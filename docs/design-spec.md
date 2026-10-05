@@ -10970,7 +10970,11 @@ label) triples of the LIGHT frames of every target that has any row on the panel
 `available`, the frame label being the frames' `panel_label` with null as its own value, except the
 triples included anywhere in this mosaic, this panel or another. A triple another panel includes
 is hidden here rather than offered and then refused; the repository refuses it anyway if a stale
-page asks (section 5.24). Under the Available table sits **Add nights from any
+page asks (section 5.24). A triple whose frame label equals another panel's label of this mosaic,
+compared case insensitively, is hidden from this panel too, so a new night carrying `Panel 2` and
+`Panel 3` frames is offered on Panel 2 and Panel 3 only; a null label and a label no panel carries
+are offered to every panel. Detail, Include all, Include all available and As new panel read the
+one list. Under the Available table sits **Add nights from any
 target**, a target search on the same `TargetSearchQuery` and debounce as the add panel form;
 choosing a target writes an `available` row on this panel for each (night, frame label) pair of
 that target's LIGHT frames whose triple no panel of this mosaic includes, so the target becomes one

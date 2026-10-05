@@ -190,7 +190,9 @@ public sealed class MosaicQueries(DatabaseConnectionString connectionString, Ali
             var included = own.Where(row => row.Status == MosaicPanelSession.Included)
                 .Select(row => Night(row.TargetId, row.SessionDate, row.FrameLabel))
                 .ToList();
-            var available = MosaicFrames.AvailableTriples(allBuckets, own.Select(row => row.TargetId).ToHashSet(), includedAnywhere)
+            var available = MosaicFrames.AvailableTriples(
+                    allBuckets, own.Select(row => row.TargetId).ToHashSet(), includedAnywhere,
+                    panels.Where(other => other.Id != panel.Id).Select(other => other.PanelLabel))
                 .Select(triple => Night(triple.TargetId, triple.Date, triple.Label));
             var counted = included.SelectMany(night => buckets[TripleKey.Of(night.TargetId, night.Date, night.FrameLabel)]).ToList();
             var targets = included.Select(night => night.TargetId).Distinct()

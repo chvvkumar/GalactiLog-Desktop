@@ -87,11 +87,17 @@ internal static class MosaicFrames
 
     /// <summary>Spec 12.17's Available triples of one panel: the distinct triples of the LIGHT
     /// frames of every target with any row on the panel, except those included anywhere in the
-    /// mosaic.</summary>
+    /// mosaic and those whose frame label is another panel's label of the mosaic (case
+    /// insensitive). A null or unmatched label stays offered to every panel.</summary>
     public static List<(Guid TargetId, DateOnly Date, string? Label)> AvailableTriples(
-        IEnumerable<FrameBucket> contributorBuckets, IReadOnlySet<Guid> contributors, IReadOnlyDictionary<TripleKey, MosaicPanel> included)
-        => [.. Triples(contributorBuckets.Where(bucket => contributors.Contains(bucket.TargetId)))
-            .Where(triple => !included.ContainsKey(TripleKey.Of(triple.TargetId, triple.Date, triple.Label)))];
+        IEnumerable<FrameBucket> contributorBuckets, IReadOnlySet<Guid> contributors, IReadOnlyDictionary<TripleKey, MosaicPanel> included,
+        IEnumerable<string> otherPanelLabels)
+    {
+        var others = otherPanelLabels.Select(TripleKey.Fold).ToHashSet(StringComparer.Ordinal);
+        return [.. Triples(contributorBuckets.Where(bucket => contributors.Contains(bucket.TargetId)))
+            .Where(triple => !included.ContainsKey(TripleKey.Of(triple.TargetId, triple.Date, triple.Label))
+                && (triple.Label is null || !others.Contains(TripleKey.Fold(triple.Label))))];
+    }
 
     /// <summary>A stored frame label: trimmed, and null for no label (spec 5.24: never the empty
     /// string).</summary>

@@ -688,7 +688,8 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
         var contributors = context.MosaicPanelSessions.Where(row => row.PanelId == panel.Id)
             .Select(row => row.TargetId).Distinct().ToHashSet();
         var triples = MosaicFrames.AvailableTriples(
-            MosaicFrames.Buckets(context, contributors), contributors, MosaicFrames.IncludedTriples(context, panel.MosaicId));
+            MosaicFrames.Buckets(context, contributors), contributors, MosaicFrames.IncludedTriples(context, panel.MosaicId),
+            context.MosaicPanels.Where(row => row.MosaicId == panel.MosaicId && row.Id != panel.Id).Select(row => row.PanelLabel).ToList());
         foreach (var (target, date, label) in triples)
         {
             IncludeCore(context, panel, target, date, label);

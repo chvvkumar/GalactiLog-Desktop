@@ -126,7 +126,51 @@ public class MosaicQueriesTests : IDisposable
             new[] { (Night(3), (string?)"Panel 1", 3), (Night(2), "Panel 3", 1) },
             one.Available.Select(night => (night.Date, night.FrameLabel, night.Frames)));
         Assert.Equal(2, one.NightsAvailable);
-        Assert.Equal(2, detail.Panels[1].NightsAvailable);
+        Assert.Equal(
+            new[] { (Night(2), (string?)"Panel 3") },
+            detail.Panels[1].Available.Select(night => (night.Date, night.FrameLabel)));
+    }
+
+    // Spec 12.17's Available label rule: after a four-panel mosaic is accepted, a new night
+    // carrying Panel 2 and Panel 3 frames is offered to its own panel only; a null label and a
+    // label no panel carries ("Panel 9") are offered to every panel. Include all agrees.
+    [Fact]
+    public void Detail_Available_HidesATripleWhoseLabelIsAnotherPanels()
+    {
+        var target = NewTarget("NGC 7000");
+        var mosaic = _repository.Create("North America");
+        var panels = new List<Guid>();
+        for (var n = 1; n <= 4; n++)
+        {
+            Frames(target, 1, $"Panel {n}", 1);
+            panels.Add(_repository.AddPanel(mosaic, $"Panel {n}"));
+            _repository.IncludeNight(panels[^1], target, Night(1), $"Panel {n}");
+        }
+
+        Frames(target, 5, "Panel 2", 2);
+        Frames(target, 5, "Panel 3", 2);
+        Frames(target, 6, null, 1);
+        Frames(target, 7, "Panel 9", 1);
+
+        var detail = _queries.Detail(mosaic)!;
+
+        string?[] Labels(int index) => [.. detail.Panels[index].Available
+            .Where(night => night.Date == Night(5)).Select(night => night.FrameLabel)];
+        Assert.Empty(Labels(0));
+        Assert.Equal(new[] { (string?)"Panel 2" }, Labels(1));
+        Assert.Equal(new[] { (string?)"Panel 3" }, Labels(2));
+        Assert.Empty(Labels(3));
+        Assert.All(detail.Panels, panel =>
+        {
+            Assert.Contains(panel.Available, night => night.Date == Night(6) && night.FrameLabel is null);
+            Assert.Contains(panel.Available, night => night.Date == Night(7) && night.FrameLabel == "Panel 9");
+            Assert.Equal(panel.Label is "Panel 2" or "Panel 3" ? 3 : 2, panel.NightsAvailable);
+        });
+
+        Assert.Equal(2, _repository.IncludeAll(panels[0]));
+        var after = _queries.Detail(mosaic)!;
+        Assert.DoesNotContain(after.Panels[0].Included, night => night.Date == Night(5));
+        Assert.Equal(new[] { (string?)"Panel 2" }, after.Panels[1].Available.Select(night => night.FrameLabel));
     }
 
     [Fact]
