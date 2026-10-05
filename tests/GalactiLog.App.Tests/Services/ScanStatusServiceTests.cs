@@ -360,7 +360,7 @@ public class ScanStatusServiceTests
 
         Assert.Empty(jobs.Running);
         Assert.Equal(0, jobs.RunningCount);
-        var job = Assert.Single(jobs.Recent);
+        var job = Assert.Single(jobs.Recent, candidate => candidate.Kind == ScanStatusService.ScanJobKind);
         Assert.True(job.IsFinished);
         Assert.Equal(JobResult.Succeeded, job.Result);
         Assert.Equal(ScanStatusService.ScanJobSummary, job.Summary);
@@ -381,9 +381,10 @@ public class ScanStatusServiceTests
         await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
 
         Assert.Empty(jobs.Running);
-        Assert.Equal(2, jobs.Recent.Count);
-        Assert.NotSame(jobs.Recent[0], jobs.Recent[1]);
-        Assert.All(jobs.Recent, job => Assert.Equal("Library scan", job.Title));
+        var scans = jobs.Recent.Where(job => job.Kind == ScanStatusService.ScanJobKind).ToList();
+        Assert.Equal(2, scans.Count);
+        Assert.NotSame(scans[0], scans[1]);
+        Assert.All(scans, job => Assert.Equal("Library scan", job.Title));
     }
 
     // Section 6.1 fact 2: the constructor seeds IsRunning synchronously, but no ProgressChanged
@@ -484,9 +485,28 @@ public class ScanStatusServiceTests
         var outcome = await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
 
         Assert.Equal("complete", outcome.State);
-        var job = Assert.Single(jobs.Recent);
+        var job = Assert.Single(jobs.Recent, candidate => candidate.Kind == ScanStatusService.ScanJobKind);
         Assert.Equal(JobResult.Succeeded, job.Result);
         Assert.Equal(ScanStatusService.ScanJobSummary, job.Summary);
+    }
+
+    // Phase 18 Task 4, spec 7.7: a completed scan's mosaic detection pass is its own job, closed by
+    // the next phase's envelope with the pass's own summary.
+    [Fact]
+    public async Task ACompletedScan_RegistersTheMosaicDetectionJob_WithItsSummary()
+    {
+        using var settings = new SettingsFixture();
+        settings.Save(general => general with { ScanRoots = [settings.Root] });
+        var coordinator = ScanCoordinatorTestFactory.Create(settings);
+        var jobs = new JobRegistry(action => action());
+        using var service = new ScanStatusService(coordinator, action => action(), jobs: jobs);
+
+        await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
+
+        var detection = Assert.Single(jobs.Recent, job => job.Kind == ScanStatusService.MosaicDetectionJobKind);
+        Assert.Equal(ScanStatusService.MosaicDetectionJobTitle, detection.Title);
+        Assert.Equal(JobResult.Succeeded, detection.Result);
+        Assert.Equal("0 suggestions", detection.Summary);
     }
 
     [Fact]

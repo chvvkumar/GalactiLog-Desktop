@@ -158,6 +158,10 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
         {
             ScanTaskNames.Phd2Ingest => Phd2IngestJobKind,
             ScanTaskNames.Phd2Correlate => Phd2CorrelateJobKind,
+
+            // Phase 18 Task 4: the scan's mosaic detection pass (spec 7.7) is a job of its own in
+            // the same shape, and its failed envelope uses the same -1 total.
+            ScanTaskNames.MosaicDetection => MosaicDetectionJobKind,
             _ => null,
         };
 
@@ -179,7 +183,8 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
 
         if (kind is null || kind != _phd2JobKind)
         {
-            FinishPhd2SubJob(JobResult.Succeeded, Phd2JobSummary);
+            // Spec 7.7: the detection job's summary is its terminal envelope's "n suggestions".
+            FinishPhd2SubJob(JobResult.Succeeded, SubJobSummary);
         }
 
         if (kind is null)
@@ -206,7 +211,14 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
         }
 
         _phd2Job?.Report(progress.Message, progress.Percent);
+        _subJobLastMessage = progress.Message;
     }
+
+    // The last message the open sub-job reported, which is the mosaic detection job's summary.
+    private string _subJobLastMessage = "";
+
+    // A finished sub-job's summary: the PHD2 sentence, or the detection job's own "n suggestions".
+    private string SubJobSummary => _phd2JobKind == MosaicDetectionJobKind ? _subJobLastMessage : Phd2JobSummary;
 
     private void FinishPhd2SubJob(JobResult result, string summary)
     {
@@ -246,7 +258,7 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
             // Any PHD2 sub-job still open goes first, and with the run's own result: a scan the
             // user stopped inside the guide-log pass must not leave that pass reading Succeeded
             // in the flyout, and a sub-job left running would outlive the scan that owns it.
-            FinishPhd2SubJob(result, summary == ScanJobSummary ? Phd2JobSummary : summary);
+            FinishPhd2SubJob(result, summary == ScanJobSummary ? SubJobSummary : summary);
             finished?.Finish(result, summary);
 
             IsRunning = _coordinator.IsRunning;
@@ -315,9 +327,20 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
     internal const string Phd2CorrelateJobKind = ScanTaskNames.Phd2Correlate;
 
     /// <summary>The flyout title for a PHD2 sub-job, by kind.</summary>
-    internal static string Phd2JobTitle(string kind) => kind == Phd2CorrelateJobKind
-        ? "Matching guiding to frames"
-        : "Reading PHD2 guide logs";
+    internal static string Phd2JobTitle(string kind) => kind switch
+    {
+        Phd2CorrelateJobKind => "Matching guiding to frames",
+        MosaicDetectionJobKind => MosaicDetectionJobTitle,
+        _ => "Reading PHD2 guide logs",
+    };
+
+    /// <summary>Spec 7.7's detection job kind, the envelope task name itself, for the reason the
+    /// two PHD2 kinds are: a phase that is also a job keeps its one token. The Mosaics page's Run
+    /// Detection registers under the same kind.</summary>
+    public const string MosaicDetectionJobKind = ScanTaskNames.MosaicDetection;
+
+    /// <summary>Spec 7.7's detection job title.</summary>
+    public const string MosaicDetectionJobTitle = "Mosaic detection";
 
     /// <summary>The recent-list summary for a finished PHD2 sub-job.</summary>
     internal const string Phd2JobSummary = "The guiding step finished.";
