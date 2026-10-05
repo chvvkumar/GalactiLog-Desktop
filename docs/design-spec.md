@@ -1802,10 +1802,13 @@ The same triple may sit in panels of two different mosaics; the rule is per mosa
 merged-away target to the winner on every row, in the merge's own transaction, because the winner
 is where the frames now resolve and a row left on the loser would join nothing. Collisions are
 resolved per (mosaic, winner, night, frame label), across the mosaic's panels and not only within
-one panel, so the rewrite cannot break the one-triple rule below: when it would leave the same
+one panel, so the rewrite cannot break the one-triple rule above: when it would leave the same
 triple `included` in two panels of one mosaic, the panel earlier in `sort_order` keeps its
 `included` row and the other row is dropped; an `available` row that would collide with any row of
-the same triple in the mosaic, of either status, is dropped. An unmerge
+the same triple in the mosaic, of either status, is dropped. A collision is judged against the
+winner's rows as they stood before the merge: two rows of the merged-away target that legally
+coexisted before it (one `included` in one panel, one `available` in another) both move, and within
+one panel the winner's `included` row stays over the loser's. An unmerge
 does not move rows back: the manifest records no mosaic rows, and after an unmerge the reader
 re-includes the nights from the detail page's Available table. That is a stated limit, not a defect.
 
@@ -2208,7 +2211,8 @@ Rules the table encodes, restated because getting them wrong is silent data corr
   and seconds and the result is `(h + m / 60 + s / 3600) * 15`. For declination the leading `+` or
   `-` is removed before the split, the result is `d + m / 60 + s / 3600`, and it is negated when
   the trimmed value began with `-`, which is what keeps `-00 30 00` negative. Colon-separated
-  values such as `05:35:17` are not parsed, as in the web. `RA` falls back to `OBJCTRA` and `DEC`
+  values such as `05:35:17` are not parsed, as in the web. A value that parses to `NaN` or infinity
+  yields nothing, where Python's `float()` would accept it and store a NaN centre. `RA` falls back to `OBJCTRA` and `DEC`
   to `OBJCTDEC` independently, so a frame may take its right ascension from one keyword and its
   declination from the other. The pair is stored only when both values exist and the declination
   lies in -90 to 90 inclusive; otherwise both columns are null. A stored right ascension is
@@ -3085,7 +3089,7 @@ group's base name is its first entry's base.
    by base name compared case insensitively, and each such base becomes a one-panel group with
    discovery source `name`, provided that base, compared case insensitively, has no entry in any
    name or position group. A leftover candidate of a base that is already grouped is dropped, as
-   the web drops it, so the path never duplicates a suggestion. The web drops these; the plan's fixture keeps a lone `IC 1396 P1` as a
+   the web drops it, so the path never duplicates a suggestion. The plan's fixture keeps a lone `IC 1396 P1` as a
    low confidence suggestion, so the port surfaces a first panel the reader may be starting a
    mosaic with, and dismissing it keeps it away under the rule below.
 
@@ -3181,7 +3185,8 @@ cancel delegate, reporting the steps "Relabelling frames", "Filling positions", 
 candidates" and "Writing suggestions", and ending with the summary "n suggestions". The button is
 disabled while a scan runs, with the tooltip "A scan is running. Detection runs when it ends.", and
 while a detection job runs. Two passes never overlap: a pass waits for the one in flight to finish
-before it starts.
+before it starts. A manual run requested while the resolution lease is held (a manual resolution or
+the reference thumbnail regeneration) is refused rather than queued, and its job ends Cancelled.
 
 It writes `mosaic_detection_complete` (`scan`, info) with `{trigger, suggestions, relabelled,
 backfilled}` when it ends, and `mosaic_detection_failed` (`scan`, error) with `{trigger, reason}`
@@ -4557,7 +4562,7 @@ while a scan is running.
 | `scan` | `phd2_correlation_unattributed` | warning | Guiding sessions on a night were attributed to no rig (section 7.6 rig selection step 3) | `{profiles, nights}` |
 | `scan` | `mosaic_detection_complete` | info | A mosaic detection pass finishes, from a scan or from the Mosaics page's Run Detection (section 7.7) | `{trigger, suggestions, relabelled, backfilled}`. `trigger` is `scan` or `manual`. Inside a scan, parented to `scan_started`. |
 | `scan` | `mosaic_detection_failed` | error | A mosaic detection pass threw (section 7.7). The scan that hosted it still ends normally | `{trigger, reason}` |
-| `user_action` | `mosaic_action_failed` | warning | One item of a bulk Accept, Dismiss or Delete Selected job on the Mosaics page failed (section 12.17), one event per failed item | `{action, name, reason}`. `action` is `accept`, `dismiss` or `delete`; `name` is the suggestion's or the mosaic's name. |
+| `user_action` | `mosaic_action_failed` | warning | One item of a bulk Accept, Dismiss or Delete Selected job on the Mosaics page failed (section 12.17), one event per failed item, and the failed read that opens the Create mosaic dialog from the Target detail page (section 12.17), carrying that target's id | `{action, name, reason}`. `action` is `accept`, `dismiss`, `delete` or `create`; `name` is the suggestion's or the mosaic's name, or the target's name for `create`. |
 | `enrichment` | `target_created` | info | A new target row is inserted | `{primary_name, catalog_id, source}`. Manual creation (section 9.7) adds `linked_frames` and `closed_candidates`: `linked_frames` is the count of LIGHT frames the retro-link moved onto the new target, and `closed_candidates` is the count of distinct unresolved `OBJECT` names it closed, not a count of `merge_candidates` rows (the member and key names were kept from an earlier design; the value they carry moved with the frame-driven retro-link of section 9.7 step 5). |
 | `enrichment` | `target_merged` | info | A merge completes | `{winner, loser, moved_images}` |
 | `enrichment` | `target_unmerged` | info | An unmerge completes | `{winner, loser}` |
@@ -5065,10 +5070,10 @@ Maintenance actions of section 12.7, two of which are the reference thumbnail pa
 thumbnail regeneration (they are not a tenth and eleventh member; naming them twice was a spec
 contradiction the brief-writer recorded and the coordinator ruled at dispatch). Later phases add
 their passes to the same registry and to the same census rather than growing a second status
-surface. Phase 18 adds the four mosaic kinds (`mosaic_detection`, `mosaic_accept`,
-`mosaic_dismiss` and `mosaic_delete`, section 12.17), which takes the set `JobRegistryCensusTest`
-declares to nineteen members. The spine is built here, at the second occurrence of the pattern, rather than at the
-sixth.
+surface. The spine is built here, at the second occurrence of the pattern, rather than at the
+sixth. Phase 18 adds the four mosaic kinds (`mosaic_detection`, `mosaic_accept`, `mosaic_dismiss`
+and `mosaic_delete`, section 12.17), which takes the set `JobRegistryCensusTest` declares to
+nineteen members.
 
 Target detail (section 12.4) is a screen that is not a rail destination, and from Phase 18 the
 mosaic detail page is the second. It is a single
@@ -7846,11 +7851,11 @@ Line breaks inside a paragraph are not significant.
 | `mosaics.about` | A mosaic collects the panels of one large field, each panel a set of nights from any target. It totals the integration of each panel so you can see which one needs more time. Suggestions come from Run Detection and from every scan, and Create mosaic makes one by hand. Only light frames are counted. |
 | `mosaics.keywords` | A keyword is a word that introduces a panel number in a target's name, such as Panel in "M 31 Panel 2" or P in "NGC 7000 P3". Detection reads these tokens to group targets into suggested mosaics, and the position tolerance sets how close two panels must sit on the sky. A change applies to your frames at the next Run Detection or scan, not at once. |
 | `mosaics.suggestions` | Each suggestion is a group of targets that look like panels of one mosaic, found by name, by sky position or by both. High confidence means name and position agree; low means review the notes before accepting. The source badge says which signal found it. Accept creates the mosaic from the checked panels. Dismiss asks twice, and a dismissed suggestion comes back only when new nights of its panels are catalogued. |
-| `mosaics.table` | Every mosaic with its panel count, integration, frames and date range, counting light frames only. A header click sorts by that column and a second click reverses it; the choice is kept for your next visit. The column picker chooses which columns show, including your own mosaic columns. Expand renames the mosaic and edits its panels, and Delete asks twice before it removes the mosaic and its panels. No frame is ever touched. |
+| `mosaics.table` | Every mosaic with its panel count, integration, frames and date range, counting light frames only. A header click on a built-in column sorts by it and a second click reverses it, and the choice is kept for your next visit; a custom column's header does not sort. The column picker chooses which columns show, including your own mosaic columns. Expand renames the mosaic and edits its panels, and Delete asks twice before it removes the mosaic and its panels. No frame is ever touched. |
 | `mosaic.about` | This mosaic's panels and the nights that count toward each. The summary line gives the panel count, the total integration and the total frames, and each panel row shows its own figures. The Deficit column shows how far a panel's integration is behind the leading panel, the one with the most, as a time such as 2h 10m behind. The figures count only included nights. |
-| `mosaic.notes` | Free-form notes about this mosaic. They are saved a second after you stop typing, and an emptied box clears the note. They are yours and nothing reads them: no figure on this page is derived from them. |
-| `mosaic.labels` | A panel label is the label carried by a target's frames, such as Panel 2. This banner lists labels found on this mosaic's targets that no panel of the mosaic has yet. Their frames count nowhere until you add a panel for the label, so the integration shown is lower than the data on disk. Add panel creates it and includes the nights that carry the label. |
-| `mosaic.sessions` | Each panel counts a night as Included, and lists the other nights of its targets as Available. A night is one target, one date and one frame label, and that triple counts in only one panel of a mosaic. Include and Remove move a night between the two lists. As new panel moves an available night into a panel of its own, and Add nights from any target brings in nights from another target. Delete panel asks twice and is enabled once the panel has no included night. |
+| `mosaic.notes` | Free-form notes about this mosaic. They are saved a second after you stop typing, and an emptied box clears the note. They are yours, and no figure on this page is derived from them. |
+| `mosaic.labels` | A panel label is the label carried by a target's frames, such as Panel 2. This banner lists labels found on this mosaic's targets that no panel of the mosaic has yet. Their frames count nowhere until you add a panel for the label. Add panel creates it and includes the nights that carry the label. |
+| `mosaic.sessions` | Each panel counts a night as Included, and lists the other nights of its targets as Available. A night is one target, one date and one frame label, and that triple counts in only one panel of a mosaic. Include and Remove move a night between the two lists. As new panel moves an available night into a panel of its own, and Add nights from any target makes another target's nights available to include (it writes Available rows; Include still takes them). Delete panel asks twice and is enabled once the panel has no included night. |
 | `mosaic.create` | Makes a new mosaic, or adds to an existing one, from the nights checked on this target. Rows given the same panel label combine into one panel, and the label starts as the frame label when the frames carry one. The name starts as the target's base name with the date range and stays until you edit it. Nothing is written until you press Create, and a refusal writes nothing. |
 
 The nine stacking export rows above are transcribed from `HelpTopics.cs` character for character,
@@ -10772,7 +10777,8 @@ Expanding a row shows, in order:
 2. **The targets**, each target's primary name as a link that opens its Target detail page.
 3. **The session table**, an aligned table (`DESIGN.md` section 6) with one row per (entry,
    `OBJECT`, night, filter) over the suggestion's own nights, the frames being the entry target's
-   LIGHT frames whose `OBJECT` parses to the entry's base and number (section 7.7). Columns: a
+   LIGHT frames whose stored `panel_label` equals the entry's label, which is the label accept writes
+   (section 7.7). Columns: a
    panel `CheckBox`, Panel, OBJECT, Night, Filter, Frames, Integration. Every header but the first
    sorts on click and reverses on a second click; the default is Panel ascending. A row's check box
    checks or unchecks its panel, every row of that label at once; the header check box checks or
@@ -10782,7 +10788,8 @@ The web's tile preview is the arranger in a read-only form and arrives with it (
 phase draws no preview.
 
 The empty state is the sentence "No suggestions. Run Detection looks for panels in your target
-names and sky positions."
+names and sky positions." A failed read of the list shows "The suggestions could not be loaded."
+with a Retry link in place of the rows.
 
 **Bulk actions run as jobs (ruling R13).** Accept all or Accept (k) asks nothing and runs one job,
 kind `mosaic_accept`, titled "Accept suggestions"; Dismiss all or Dismiss (k) arms the two-press
@@ -10839,7 +10846,8 @@ other rows' state.
    Enter saves and Escape cancels. The refusals are the name sentences above.
 2. **The panel list**, one line per panel in `sort_order`: the label, the targets' names joined
    with ", ", the integration and the frame count, and Remove, a `Button.sm` with the two-press
-   inline confirm "Remove panel <label>? Its nights leave this mosaic; no frame is touched." The
+   inline confirm "Remove panel <label>? Its nights leave this mosaic; no frame is touched." It runs as one
+   repository call in one transaction, so a panel is never left half emptied. The
    empty state is "No panels yet."
 3. **Add panel**, the add panel form below.
 
@@ -10864,7 +10872,8 @@ loaded." with a Retry link in place of the rows.
 
 Opened from a Mosaics table row, a dashboard mosaic link (section 12.2) or a completed Create
 mosaic dialog, on the shell's detail overlay (section 12): Back closes it, a rail click closes it,
-and opening a target from it closes it. The page is a workbench with no page scroller (ruling R7):
+and opening a target from it closes it. Escape, unless a text box has focus, and Alt+Left go
+Back, as on the Target detail page (section 12.4). The page is a workbench with no page scroller (ruling R7):
 `Grid RowDefinitions="Auto,Auto,*,Auto,*"`.
 
 | Row | Content |
@@ -10889,7 +10898,7 @@ The **overflow menu** is a `MenuFlyout` with two entries:
 - **Export panels (CSV)** opens a save dialog with the file name `<name>_panels.csv`, every
   character of the mosaic name outside A to Z, a to z and 0 to 9 replaced by `_`, and writes one
   new file at the path the dialog returned through `AppWriter.BeginExport` (section 2.1.1), from
-  `MosaicDetailViewModel`. The file is UTF-8 without a byte order mark, lines separated by `\n`, the
+  `MosaicDetailViewModel`. The file is UTF-8 without a byte order mark, every line, the last included, ending in `\n`, the
   header `panel_label,targets,frames,integration_seconds,filters`, then one row per panel in
   `sort_order`: the label; the targets' primary names joined with `; `; the frame count; the
   integration in whole seconds, rounded; and the per-filter integration as `<filter>: <seconds>`
@@ -10953,7 +10962,8 @@ heading:
 frames labelled `Panel 1`. The next suffix of a label ending in a space and one
   letter in parentheses is that label with the following letter, so `Panel 1 (b)` gives
   `Panel 1 (c)`; of any other label it is the label followed by ` (b)`, so `Panel 1` gives
-  `Panel 1 (b)`. The web's browser prompt becomes the inline row.
+  `Panel 1 (b)`; when the mosaic already carries that label, the suffix goes on to the next letter
+  that no panel carries, compared case insensitively. The web's browser prompt becomes the inline row.
 
 **A panel's Available triples** (rulings R19 and R19a) are the distinct (target, night, frame
 label) triples of the LIGHT frames of every target that has any row on the panel, `included` or
@@ -10979,7 +10989,11 @@ per-panel figures separate them by frame label.
 
 Every include, remove, add and delete re-reads the page's detail, so the summary line, the panel
 figures, the deficits and the available counts follow at once. The page also re-reads when a scan
-or a detection job ends, because a scan can add frames to a night a panel already holds.
+or a detection job ends, because a scan can add frames to a night a panel already holds. A re-read
+keeps every row that stays as the same row, matched by panel label and by (target, night, frame
+label) triple, so typed input survives it: an open As new panel row keeps its label and its
+refusal sentence until the next re-read clears the refusal, and the add panel label box keeps
+what the reader typed, following the prefill only while it is untouched.
 
 #### The Create mosaic dialog
 

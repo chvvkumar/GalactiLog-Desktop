@@ -812,8 +812,8 @@ public static class HelpTopics
 
         new("mosaics.table", "Mosaics table",
             "Every mosaic with its panel count, integration, frames and date range, counting light "
-            + "frames only. A header click sorts by that column and a second click reverses it; the "
-            + "choice is kept for your next visit. The column picker chooses which columns show, "
+            + "frames only. A header click on a built-in column sorts by it and a second click reverses it, "
+            + "and the choice is kept for your next visit; a custom column's header does not sort. The column picker chooses which columns show, "
             + "including your own mosaic columns. Expand renames the mosaic and edits its panels, and "
             + "Delete asks twice before it removes the mosaic and its panels. No frame is ever "
             + "touched."),
@@ -828,14 +828,14 @@ public static class HelpTopics
 
         new("mosaic.notes", "Notes",
             "Free-form notes about this mosaic. They are saved a second after you stop typing, and "
-            + "an emptied box clears the note. They are yours and nothing reads them: no figure on "
+            + "an emptied box clears the note. They are yours, and no figure on "
             + "this page is derived from them."),
 
         new("mosaic.labels", "New panel labels",
             "A panel label is the label carried by a target's frames, such as Panel 2. This banner "
             + "lists labels found on this mosaic's targets that no panel of the mosaic has yet. Their "
-            + "frames count nowhere until you add a panel for the label, so the integration shown is "
-            + "lower than the data on disk. Add panel creates it and includes the nights that carry "
+            + "frames count nowhere until you add a panel for the label. "
+            + "Add panel creates it and includes the nights that carry "
             + "the label."),
 
         new("mosaic.sessions", "Panels and nights",
@@ -843,7 +843,8 @@ public static class HelpTopics
             + "Available. A night is one target, one date and one frame label, and that triple counts "
             + "in only one panel of a mosaic. Include and Remove move a night between the two lists. "
             + "As new panel moves an available night into a panel of its own, and Add nights from any "
-            + "target brings in nights from another target. Delete panel asks twice and is enabled "
+            + "target makes another target's nights available to include (it writes Available rows; "
+            + "Include still takes them). Delete panel asks twice and is enabled "
             + "once the panel has no included night."),
 
         new("mosaic.create", "Create mosaic",
