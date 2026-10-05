@@ -796,6 +796,15 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             return;
         }
 
+        // Web parity, ScanFiltersPanel.tsx's applyNow: a scan reads the stored filters, so an
+        // unsaved rule is the one thing the user expects it to apply and the one thing it cannot
+        // see. Refused with the reason on the tab rather than run against the old rules.
+        if (IsDirty)
+        {
+            ErrorMessage = UnsavedFiltersRefusal;
+            return;
+        }
+
         try
         {
             // Spec 10.3's two per-run arguments, built at the press and carried no further: the
@@ -820,6 +829,10 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             Post(ClearPerRunOptions);
         }
     }
+
+    /// <summary>Why a scan was refused while the filter block is dirty.</summary>
+    public const string UnsavedFiltersRefusal =
+        "Save the library folders, paths and rules before scanning. A scan uses the last saved filters, not unsaved edits.";
 
     private bool CanRunScan()
         => _scanStatus is null || (!_scanStatus.IsRunning && !_scanStatus.ResolutionInProgress);

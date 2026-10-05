@@ -373,6 +373,13 @@
                     Content="Revert"
                     Padding="10,3"
                     Command="{Binding RevertCommand}" />
+            <!-- The web panel's "unsaved" badge: the rules table holds edits until Save rules,
+                 and a scan started meanwhile runs on the stored rules. -->
+            <TextBlock x:Name="UnsavedFiltersText"
+                       Text="Unsaved"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding IsDirty}"
+                       Foreground="{DynamicResource ColorWarning}" />
           </StackPanel>
 
           <TextBlock x:Name="FilterErrorText"
