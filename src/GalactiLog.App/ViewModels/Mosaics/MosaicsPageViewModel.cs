@@ -374,7 +374,9 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     public partial bool DismissAllPending { get; private set; }
 
     public string DismissAllConfirmText
-        => $"Dismiss {BulkTargets.Count} suggestions? Each comes back only if new nights of its panels are catalogued.";
+        => BulkTargets.Count == 1
+            ? "Dismiss 1 suggestion? It comes back only if new nights of its panels are catalogued."
+            : $"Dismiss {BulkTargets.Count} suggestions? Each comes back only if new nights of its panels are catalogued.";
 
     /// <summary>True while one of this page's bulk jobs runs. Every Accept, Dismiss and Delete on
     /// the page is disabled meanwhile (spec 12.17).</summary>

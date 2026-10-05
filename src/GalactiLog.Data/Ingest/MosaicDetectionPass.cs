@@ -249,6 +249,8 @@ public sealed class MosaicDetectionPass(string connectionString, DetectionSettin
         var dec = update.Parameters.Add("$dec", SqliteType.Real);
         var widthPx = update.Parameters.Add("$width", SqliteType.Integer);
         var id = update.Parameters.Add("$id", SqliteType.Text);
+        update.Prepare();
+
         foreach (var row in found)
         {
             ra.Value = (object?)row.Ra ?? DBNull.Value;

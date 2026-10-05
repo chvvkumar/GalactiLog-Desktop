@@ -120,6 +120,27 @@ public sealed class AppHostTests
         Assert.Equal(Path.GetFullPath(fixture.Root), appWriter.AppDataRoot);
     }
 
+    // Phase 18 final review: every delegate of the Mosaics backend is bound by AppHost, so a member
+    // added without a binding fails here instead of answering with its inert test default.
+    [Fact]
+    public void Build_BindsEveryMosaicsBackendDelegate()
+    {
+        using var fixture = new AppHostFixture();
+
+        var bound = fixture.Host.Services.GetRequiredService<MosaicsBackend>();
+        var defaults = new MosaicsBackend();
+
+        var members = typeof(MosaicsBackend).GetProperties()
+            .Where(property => typeof(Delegate).IsAssignableFrom(property.PropertyType))
+            .ToList();
+        Assert.NotEmpty(members);
+        Assert.All(members, property =>
+        {
+            var value = property.GetValue(bound);
+            Assert.True(value is not null && !Equals(value, property.GetValue(defaults)), $"MosaicsBackend.{property.Name} is not bound");
+        });
+    }
+
     [Fact]
     public void Build_ResolvesSettingsStore()
     {

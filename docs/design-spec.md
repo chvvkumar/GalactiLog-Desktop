@@ -3596,6 +3596,8 @@ Lookup order for a normalized name. The panel token is stripped first (`StripPan
 the web's order: `NGC 7000 Panel 1` and `IC 1396 P1` resolve offline to NGC 7000 and IC 1396 on a
 catalogue that holds no target for either yet. The strip uses the default keywords only, so a
 custom keyword in `general.mosaic_keywords` affects detection (section 7.7), not resolution.
+A panel name negatively cached before the upgrade (section 5.7) stays unresolved until that cache
+row expires; Retry unresolved or smart rebuild's link pass resolves it sooner.
 
 1. **Direct catalog designation.** If the stripped name matches a catalog pattern (section 9.4.1),
    normalize it and look it up:

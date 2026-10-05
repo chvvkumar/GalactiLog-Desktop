@@ -203,6 +203,16 @@ public class MigrationTests
         Assert.Equal(before, ValueRows(db.ConnectionString));
         AssertDuplicateRefused(db.ConnectionString);
 
+        // A mosaic-scope value has no key to keep once Down drops mosaic_id, so Down deletes it
+        // rather than leaving a row that names no target.
+        Execute(db.ConnectionString, """
+            INSERT INTO mosaics (id, name, rotation_angle, created_at, updated_at)
+              VALUES ('M1', 'North America', 0, '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              VALUES ('V4', 'C1', NULL, 'M1', NULL, NULL, 'mosaic', '2026-01-01 00:00:00');
+            """);
+        Assert.Equal(4, ValueRows(db.ConnectionString).Count);
+
         Migrator(db.ConnectionString, "20261005022536_SkippedFiles");
         Assert.Equal(before, ValueRows(db.ConnectionString));
         AssertDuplicateRefused(db.ConnectionString);

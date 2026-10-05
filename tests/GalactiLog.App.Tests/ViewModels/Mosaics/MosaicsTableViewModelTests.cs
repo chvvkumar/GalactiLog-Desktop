@@ -192,6 +192,9 @@ public class MosaicsTableViewModelTests
         await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
         Assert.True(page.Table.DeleteSelectedPending);
         Assert.Equal("Delete 2 mosaics? Their panels and nights are removed; no frame is touched.", page.Table.DeleteSelectedConfirmText);
+        page.Table.Mosaics[2].IsSelected = false;
+        Assert.Equal("Delete 1 mosaic? Its panels and nights are removed; no frame is touched.", page.Table.DeleteSelectedConfirmText);
+        page.Table.Mosaics[2].IsSelected = true;
         Assert.Empty(deleted);
 
         await page.Table.DeleteSelectedCommand.ExecuteAsync(null);

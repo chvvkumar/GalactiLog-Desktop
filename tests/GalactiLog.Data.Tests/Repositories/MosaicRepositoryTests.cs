@@ -54,6 +54,24 @@ public class MosaicRepositoryTests : IDisposable
 
     // ---- mosaics -----------------------------------------------------------------------
 
+    // Phase 18 final review item 6: Changed is raised once per committed write, and a refused
+    // write, which commits nothing, raises nothing.
+    [Fact]
+    public void Changed_IsRaisedAfterACommittedWrite_AndNotAfterARefusal()
+    {
+        var raised = 0;
+        _repository.Changed += (_, _) => raised++;
+
+        var mosaic = _repository.Create("North America");
+        Assert.Equal(1, raised);
+
+        Assert.Throws<DuplicateMosaicNameException>(() => _repository.Create("north america"));
+        Assert.Equal(1, raised);
+
+        _repository.Delete(mosaic);
+        Assert.Equal(2, raised);
+    }
+
     [Fact]
     public void Create_TrimsTheName_AndStampsBothTimes()
     {

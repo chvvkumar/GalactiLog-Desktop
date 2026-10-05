@@ -232,8 +232,10 @@ namespace GalactiLog.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // The reverse of Up's rebuild, before the mosaics table goes, so dropping it cannot
-            // cascade into the values.
+            // A mosaic-scope value has no row to go to once the mosaic key is gone, so it goes
+            // first; then the reverse of Up's rebuild, before the mosaics table goes, so dropping
+            // it cannot cascade into the values.
+            migrationBuilder.Sql("""DELETE FROM "custom_column_values" WHERE "mosaic_id" IS NOT NULL;""");
             migrationBuilder.Sql(DropCustomValueIndexSql);
             migrationBuilder.Sql(RebuildCustomValuesSql(withMosaicKey: false));
             migrationBuilder.Sql(CreateCustomValueIndexSql);

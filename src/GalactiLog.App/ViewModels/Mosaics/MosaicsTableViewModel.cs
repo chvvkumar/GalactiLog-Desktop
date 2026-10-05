@@ -163,7 +163,9 @@ public sealed partial class MosaicsTableViewModel : ObservableObject, IDisposabl
     public string DeleteSelectedText => $"Delete selected ({SelectedMosaicCount})";
 
     public string DeleteSelectedConfirmText
-        => $"Delete {SelectedMosaicCount} mosaics? Their panels and nights are removed; no frame is touched.";
+        => SelectedMosaicCount == 1
+            ? "Delete 1 mosaic? Its panels and nights are removed; no frame is touched."
+            : $"Delete {SelectedMosaicCount} mosaics? Their panels and nights are removed; no frame is touched.";
 
     public bool AllMosaicsSelected
     {

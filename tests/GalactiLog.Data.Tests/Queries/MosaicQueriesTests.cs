@@ -173,6 +173,41 @@ public class MosaicQueriesTests : IDisposable
         Assert.Equal(new[] { (string?)"Panel 2" }, after.Panels[1].Available.Select(night => night.FrameLabel));
     }
 
+    // Spec 5.24's join: a null frame_label row counts the night's null-label frames only, and a
+    // label differing only in case is the same triple.
+    [Fact]
+    public void Detail_NullLabelRow_CountsNullLabelFramesOnly()
+    {
+        var target = NewTarget("NGC 7000");
+        Frames(target, 1, null, 3);
+        Frames(target, 1, "Panel 1", 5);
+        var mosaic = _repository.Create("North America");
+        var panel = _repository.AddPanel(mosaic, "Panel 1");
+        _repository.IncludeNight(panel, target, Night(1), null);
+
+        var one = _queries.Detail(mosaic)!.Panels[0];
+
+        Assert.Equal((3, 3 * Exposure), (one.Frames, one.IntegrationSeconds));
+        Assert.Equal(new[] { (string?)"Panel 1" }, one.Available.Select(night => night.FrameLabel));
+    }
+
+    [Fact]
+    public void Detail_LabelsDifferingOnlyInCase_AreOneTriple()
+    {
+        var target = NewTarget("NGC 7000");
+        Frames(target, 1, "Panel 1", 2);
+        Frames(target, 1, "PANEL 1", 3);
+        var mosaic = _repository.Create("North America");
+        var panel = _repository.AddPanel(mosaic, "Panel 1");
+        _repository.IncludeNight(panel, target, Night(1), "panel 1");
+
+        var one = _queries.Detail(mosaic)!.Panels[0];
+
+        Assert.Equal((5, 1), (one.Frames, one.NightsIncluded));
+        Assert.Single(one.Included);
+        Assert.Empty(one.Available);
+    }
+
     [Fact]
     public void Detail_AvailableLabels_AreLabelsOfContributingTargetsNoPanelCarries()
     {

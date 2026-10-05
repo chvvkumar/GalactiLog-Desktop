@@ -828,6 +828,12 @@ public static class AppHost
                 UiPost.Default(() =>
                     serviceProvider.GetRequiredService<DashboardViewModel>().RefreshCustomColumns());
 
+            // Spec 12.2's mosaic links: every committed mosaic write, whichever page made it, is
+            // one route to the dashboard's listing query, posted for the same reason as above.
+            serviceProvider.GetRequiredService<MosaicRepository>().Changed += (_, _) =>
+                UiPost.Default(() =>
+                    serviceProvider.GetRequiredService<DashboardViewModel>().RefreshMosaicLinks());
+
             // Spec 12.7's re-run (Phase 15A Task 6). THE ONE TRIGGER PATH: the store's own event,
             // which fires at most once per save and only when the normalised profile map, the
             // observer timezone, the observer latitude or the observer longitude really moved.

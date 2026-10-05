@@ -80,6 +80,11 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
 {
     private static readonly int[] Rotations = [0, 90, 180, 270];
 
+    /// <summary>Raised after every committed write, on the writing thread, so an open surface that
+    /// draws mosaic links (spec 12.2) re-reads them after accept, delete, create or remove without
+    /// waiting for a scan. No payload: each subscriber re-reads what it draws.</summary>
+    public event EventHandler? Changed;
+
     // ---- mosaics -------------------------------------------------------------------------
 
     /// <summary>Creates an empty mosaic with the trimmed name.</summary>
@@ -852,6 +857,7 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
         var result = body(context);
         context.SaveChanges();
         transaction.Commit();
+        Changed?.Invoke(this, EventArgs.Empty);
         return result;
     }
 

@@ -865,6 +865,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         RequestQuery();
     }
 
+    /// <summary>A mosaic write committed somewhere else in the application (accept, delete, the
+    /// Create mosaic dialog, a removed night or panel). The listing query carries spec 12.2's
+    /// mosaic links, so the page re-runs it, debounced, as it does after a scan. Called on the UI
+    /// thread by the composition root's own route.</summary>
+    internal void RefreshMosaicLinks() => RequestQuery();
+
     private void OnScanFinished(object? sender, EventArgs e)
     {
         // A root that came back (or went away) since the last scan is picked up here, which is
