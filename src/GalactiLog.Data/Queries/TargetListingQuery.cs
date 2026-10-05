@@ -193,8 +193,8 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
     {
         CustomColumnScope.Session => "AND cv.session_date IS NOT NULL",
         CustomColumnScope.Rig => "AND cv.rig_label IS NOT NULL",
-        // target, and the reserved mosaic scope (U1), which no surface can create: the repository
-        // refuses it, and a mosaic row's null target_id matches no group in any case.
+        // target, and the mosaic scope, which the dashboard filter never lists (spec 12.15): a
+        // mosaic row's null target_id matches no group in any case.
         _ => "AND cv.session_date IS NULL AND cv.rig_label IS NULL",
     };
 

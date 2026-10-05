@@ -17,7 +17,7 @@ public sealed record CustomColumnDefinition(
     DateTime CreatedAt,
     int ValueCount);
 
-/// <summary>The four key parts of one value slot (spec 5.20). Built by the three factories below
+/// <summary>The four key parts of one value slot (spec 5.20). Built by the four factories below
 /// so no caller assembles a key by hand and no caller can put a date on a target-scope value.
 /// </summary>
 public readonly record struct CustomValueKey(
@@ -38,6 +38,10 @@ public readonly record struct CustomValueKey(
     /// night and per rig, not per rig across the library).</summary>
     public static CustomValueKey ForRig(Guid targetId, DateOnly night, string rigLabel)
         => new(targetId, MosaicId: null, night, rigLabel);
+
+    /// <summary>Spec 5.20's `mosaic` scope key (Phase 18): the mosaic only.</summary>
+    public static CustomValueKey ForMosaic(Guid mosaicId)
+        => new(TargetId: null, mosaicId, SessionDate: null, RigLabel: null);
 }
 
 /// <summary>One stored value, as the read methods return it.</summary>
@@ -62,10 +66,11 @@ public enum CustomWriteStatus
     ColumnNotFound,
 
     /// <summary>The key's four parts are not the ones the column's scope names (spec 5.20's key
-    /// table, U3): a target-scope key carrying a night, a rig-scope key carrying no rig label, any
-    /// key carrying a mosaic id. Like <see cref="ColumnNotFound"/> it is a programming error rather
-    /// than a user path and carries a null message: no surface shows it, and a surface that builds
-    /// its key through the three factories cannot reach it.</summary>
+    /// table, U3): a target-scope key carrying a night, a rig-scope key carrying no rig label, a
+    /// target-keyed scope's key carrying a mosaic id, a mosaic-scope key carrying anything but its
+    /// mosaic id. Like <see cref="ColumnNotFound"/> it is a programming error rather than a user
+    /// path and carries a null message: no surface shows it, and a surface that builds its key
+    /// through the four factories cannot reach it.</summary>
     KeyDoesNotMatchScope,
 
     /// <summary>Options were submitted for a column that is not a dropdown. Create and Update answer

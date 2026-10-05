@@ -14,9 +14,8 @@ namespace GalactiLog.Data.Entities;
 /// empty string and never a sentinel date (core-shapes.md section 5.3's key table).
 /// </para>
 /// <para>
-/// <see cref="MosaicId"/> carries no foreign key and no reader (U1). It exists so the phase that
-/// builds mosaics adds the key, its cascade and the fourth scope and nothing else. It is null on
-/// every row this phase can write, and a case proves it.
+/// <see cref="MosaicId"/> is set on a mosaic-scope value alone, with a foreign key to
+/// <c>mosaics.id</c> that cascades (Phase 18, ruling R2).
 /// </para>
 /// <para>No <c>updated_by</c> (spec 2.3).</para>
 /// </remarks>
