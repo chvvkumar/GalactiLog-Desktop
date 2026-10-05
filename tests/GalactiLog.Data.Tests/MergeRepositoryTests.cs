@@ -1012,4 +1012,93 @@ public class MergeRepositoryTests : IDisposable
             .GroupBy(image => image.ResolvedTargetId!.Value)
             .ToDictionary(group => group.Key, group => group.Count());
     }
+    // ---- mosaic nights (spec 5.24, Phase 18) -------------------------------------------
+
+    private (MosaicRepository Mosaics, Guid Mosaic, Guid First, Guid Second) TwoPanelMosaic()
+    {
+        var mosaics = new MosaicRepository(new DatabaseConnectionString(_db.ConnectionString));
+        var id = mosaics.Create("NGC 7000");
+        return (mosaics, id, mosaics.AddPanel(id, "Panel 1"), mosaics.AddPanel(id, "Panel 2"));
+    }
+
+    private List<(Guid Panel, Guid Target, DateOnly Night, string? Label, string Status)> SessionRows()
+    {
+        using var context = Open();
+        return [.. context.MosaicPanelSessions
+            .OrderBy(row => row.SessionDate).ThenBy(row => row.FrameLabel)
+            .AsEnumerable()
+            .Select(row => (row.PanelId, row.TargetId, row.SessionDate, row.FrameLabel, row.Status))];
+    }
+
+    [Fact]
+    public void Merge_RewritesTheLosersMosaicNightsToTheWinner_AndUnmergeLeavesThem()
+    {
+        var winner = NewTarget("NGC 7000");
+        var loser = NewTarget("North America Nebula");
+        var (mosaics, _, first, _) = TwoPanelMosaic();
+        mosaics.IncludeNight(first, loser.Id, Date(1), "Panel 1");
+        mosaics.RemoveNight(first, loser.Id, Date(2), null);
+
+        _repository.Merge(winner.Id, loser.Id);
+        Assert.Equal(
+            new[] { (first, winner.Id, Date(1), (string?)"Panel 1", "included"), (first, winner.Id, Date(2), null, "available") },
+            SessionRows().OrderBy(row => row.Night));
+
+        _repository.Unmerge(loser.Id);
+        Assert.All(SessionRows(), row => Assert.Equal(winner.Id, row.Target));
+    }
+
+    // Two panels of one mosaic including the same triple after the rewrite: the panel earlier in
+    // sort_order keeps its row, whichever target it came from.
+    [Fact]
+    public void Merge_ACollidingIncludedTriple_IsKeptByTheEarlierPanel()
+    {
+        var winner = NewTarget("NGC 7000");
+        var loser = NewTarget("North America Nebula");
+        var (mosaics, _, first, second) = TwoPanelMosaic();
+        mosaics.IncludeNight(second, winner.Id, Date(1), "Panel 1");
+        mosaics.IncludeNight(first, loser.Id, Date(1), "panel 1");
+
+        _repository.Merge(winner.Id, loser.Id);
+
+        var row = Assert.Single(SessionRows());
+        Assert.Equal((first, winner.Id, "included"), (row.Panel, row.Target, row.Status));
+    }
+
+    [Fact]
+    public void Merge_InOnePanel_TheWinnersIncludedRowStays_AndAnIncludedRowReplacesAnAvailableOne()
+    {
+        var winner = NewTarget("NGC 7000");
+        var loser = NewTarget("North America Nebula");
+        var (mosaics, _, first, _) = TwoPanelMosaic();
+        mosaics.IncludeNight(first, winner.Id, Date(1), null);
+        mosaics.IncludeNight(first, loser.Id, Date(1), null);
+        mosaics.RemoveNight(first, winner.Id, Date(2), null);
+        mosaics.IncludeNight(first, loser.Id, Date(2), null);
+
+        _repository.Merge(winner.Id, loser.Id);
+
+        Assert.Equal(
+            new[] { (first, winner.Id, Date(1), (string?)null, "included"), (first, winner.Id, Date(2), null, "included") },
+            SessionRows());
+    }
+
+    // An available row that would collide with any row of the triple in the mosaic is dropped;
+    // a different frame label is a different triple and moves.
+    [Fact]
+    public void Merge_AnAvailableRowMeetingAnyRowOfItsTriple_IsDropped()
+    {
+        var winner = NewTarget("NGC 7000");
+        var loser = NewTarget("North America Nebula");
+        var (mosaics, _, first, second) = TwoPanelMosaic();
+        mosaics.RemoveNight(second, winner.Id, Date(1), null);
+        mosaics.RemoveNight(first, loser.Id, Date(1), null);
+        mosaics.RemoveNight(first, loser.Id, Date(1), "Panel 2");
+
+        _repository.Merge(winner.Id, loser.Id);
+
+        Assert.Equal(
+            new[] { (second, winner.Id, Date(1), (string?)null, "available"), (first, winner.Id, Date(1), "Panel 2", "available") },
+            SessionRows());
+    }
 }

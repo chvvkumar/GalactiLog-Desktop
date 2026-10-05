@@ -148,6 +148,10 @@ public sealed class MergeRepository(DatabaseConnectionString connectionString)
         // restores exactly those. Re-keyed on tracked entities, inside this same transaction.
         var movedValueIds = CustomColumnRepository.MoveValuesOnMerge(context, winnerId, loserId);
 
+        // Spec 5.24: the loser's mosaic nights follow its frames to the winner, collisions
+        // resolved there. Not in the manifest: an unmerge does not move them back.
+        MosaicRepository.MoveSessionsOnMerge(context, winnerId, loserId);
+
         var winnerNotesByDate = context.SessionNotes
             .Where(note => note.TargetId == winnerId)
             .ToList()
