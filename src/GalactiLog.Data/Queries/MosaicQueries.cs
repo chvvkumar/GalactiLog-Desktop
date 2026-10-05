@@ -90,6 +90,11 @@ public sealed record PanelCsvRow(
 /// mosaic dialog's existing list (spec 12.17).</summary>
 public sealed record MosaicLink(Guid MosaicId, string Name);
 
+/// <summary>The Create mosaic dialog's input (spec 12.17): one target's LIGHT frames on one
+/// night, grouped by their stored <c>panel_label</c> and their <c>OBJECT</c>, which the dialog
+/// re-parses for the name prefill's base.</summary>
+public sealed record NightFrameGroup(DateOnly Night, string? FrameLabel, string? ObjectName, int Frames);
+
 /// <summary>One row of a suggestion's session table (spec 12.17): an entry's frames grouped by
 /// <c>OBJECT</c>, night and canonical filter. <see cref="InCampaign"/> is false for a night
 /// outside the suggestion's own nights, which the "+k more nights" total counts.</summary>
@@ -338,6 +343,51 @@ public sealed class MosaicQueries(DatabaseConnectionString connectionString, Ali
                 entry.TargetId, entry.Label, group.Key.Object, group.Key.Night, group.Key.Filter,
                 group.Sum(frame => frame.Frames), group.Sum(frame => frame.Seconds),
                 entry.Dates.Contains(group.Key.Night))))];
+    }
+
+    /// <summary>The Create mosaic dialog's rows (spec 12.17): the target's LIGHT frames on the
+    /// given nights, grouped by night, stored frame label and <c>OBJECT</c>, newest night first,
+    /// then by label and <c>OBJECT</c>, ordinal.</summary>
+    public IReadOnlyList<NightFrameGroup> NightFrames(Guid targetId, IReadOnlyCollection<DateOnly> nights)
+    {
+        using var context = Open();
+        context.Database.OpenConnection();
+        var connection = (SqliteConnection)context.Database.GetDbConnection();
+        var parameters = new SqlParameters();
+        var target = parameters.Add(targetId);
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            SELECT i.session_date, i.panel_label, CAST(json_extract(i.raw_headers, '$.OBJECT') AS TEXT), count(*)
+            FROM images i
+            WHERE i.{SqlFragments.LightFrameOnly}
+              AND i.session_date IS NOT NULL
+              AND i.resolved_target_id = {target}
+            GROUP BY 1, 2, 3
+            """;
+        parameters.ApplyTo(command);
+
+        // The target's nights are tens; filtering them here keeps the date's stored text form out
+        // of the SQL.
+        var wanted = nights.ToHashSet();
+        var rows = new List<NightFrameGroup>();
+        using (var reader = command.ExecuteReader())
+        {
+            while (reader.Read())
+            {
+                if (SqlReaders.ReadDate(reader, 0) is { } night && wanted.Contains(night))
+                {
+                    rows.Add(new NightFrameGroup(night, SqlReaders.ReadText(reader, 1), SqlReaders.ReadText(reader, 2),
+                        SqlReaders.ReadInt(reader, 3)));
+                }
+            }
+        }
+
+        return [.. rows
+            .OrderByDescending(row => row.Night)
+            .ThenBy(row => row.FrameLabel ?? "", StringComparer.Ordinal)
+            .ThenBy(row => row.ObjectName ?? "", StringComparer.Ordinal)];
     }
 
     /// <summary>The primary name of each of these targets, for the suggestion row's target links

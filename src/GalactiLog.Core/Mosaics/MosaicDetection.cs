@@ -274,7 +274,10 @@ public static class MosaicDetection
         }
     }
 
-    private static string DateRangeSuffix(DateOnly first, DateOnly last)
+    /// <summary>The date range suffix of spec 7.7: <c>(Mar 2026)</c> when both nights fall in one
+    /// month, <c>(Mar 2026 - May 2026)</c> otherwise, English month abbreviations whatever the
+    /// culture. The Create mosaic dialog's name prefill (spec 12.17) reuses it.</summary>
+    public static string DateRangeSuffix(DateOnly first, DateOnly last)
     {
         var a = first.ToString("MMM yyyy", CultureInfo.InvariantCulture);
         var b = last.ToString("MMM yyyy", CultureInfo.InvariantCulture);

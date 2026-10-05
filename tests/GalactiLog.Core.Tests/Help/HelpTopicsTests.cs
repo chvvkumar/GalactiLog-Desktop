@@ -22,11 +22,12 @@ public class HelpTopicsTests
     // The export wizard added `export.destination`, `export.method`, `export.review` and `export.result`, taking it to 103.
     // Phase 18 Task 4 added the Mosaics page's four `mosaics.*` ids, taking it to 107.
     // Phase 18 Task 5 added the mosaic detail page's four `mosaic.*` ids, taking it to 111.
+    // Phase 18 Task 6 added `mosaic.create`, the Create mosaic dialog's heading, taking it to 112.
     [Fact]
-    public void All_Holds111Topics()
+    public void All_Holds112Topics()
     {
-        Assert.Equal(111, HelpTopics.All.Count);
-        Assert.Equal(111, HelpTopics.Ids.Count);
+        Assert.Equal(112, HelpTopics.All.Count);
+        Assert.Equal(112, HelpTopics.Ids.Count);
     }
 
     // Phase 18 Task 4. The four ids carry spec 12.12's titles.
@@ -39,6 +40,7 @@ public class HelpTopicsTests
     [InlineData("mosaic.notes", "Notes")]
     [InlineData("mosaic.labels", "New panel labels")]
     [InlineData("mosaic.sessions", "Panels and nights")]
+    [InlineData("mosaic.create", "Create mosaic")]
     public void TheMosaicTopics_ExistAndCarryTheirTitles(string id, string title)
         => Assert.Equal(title, HelpTopics.Get(id).Title);
 

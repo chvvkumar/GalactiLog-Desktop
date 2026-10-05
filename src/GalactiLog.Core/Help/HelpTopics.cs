@@ -827,6 +827,10 @@ public static class HelpTopics
             "Each panel lists the nights it counts as Included and the other nights of its targets as "
             + "Available, each night with the panel label its frames carry, and frames of one target, "
             + "night and label can count in only one panel of a mosaic."),
+
+        new("mosaic.create", "Create mosaic",
+            "Makes a new mosaic, or grows an existing one, from the nights checked on this target, "
+            + "where nights given the same panel label become one panel."),
     ];
 
     /// <summary>The table indexed by id, ordinal. Built with <c>ToDictionary</c> on purpose: a

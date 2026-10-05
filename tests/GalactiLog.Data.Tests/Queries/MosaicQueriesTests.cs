@@ -227,6 +227,31 @@ public class MosaicQueriesTests : IDisposable
         Assert.All(rows, row => Assert.Equal((target, "Panel 1"), (row.TargetId, row.Label)));
     }
 
+    // Phase 18 Task 6: the Create mosaic dialog's rows and its name prefill's OBJECT strings.
+    [Fact]
+    public void NightFrames_GroupTheTargetsLightFramesOnTheGivenNights_ByLabelAndObject_NewestFirst()
+    {
+        var target = NewTarget("NGC 7000");
+        var other = NewTarget("M 31");
+        Frames(target, 1, "Panel 1", 3, objectName: "NGC 7000 Panel 1");
+        Frames(target, 1, "Panel 1", 1, filter: "OIII", objectName: "NGC 7000 Panel 1");
+        Frames(target, 1, null, 2, objectName: "NGC 7000");
+        Frames(target, 2, "Panel 2", 2, objectName: "NGC 7000 P2");
+        Frames(target, 2, "Panel 2", 4, imageType: "DARK", objectName: "NGC 7000 P2");
+        Frames(target, 3, "Panel 1", 5, objectName: "NGC 7000 Panel 1");
+        Frames(other, 1, "Panel 1", 7, objectName: "M 31 Panel 1");
+
+        var rows = _queries.NightFrames(target, [Night(1), Night(2)]);
+
+        Assert.Equal(
+            [
+                new NightFrameGroup(Night(2), "Panel 2", "NGC 7000 P2", 2),
+                new NightFrameGroup(Night(1), null, "NGC 7000", 2),
+                new NightFrameGroup(Night(1), "Panel 1", "NGC 7000 Panel 1", 4),
+            ],
+            rows);
+    }
+
     // Phase 18 Task 4: the suggestion row's target links name each target by its primary name.
     [Fact]
     public void TargetNames_MapEachKnownTargetToItsPrimaryName()

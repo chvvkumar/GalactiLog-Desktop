@@ -316,4 +316,35 @@ public class NightSelectionTests
         Assert.False(harness.ViewModel.AreAllNightsSelected);
         Assert.Empty(harness.ViewModel.SelectedNights);
     }
+
+    // Phase 18 Task 6, spec 12.4: the overflow menu's Create mosaic entry reads SelectedNights and
+    // is disabled while nothing is checked.
+    [Fact]
+    public async Task CreateMosaic_IsDisabledWithNoNight_AndOpensTheDialogOverTheCheckedOnes()
+    {
+        using var harness = Factory.Create().Settle();
+
+        Assert.True(harness.ViewModel.IsResolved);
+        Assert.False(harness.ViewModel.CreateMosaicCommand.CanExecute(null));
+        Assert.Equal("Select one or more nights first", harness.ViewModel.NoNightCheckedHint);
+
+        harness.ViewModel.Sessions[0].IsChecked = true;
+
+        Assert.True(harness.ViewModel.CreateMosaicCommand.CanExecute(null));
+        await harness.ViewModel.CreateMosaicCommand.ExecuteAsync(null);
+        var opened = Assert.Single(harness.OpenedCreateMosaics);
+        Assert.Equal(Factory.TargetId, opened.TargetId);
+        Assert.Equal("M 31", opened.TargetName);
+        Assert.Equal([harness.ViewModel.Sessions[0].SessionDate], opened.Nights);
+    }
+
+    [Fact]
+    public void CreateMosaic_IsNotDrawnForAnUnresolvedGroup()
+    {
+        using var harness = Factory.Create(
+            get: _ => Factory.PopulatedDetail(header: Factory.UnresolvedHeader()),
+            groupKey: Factory.UnresolvedGroupKey).Settle();
+
+        Assert.False(harness.ViewModel.IsResolved);
+    }
 }

@@ -1,0 +1,143 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+        xmlns:queries="using:GalactiLog.Data.Queries"
+        x:Class="GalactiLog.App.Views.TargetDetail.CreateMosaicWindow"
+        x:DataType="detail:CreateMosaicViewModel"
+        Title="Create mosaic"
+        Width="620"
+        MinHeight="300"
+        MaxHeight="820"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.17's Create mosaic dialog, opened from the Target detail page's overflow
+       entry over the checked nights (spec 12.4, ruling R12). A ModalPageWindow like the merge
+       preview and Copy Frame List, on the one ModalHost. It writes the catalogue and no file.
+       Every colour is a theme token (spec 14); no control style is declared here. -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <StackPanel Spacing="2">
+        <StackPanel x:Name="HeadingRow" Orientation="Horizontal" Spacing="6">
+          <TextBlock x:Name="TitleText"
+                     Text="Create mosaic"
+                     VerticalAlignment="Center"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <controls:HelpButton Topic="mosaic.create" />
+        </StackPanel>
+        <TextBlock x:Name="SublineText"
+                   Text="{Binding Subline}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+      </StackPanel>
+
+      <!-- New mosaic or Add to existing: the second radio is bound to the negation of the first,
+           the shape the Copy Frame List mode segment uses, so both cannot read checked. -->
+      <StackPanel Spacing="6">
+        <RadioButton x:Name="NewMosaicRadio"
+                     GroupName="CreateMosaicMode"
+                     Content="New mosaic"
+                     IsChecked="{Binding IsNew, Mode=TwoWay}" />
+        <StackPanel Spacing="4" Margin="24,0,0,0" IsVisible="{Binding IsNew}">
+          <TextBox x:Name="NameBox"
+                   Watermark="Mosaic name"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding Name, Mode=TwoWay}" />
+          <TextBlock x:Name="NameErrorText"
+                     Text="{Binding NameError}"
+                     IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+        </StackPanel>
+        <RadioButton x:Name="ExistingMosaicRadio"
+                     GroupName="CreateMosaicMode"
+                     Content="Add to existing"
+                     IsEnabled="{Binding CanUseExisting}"
+                     ToolTip.Tip="{Binding ExistingHint}"
+                     ToolTip.ShowOnDisabled="True"
+                     IsChecked="{Binding !IsNew, Mode=TwoWay}" />
+        <ComboBox x:Name="ExistingMosaicCombo"
+                  Margin="24,0,0,0"
+                  MinWidth="260"
+                  PlaceholderText="Select a mosaic"
+                  IsVisible="{Binding !IsNew}"
+                  ItemsSource="{Binding Existing}"
+                  SelectedItem="{Binding SelectedExisting, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="queries:MosaicLink">
+              <TextBlock Text="{Binding Name}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <!-- The Nights table: one row per (night, frame label) pair, newest night first, aligned
+           through shared size groups. -->
+      <StackPanel Spacing="6" Grid.IsSharedSizeScope="True">
+        <Grid>
+          <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicNight" />
+            <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicFrameLabel" />
+            <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicFrames" />
+            <ColumnDefinition Width="*" />
+          </Grid.ColumnDefinitions>
+          <TextBlock Grid.Column="0" Text="Night" Margin="0,0,16,0" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Grid.Column="1" Text="Frame label" Margin="0,0,16,0" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Grid.Column="2" Text="Frames" Margin="0,0,16,0" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Grid.Column="3" Text="Panel label" Foreground="{DynamicResource ColorTextTertiary}" />
+        </Grid>
+        <ItemsControl x:Name="NightRows" ItemsSource="{Binding Rows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="detail:CreateMosaicRowViewModel">
+              <Grid Margin="0,2">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicNight" />
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicFrameLabel" />
+                  <ColumnDefinition Width="Auto" SharedSizeGroup="CreateMosaicFrames" />
+                  <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Classes="mono" Text="{Binding NightText}" Margin="0,0,16,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource ColorTextPrimary}" />
+                <TextBlock Grid.Column="1" Text="{Binding FrameLabelText}" Margin="0,0,16,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource ColorTextSecondary}" />
+                <TextBlock Grid.Column="2" Text="{Binding Frames}" Margin="0,0,16,0"
+                           VerticalAlignment="Center" Foreground="{DynamicResource ColorTextPrimary}" />
+                <TextBox Grid.Column="3"
+                         Watermark="For example, Panel 1"
+                         Background="{DynamicResource ColorBgInput}"
+                         Foreground="{DynamicResource ColorTextPrimary}"
+                         Text="{Binding Label, Mode=TwoWay}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <TextBlock x:Name="CombineCaption"
+                   Text="Nights with the same panel label are combined into one panel."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+      </StackPanel>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding Error}"
+                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton"
+                Content="Cancel"
+                Padding="14,4"
+                Command="{Binding CancelCommand}" />
+        <Button x:Name="CreateButton"
+                Content="Create"
+                Padding="14,4"
+                IsDefault="True"
+                Command="{Binding CreateCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

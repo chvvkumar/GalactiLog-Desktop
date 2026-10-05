@@ -129,6 +129,14 @@
                               Header="Re-resolve"
                               Command="{Binding ReResolveCommand}"
                               IsVisible="{x:Static detail:TargetDetailViewModel.ReResolveAvailable}" />
+                    <!-- Spec 12.4 and 12.17 (Phase 18, ruling R12): disabled while nothing is
+                         checked with the Export flyout's sentence, drawn for a resolved target only. -->
+                    <MenuItem x:Name="CreateMosaicMenuItem"
+                              Header="Create mosaic from selected nights"
+                              Command="{Binding CreateMosaicCommand}"
+                              IsVisible="{Binding IsResolved}"
+                              ToolTip.Tip="{Binding NoNightCheckedHint}"
+                              ToolTip.ShowOnDisabled="True" />
                     <!-- Spec 12.16, rulings B5 and B9. A Separator, as LogViewerView.axaml:225,
                          never a Border.rule inside a menu, hidden with both submenus; each submenu
                          is hidden while its own list is empty and its leaf items are built by

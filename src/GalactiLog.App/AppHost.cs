@@ -15,6 +15,7 @@ using GalactiLog.App.ViewModels.Setup;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
+using GalactiLog.App.Views.TargetDetail;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.App.ViewModels.Update;
 using GalactiLog.Core.Catalogs;
@@ -1574,7 +1575,31 @@ public static class AppHost
                 getSessionDetail: serviceProvider.GetRequiredService<SessionDetailQuery>().Get,
                 subscribeGeneralChanged: handler => settingsStore.GeneralChanged += handler,
                 unsubscribeGeneralChanged: handler => settingsStore.GeneralChanged -= handler,
-                openSurveyView: target => serviceProvider.GetRequiredService<SurveyViewModalService>().ShowAsync(target)));
+                openSurveyView: target => serviceProvider.GetRequiredService<SurveyViewModalService>().ShowAsync(target),
+                // Spec 12.17's Create mosaic dialog (Phase 18 Task 6, ruling R12). Its two reads run
+                // off the UI thread before the modal opens, so the dialog is built over plain data;
+                // its one write is the repository's single transaction, and its success path is the
+                // shell's one route to the mosaic detail page.
+                openCreateMosaic: async (targetId, targetName, nights) =>
+                {
+                    var queries = serviceProvider.GetRequiredService<MosaicQueries>();
+                    var (frames, existing) = await Task.Run(() =>
+                        (queries.NightFrames(targetId, nights), queries.MosaicsIncludingTarget(targetId))).ConfigureAwait(true);
+                    var keywords = serviceProvider.GetRequiredService<SettingsStore>().GetGeneral().MosaicKeywords;
+                    var repository = serviceProvider.GetRequiredService<MosaicRepository>();
+                    await serviceProvider.GetRequiredService<ModalHost>().ShowAsync<bool>(() => new CreateMosaicWindow
+                    {
+                        DataContext = new CreateMosaicViewModel(
+                            targetName,
+                            nights,
+                            frames,
+                            existing,
+                            keywords,
+                            (name, existingId, rows) => repository.CreateFromNights(name, existingId, targetId, rows),
+                            mosaicId => serviceProvider.GetRequiredService<MainWindowViewModel>().OpenMosaic(mosaicId),
+                            serviceProvider.GetRequiredService<ILogger<CreateMosaicViewModel>>()),
+                    }).ConfigureAwait(true);
+                }));
 
         // Spec 12.4's Copy Frame List page (Phase 14A Task 4). Per opening, so a factory keyed on
         // the group key and the checked nights, the same shape the merge dialog uses. Every
