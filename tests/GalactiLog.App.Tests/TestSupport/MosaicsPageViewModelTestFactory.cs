@@ -12,7 +12,18 @@ internal sealed class MosaicsPageHarness : IDisposable
     public MosaicsPageHarness(
         MosaicsBackend? backend = null, DisplaySettings? display = null, ScanStatusService? scanStatus = null, JobRegistry? jobs = null)
     {
-        Jobs = jobs ?? new JobRegistry(action => action());
+        // Synchronous, but one action at a time across threads, the way the one UI thread runs
+        // them: a reload's apply and a job's end both arrive from the thread pool (Task 6c).
+        var ui = new object();
+        void Post(Action action)
+        {
+            lock (ui)
+            {
+                action();
+            }
+        }
+
+        Jobs = jobs ?? new JobRegistry(Post);
         Display = display ?? new DisplaySettings();
         Writer = new DisplayColumnWriter(() => Display, saved => Display = saved);
         Page = new MosaicsPageViewModel(
@@ -21,7 +32,7 @@ internal sealed class MosaicsPageHarness : IDisposable
             Display,
             Writer,
             scanStatus,
-            post: action => action(),
+            post: Post,
             delay: (_, _) => Task.CompletedTask);
     }
 

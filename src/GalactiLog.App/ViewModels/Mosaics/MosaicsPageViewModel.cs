@@ -638,7 +638,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     {
         AcceptAllCommand.NotifyCanExecuteChanged();
         DismissAllCommand.NotifyCanExecuteChanged();
-        foreach (var row in _suggestions)
+        // A snapshot: a row's gate handler can remove a row, and a reload replaces the list.
+        // Every mutation of _suggestions runs on the UI thread (ApplySuggestions through Post,
+        // RemoveSuggestion from a row's command), as does this method in the application.
+        foreach (var row in _suggestions.ToArray())
         {
             row.NotifyGates();
         }

@@ -317,6 +317,32 @@ public class MosaicsPageViewModelTests
         Assert.False(harness.Page.BulkRunning);
     }
 
+    // Task 6c: the gates walk a snapshot of the suggestions. A row's gate notification that
+    // removes another row (here a handler accepting it) used to throw "Collection was modified"
+    // out of NotifyActionGates; the same enumeration raced a reload on the job thread.
+    [Fact]
+    public async Task TheActionGates_SurviveTheSuggestionsChangingWhileTheyAreNotified()
+    {
+        var rows = new[] { Suggestion("A", "Panel 1"), Suggestion("B", "Panel 1"), Suggestion("C", "Panel 1") };
+        using var harness = await Ready(new MosaicsBackend { ListPending = () => rows, Accept = (_, _) => Guid.NewGuid() });
+        var page = harness.Page;
+        var second = page.VisibleSuggestions[1];
+        var fired = false;
+        page.VisibleSuggestions[0].AcceptCommand.CanExecuteChanged += (_, _) =>
+        {
+            if (!fired && !page.BulkRunning)
+            {
+                fired = true;
+                second.AcceptCommand.Execute(null);
+            }
+        };
+
+        await page.RunBulkAsync<int>("mosaic_test", "Test", "test", "Tested", [], _ => "", _ => { });
+
+        Assert.True(fired);
+        Assert.Equal(new[] { "A", "C" }, page.VisibleSuggestions.Select(row => row.Name));
+    }
+
     [Fact]
     public async Task DismissAll_ArmsFirst_ThenRunsOneJob_AndFailsWhenEveryItemFails()
     {
