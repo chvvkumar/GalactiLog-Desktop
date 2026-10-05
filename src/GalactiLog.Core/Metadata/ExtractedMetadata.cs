@@ -23,6 +23,9 @@ public sealed record ExtractedMetadata
     [JsonPropertyName("eccentricity_source")] public string? EccentricitySource { get; init; }
     [JsonPropertyName("altitude_deg")] public double? AltitudeDeg { get; init; }
     [JsonPropertyName("arcsec_per_pixel")] public double? ArcsecPerPixel { get; init; }
+    [JsonPropertyName("ra_deg")] public double? RaDeg { get; init; }
+    [JsonPropertyName("dec_deg")] public double? DecDeg { get; init; }
+    [JsonPropertyName("width_px")] public int? WidthPx { get; init; }
     [JsonPropertyName("capture_date")] public string? CaptureDate { get; init; }
     [JsonPropertyName("hfr_stdev")] public double? HfrStdev { get; init; }
     [JsonPropertyName("fwhm")] public double? Fwhm { get; init; }

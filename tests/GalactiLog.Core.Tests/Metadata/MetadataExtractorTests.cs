@@ -615,4 +615,53 @@ public class MetadataExtractorTests
             XisfHeaderReader.BuildRawHeaders(header).ToJsonString(),
             result.Metadata.RawHeaders.ToJsonString());
     }
+
+    // --- Phase 18 geometry fields: ra_deg, dec_deg, width_px (spec 7.1) ---
+
+    [Fact]
+    public void FromFits_DecimalRaDec_AndNaxis1_FillGeometryWithProvenance()
+    {
+        var cards = ReadCards(MinimalValidFits()
+            .Card("RA", 10.684).Card("DEC", 41.269)
+            .Card("OBJCTRA", "01 00 00").Card("OBJCTDEC", "+10 00 00")
+            .Card("NAXIS1", 6248L));
+
+        var m = MetadataExtractor.FromFits(cards, "frame.fits").Metadata;
+
+        Assert.Equal(10.684, m.RaDeg);
+        Assert.Equal(41.269, m.DecDeg);
+        Assert.Equal(6248, m.WidthPx);
+        Assert.Equal("RA", m.Provenance["ra_deg"]);
+        Assert.Equal("DEC", m.Provenance["dec_deg"]);
+        Assert.Equal("NAXIS1", m.Provenance["width_px"]);
+    }
+
+    [Fact]
+    public void FromFits_SexagesimalFallback_PerAxis()
+    {
+        var cards = ReadCards(MinimalValidFits()
+            .Card("RA", "not a number").Card("OBJCTRA", "00 42 44")
+            .Card("OBJCTDEC", "-00 30 00"));
+
+        var m = MetadataExtractor.FromFits(cards, "frame.fits").Metadata;
+
+        Assert.Equal((42 / 60.0 + 44 / 3600.0) * 15, m.RaDeg!.Value, 9);
+        Assert.Equal(-0.5, m.DecDeg);
+        Assert.Equal("OBJCTRA", m.Provenance["ra_deg"]);
+        Assert.Equal("OBJCTDEC", m.Provenance["dec_deg"]);
+    }
+
+    [Fact]
+    public void FromFits_MissingDeclinationOrBadWidth_LeavesGeometryNull()
+    {
+        var cards = ReadCards(MinimalValidFits().Card("RA", 10.0).Card("NAXIS1", "4000.5"));
+
+        var m = MetadataExtractor.FromFits(cards, "frame.fits").Metadata;
+
+        Assert.Null(m.RaDeg);
+        Assert.Null(m.DecDeg);
+        Assert.Null(m.WidthPx);
+        Assert.False(m.Provenance.ContainsKey("ra_deg"));
+        Assert.False(m.Provenance.ContainsKey("width_px"));
+    }
 }

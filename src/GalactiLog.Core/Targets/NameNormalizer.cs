@@ -38,7 +38,9 @@ public static partial class NameNormalizer
     public static string? NormalizeCatalogId(string? catalogId)
         => string.IsNullOrWhiteSpace(catalogId) ? null : Normalize(catalogId);
 
-    // Removes a trailing mosaic panel suffix ("M31 Panel 2" -> "M31"), then trims.
+    // Removes a trailing mosaic panel suffix ("M31 Panel 2" -> "M31"), then trims. A fixed
+    // keyword, used by target resolution; the configurable mosaic token rule of spec 7.7 is
+    // Mosaics.PanelTokens, which never changes how a name resolves.
     public static string StripPanel(string name) => PanelSuffix.Replace(name, "").Trim();
 
     // openngc_catalog.messier's stored form ("M 057") to the bare number a catalog id or a
