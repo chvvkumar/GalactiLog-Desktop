@@ -181,6 +181,27 @@ public class MosaicRepositoryTests : IDisposable
         Assert.Equal("Panel 1 (b)", Panels(id)[0].PanelLabel);
     }
 
+    // Phase 18 Task 4 fix round: Remove panel in one transaction, included nights and all, leaving
+    // the mosaic's other panels as they were.
+    [Fact]
+    public void RemovePanel_RemovesThePanelAndItsNights_InOneWrite()
+    {
+        var target = NewTarget("NGC 7000");
+        var id = _repository.Create("Alpha");
+        var first = _repository.AddPanel(id, "Panel 1");
+        var second = _repository.AddPanel(id, "Panel 2");
+        _repository.IncludeNight(first, target, Night(1), "Panel 1");
+        _repository.RemoveNight(first, target, Night(2), "Panel 1");
+        _repository.IncludeNight(second, target, Night(1), "Panel 2");
+
+        _repository.RemovePanel(first);
+
+        using var context = Open();
+        Assert.Equal(second, Assert.Single(context.MosaicPanels).Id);
+        Assert.Equal(second, Assert.Single(context.MosaicPanelSessions).PanelId);
+        Assert.Throws<KeyNotFoundException>(() => _repository.RemovePanel(first));
+    }
+
     [Fact]
     public void DeletePanel_WithAnIncludedNight_IsRefused_AndWithOnlyAvailableRows_DeletesThem()
     {

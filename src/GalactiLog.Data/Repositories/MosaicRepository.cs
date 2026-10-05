@@ -161,6 +161,18 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
             return 0;
         });
 
+    /// <summary>Spec 12.17's Remove panel: in one transaction the panel's nights leave this mosaic
+    /// and the panel goes. Its rows, included or available, go with it through the cascade, so no
+    /// frame and no other panel's row is touched.</summary>
+    public void RemovePanel(Guid panelId)
+        => Write(context =>
+        {
+            var panel = FindPanel(context, panelId);
+            context.MosaicPanels.Remove(panel);
+            Touch(FindMosaic(context, panel.MosaicId));
+            return 0;
+        });
+
     /// <summary>Spec 12.17's add panel form: the panel of that label, created at the end when the
     /// mosaic has none, gains the target's triples as <c>included</c> rows. When any LIGHT frame
     /// of the target carries the label (compared case insensitively) only those pairs are taken;
