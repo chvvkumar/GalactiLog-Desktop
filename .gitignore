@@ -13,8 +13,7 @@ Releases/
 /publish/
 *.log
 
-# Only application files belong in this repository. Process notes, agent memory,
-# AI tooling state and repository packs live in the GalactiLog-Windows repository.
+# Only application files belong in this repository.
 docs/superpowers/
 docs/reference/
 .claude/

@@ -166,7 +166,7 @@ function Resolve-Dotnet {
         if (Test-DotnetSdk10 $candidate) { return $candidate }
     }
     throw ('No .NET SDK 10.0.4xx found. Checked: ' + ($candidates -join ', ') +
-           '. See docs/superpowers/HANDOFF.md section 3.1 item 2.')
+           '. See docs/packaging.md.')
 }
 
 function Resolve-Vpk {
