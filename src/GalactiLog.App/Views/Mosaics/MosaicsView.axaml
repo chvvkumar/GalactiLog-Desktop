@@ -1,0 +1,624 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+             xmlns:queries="using:GalactiLog.Data.Queries"
+             xmlns:sys="using:System"
+             x:Class="GalactiLog.App.Views.Mosaics.MosaicsView"
+             x:Name="Root"
+             x:DataType="mos:MosaicsPageViewModel">
+  <!-- Spec 12.17's Mosaics page (Phase 18). Two columns, each with its own ScrollViewer, so the
+       page itself never scrolls and a long suggestion list does not carry the mosaics table off
+       screen. Flat sections with a heading row, not collapsible cards. Every colour is a theme
+       token, nothing sets FontSize, and no button is filled: Run scan is the one filled button in
+       the application (section 14). -->
+  <UserControl.Styles>
+    <!-- A session table row of an unchecked panel is drawn in the tertiary ink (spec 12.17). -->
+    <Style Selector="Grid.unchecked TextBlock">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
+      <TextBlock Text="Mosaics" Classes="t-label section" VerticalAlignment="Center" />
+      <controls:HelpButton Topic="mosaics.about" />
+    </StackPanel>
+
+    <Grid Grid.Row="1" ColumnDefinitions="*,*">
+
+      <!-- ===== Left column: detection keywords over suggestions ===== -->
+      <ScrollViewer Grid.Column="0" Margin="0,0,8,0">
+        <StackPanel Spacing="10" Margin="0,0,12,0">
+
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="Detection keywords" Classes="section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="mosaics.keywords" />
+            </StackPanel>
+            <Button Grid.Column="1"
+                    x:Name="RunDetectionButton"
+                    Classes="sm"
+                    Content="Run Detection"
+                    Command="{Binding RunDetectionCommand}"
+                    ToolTip.Tip="{Binding RunDetectionTooltip}"
+                    ToolTip.ShowOnDisabled="True" />
+          </Grid>
+
+          <ItemsControl x:Name="KeywordChips" ItemsSource="{Binding Keywords}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <Border Classes="tag" Margin="0,0,6,6">
+                  <StackPanel Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{Binding}" VerticalAlignment="Center" />
+                    <Button Classes="quiet"
+                            Content="x"
+                            Padding="2,0"
+                            MinHeight="0"
+                            ToolTip.Tip="Remove"
+                            Command="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).RemoveKeywordCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox x:Name="NewKeywordBox"
+                     Watermark="New keyword"
+                     Text="{Binding NewKeyword}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddKeywordCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1" Classes="sm" Content="Add" Margin="8,0,0,0" Command="{Binding AddKeywordCommand}" />
+          </Grid>
+          <TextBlock Text="{Binding KeywordError}"
+                     IsVisible="{Binding KeywordError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Position tolerance (arcmin)" Foreground="{DynamicResource ColorTextSecondary}" />
+            <NumericUpDown x:Name="ToleranceBox"
+                           Minimum="0"
+                           Maximum="600"
+                           Increment="1"
+                           FormatString="0"
+                           HorizontalAlignment="Left"
+                           MinWidth="140"
+                           Value="{Binding PositionTolerance}" />
+            <TextBlock Text="0 derives it from the field of view." Classes="t-caption" Foreground="{DynamicResource ColorTextSecondary}" />
+          </StackPanel>
+
+          <TextBlock Text="Run Detection to apply."
+                     IsVisible="{Binding ShowApplyCaption}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+
+          <!-- Suggestions -->
+          <Grid ColumnDefinitions="*,Auto" Margin="0,12,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="{Binding SuggestionsHeading}" Classes="section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="mosaics.suggestions" />
+            </StackPanel>
+            <ComboBox Grid.Column="1"
+                      x:Name="CampaignGapBox"
+                      ItemsSource="{Binding GapChoices}"
+                      SelectedItem="{Binding SelectedGap}"
+                      ToolTip.Tip="Campaign gap">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="mos:CampaignGapChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
+
+          <TextBox x:Name="SuggestionFilterBox"
+                   Watermark="Filter suggestions"
+                   Text="{Binding FilterText}"
+                   IsVisible="{Binding ShowFilter}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasVisibleSuggestions}">
+            <CheckBox Content="Select all" IsChecked="{Binding AllSuggestionsSelected}" />
+            <Button Classes="sm" Content="{Binding AcceptAllText}" Command="{Binding AcceptAllCommand}" />
+            <Button Classes="sm" Content="{Binding DismissAllText}" Command="{Binding DismissAllCommand}" />
+          </StackPanel>
+          <Border Classes="callout warn" IsVisible="{Binding DismissAllPending}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding DismissAllConfirmText}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="sm" Content="Confirm" Command="{Binding DismissAllCommand}" />
+                <Button Classes="sm" Content="Cancel" Command="{Binding CancelDismissAllCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <TextBlock x:Name="NoSuggestionsText"
+                     Text="{x:Static mos:MosaicsPageViewModel.NoSuggestionsText}"
+                     IsVisible="{Binding HasNoSuggestions}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <ItemsControl x:Name="SuggestionList" ItemsSource="{Binding VisibleSuggestions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="mos:SuggestionRowViewModel">
+                <Border Classes="rule" Padding="0,6">
+                  <StackPanel Spacing="6">
+                    <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+                      <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Top" />
+                      <Button Grid.Column="1" Classes="chevron" VerticalAlignment="Top" Command="{Binding ToggleExpandedCommand}">
+                        <Panel>
+                          <Path Width="16" Height="16" Classes="icon-glyph" Data="{StaticResource IconChevronRight}"
+                                IsVisible="{Binding !IsExpanded}" />
+                          <Path Width="16" Height="16" Classes="icon-glyph" Data="{StaticResource IconChevronRight}"
+                                RenderTransform="rotate(90deg)" IsVisible="{Binding IsExpanded}" />
+                        </Panel>
+                      </Button>
+                      <StackPanel Grid.Column="2" Spacing="2" Margin="4,0">
+                        <WrapPanel Orientation="Horizontal">
+                          <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
+                          <Border Classes="tag" Margin="0,0,6,0" ToolTip.Tip="{Binding ConfidenceTooltip}">
+                            <Panel>
+                              <TextBlock Text="{Binding ConfidenceText}" IsVisible="{Binding IsHighConfidence}" Foreground="{DynamicResource ColorSuccess}" />
+                              <TextBlock Text="{Binding ConfidenceText}" IsVisible="{Binding !IsHighConfidence}" Foreground="{DynamicResource ColorWarning}" />
+                            </Panel>
+                          </Border>
+                          <Border Classes="tag">
+                            <TextBlock Text="{Binding SourceText}" Foreground="{DynamicResource ColorTextSecondary}" />
+                          </Border>
+                        </WrapPanel>
+                        <WrapPanel Orientation="Horizontal">
+                          <TextBlock Text="{Binding TotalsText}" Foreground="{DynamicResource ColorTextSecondary}" />
+                          <Panel>
+                            <TextBlock Text="{Binding FramesText}" IsVisible="{Binding !FramesAreZero}" Foreground="{DynamicResource ColorTextSecondary}" />
+                            <TextBlock Text="{Binding FramesText}" IsVisible="{Binding FramesAreZero}" Foreground="{DynamicResource ColorWarning}" />
+                          </Panel>
+                          <TextBlock Text="{Binding IntegrationText}" Foreground="{DynamicResource ColorTextSecondary}" />
+                          <TextBlock Text="{Binding MoreNightsText}" IsVisible="{Binding HasMoreNights}" Margin="8,0,0,0" Foreground="{DynamicResource ColorWarning}" />
+                        </WrapPanel>
+                      </StackPanel>
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
+                        <Button Classes="sm"
+                                Content="{Binding AcceptText}"
+                                Command="{Binding AcceptCommand}"
+                                ToolTip.Tip="{Binding AcceptTooltip}"
+                                ToolTip.ShowOnDisabled="True" />
+                        <Button Classes="sm" Content="Dismiss" Command="{Binding DismissCommand}" />
+                      </StackPanel>
+                    </Grid>
+
+                    <Border Classes="callout warn" IsVisible="{Binding DismissPending}">
+                      <StackPanel Spacing="6">
+                        <TextBlock Text="{x:Static mos:SuggestionRowViewModel.DismissConfirmText}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Button Classes="sm" Content="Confirm" Command="{Binding DismissCommand}" />
+                          <Button Classes="sm" Content="Cancel" Command="{Binding CancelDismissCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                    <TextBlock Text="{Binding AcceptError}"
+                               IsVisible="{Binding AcceptError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorError}" />
+
+                    <StackPanel Spacing="8" IsVisible="{Binding IsExpanded}" Margin="28,0,0,0">
+                      <Border Classes="callout warn" IsVisible="{Binding HasFlags}">
+                        <StackPanel Spacing="2">
+                          <TextBlock Text="Review notes" FontWeight="SemiBold" />
+                          <ItemsControl ItemsSource="{Binding Flags}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="sys:String">
+                                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </Border>
+
+                      <ItemsControl ItemsSource="{Binding Targets}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="mos:SuggestionTargetLink">
+                            <Button Classes="quiet"
+                                    Content="{Binding Name}"
+                                    Foreground="{DynamicResource ColorAccent}"
+                                    Command="{Binding $parent[ItemsControl].((mos:SuggestionRowViewModel)DataContext).OpenTargetCommand}"
+                                    CommandParameter="{Binding}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <!-- The session table (DESIGN.md section 6's aligned table). -->
+                      <StackPanel Grid.IsSharedSizeScope="True">
+                        <Grid>
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionCheck" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionPanel" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionNight" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionFilter" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionFrames" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="SessionIntegration" />
+                          </Grid.ColumnDefinitions>
+                          <CheckBox Grid.Column="0" IsChecked="{Binding AllPanelsChecked}" />
+                          <Button Grid.Column="1" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="Panel" Command="{Binding SortSessionsByCommand}" CommandParameter="panel" />
+                          <Button Grid.Column="2" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="OBJECT" Command="{Binding SortSessionsByCommand}" CommandParameter="object" />
+                          <Button Grid.Column="3" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="Night" Command="{Binding SortSessionsByCommand}" CommandParameter="night" />
+                          <Button Grid.Column="4" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="Filter" Command="{Binding SortSessionsByCommand}" CommandParameter="filter" />
+                          <Button Grid.Column="5" Classes="header-cell numeric" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="Frames" Command="{Binding SortSessionsByCommand}" CommandParameter="frames" />
+                          <Button Grid.Column="6" Classes="header-cell numeric" Background="Transparent" BorderThickness="0" Padding="8,0"
+                                  Content="Integration" Command="{Binding SortSessionsByCommand}" CommandParameter="integration" />
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Sessions}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="mos:SuggestionSessionViewModel">
+                              <Grid Classes.unchecked="{Binding !IsChecked}">
+                                <Grid.ColumnDefinitions>
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionCheck" />
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionPanel" />
+                                  <ColumnDefinition Width="*" />
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionNight" />
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionFilter" />
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionFrames" />
+                                  <ColumnDefinition Width="Auto" SharedSizeGroup="SessionIntegration" />
+                                </Grid.ColumnDefinitions>
+                                <CheckBox Grid.Column="0" IsChecked="{Binding IsChecked}" />
+                                <TextBlock Grid.Column="1" Text="{Binding Data.Label}" Margin="8,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="2" Text="{Binding Data.ObjectName}" Margin="8,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="3" Text="{Binding NightText}" Margin="8,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="4" Text="{Binding Data.Filter}" Margin="8,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="5" Text="{Binding FramesText}" Margin="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="6" Text="{Binding IntegrationText}" Margin="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </StackPanel>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ===== Right column: the mosaics table ===== -->
+      <ScrollViewer Grid.Column="1" Margin="8,0,0,0">
+        <StackPanel Spacing="10" Margin="0,0,12,0">
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="{Binding MosaicsHeading}" Classes="section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="mosaics.table" />
+            </StackPanel>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+              <Button Classes="sm"
+                      Content="{Binding DeleteSelectedText}"
+                      IsVisible="{Binding HasSelectedMosaics}"
+                      Command="{Binding DeleteSelectedCommand}" />
+              <Button x:Name="CreateMosaicButton" Classes="sm" Content="{Binding CreateButtonText}" Command="{Binding ToggleCreateCommand}" />
+              <Button x:Name="MosaicColumnGear" Padding="8,3" ToolTip.Tip="Columns">
+                <Path Width="16" Height="16" Classes="icon-glyph" Data="{StaticResource IconGear}" />
+                <Button.Flyout>
+                  <Flyout>
+                    <ItemsControl ItemsSource="{Binding Picker.Groups}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="settings:ColumnGroupViewModel">
+                          <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding Heading}"
+                                       Margin="0,4,0,0"
+                                       IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.ShowGroupHeadings}"
+                                       Foreground="{DynamicResource ColorTextTertiary}" />
+                            <ItemsControl ItemsSource="{Binding Columns}">
+                              <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="dash:ColumnViewModel">
+                                  <CheckBox Content="{Binding Title}"
+                                            IsChecked="{Binding IsVisible, Mode=OneWay}"
+                                            IsEnabled="{Binding CanHide}"
+                                            Command="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.ToggleCommand}"
+                                            CommandParameter="{Binding}" />
+                                </DataTemplate>
+                              </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                          </StackPanel>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Flyout>
+                </Button.Flyout>
+              </Button>
+            </StackPanel>
+          </Grid>
+
+          <Border Classes="callout warn" IsVisible="{Binding DeleteSelectedPending}">
+            <StackPanel Spacing="6">
+              <TextBlock Text="{Binding DeleteSelectedConfirmText}" TextWrapping="Wrap" />
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Classes="sm" Content="Confirm" Command="{Binding DeleteSelectedCommand}" />
+                <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteSelectedCommand}" />
+              </StackPanel>
+            </StackPanel>
+          </Border>
+
+          <StackPanel Spacing="4" IsVisible="{Binding IsCreateOpen}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBox x:Name="NewMosaicNameBox" Watermark="Mosaic name" Text="{Binding NewMosaicName}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding CreateCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <Button Grid.Column="1" Classes="sm" Content="Create" Margin="8,0,0,0" Command="{Binding CreateCommand}" />
+            </Grid>
+            <TextBlock Text="{Binding CreateError}"
+                       IsVisible="{Binding CreateError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LoadFailed}">
+            <TextBlock Text="{x:Static mos:MosaicsPageViewModel.LoadFailedText}" VerticalAlignment="Center" Foreground="{DynamicResource ColorError}" />
+            <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetryCommand}" />
+          </StackPanel>
+          <TextBlock x:Name="NoMosaicsText"
+                     Text="{x:Static mos:MosaicsPageViewModel.NoMosaicsText}"
+                     IsVisible="{Binding HasNoMosaics}"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <CheckBox Content="Select all" IsChecked="{Binding AllMosaicsSelected}" IsVisible="{Binding ShowSelectAllMosaics}" />
+
+          <StackPanel Grid.IsSharedSizeScope="True" IsVisible="{Binding !HasNoMosaics}">
+            <!-- The header row. Each built-in header sorts; a custom column's header does not. -->
+            <Grid MinHeight="30">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicCheck" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicPanels" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicIntegration" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicFrames" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicDates" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicCustom" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicActions" />
+              </Grid.ColumnDefinitions>
+              <Border Grid.Column="0" Width="28" />
+              <Button Grid.Column="1" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Left"
+                      Command="{Binding SortByCommand}" CommandParameter="name">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Picker.Columns[0].Title}" FontWeight="SemiBold" Foreground="{DynamicResource ColorTextSecondary}" />
+                  <TextBlock Text="{Binding Picker.Columns[0].SortGlyph}" Foreground="{DynamicResource ColorAccent}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="2" Classes="header-cell numeric" Background="Transparent" BorderThickness="0" Padding="8,0"
+                      IsVisible="{Binding Picker.Columns[1].IsVisible}"
+                      Command="{Binding SortByCommand}" CommandParameter="panels">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Picker.Columns[1].SortGlyph}" Foreground="{DynamicResource ColorAccent}" />
+                  <TextBlock Text="{Binding Picker.Columns[1].Title}" FontWeight="SemiBold" Foreground="{DynamicResource ColorTextSecondary}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="3" Classes="header-cell numeric" Background="Transparent" BorderThickness="0" Padding="8,0"
+                      IsVisible="{Binding Picker.Columns[2].IsVisible}"
+                      Command="{Binding SortByCommand}" CommandParameter="integration">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Picker.Columns[2].SortGlyph}" Foreground="{DynamicResource ColorAccent}" />
+                  <TextBlock Text="{Binding Picker.Columns[2].Title}" FontWeight="SemiBold" Foreground="{DynamicResource ColorTextSecondary}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="4" Classes="header-cell numeric" Background="Transparent" BorderThickness="0" Padding="8,0"
+                      IsVisible="{Binding Picker.Columns[3].IsVisible}"
+                      Command="{Binding SortByCommand}" CommandParameter="frames">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Picker.Columns[3].SortGlyph}" Foreground="{DynamicResource ColorAccent}" />
+                  <TextBlock Text="{Binding Picker.Columns[3].Title}" FontWeight="SemiBold" Foreground="{DynamicResource ColorTextSecondary}" />
+                </StackPanel>
+              </Button>
+              <Button Grid.Column="5" Classes="header-cell" Background="Transparent" BorderThickness="0" Padding="8,0"
+                      IsVisible="{Binding Picker.Columns[4].IsVisible}"
+                      Command="{Binding SortByCommand}" CommandParameter="date_range">
+                <StackPanel Orientation="Horizontal" Spacing="4">
+                  <TextBlock Text="{Binding Picker.Columns[4].Title}" FontWeight="SemiBold" Foreground="{DynamicResource ColorTextSecondary}" />
+                  <TextBlock Text="{Binding Picker.Columns[4].SortGlyph}" Foreground="{DynamicResource ColorAccent}" />
+                </StackPanel>
+              </Button>
+              <ItemsControl Grid.Column="6" ItemsSource="{Binding ShownCustomColumns}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="queries:CustomColumnDefinition">
+                    <TextBlock Text="{Binding Name}" Width="140" Padding="8,0" VerticalAlignment="Center"
+                               FontWeight="SemiBold" TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+
+            <ItemsControl x:Name="MosaicList" ItemsSource="{Binding Mosaics}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="mos:MosaicRowViewModel">
+                  <Border Classes="rule">
+                    <StackPanel>
+                      <Panel>
+                        <!-- The row's own click target sits behind the cells, the dashboard's shape:
+                             a click outside the row's controls opens the mosaic detail page. -->
+                        <Button Command="{Binding OpenCommand}"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                IsTabStop="False"
+                                AutomationProperties.Name="{Binding Name}"
+                                MinHeight="0"
+                                Padding="0" />
+                        <Grid MinHeight="34">
+                          <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicCheck" />
+                            <ColumnDefinition Width="*" MinWidth="120" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicPanels" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicIntegration" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicFrames" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicDates" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicCustom" />
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="MosaicActions" />
+                          </Grid.ColumnDefinitions>
+                          <CheckBox Grid.Column="0" Width="28" IsChecked="{Binding IsSelected}" />
+                          <TextBlock Grid.Column="1" Text="{Binding Name}" Padding="8,0" VerticalAlignment="Center"
+                                     TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextPrimary}" />
+                          <TextBlock Grid.Column="2" Text="{Binding PanelsText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[1].IsVisible}" />
+                          <TextBlock Grid.Column="3" Text="{Binding IntegrationText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[2].IsVisible}" />
+                          <TextBlock Grid.Column="4" Text="{Binding FramesText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[3].IsVisible}" />
+                          <TextBlock Grid.Column="5" Text="{Binding DateRangeText}" Padding="8,0" VerticalAlignment="Center"
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[4].IsVisible}" />
+                          <ItemsControl Grid.Column="6" ItemsSource="{Binding CustomCells}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="cc:CustomValueViewModel">
+                                <Border Width="140" Padding="8,0" VerticalAlignment="Center">
+                                  <controls:CustomCellEditor />
+                                </Border>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <StackPanel Grid.Column="7" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Center">
+                            <Button Classes="sm" Content="Delete" Command="{Binding DeleteCommand}" />
+                            <Button Classes="sm" Content="{Binding ExpandText}" Command="{Binding ToggleExpandCommand}" />
+                          </StackPanel>
+                        </Grid>
+                      </Panel>
+
+                      <Border Classes="callout warn" IsVisible="{Binding DeletePending}" Margin="0,4">
+                        <StackPanel Spacing="6">
+                          <TextBlock Text="{x:Static mos:MosaicRowViewModel.DeleteConfirmText}" TextWrapping="Wrap" />
+                          <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Classes="sm" Content="Confirm" Command="{Binding DeleteCommand}" />
+                            <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteCommand}" />
+                          </StackPanel>
+                        </StackPanel>
+                      </Border>
+                      <TextBlock Text="{Binding Error}"
+                                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource ColorError}" />
+
+                      <!-- The expanded row: Rename, the panel list, the add panel form. -->
+                      <StackPanel Spacing="8" Margin="28,6,0,10" IsVisible="{Binding IsExpanded}">
+                        <Button Classes="sm" Content="Rename" HorizontalAlignment="Left"
+                                IsVisible="{Binding !IsRenaming}" Command="{Binding BeginRenameCommand}" />
+                        <StackPanel Spacing="4" IsVisible="{Binding IsRenaming}">
+                          <Grid ColumnDefinitions="*,Auto,Auto">
+                            <TextBox Text="{Binding RenameText}">
+                              <TextBox.KeyBindings>
+                                <KeyBinding Gesture="Enter" Command="{Binding SaveRenameCommand}" />
+                                <KeyBinding Gesture="Escape" Command="{Binding CancelRenameCommand}" />
+                              </TextBox.KeyBindings>
+                            </TextBox>
+                            <Button Grid.Column="1" Classes="sm" Content="Save" Margin="8,0,0,0" Command="{Binding SaveRenameCommand}" />
+                            <Button Grid.Column="2" Classes="sm" Content="Cancel" Margin="8,0,0,0" Command="{Binding CancelRenameCommand}" />
+                          </Grid>
+                          <TextBlock Text="{Binding RenameError}"
+                                     IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                     Foreground="{DynamicResource ColorError}" />
+                        </StackPanel>
+
+                        <TextBlock Text="{x:Static mos:MosaicRowViewModel.NoPanelsText}"
+                                   IsVisible="{Binding HasNoPanels}"
+                                   Foreground="{DynamicResource ColorTextTertiary}" />
+                        <ItemsControl ItemsSource="{Binding PanelLines}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="mos:PanelLineViewModel">
+                              <StackPanel Spacing="4" Margin="0,2">
+                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                                  <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                  <TextBlock Grid.Column="1" Text="{Binding TargetsText}" Margin="8,0" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
+                                  <TextBlock Grid.Column="2" Text="{Binding IntegrationText}" Margin="8,0" VerticalAlignment="Center" />
+                                  <TextBlock Grid.Column="3" Text="{Binding FramesText}" Margin="8,0" VerticalAlignment="Center" />
+                                  <Button Grid.Column="4" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
+                                </Grid>
+                                <Border Classes="callout warn" IsVisible="{Binding RemovePending}">
+                                  <StackPanel Spacing="6">
+                                    <TextBlock Text="{Binding RemoveConfirmText}" TextWrapping="Wrap" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                      <Button Classes="sm" Content="Confirm" Command="{Binding RemoveCommand}" />
+                                      <Button Classes="sm" Content="Cancel" Command="{Binding CancelRemoveCommand}" />
+                                    </StackPanel>
+                                  </StackPanel>
+                                </Border>
+                                <TextBlock Text="{Binding Error}"
+                                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                           Foreground="{DynamicResource ColorError}" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- The add panel form (AddPanelViewModel), shared with the detail page. -->
+                        <StackPanel Spacing="4" DataContext="{Binding AddPanel}" x:DataType="mos:AddPanelViewModel">
+                          <TextBlock Text="Add panel" FontWeight="SemiBold" />
+                          <TextBox Watermark="Search targets" Text="{Binding SearchText}" />
+                          <ItemsControl ItemsSource="{Binding SearchResults}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="dash:SearchResultViewModel">
+                                <Button Classes="quiet"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Content="{Binding DisplayName}"
+                                        Command="{Binding $parent[ItemsControl].((mos:AddPanelViewModel)DataContext).ChooseCommand}"
+                                        CommandParameter="{Binding}" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Text="{Binding Chosen.DisplayName, StringFormat='Target: {0}'}"
+                                     IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                          <Grid ColumnDefinitions="*,Auto">
+                            <TextBox Watermark="Panel label" Text="{Binding Label}" />
+                            <Button Grid.Column="1" Classes="sm" Content="Add" Margin="8,0,0,0" Command="{Binding AddCommand}" />
+                          </Grid>
+                          <TextBlock Text="{Binding Caption}"
+                                     IsVisible="{Binding Caption, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                     Foreground="{DynamicResource ColorTextSecondary}" />
+                          <TextBlock Text="{Binding Error}"
+                                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                     TextWrapping="Wrap"
+                                     Foreground="{DynamicResource ColorError}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </StackPanel>
+      </ScrollViewer>
+    </Grid>
+  </Grid>
+</UserControl>

@@ -4,6 +4,7 @@ using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -12,7 +13,7 @@ using GalactiLog.Core.Settings;
 namespace GalactiLog.App.ViewModels;
 
 /// <summary>
-/// The shell (design-spec 12): the six rail destinations, which one is selected, the page the
+/// The shell (design-spec 12): the seven rail destinations, which one is selected, the page the
 /// content region shows, and how wide that region may grow.
 /// </summary>
 /// <remarks>
@@ -29,6 +30,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly Func<ActivityViewModel> _activityFactory;
     private readonly Func<DiagnosticsViewModel>? _diagnosticsFactory;
     private readonly Func<string, DateOnly?, TargetDetailViewModel>? _openDetail;
+    private readonly Func<MosaicsPageViewModel>? _mosaicsFactory;
 
     // Held for spec 12.2's Review route, which selects this page's Library tab. The same
     // instance the rail's "settings" entry carries.
@@ -68,6 +70,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// lets a test construct a shell with no queries. The date is null on every route that exists
     /// today; spec 12.4's "Opening the page" block says what a non-null one does, and Phase 14B's
     /// dashboard session rows are the first caller to pass one.</param>
+    /// <param name="mosaics">Builds spec 12.17's Mosaics page (Phase 18) on the first read of its
+    /// rail entry, lazy for the reason <paramref name="statistics"/> is. Optional for the reason
+    /// <paramref name="diagnostics"/> is: null leaves the entry a placeholder, so a shell still
+    /// constructs in a unit test with no queries. <c>AppHost</c> always supplies it.</param>
     public MainWindowViewModel(
         GeneralSettings general,
         DashboardViewModel dashboard,
@@ -77,8 +83,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Func<AnalysisViewModel> analysis,
         Func<ActivityViewModel> activity,
         Func<DiagnosticsViewModel>? diagnostics = null,
-        Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null)
+        Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null,
+        Func<MosaicsPageViewModel>? mosaics = null)
     {
+        _mosaicsFactory = mosaics;
         StatusBar = statusBar;
         _dashboard = dashboard;
         _statisticsFactory = statistics;
@@ -102,6 +110,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Items =
         [
             new NavigationItem("dashboard", "Dashboard", dashboard, "IconDashboard"),
+
+            // Spec 12.17, ruling R3: Mosaics is second on the rail, after Dashboard.
+            mosaics is null
+                ? new NavigationItem("mosaics", "Mosaics", new PlaceholderPageViewModel(
+                    "Mosaics", "The mosaics page is not available on this surface."), "IconMosaics")
+                : new NavigationItem("mosaics", "Mosaics", BuildMosaics, "IconMosaics"),
             new NavigationItem("statistics", "Statistics", BuildStatistics, "IconStatistics"),
 
             // Spec 12.14, ruling A3: the sixth destination, placed after Statistics and before
@@ -191,6 +205,35 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     // _analysis field and no Dispose arm for a subscription that does not exist, and both arrive
     // the moment a routing event does.
     private object BuildAnalysis() => _analysisFactory();
+
+    // Spec 12.17's Mosaics page (Phase 18). Its two routing events are the shell's, for the reason
+    // the Statistics page's are: the shell owns the content region and the detail overlay.
+    private object BuildMosaics()
+    {
+        var page = _mosaicsFactory!();
+        page.MosaicOpenRequested += OnMosaicOpenRequested;
+        page.TargetOpenRequested += OnMosaicTargetOpenRequested;
+        _mosaics = page;
+        return page;
+    }
+
+    // The Mosaics page once built, so Dispose can drop the two handlers above.
+    private MosaicsPageViewModel? _mosaics;
+
+    private void OnMosaicTargetOpenRequested(object? sender, Guid targetId) => OpenDetail(targetId.ToString());
+
+    private void OnMosaicOpenRequested(object? sender, Guid mosaicId) => OpenMosaic(mosaicId);
+
+    /// <summary>
+    /// Spec 12.17's route to the mosaic detail page, raised by a Mosaics table row click. Phase 18
+    /// Task 5 builds the page and opens it on this shell's detail overlay here; until then the
+    /// route exists and does nothing.
+    /// </summary>
+    public void OpenMosaic(Guid mosaicId)
+    {
+        // Task 5 fills this: build the MosaicDetailViewModel for mosaicId and show it on the overlay.
+        _ = mosaicId;
+    }
 
     private object BuildActivity()
     {
@@ -477,6 +520,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             statistics.DateRangeRequested -= OnDateRangeRequested;
             statistics.OpenSettingsRequested -= OnOpenSettingsRequested;
+        }
+
+        if (_mosaics is { } mosaicsPage)
+        {
+            mosaicsPage.MosaicOpenRequested -= OnMosaicOpenRequested;
+            mosaicsPage.TargetOpenRequested -= OnMosaicTargetOpenRequested;
         }
 
         // The same, for the Activity page's rail-badge forwarding (fixer list item 48).

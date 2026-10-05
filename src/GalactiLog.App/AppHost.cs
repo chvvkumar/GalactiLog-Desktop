@@ -8,6 +8,7 @@ using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
 using GalactiLog.App.ViewModels.Merge;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Preview;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.ViewModels.Setup;
@@ -1123,6 +1124,12 @@ public static class AppHost
         // validated by default.
         builder.Services.AddSingleton(serviceProvider => new CustomColumnRepository(
             serviceProvider.GetRequiredService<DatabaseConnectionString>()));
+        // Spec 12.17's one mosaic write path and its read side (Phase 18).
+        builder.Services.AddSingleton(serviceProvider => new MosaicRepository(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>()));
+        builder.Services.AddSingleton(serviceProvider => new MosaicQueries(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>(),
+            serviceProvider.GetRequiredService<AliasMapCache>()));
         // The catalog re-enrichment writer (Phase 7 Task 7, FIXER LIST item 13). The third named
         // sibling, and with the two above the complete list of App-callable writers of targets
         // rows: rename and notes, merge and unmerge, catalog columns.
@@ -2410,6 +2417,61 @@ public static class AppHost
                 });
         });
 
+        // Spec 12.17's Mosaics page (Phase 18). A singleton for the reason the Analysis page is one:
+        // the filter text and the sort are session state. Every collaborator is a delegate (spec
+        // 18.3), bound here and nowhere else.
+        builder.Services.AddSingleton(serviceProvider =>
+        {
+            var repository = serviceProvider.GetRequiredService<MosaicRepository>();
+            var queries = serviceProvider.GetRequiredService<MosaicQueries>();
+            var columns = serviceProvider.GetRequiredService<CustomColumnRepository>();
+            return new MosaicsPageViewModel(
+                new MosaicsBackend
+                {
+                    General = settingsStore.GetGeneral,
+                    MutateGeneral = settingsStore.MutateGeneral,
+                    RunDetection = serviceProvider.GetRequiredService<ScanCoordinator>().RunMosaicDetectionAsync,
+                    ListPending = repository.ListPending,
+                    SuggestionSessions = queries.SuggestionSessions,
+                    TargetNames = queries.TargetNames,
+                    Accept = repository.Accept,
+                    Dismiss = repository.Dismiss,
+                    ListMosaics = queries.List,
+                    Detail = queries.Detail,
+                    Create = repository.Create,
+                    Rename = repository.Rename,
+                    Delete = repository.Delete,
+                    // Spec 12.17's Remove panel: its included nights leave the mosaic, then the panel
+                    // and its available rows go. Two writes, not one transaction.
+                    // ponytail: not atomic; a crash between the two leaves an empty panel the reader
+                    // removes again. Add a repository member if that ever matters.
+                    RemovePanel = panel =>
+                    {
+                        foreach (var night in panel.Included)
+                        {
+                            repository.RemoveNight(panel.Id, night.TargetId, night.Date, night.FrameLabel);
+                        }
+
+                        repository.DeletePanel(panel.Id);
+                    },
+                    AddPanelWithTarget = repository.AddPanelWithTarget,
+                    SearchTargets = term => serviceProvider.GetRequiredService<TargetSearchQuery>().Search(term),
+                    CustomColumns = columns.List,
+                    MosaicValues = ids => columns.ValuesForMosaics(ids),
+                    WriteValue = columns.SetValue,
+                    EmitActionFailed = (message, details) => serviceProvider
+                        .GetRequiredService<ActivityRepository>()
+                        .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),
+                },
+                serviceProvider.GetRequiredService<JobRegistry>(),
+                settingsStore.GetDisplay(),
+                serviceProvider.GetRequiredService<DisplayColumnWriter>(),
+                serviceProvider.GetRequiredService<ScanStatusService>(),
+                post: null,
+                delay: null,
+                logger: serviceProvider.GetRequiredService<ILogger<MosaicsPageViewModel>>());
+        });
+
         // Spec 12.6's Activity page (Phase 9 Task 4). A singleton for the reason DashboardViewModel
         // is one: the filter pills, the search term and the pages already loaded are session state,
         // so navigating away and back keeps them.
@@ -2591,7 +2653,9 @@ public static class AppHost
             serviceProvider.GetRequiredService<Func<DiagnosticsViewModel>>(),
             // Spec 12.2's row click navigation. The shell holds one nullable detail overlay and
             // builds its page through this delegate (ruling Q9).
-            serviceProvider.GetRequiredService<Func<string, DateOnly?, TargetDetailViewModel>>());
+            serviceProvider.GetRequiredService<Func<string, DateOnly?, TargetDetailViewModel>>(),
+            // Spec 12.17's Mosaics page, second on the rail (ruling R3), lazy like the others.
+            serviceProvider.GetRequiredService<MosaicsPageViewModel>);
 
             // Phase 9 FIXER item 2 and spec 5.8.1's content_width. The Settings Display tab writes
             // both keys while this shell is alive, so the window's root font size and the content

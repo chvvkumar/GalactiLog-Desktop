@@ -128,7 +128,7 @@ public class CompareTabViewTests : IDisposable
         // Away, and back.
         shell.Selected = shell.Items[0];
         Dispatcher.UIThread.RunJobs();
-        shell.Selected = shell.Items[2];
+        shell.Selected = shell.Items[3];
         AnalysisSettle.Page(page);
 
         var region = window.GetControl<ContentControl>("ContentRegion");

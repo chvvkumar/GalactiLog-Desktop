@@ -20,12 +20,22 @@ public class HelpTopicsTests
     // taking the count to 97. Phase 22 unit B added `settings.general.survey-downloads`, taking
     // the count to 98. Unit D added `page.sky-view`, taking the count to 99.
     // The export wizard added `export.destination`, `export.method`, `export.review` and `export.result`, taking it to 103.
+    // Phase 18 Task 4 added the Mosaics page's four `mosaics.*` ids, taking it to 107.
     [Fact]
-    public void All_Holds103Topics()
+    public void All_Holds107Topics()
     {
-        Assert.Equal(103, HelpTopics.All.Count);
-        Assert.Equal(103, HelpTopics.Ids.Count);
+        Assert.Equal(107, HelpTopics.All.Count);
+        Assert.Equal(107, HelpTopics.Ids.Count);
     }
+
+    // Phase 18 Task 4. The four ids carry spec 12.12's titles.
+    [Theory]
+    [InlineData("mosaics.about", "Mosaics")]
+    [InlineData("mosaics.keywords", "Detection keywords")]
+    [InlineData("mosaics.suggestions", "Suggestions")]
+    [InlineData("mosaics.table", "Mosaics table")]
+    public void TheFourMosaicsTopics_ExistAndCarryTheirTitles(string id, string title)
+        => Assert.Equal(title, HelpTopics.Get(id).Title);
 
     // A typo in the id or a paragraph that names no host would still leave the count at 103 (the
     // record exists), and the census reports it only as "placed nowhere" once the glyph lands.

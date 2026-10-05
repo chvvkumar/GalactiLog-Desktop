@@ -6,6 +6,7 @@ using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -129,9 +130,9 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = CreateWithActivity(activity);
 
         // The seam Phase 5 Task 4 opened with "The activity log page arrives in Phase 9."
-        Assert.Equal("activity", viewModel.Items[3].Key);
-        Assert.Same(activity, viewModel.Items[3].Page);
-        Assert.IsType<ActivityViewModel>(viewModel.Items[3].Page);
+        Assert.Equal("activity", viewModel.Items[4].Key);
+        Assert.Same(activity, viewModel.Items[4].Page);
+        Assert.IsType<ActivityViewModel>(viewModel.Items[4].Page);
         viewModel.Dispose();
     }
 
@@ -141,7 +142,7 @@ public class MainWindowViewModelTests : IDisposable
         var activity = CreateActivity();
         var viewModel = CreateWithActivity(activity);
 
-        viewModel.Selected = viewModel.Items[3];
+        viewModel.Selected = viewModel.Items[4];
 
         Assert.Equal("activity", viewModel.Selected.Key);
         Assert.Same(activity, viewModel.CurrentPage);
@@ -149,15 +150,15 @@ public class MainWindowViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Items_AreTheSixShellDestinationsInSpecOrder()
+    public void Items_AreTheSevenShellDestinationsInSpecOrder()
     {
         var viewModel = Create();
 
         // Spec 12.14, ruling A3: Analysis is the sixth destination, placed after Statistics. The
         // rail's ORDER is the contract spec 12 states, so this stays an exact positional set and
-        // never a key lookup.
+        // never a key lookup. Spec 12.17, ruling R3: Mosaics is second, after Dashboard.
         Assert.Equal(
-            new[] { "dashboard", "statistics", "analysis", "activity", "diagnostics", "settings" },
+            new[] { "dashboard", "mosaics", "statistics", "analysis", "activity", "diagnostics", "settings" },
             viewModel.Items.Select(item => item.Key));
     }
 
@@ -167,7 +168,7 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = Create();
 
         Assert.Equal(
-            new[] { "Dashboard", "Statistics", "Analysis", "Activity", "Diagnostics", "Settings" },
+            new[] { "Dashboard", "Mosaics", "Statistics", "Analysis", "Activity", "Diagnostics", "Settings" },
             viewModel.Items.Select(item => item.Title));
     }
 
@@ -196,15 +197,15 @@ public class MainWindowViewModelTests : IDisposable
             () => activity);
 
         Assert.Same(dashboard, viewModel.Items[0].Page);
-        Assert.Same(statistics, viewModel.Items[1].Page);
-        Assert.Equal("statistics", viewModel.Items[1].Key);
-        Assert.Same(activity, viewModel.Items[3].Page);
-        Assert.Same(settings, viewModel.Items[5].Page);
-        Assert.Equal("settings", viewModel.Items[5].Key);
+        Assert.Same(statistics, viewModel.Items[2].Page);
+        Assert.Equal("statistics", viewModel.Items[2].Key);
+        Assert.Same(activity, viewModel.Items[4].Page);
+        Assert.Same(settings, viewModel.Items[6].Page);
+        Assert.Equal("settings", viewModel.Items[6].Key);
 
         // With no diagnostics factory the rail keeps a placeholder, the same way a null openDetail
         // leaves the detail route inert.
-        Assert.IsType<PlaceholderPageViewModel>(viewModel.Items[4].Page);
+        Assert.IsType<PlaceholderPageViewModel>(viewModel.Items[5].Page);
         viewModel.Dispose();
     }
 
@@ -232,19 +233,19 @@ public class MainWindowViewModelTests : IDisposable
 
         // The page reads the whole spec 12.8 snapshot on its first refresh, so an application
         // start that never opens it must build nothing.
-        Assert.Equal("diagnostics", shell.Items[4].Key);
-        Assert.False(shell.Items[4].IsConstructed);
+        Assert.Equal("diagnostics", shell.Items[5].Key);
+        Assert.False(shell.Items[5].IsConstructed);
         Assert.Equal(0, built);
 
-        shell.Selected = shell.Items[4];
+        shell.Selected = shell.Items[5];
 
         Assert.Equal(1, built);
-        Assert.True(shell.Items[4].IsConstructed);
+        Assert.True(shell.Items[5].IsConstructed);
         Assert.Same(page, shell.CurrentPage);
 
         // Memoized: navigating away and back does not build a second page.
         shell.Selected = shell.Items[0];
-        shell.Selected = shell.Items[4];
+        shell.Selected = shell.Items[5];
         Assert.Equal(1, built);
 
         shell.Dispose();
@@ -271,14 +272,14 @@ public class MainWindowViewModelTests : IDisposable
         // constructor, so an application start that opens neither must build neither.
         Assert.Equal(0, statistics);
         Assert.Equal(0, activity);
-        Assert.False(shell.Items[1].IsConstructed);
-        Assert.False(shell.Items[3].IsConstructed);
+        Assert.False(shell.Items[2].IsConstructed);
+        Assert.False(shell.Items[4].IsConstructed);
 
         // Phase 17 Task 4: the sixth destination holds to F21's rule too. The Analysis page reads
         // the display document and resolves the cache in its own constructor, so an application
         // start that never opens it must build nothing.
-        Assert.Equal("analysis", shell.Items[2].Key);
-        Assert.False(shell.Items[2].IsConstructed);
+        Assert.Equal("analysis", shell.Items[3].Key);
+        Assert.False(shell.Items[3].IsConstructed);
         shell.Dispose();
     }
 
@@ -296,19 +297,19 @@ public class MainWindowViewModelTests : IDisposable
             CreateAnalysis,
             () => { activity++; return CreateActivity(); });
 
-        shell.Selected = shell.Items[1];
+        shell.Selected = shell.Items[2];
         var firstStatistics = shell.CurrentPage;
-        shell.Selected = shell.Items[3];
+        shell.Selected = shell.Items[4];
         var firstActivity = shell.CurrentPage;
         shell.Selected = shell.Items[0];
-        shell.Selected = shell.Items[1];
+        shell.Selected = shell.Items[2];
 
         Assert.Equal(1, statistics);
         Assert.Equal(1, activity);
         Assert.IsType<StatisticsViewModel>(firstStatistics);
         Assert.IsType<ActivityViewModel>(firstActivity);
         Assert.Same(firstStatistics, shell.CurrentPage);
-        Assert.Same(firstActivity, shell.Items[3].Page);
+        Assert.Same(firstActivity, shell.Items[4].Page);
         shell.Dispose();
     }
 
@@ -328,7 +329,7 @@ public class MainWindowViewModelTests : IDisposable
             CreateAnalysis,
             CreateActivity);
 
-        shell.Selected = shell.Items[1];
+        shell.Selected = shell.Items[2];
         var statistics = Assert.IsType<StatisticsViewModel>(shell.CurrentPage);
         statistics.Timeline.SelectPresetCommand.Execute(TimelineRangePreset.All);
         statistics.Timeline.Granularity = TimelineGranularity.Monthly;
@@ -368,7 +369,7 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = Create();
 
         // The seam Phase 5 Task 4 opened with "The statistics page arrives in Phase 9."
-        Assert.IsType<StatisticsViewModel>(viewModel.Items[1].Page);
+        Assert.IsType<StatisticsViewModel>(viewModel.Items[2].Page);
     }
 
     [Fact]
@@ -381,7 +382,7 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = new MainWindowViewModel(
             new GeneralSettings(), dashboard, CreateStatusBar(), TabFactory.CreateSettingsPage(), () => statistics,
             CreateAnalysis, CreateActivity);
-        viewModel.Selected = viewModel.Items[1];
+        viewModel.Selected = viewModel.Items[2];
 
         statistics.Timeline.SelectPresetCommand.Execute(TimelineRangePreset.All);
         statistics.Timeline.Granularity = TimelineGranularity.Monthly;
@@ -403,7 +404,7 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = new MainWindowViewModel(
             new GeneralSettings(), dashboard, CreateStatusBar(), TabFactory.CreateSettingsPage(), () => statistics,
             CreateAnalysis, CreateActivity);
-        viewModel.Selected = viewModel.Items[1];
+        viewModel.Selected = viewModel.Items[2];
 
         viewModel.Dispose();
         statistics.Timeline.SelectPresetCommand.Execute(TimelineRangePreset.All);
@@ -467,7 +468,7 @@ public class MainWindowViewModelTests : IDisposable
         var viewModel = new MainWindowViewModel(new GeneralSettings(), DashboardViewModelTestFactory.Create(), CreateStatusBar(),
             TabFactory.CreateSettingsPage(), CreateStatistics, CreateAnalysis, CreateActivity);
 
-        Assert.Equal(6, viewModel.Items.Count);
+        Assert.Equal(7, viewModel.Items.Count);
         Assert.NotNull(viewModel.CurrentPage);
     }
 
@@ -518,6 +519,51 @@ public class MainWindowViewModelTests : IDisposable
                 return page;
             }));
         return (shell, dashboard, built);
+    }
+
+    // Phase 18 Task 4, spec 12.17 and ruling R3: Mosaics is a lazy rail page, and its target link
+    // opens the Target detail overlay through the shell's one route.
+    [Fact]
+    public async Task TheMosaicsPage_IsBuiltOnFirstVisit_AndItsTargetLinkOpensTheTargetDetail()
+    {
+        var target = Guid.NewGuid();
+        using var mosaics = new MosaicsPageHarness(new MosaicsBackend
+        {
+            ListPending = () =>
+            [
+                new MosaicSuggestionRow(
+                    Guid.NewGuid(), "M 31", "M 31", [new GalactiLog.Core.Mosaics.SuggestionPanel(target, "Panel 1", "%", [])],
+                    "high", "name", null, [], "sig", DateTime.UtcNow),
+            ],
+        });
+        var opened = new List<string>();
+        var shell = new MainWindowViewModel(
+            new GeneralSettings(),
+            DashboardViewModelTestFactory.Create(),
+            CreateStatusBar(),
+            TabFactory.CreateSettingsPage(),
+            CreateStatistics,
+            CreateAnalysis,
+            CreateActivity,
+            openDetail: (groupKey, sessionDate) =>
+            {
+                opened.Add(groupKey);
+                return DetailFactory.Create(groupKey: groupKey, initialSessionDate: sessionDate).Settle().ViewModel;
+            },
+            mosaics: () => mosaics.Page);
+        Assert.Equal("mosaics", shell.Items[1].Key);
+        Assert.False(shell.Items[1].IsConstructed);
+
+        shell.Selected = shell.Items[1];
+        Assert.Same(mosaics.Page, shell.CurrentPage);
+        await mosaics.Page.PendingLoad;
+
+        var suggestion = Assert.Single(mosaics.Page.VisibleSuggestions);
+        suggestion.OpenTargetCommand.Execute(suggestion.Targets[0]);
+
+        Assert.Equal(new[] { target.ToString() }, opened);
+        Assert.NotNull(shell.Detail);
+        shell.Dispose();
     }
 
     // Settled first: a detail close re-queries the dashboard, and with the inline post its Load
@@ -660,10 +706,10 @@ public class MainWindowViewModelTests : IDisposable
         var (shell, dashboard, built) = CreateRouted();
         ClickRow(dashboard);
 
-        shell.Selected = shell.Items[1];
+        shell.Selected = shell.Items[2];
 
         Assert.Null(shell.Detail);
-        Assert.Same(shell.Items[1].Page, shell.CurrentPage);
+        Assert.Same(shell.Items[2].Page, shell.CurrentPage);
         Assert.True(built[0].IsDisposed);
         shell.Dispose();
     }
@@ -687,14 +733,14 @@ public class MainWindowViewModelTests : IDisposable
     public void CloseDetail_ReturnsToTheSelectedDestination()
     {
         var (shell, dashboard, built) = CreateRouted();
-        shell.Selected = shell.Items[3];
+        shell.Selected = shell.Items[4];
         ClickRow(dashboard);
         Assert.NotNull(shell.Detail);
 
         shell.CloseDetailCommand.Execute(null);
 
         Assert.Null(shell.Detail);
-        Assert.Same(shell.Items[3].Page, shell.CurrentPage);
+        Assert.Same(shell.Items[4].Page, shell.CurrentPage);
         Assert.True(built[0].IsDisposed);
         shell.Dispose();
     }

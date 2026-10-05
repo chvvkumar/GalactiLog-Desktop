@@ -788,6 +788,28 @@ public static class HelpTopics
             + "by path. A cancelled or stopped copy lists the files it left part written. Running "
             + "the same export again fills in only what is missing. Save report writes these lists "
             + "to a text file."),
+
+        // Phase 18 Task 4: the Mosaics page's four glyphs (spec 12.12, 12.17).
+        new("mosaics.about", "Mosaics",
+            "A mosaic collects the panels of one large field, each panel a set of nights from any "
+            + "target, and totals their integration so you can see which panel needs more time; "
+            + "suggestions come from Run Detection and every scan, and Create mosaic makes one by hand."),
+
+        new("mosaics.keywords", "Detection keywords",
+            "The words that introduce a panel number in a target's name, such as Panel in \"M 31 "
+            + "Panel 2\" or P in \"NGC 7000 P3\"; a change is applied to your frames at the next Run "
+            + "Detection or scan."),
+
+        new("mosaics.suggestions", "Suggestions",
+            "Groups of targets that look like panels of one mosaic, found by name, by sky position or "
+            + "by both, where high confidence means name and position agree and low means review the "
+            + "notes first; Accept creates the mosaic from the checked panels, and Dismiss hides it "
+            + "until new nights appear."),
+
+        new("mosaics.table", "Mosaics table",
+            "Every mosaic with its panel count, integration, frames and date range, where a header "
+            + "click sorts, the column picker chooses the columns, and Expand renames the mosaic and "
+            + "edits its panels."),
     ];
 
     /// <summary>The table indexed by id, ordinal. Built with <c>ToDictionary</c> on purpose: a

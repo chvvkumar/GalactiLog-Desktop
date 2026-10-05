@@ -12,6 +12,8 @@ using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
+using GalactiLog.App.ViewModels.Mosaics;
+using GalactiLog.App.Views.Mosaics;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.Views;
 using GalactiLog.App.Views.Analysis;
@@ -37,6 +39,7 @@ public class ShellNavigationTests : IDisposable
     private readonly List<StatisticsViewModel> _statistics = [];
     private readonly List<ActivityViewModel> _activity = [];
     private readonly List<AnalysisViewModel> _analysis = [];
+    private readonly List<MosaicsPageHarness> _mosaics = [];
 
     public void Dispose()
     {
@@ -62,6 +65,13 @@ public class ShellNavigationTests : IDisposable
         }
 
         _analysis.Clear();
+
+        foreach (var harness in _mosaics)
+        {
+            harness.Dispose();
+        }
+
+        _mosaics.Clear();
         GC.SuppressFinalize(this);
     }
 
@@ -86,6 +96,14 @@ public class ShellNavigationTests : IDisposable
         return page;
     }
 
+    // Phase 18 Task 4: the Mosaics destination, a real page over inert delegates.
+    private MosaicsPageViewModel CreateMosaics()
+    {
+        var harness = new MosaicsPageHarness();
+        _mosaics.Add(harness);
+        return harness.Page;
+    }
+
     private ActivityViewModel CreateActivity()
     {
         var page = ActivityViewModelTestFactory.Create();
@@ -107,7 +125,8 @@ public class ShellNavigationTests : IDisposable
             CreateStatistics,
             CreateAnalysis,
             activity ?? CreateActivity,
-            diagnostics);
+            diagnostics,
+            mosaics: CreateMosaics);
         var window = new MainWindow { DataContext = viewModel };
         window.Show();
         Dispatcher.UIThread.RunJobs();
@@ -197,6 +216,9 @@ public class ShellNavigationTests : IDisposable
                 // placeholder view and fails at the assertion below, which is what makes the
                 // App.axaml template for the page load bearing here.
                 AnalysisViewModel => typeof(AnalysisView),
+
+                // Phase 18 Task 4, spec 12.17's Mosaics page.
+                MosaicsPageViewModel => typeof(MosaicsView),
                 _ => typeof(PlaceholderPageView),
             };
             Assert.Contains(contentRegion.GetVisualDescendants(), visual => visual.GetType() == expectedView);
@@ -216,7 +238,7 @@ public class ShellNavigationTests : IDisposable
         var (window, viewModel) = ShowShell(diagnostics: () => diagnostics);
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
 
-        viewModel.Selected = viewModel.Items[4];
+        viewModel.Selected = viewModel.Items[5];
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("diagnostics", viewModel.Selected.Key);
@@ -248,7 +270,7 @@ public class ShellNavigationTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
 
-        viewModel.Selected = viewModel.Items[3];
+        viewModel.Selected = viewModel.Items[4];
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("activity", viewModel.Selected.Key);
@@ -265,7 +287,7 @@ public class ShellNavigationTests : IDisposable
         var (window, viewModel) = ShowShell();
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
 
-        viewModel.Selected = viewModel.Items[1];
+        viewModel.Selected = viewModel.Items[2];
         Dispatcher.UIThread.RunJobs();
 
         Assert.IsType<StatisticsViewModel>(contentRegion.Content);
@@ -283,11 +305,11 @@ public class ShellNavigationTests : IDisposable
         Dispatcher.UIThread.RunJobs();
         Assert.NotNull(viewModel.Detail);
 
-        viewModel.Selected = viewModel.Items[1];
+        viewModel.Selected = viewModel.Items[2];
         Dispatcher.UIThread.RunJobs();
 
         Assert.Null(viewModel.Detail);
-        Assert.Same(viewModel.Items[1].Page, contentRegion.Content);
+        Assert.Same(viewModel.Items[2].Page, contentRegion.Content);
         Assert.Contains(contentRegion.GetVisualDescendants(), visual => visual is StatisticsView);
 
         viewModel.Dispose();
@@ -324,7 +346,7 @@ public class ShellNavigationTests : IDisposable
         var (window, viewModel) = ShowShell();
         var rail = window.GetControl<ListBox>("NavigationRail");
 
-        rail.SelectedItem = viewModel.Items[4];
+        rail.SelectedItem = viewModel.Items[5];
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("diagnostics", viewModel.Selected.Key);
@@ -344,18 +366,18 @@ public class ShellNavigationTests : IDisposable
         var rail = window.GetControl<ListBox>("NavigationRail");
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
 
-        viewModel.Selected = viewModel.Items[3];
+        viewModel.Selected = viewModel.Items[4];
         Dispatcher.UIThread.RunJobs();
 
         rail.SelectedItem = null;
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("activity", viewModel.Selected.Key);
-        Assert.Same(viewModel.Items[3].Page, viewModel.CurrentPage);
-        Assert.Same(viewModel.Items[3].Page, contentRegion.Content);
+        Assert.Same(viewModel.Items[4].Page, viewModel.CurrentPage);
+        Assert.Same(viewModel.Items[4].Page, contentRegion.Content);
 
         // And the rail is still usable afterwards.
-        rail.SelectedItem = viewModel.Items[5];
+        rail.SelectedItem = viewModel.Items[6];
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("settings", viewModel.Selected.Key);
     }
@@ -552,15 +574,15 @@ public class ShellNavigationTests : IDisposable
         Assert.Equal(MainWindowViewModel.NavRailCollapsedWidth, column.Bounds.Width);
         Assert.True(column.Bounds.Width < expandedWidth);
 
-        // The six destinations are still there to click; only their labels have gone.
-        Assert.Equal(6, rail.ItemCount);
+        // The seven destinations are still there to click; only their labels have gone.
+        Assert.Equal(7, rail.ItemCount);
         Assert.DoesNotContain(
             rail.GetVisualDescendants().OfType<TextBlock>(),
             block => block.Text == "Dashboard" && block.IsEffectivelyVisible);
 
-        viewModel.Selected = viewModel.Items[5];
+        viewModel.Selected = viewModel.Items[6];
         Dispatcher.UIThread.RunJobs();
-        Assert.Same(viewModel.Items[5].Page, window.GetControl<ContentControl>("ContentRegion").Content);
+        Assert.Same(viewModel.Items[6].Page, window.GetControl<ContentControl>("ContentRegion").Content);
     }
 
     // Phase 14B Task 7 (PAR-017, spec 12.6). The rail badge. Lines 472 and 484 to 485 above walk

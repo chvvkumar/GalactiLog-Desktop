@@ -405,30 +405,30 @@ public sealed class AppHostTests
         // error the way dropping Task 3's positional `statistics` one would be: it silently
         // restores the Phase 5 placeholder. This is the assertion that fails if it is ever
         // dropped. Both real pages are checked, so the same gap cannot open on either.
-        Assert.IsType<StatisticsViewModel>(shell.Items[1].Page);
+        Assert.IsType<StatisticsViewModel>(shell.Items[2].Page);
 
         // Phase 17 Task 4, the same shape one phase later: `analysis:` is a required positional
         // argument, so dropping it from the AppHost call site is a compile error, but pointing it
         // at the wrong registration is not. This is the assertion that fails if it ever is.
-        Assert.IsType<AnalysisViewModel>(shell.Items[2].Page);
-        Assert.IsType<ActivityViewModel>(shell.Items[3].Page);
+        Assert.IsType<AnalysisViewModel>(shell.Items[3].Page);
+        Assert.IsType<ActivityViewModel>(shell.Items[4].Page);
 
         // Phase 10 Task 1 review finding I2, the same shape one phase later: both of Task 1's
         // `diagnostics:` arguments are OPTIONAL, so dropping either from the AppHost call site
         // compiles and silently restores a placeholder. These are the assertions that fail.
-        Assert.IsType<DiagnosticsViewModel>(shell.Items[4].Page);
+        Assert.IsType<DiagnosticsViewModel>(shell.Items[5].Page);
 
         // And coordinator ruling Q3's core guarantee, asserted against the real container rather
         // than against a hand-built page: the rail destination and the Settings Diagnostics tab
         // are ONE instance, so there is one refresh, one log viewer and one export button.
         var settingsPage = fixture.Host.Services.GetRequiredService<SettingsViewModel>();
         settingsPage.Selected = settingsPage.Tabs.Single(tab => tab.Key == "diagnostics");
-        Assert.Same(shell.Items[4].Page, settingsPage.CurrentTab);
+        Assert.Same(shell.Items[5].Page, settingsPage.CurrentTab);
 
         // That page's first refresh holds a SQLite connection to this fixture's temp database,
         // the same reason the activity page and the dashboard are quiesced below.
         var diagnostics = fixture.Host.Services.GetRequiredService<DiagnosticsViewModel>();
-        Assert.Same(shell.Items[4].Page, diagnostics);
+        Assert.Same(shell.Items[5].Page, diagnostics);
 
         // Phase review Important P1, the observable half: the log viewer spec 12.8 puts on this
         // page is an OPTIONAL constructor argument, so dropping it from the AppHost call site
@@ -446,7 +446,7 @@ public sealed class AppHostTests
         // The Analysis page's filter bar reads its two option lists off the UI thread the moment
         // the page is built, and this fixture deletes its app data root on dispose, so that read is
         // joined here the way the dashboard's and the activity page's are.
-        AnalysisViewModelTestFactory.Settle((AnalysisViewModel)shell.Items[2].Page);
+        AnalysisViewModelTestFactory.Settle((AnalysisViewModel)shell.Items[3].Page);
 
         var dashboard = fixture.Host.Services.GetRequiredService<DashboardViewModel>();
         Assert.Same(dashboard, fixture.Host.Services.GetRequiredService<DashboardViewModel>());
