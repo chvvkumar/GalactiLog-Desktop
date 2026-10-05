@@ -251,6 +251,10 @@ public sealed record GeneralSettings
     // document without the key must hand back the same array to compare equal. Never mutated.
     private static readonly string[] DefaultMosaicKeywords = ["Panel", "P"];
 
+    /// <summary>Spec 7.7 and 9.1. The default mosaic keywords, which target resolution's
+    /// <c>NameNormalizer.StripPanel</c> strips whatever the stored list says.</summary>
+    public static IReadOnlyList<string> DefaultPanelKeywords => DefaultMosaicKeywords;
+
     /// <summary>Spec 5.8.1 and 7.7. Nights further apart than this split a suggestion into
     /// campaigns; 0 means no grouping. A stored value outside <see cref="MosaicCampaignGapChoices"/>
     /// reads as 0.</summary>

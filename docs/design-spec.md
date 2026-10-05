@@ -3493,7 +3493,7 @@ Port of `simbad.normalize_object_name` and `normalize_catalog_id`.
 | `Normalize(name)` | Trim outer whitespace, collapse every internal whitespace run to a single space, uppercase. Used as the DB matching key. |
 | `NormalizeDisplay(name)` | Same, without uppercasing. Used for display-quality names. |
 | `NormalizeCatalogId(id)` | Null or blank in, null out. Otherwise `Normalize(id)`. Null-safe because `catalog_id` is nullable. |
-| `StripPanel(name)` | Remove a trailing mosaic panel suffix, then trim. Regex `_PANEL_RE` from `simbad.py`. The strip is kept so `M31 Panel 2` resolves to M31 rather than creating a second target; mosaic panels are told apart by `images.panel_label` and the frame label of section 5.24, not by target. |
+| `StripPanel(name)` | Remove a trailing mosaic panel token, then trim. The token is section 7.7's keyword rule (`PanelTokens`) over the default keywords `Panel` and `P` from `GeneralSettings`, never the stored `general.mosaic_keywords`: a custom keyword affects detection, not resolution. Token-bounded and case-insensitive: the keyword follows a space, hyphen or underscore and is followed by digits, so `IC 1396 P1` becomes `IC 1396` and `M 31 Panel 2` becomes `M 31`, while `PK 164+31.1`, `NGC 7000 P` and `HIP 12345` stay whole. A tile token (`2-1`) is not stripped, and neither is a comet designation's half-month token (`C/2023 P1`). The web's `_PANEL_RE` knew only `Panel`. The strip is kept so `M31 Panel 2` resolves to M31 rather than creating a second target; mosaic panels are told apart by `images.panel_label` and the frame label of section 5.24, not by target. |
 | `Compact(s)` | Uppercase, then remove spaces, hyphens, and underscores. Used for the substring filter tier in dashboard search. `target_listing._compact` uppercases, so the port does too; both sides of every comparison pass through this function, so the case only has to be consistent. |
 
 `normalization.py` in the web application is a different concern: it maps user-configured
@@ -3583,9 +3583,13 @@ Bundled files, copied verbatim from `backend/data/catalogs/` into the applicatio
 | `sac.csv` | 15 KB | `static_catalog_entries` (`sac`) | |
 | `herschel400.csv` | 8 KB | `static_catalog_entries` (`herschel400`) | |
 
-Lookup order for a normalized name:
+Lookup order for a normalized name. The panel token is stripped first (`StripPanel`, section
+9.1), and every step below looks up the stripped name, the designation and the common name alike,
+the web's order: `NGC 7000 Panel 1` and `IC 1396 P1` resolve offline to NGC 7000 and IC 1396 on a
+catalogue that holds no target for either yet. The strip uses the default keywords only, so a
+custom keyword in `general.mosaic_keywords` affects detection (section 7.7), not resolution.
 
-1. **Direct catalog designation.** If the name matches a catalog pattern (section 9.4.1),
+1. **Direct catalog designation.** If the stripped name matches a catalog pattern (section 9.4.1),
    normalize it and look it up:
    - `NGC n` or `IC n`: `openngc_catalog.name`, after `NormalizeNgcName`.
    - `M n`: `openngc_catalog.messier`, where the stored form is `M` plus the number
@@ -3594,7 +3598,7 @@ Lookup order for a normalized name:
    - `Caldwell n` or `C n`: `static_catalog_entries` where `catalog_name = 'caldwell'`, then
      follow its `ngc_name` into `openngc_catalog`.
    - `Abell n`, `Arp n`: same shape against their own discriminators.
-2. **Common name.** Look the lowercased, panel-stripped name up in the override map
+2. **Common name.** Look the lowercased, stripped name up in the override map
    (section 9.4.2), then in the Stellarium names map. Both yield a SIMBAD-style identifier
    such as `NGC 7000` or `Sh2-155`, which re-enters step 1.
 3. **Descriptive suffix strip.** If the name contains ` - `, take the part before it and

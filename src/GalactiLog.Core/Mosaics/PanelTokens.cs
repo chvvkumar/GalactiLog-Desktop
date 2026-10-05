@@ -10,9 +10,9 @@ public sealed record PanelMatch(string BaseName, string? Keyword, string Number)
 
 /// <summary>
 /// The configurable panel token rule of spec 7.7, port of <c>panel_tokens.py</c>. Pure functions.
-/// <see cref="Targets.NameNormalizer.StripPanel"/> is a separate, fixed-keyword strip that target
-/// resolution uses and is deliberately not this rule: resolution must not change when the reader
-/// edits <c>general.mosaic_keywords</c>.
+/// <see cref="Targets.NameNormalizer.StripPanel"/> applies this rule with the DEFAULT keywords
+/// only, never the stored list: resolution must not change when the reader edits
+/// <c>general.mosaic_keywords</c> (spec 9.1).
 /// </summary>
 public static class PanelTokens
 {

@@ -12,7 +12,9 @@ public static partial class NameNormalizer
     private static partial Regex NgcIcRegex();
 
     private static readonly Regex WhitespaceRun = new(@"\s+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex PanelSuffix = new(@"\s+Panel\s+\d+$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    // A comet designation's year ("C/2023" of "C/2023 P1"): its half-month letter and number
+    // read as a "P" panel token, so the strip leaves such a name whole.
+    private static readonly Regex CometYear = new(@"^\d*[CPDXI]/\d{4}$", RegexOptions.IgnoreCase | RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     // "NGC0031" -> "NGC 31", "IC0002" -> "IC 2". Any non-matching input is returned trimmed,
     // unchanged.
@@ -38,10 +40,21 @@ public static partial class NameNormalizer
     public static string? NormalizeCatalogId(string? catalogId)
         => string.IsNullOrWhiteSpace(catalogId) ? null : Normalize(catalogId);
 
-    // Removes a trailing mosaic panel suffix ("M31 Panel 2" -> "M31"), then trims. A fixed
-    // keyword, used by target resolution; the configurable mosaic token rule of spec 7.7 is
-    // Mosaics.PanelTokens, which never changes how a name resolves.
-    public static string StripPanel(string name) => PanelSuffix.Replace(name, "").Trim();
+    // Removes a trailing mosaic panel token ("M31 Panel 2" -> "M31", "IC 1396 P1" -> "IC 1396"),
+    // then trims (spec 9.1). The token is spec 7.7's keyword rule (Mosaics.PanelTokens) over the
+    // DEFAULT keywords only, never the stored list, so a custom keyword changes detection and not
+    // resolution. Token-bounded: the keyword follows a space, hyphen or underscore, so "HIP 12345"
+    // stays whole. A tile token ("2-1") is not stripped.
+    public static string StripPanel(string name)
+    {
+        var trimmed = name.Trim();
+        return Mosaics.PanelTokens.Match(trimmed, Settings.GeneralSettings.DefaultPanelKeywords) is { Keyword: not null } m
+            && m.BaseName.Length < trimmed.Length
+            && (char.IsWhiteSpace(trimmed[m.BaseName.Length]) || trimmed[m.BaseName.Length] is '-' or '_')
+            && !CometYear.IsMatch(m.BaseName)
+                ? m.BaseName
+                : trimmed;
+    }
 
     // openngc_catalog.messier's stored form ("M 057") to the bare number a catalog id or a
     // messier membership row needs ("57"). A stored value without the "M " prefix is returned

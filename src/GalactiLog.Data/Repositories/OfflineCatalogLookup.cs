@@ -26,13 +26,15 @@ public static class OfflineCatalogLookup
     private static readonly Regex LbnRewrite = new(@"^LBN[\s\-_]+(\d+)$", RegexOptions.IgnoreCase);
 
     // Spec 9.3's four-step order. Returns null if no bundled catalog can produce an identity;
-    // never throws for an unrecognized name; never touches the network.
+    // never throws for an unrecognized name; never touches the network. The panel token is
+    // stripped before every lookup, the designation and the common name alike, so "NGC 7000
+    // Panel 1" resolves to NGC 7000 on a catalogue with no NGC 7000 target yet (Task 6c).
     public static ResolvedIdentity? Lookup(GalactiLogContext context, string objectName, string catalogsDirectory)
     {
-        var hit = TryDirectDesignation(context, objectName);
+        var stripped = NameNormalizer.StripPanel(objectName);
+        var hit = TryDirectDesignation(context, stripped);
         if (hit is not null) return hit;
 
-        var stripped = NameNormalizer.StripPanel(objectName).Trim();
         var mapped = MapCommonName(stripped, catalogsDirectory);
         if (mapped is not null)
         {
