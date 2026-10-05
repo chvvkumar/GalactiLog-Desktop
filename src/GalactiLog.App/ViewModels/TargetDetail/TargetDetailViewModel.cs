@@ -327,7 +327,6 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         Func<SurveyTarget, Task>? openSurveyView = null,
         Func<Guid, string, IReadOnlyList<DateOnly>, Task>? openCreateMosaic = null)
     {
-        _openCreateMosaic = openCreateMosaic;
         GroupKey = groupKey;
         _setObjectType = setObjectType;
         _initialSessionDate = initialSessionDate;
@@ -430,6 +429,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         _getAliasMap = getAliasMap;
         _getSessionDetail = getSessionDetail;
         _openSurveyView = openSurveyView;
+        _openCreateMosaic = openCreateMosaic;
 
         // An instance saved, disabled or deleted on the External Tools tab, and a timezone or
         // clock change on the Location tab, reach an open page here.
@@ -1693,7 +1693,23 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         }
         catch (Exception ex)
         {
+            // The dialog's own reads failed before it could open, so nothing appeared: the
+            // Activity feed is where the reader learns why (spec 10.9's mosaic_action_failed).
             _logger.LogWarning(ex, "The Create mosaic dialog for target {TargetId} failed", targetId);
+            var name = block.PrimaryName;
+            try
+            {
+                _emitActivity?.Invoke(
+                    "warning",
+                    "mosaic_action_failed",
+                    $"Could not create a mosaic from {name}: {ex.Message}",
+                    new { action = "create", name, reason = ex.Message },
+                    targetId);
+            }
+            catch (Exception emitFailure)
+            {
+                _logger.LogWarning(emitFailure, "The mosaic_action_failed event could not be written");
+            }
         }
     }
 

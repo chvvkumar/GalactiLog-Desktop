@@ -608,35 +608,40 @@
                         x:Name="NameCell"
                         MaxWidth="{Binding #Root.NameCellMaxWidth}"
                         HorizontalAlignment="Left"
-                        ColumnDefinitions="Auto,Auto,*"
+                        ColumnDefinitions="Auto,*"
                         IsVisible="{Binding Columns[0].IsShown}"
                         ClipToBounds="True"
                         VerticalAlignment="Center">
-                    <TextBlock Grid.Column="0"
-                               Text="{Binding Name}"
-                               FontWeight="SemiBold"
-                               Margin="8,0,0,0"
-                               MaxWidth="{Binding #Root.NameCellMaxWidth}"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource ColorTextPrimary}" />
                     <!-- Spec 12.2's mosaic link (Phase 18, ruling R19): straight after the name and
                          before the common name, a drawn 2 by 2 tile glyph in the accent ink. It
                          sits above the row's own click target, so it opens the mosaic and never
-                         the row's Target detail. -->
-                    <Button Grid.Column="1"
-                            x:Name="MosaicLink"
-                            Classes="quiet"
-                            Margin="4,0,0,0"
-                            Padding="2"
-                            VerticalAlignment="Center"
-                            IsVisible="{Binding HasMosaic}"
-                            ToolTip.Tip="{Binding MosaicTooltip}"
-                            AutomationProperties.Name="{Binding MosaicTooltip}"
-                            Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenMosaicCommand}"
-                            CommandParameter="{Binding}">
-                      <Path Width="14" Height="14" Stroke="{DynamicResource ColorAccent}" StrokeThickness="1.4" Data="M1,1 h5 v5 h-5 z M8,1 h5 v5 h-5 z M1,8 h5 v5 h-5 z M8,8 h5 v5 h-5 z" />
-                    </Button>
-                    <TextBlock Grid.Column="2"
+                         the row's Target detail. Docked first, so the DockPanel measures it before
+                         the name and the name trims into what is left: a long name can never push
+                         the link past the cell's clip edge. -->
+                    <DockPanel Grid.Column="0"
+                               MaxWidth="{Binding #Root.NameCellMaxWidth}"
+                               HorizontalAlignment="Left">
+                      <Button DockPanel.Dock="Right"
+                              x:Name="MosaicLink"
+                              Classes="quiet"
+                              Margin="4,0,0,0"
+                              Padding="2"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding HasMosaic}"
+                              ToolTip.Tip="{Binding MosaicTooltip}"
+                              AutomationProperties.Name="{Binding MosaicTooltip}"
+                              Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenMosaicCommand}"
+                              CommandParameter="{Binding}">
+                        <Path Width="14" Height="14" Stroke="{DynamicResource ColorAccent}" StrokeThickness="1.4" Data="M1,1 h5 v5 h-5 z M8,1 h5 v5 h-5 z M1,8 h5 v5 h-5 z M8,8 h5 v5 h-5 z" />
+                      </Button>
+                      <TextBlock Text="{Binding Name}"
+                                 FontWeight="SemiBold"
+                                 Margin="8,0,0,0"
+                                 VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                    </DockPanel>
+                    <TextBlock Grid.Column="1"
                                Text="{Binding CommonName}"
                                IsVisible="{Binding HasCommonName}"
                                Margin="6,0,8,0"

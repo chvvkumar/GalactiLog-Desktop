@@ -2,7 +2,9 @@ using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -186,7 +188,7 @@ public class TargetListViewTests
         list.MosaicOpened += (_, id) => opened.Add(id);
         list.TargetOpened += (_, request) => targets.Add(request);
         var view = new TargetListView { DataContext = list };
-        ShowList(view);
+        var window = ShowList(view);
 
         var links = view.GetVisualDescendants().OfType<Button>().Where(button => button.Name == "MosaicLink").ToList();
         Assert.Equal(2, links.Count);
@@ -196,13 +198,59 @@ public class TargetListViewTests
         Assert.Null(list.Rows[1].MosaicId);
         Assert.Equal("Alpha", list.Rows[0].MosaicName);
 
-        shown.Command!.Execute(shown.CommandParameter);
+        // A real pointer press, so the row's own click target behind the cells gets its chance to
+        // take it: the link must, and the row must not.
+        Click(window, shown);
 
         Assert.Equal([alpha.MosaicId], opened);
         Assert.Empty(targets);
 
+        // The falsifying half: a press on the name itself reaches the row and opens the target.
+        Click(window, NamedCells(view, "NameCell")[0].GetVisualDescendants().OfType<TextBlock>().First());
+        Assert.Single(targets);
+        Assert.Equal([alpha.MosaicId], opened);
+
         list.Load(new TargetListingPage([SampleRow with { Mosaics = [beta] }], 1, 44_640d, 148, 1, 50));
         Assert.Equal("Mosaic: beta", list.Rows[0].MosaicTooltip);
+    }
+
+    // Fix round 1: the Name cell clips at NameCellMaxWidth, so a name as wide as the cell used to
+    // arrange the link past the clip edge, invisible and unclickable. The link is measured first
+    // and the name trims into what is left.
+    [AvaloniaFact]
+    public void TheMosaicLink_StaysInsideTheNameCell_OnALongName()
+    {
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        var longName = WideRow with
+        {
+            Name = "NGC 6960 - Veil Nebula, Filamentary Nebula, Western Veil, Witch's Broom, Caldwell 34",
+            Mosaics = [new MosaicLink(Guid.NewGuid(), "Veil")],
+        };
+        list.Load(new TargetListingPage([longName], 1, 44_640d, 148, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        var cell = Assert.Single(NamedCells(view, "NameCell"));
+        var link = cell.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "MosaicLink");
+        Assert.True(link.IsEffectivelyVisible);
+        Assert.True(link.Bounds.Width > 0);
+
+        var topLeft = link.TranslatePoint(new Point(0, 0), cell);
+        var bottomRight = link.TranslatePoint(new Point(link.Bounds.Width, link.Bounds.Height), cell);
+        Assert.NotNull(topLeft);
+        Assert.NotNull(bottomRight);
+        Assert.True(topLeft.Value.X >= 0 && bottomRight.Value.X <= cell.Bounds.Width + 0.5d,
+            $"link spans {topLeft.Value.X:F1} to {bottomRight.Value.X:F1} in a cell {cell.Bounds.Width:F1} wide");
+    }
+
+    private static void Click(Window window, Control control)
+    {
+        var point = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window);
+        Assert.NotNull(point);
+        window.MouseDown(point.Value, MouseButton.Left);
+        window.MouseUp(point.Value, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
     }
 
     [AvaloniaFact]
