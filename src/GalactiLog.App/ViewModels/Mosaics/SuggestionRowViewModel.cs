@@ -204,19 +204,21 @@ public sealed partial class SuggestionRowViewModel : ObservableObject
 
     private void SortSessions()
     {
-        Func<SuggestionSessionViewModel, IComparable> by = SessionSortKey switch
+        Comparison<SuggestionSessionRow> by = SessionSortKey switch
         {
-            "object" => session => session.Data.ObjectName,
-            "night" => session => session.Data.Night,
-            "filter" => session => session.Data.Filter ?? "",
-            "frames" => session => session.Data.Frames,
-            "integration" => session => session.Data.IntegrationSeconds,
-            _ => session => session.Data.Label.ToUpperInvariant(),
+            "object" => (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.ObjectName, b.ObjectName),
+            "night" => (a, b) => a.Night.CompareTo(b.Night),
+            "filter" => (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Filter ?? "", b.Filter ?? ""),
+            "frames" => (a, b) => a.Frames.CompareTo(b.Frames),
+            "integration" => (a, b) => a.IntegrationSeconds.CompareTo(b.IntegrationSeconds),
+            _ => (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Label, b.Label),
         };
 
+        // OrderBy is stable, so rows that tie keep the query's own order.
+        var comparer = Comparer<SuggestionSessionRow>.Create(by);
         var sorted = SessionSortAscending
-            ? Sessions.OrderBy(by).ToList()
-            : Sessions.OrderByDescending(by).ToList();
+            ? Sessions.OrderBy(session => session.Data, comparer).ToList()
+            : Sessions.OrderByDescending(session => session.Data, comparer).ToList();
         for (var index = 0; index < sorted.Count; index++)
         {
             var current = Sessions.IndexOf(sorted[index]);

@@ -2441,19 +2441,7 @@ public static class AppHost
                     Create = repository.Create,
                     Rename = repository.Rename,
                     Delete = repository.Delete,
-                    // Spec 12.17's Remove panel: its included nights leave the mosaic, then the panel
-                    // and its available rows go. Two writes, not one transaction.
-                    // ponytail: not atomic; a crash between the two leaves an empty panel the reader
-                    // removes again. Add a repository member if that ever matters.
-                    RemovePanel = panel =>
-                    {
-                        foreach (var night in panel.Included)
-                        {
-                            repository.RemoveNight(panel.Id, night.TargetId, night.Date, night.FrameLabel);
-                        }
-
-                        repository.DeletePanel(panel.Id);
-                    },
+                    RemovePanel = repository.RemovePanel,
                     AddPanelWithTarget = repository.AddPanelWithTarget,
                     SearchTargets = term => serviceProvider.GetRequiredService<TargetSearchQuery>().Search(term),
                     CustomColumns = columns.List,

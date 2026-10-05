@@ -399,9 +399,9 @@ public class JobRegistryCensusTest
             await page.DismissAllCommand.ExecuteAsync(null);
             await page.DismissAllCommand.ExecuteAsync(null);
             await page.PendingLoad;
-            page.Mosaics[0].IsSelected = true;
-            await page.DeleteSelectedCommand.ExecuteAsync(null);
-            await page.DeleteSelectedCommand.ExecuteAsync(null);
+            page.Table.Mosaics[0].IsSelected = true;
+            await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
+            await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
             await page.PendingLoad;
         }
 

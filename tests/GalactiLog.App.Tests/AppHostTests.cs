@@ -7,6 +7,7 @@ using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Diagnostics;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Merge;
 using GalactiLog.App.ViewModels.Preview;
 using GalactiLog.App.ViewModels.Settings;
@@ -447,6 +448,12 @@ public sealed class AppHostTests
         // the page is built, and this fixture deletes its app data root on dispose, so that read is
         // joined here the way the dashboard's and the activity page's are.
         AnalysisViewModelTestFactory.Settle((AnalysisViewModel)shell.Items[3].Page);
+
+        // Phase 18 Task 4: `mosaics:` is an OPTIONAL trailing argument, so dropping it from the
+        // AppHost call site compiles and restores the placeholder. Its first load reads this
+        // fixture's database off the UI thread, so it is joined here like the Analysis page's.
+        var mosaics = Assert.IsType<MosaicsPageViewModel>(shell.Items[1].Page);
+        Assert.True(MosaicsPageSettle.Settle(mosaics), "The Mosaics page's first load did not finish.");
 
         var dashboard = fixture.Host.Services.GetRequiredService<DashboardViewModel>();
         Assert.Same(dashboard, fixture.Host.Services.GetRequiredService<DashboardViewModel>());

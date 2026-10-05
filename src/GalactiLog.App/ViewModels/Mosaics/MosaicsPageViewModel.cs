@@ -5,10 +5,7 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
-using GalactiLog.App.ViewModels.CustomColumns;
-using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.Core.Settings;
-using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -17,89 +14,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace GalactiLog.App.ViewModels.Mosaics;
 
 /// <summary>
-/// Every collaborator of the Mosaics page (spec 12.17) as a delegate, so the page, its rows and
-/// its add panel form construct in a unit test with no database (spec 18.3). Each member defaults
-/// to an inert answer, so a test sets only the ones it exercises. <c>AppHost</c> binds every one
-/// to <c>MosaicRepository</c>, <c>MosaicQueries</c>, <c>ScanCoordinator</c>,
-/// <c>CustomColumnRepository</c>, <c>TargetSearchQuery</c>, <c>SettingsStore</c> and
-/// <c>ActivityRepository</c>.
-/// </summary>
-public sealed record MosaicsBackend
-{
-    /// <summary>Normally <c>SettingsStore.GetGeneral</c>: the three spec 5.8.1 mosaic keys.</summary>
-    public Func<GeneralSettings> General { get; init; } = () => new GeneralSettings();
-
-    /// <summary>Normally <c>SettingsStore.MutateGeneral</c>, which returns what it wrote.</summary>
-    public Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings> MutateGeneral { get; init; } = mutate => mutate(new GeneralSettings());
-
-    /// <summary>Normally <c>ScanCoordinator.RunMosaicDetectionAsync</c>; null means a scan or another
-    /// pass held the lease.</summary>
-    public Func<Action<int, int, string>, CancellationToken, Task<MosaicDetectionResult?>> RunDetection { get; init; }
-        = (_, _) => Task.FromResult<MosaicDetectionResult?>(null);
-
-    /// <summary>Normally <c>MosaicRepository.ListPending</c>.</summary>
-    public Func<IReadOnlyList<MosaicSuggestionRow>> ListPending { get; init; } = () => [];
-
-    /// <summary>Normally <c>MosaicQueries.SuggestionSessions</c>.</summary>
-    public Func<MosaicSuggestionRow, IReadOnlyList<SuggestionSessionRow>> SuggestionSessions { get; init; } = _ => [];
-
-    /// <summary>Normally <c>MosaicQueries.TargetNames</c>.</summary>
-    public Func<IReadOnlyCollection<Guid>, IReadOnlyDictionary<Guid, string>> TargetNames { get; init; }
-        = _ => new Dictionary<Guid, string>();
-
-    /// <summary>Normally <c>MosaicRepository.Accept</c>.</summary>
-    public Func<Guid, IReadOnlyList<string>, Guid> Accept { get; init; } = (_, _) => Guid.NewGuid();
-
-    /// <summary>Normally <c>MosaicRepository.Dismiss</c>.</summary>
-    public Action<Guid> Dismiss { get; init; } = _ => { };
-
-    /// <summary>Normally <c>MosaicQueries.List</c>.</summary>
-    public Func<IReadOnlyList<MosaicListRow>> ListMosaics { get; init; } = () => [];
-
-    /// <summary>Normally <c>MosaicQueries.Detail</c>, read when a row expands.</summary>
-    public Func<Guid, MosaicDetail?> Detail { get; init; } = _ => null;
-
-    /// <summary>Normally <c>MosaicRepository.Create</c>.</summary>
-    public Func<string, Guid> Create { get; init; } = _ => Guid.NewGuid();
-
-    /// <summary>Normally <c>MosaicRepository.Rename</c>.</summary>
-    public Action<Guid, string> Rename { get; init; } = (_, _) => { };
-
-    /// <summary>Normally <c>MosaicRepository.Delete</c>.</summary>
-    public Action<Guid> Delete { get; init; } = _ => { };
-
-    /// <summary>Spec 12.17's Remove panel: its included nights leave the mosaic, then the panel
-    /// goes. Normally <c>MosaicRepository.RemoveNight</c> per included night, then
-    /// <c>DeletePanel</c>.</summary>
-    public Action<PanelDetail> RemovePanel { get; init; } = _ => { };
-
-    /// <summary>Normally <c>MosaicRepository.AddPanelWithTarget</c>.</summary>
-    public Func<Guid, Guid, string, PanelAddResult> AddPanelWithTarget { get; init; } = (_, _, _) => new PanelAddResult(Guid.NewGuid(), 0, 0);
-
-    /// <summary>Normally <c>TargetSearchQuery.Search</c>.</summary>
-    public Func<string, IReadOnlyList<TargetSearchResult>> SearchTargets { get; init; } = _ => [];
-
-    /// <summary>Normally <c>CustomColumnRepository.List</c>.</summary>
-    public Func<IReadOnlyList<CustomColumnDefinition>> CustomColumns { get; init; } = () => [];
-
-    /// <summary>Normally <c>CustomColumnRepository.ValuesForMosaics</c>.</summary>
-    public Func<IReadOnlyCollection<Guid>, IReadOnlyList<CustomValueRow>> MosaicValues { get; init; } = _ => [];
-
-    /// <summary>Normally <c>CustomColumnRepository.SetValue</c>. Null draws no custom cell.</summary>
-    public Func<Guid, CustomValueKey, string?, CustomWriteResult>? WriteValue { get; init; }
-
-    /// <summary>(message, details): one spec 10.9 <c>mosaic_action_failed</c> row, normally
-    /// <c>ActivityRepository.EmitStandalone</c> pinned to <c>user_action</c> and warning.</summary>
-    public Action<string, object> EmitActionFailed { get; init; } = (_, _) => { };
-}
-
-/// <summary>One entry of the campaign gap select (spec 12.17).</summary>
-public sealed record CampaignGapChoice(int Days, string Label);
-
-/// <summary>
-/// Spec 12.17's Mosaics page (Phase 18): the detection keywords with Run Detection, the
-/// suggestions list, and the mosaics table. A rail destination between Dashboard and Statistics
-/// (ruling R3).
+/// Spec 12.17's Mosaics page (Phase 18): the detection keywords with Run Detection and the
+/// suggestions list, with the mosaics table in <see cref="Table"/>. A rail destination between
+/// Dashboard and Statistics (ruling R3).
 /// </summary>
 /// <remarks>
 /// <para>
@@ -130,28 +47,24 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
 
     internal const string ScanRunningTooltip = "A scan is running. Detection runs when it ends.";
     internal const string DetectionRunningTooltip = "Detection is running.";
-    internal const string DetectionRefusedSummary = "A scan is running. Detection runs when it ends.";
+    internal const string DetectionRefusedByScanSummary = "A scan is running. Detection runs when it ends.";
+    internal const string DetectionRefusedByOtherSummary = "Another catalogue task is running. Detection runs when it ends.";
     internal const string DetectionFailedSummary = "Mosaic detection failed. See the log for details.";
 
     /// <summary>Spec 12.17's empty suggestions sentence.</summary>
     public const string NoSuggestionsText = "No suggestions. Run Detection looks for panels in your target names and sky positions.";
 
-    /// <summary>Spec 12.17's empty table sentence.</summary>
-    public const string NoMosaicsText = "No mosaics yet.";
-
-    /// <summary>Spec 12.17's failed load sentence.</summary>
-    public const string LoadFailedText = "The mosaics could not be loaded.";
+    /// <summary>What a failed suggestions read shows in place of the list.</summary>
+    public const string SuggestionsLoadFailedText = "The suggestions could not be loaded.";
 
     private static readonly HashSet<string> ReloadKinds =
         new([DetectionJobKind, AcceptJobKind, DismissJobKind, DeleteJobKind], StringComparer.Ordinal);
 
     private readonly JobRegistry _jobs;
-    private readonly DisplayColumnWriter _columnWriter;
     private readonly ScanStatusService? _scanStatus;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly List<SuggestionRowViewModel> _suggestions = [];
-    private IReadOnlyList<CustomColumnDefinition> _definitions = [];
     private bool _disposed;
 
     /// <param name="backend">Every data collaborator, as delegates.</param>
@@ -175,7 +88,6 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     {
         Backend = backend;
         _jobs = jobs;
-        _columnWriter = columnWriter;
         _scanStatus = scanStatus;
         Post = post ?? UiPost.Default;
         Delay = delay ?? Task.Delay;
@@ -187,18 +99,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         _selectedGap = GapChoices.FirstOrDefault(choice => choice.Days == general.MosaicCampaignGapDays) ?? GapChoices[0];
         NewKeyword = "";
         FilterText = "";
-        NewMosaicName = "";
-
-        var sort = display.MosaicsSort;
-        SortKey = sort.Key;
-        SortAscending = sort.Ascending;
-        Picker = ColumnPickerViewModel.ForMosaics(display, columnWriter, []);
-        _display = display;
-        UpdateSortGlyphs();
+        Table = new MosaicsTableViewModel(this, display, columnWriter);
 
         jobs.Running.CollectionChanged += OnRunningChanged;
         jobs.Recent.CollectionChanged += OnRecentChanged;
-        columnWriter.Changed += OnColumnsWritten;
         if (scanStatus is not null)
         {
             scanStatus.PropertyChanged += OnScanStatusChanged;
@@ -207,8 +111,6 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         _ = ReloadAsync();
     }
 
-    private DisplaySettings _display;
-
     internal MosaicsBackend Backend { get; }
 
     internal Action<Action> Post { get; }
@@ -216,6 +118,9 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     internal Func<TimeSpan, CancellationToken, Task> Delay { get; }
 
     internal ILogger Logger => _logger;
+
+    /// <summary>The right column: the mosaics table.</summary>
+    public MosaicsTableViewModel Table { get; }
 
     /// <summary>Raised with a mosaic id when a table row is clicked: the shell opens the mosaic
     /// detail page (Task 5) on its detail overlay.</summary>
@@ -289,11 +194,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>The seven campaign gap entries of spec 12.17.</summary>
-    public IReadOnlyList<CampaignGapChoice> GapChoices { get; } =
-    [
-        new(0, "No grouping"), new(7, "1 week"), new(14, "2 weeks"), new(30, "1 month"),
-        new(90, "3 months"), new(180, "6 months"), new(365, "1 year"),
-    ];
+    public IReadOnlyList<CampaignGapChoice> GapChoices => CampaignGapChoice.All;
 
     private CampaignGapChoice _selectedGap;
 
@@ -394,7 +295,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
                 .ConfigureAwait(false);
             if (result is null)
             {
-                job.Finish(JobResult.Cancelled, DetectionRefusedSummary);
+                // The lease was held: by a scan, or by another catalogue task such as a rebuild.
+                job.Finish(
+                    JobResult.Cancelled,
+                    ScanRunning ? DetectionRefusedByScanSummary : DetectionRefusedByOtherSummary);
                 return;
             }
 
@@ -417,7 +321,8 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     /// <summary>The suggestions the filter keeps, in suggested name order.</summary>
     public ObservableCollection<SuggestionRowViewModel> VisibleSuggestions { get; } = [];
 
-    /// <summary>Spec 12.17's filter text. Not stored; survives a reload.</summary>
+    /// <summary>Spec 12.17's filter text. Not stored; survives a reload. It narrows the list only
+    /// while its box is shown.</summary>
     [ObservableProperty]
     public partial string FilterText { get; set; }
 
@@ -431,7 +336,13 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         ? $"Suggestions ({_suggestions.Count})"
         : $"Suggestions ({VisibleSuggestions.Count} of {_suggestions.Count})";
 
-    public bool HasNoSuggestions => _suggestions.Count == 0;
+    /// <summary>True when the last suggestions read threw: the failure sentence shows instead of
+    /// the list and instead of the empty sentence.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasNoSuggestions))]
+    public partial bool SuggestionsLoadFailed { get; private set; }
+
+    public bool HasNoSuggestions => _suggestions.Count == 0 && !SuggestionsLoadFailed;
 
     public bool HasVisibleSuggestions => VisibleSuggestions.Count > 0;
 
@@ -516,10 +427,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     [RelayCommand]
     private void CancelDismissAll() => DismissAllPending = false;
 
-    // Spec 12.17's bulk rule: one job, "k of n" progress, one mosaic_action_failed row per failed
-    // item, the summary "<verb> k of n", failed only when every item failed. The reload is the
-    // registry subscription's, like every other mosaic job's.
-    private async Task RunBulkAsync<T>(
+    /// <summary>Spec 12.17's bulk rule: one job, "k of n" progress, one mosaic_action_failed row
+    /// per failed item, the summary "&lt;verb&gt; k of n", failed only when every item failed. The
+    /// reload is the registry subscription's, like every other mosaic job's.</summary>
+    internal async Task RunBulkAsync<T>(
         string kind, string title, string action, string verb, IReadOnlyList<T> items,
         Func<T, string> name, Action<T> act)
     {
@@ -588,7 +499,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     private void RefreshVisibleSuggestions()
     {
         VisibleSuggestions.Clear();
-        var filter = FilterText.Trim();
+
+        // The filter narrows only while its box is shown: once the list falls to four or fewer the
+        // box hides, and a narrowing nobody can see or clear would hide rows.
+        var filter = ShowFilter ? FilterText.Trim() : "";
         foreach (var row in _suggestions.Where(row => filter.Length == 0 || row.Name.Contains(filter, StringComparison.OrdinalIgnoreCase)))
         {
             VisibleSuggestions.Add(row);
@@ -619,226 +533,6 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         DismissAllCommand.NotifyCanExecuteChanged();
     }
 
-    // ---- the mosaics table -----------------------------------------------------------------
-
-    /// <summary>The rows, in the current sort.</summary>
-    public ObservableCollection<MosaicRowViewModel> Mosaics { get; } = [];
-
-    /// <summary>The column gear's picker over <c>display.columns.mosaics</c>; its rows also carry
-    /// the header cells' visibility and sort glyph.</summary>
-    [ObservableProperty]
-    public partial ColumnPickerViewModel Picker { get; private set; }
-
-    /// <summary>The shown mosaic-scope custom columns, in display order: the header strip.</summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<CustomColumnDefinition> ShownCustomColumns { get; private set; } = [];
-
-    public string MosaicsHeading => $"Mosaics ({Mosaics.Count})";
-
-    public bool HasNoMosaics => Mosaics.Count == 0 && !LoadFailed;
-
-    public bool ShowSelectAllMosaics => Mosaics.Count >= 2;
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasNoMosaics))]
-    public partial bool LoadFailed { get; private set; }
-
-    [ObservableProperty]
-    public partial string SortKey { get; private set; }
-
-    [ObservableProperty]
-    public partial bool SortAscending { get; private set; }
-
-    /// <summary>A header click: ascending on a new key, reversed on the same key, written to
-    /// <c>display.sort.mosaics</c>. A key outside the five built-ins does not sort.</summary>
-    [RelayCommand]
-    private void SortBy(string? key)
-    {
-        if (key is null || !DisplaySettings.MosaicColumnKeys.Contains(key) || _disposed)
-        {
-            return;
-        }
-
-        SortAscending = key != SortKey || !SortAscending;
-        SortKey = key;
-        UpdateSortGlyphs();
-        ApplySort();
-
-        var sort = new TableSort { Key = SortKey, Ascending = SortAscending };
-        _display = _display.WithSort(DisplaySettings.MosaicsTableId, sort);
-        _columnWriter.Write(display => display.WithSort(DisplaySettings.MosaicsTableId, sort));
-    }
-
-    private void UpdateSortGlyphs()
-    {
-        foreach (var column in Picker.Columns)
-        {
-            column.SortGlyph = column.Key == SortKey ? (SortAscending ? "▲" : "▼") : "";
-        }
-    }
-
-    private void ApplySort()
-    {
-        var sorted = Sorted(Mosaics, SortKey, SortAscending);
-        for (var index = 0; index < sorted.Count; index++)
-        {
-            var current = Mosaics.IndexOf(sorted[index]);
-            if (current != index)
-            {
-                Mosaics.Move(current, index);
-            }
-        }
-    }
-
-    /// <summary>Spec 12.17's order: the key ascending or descending, ties by name; Date range by
-    /// the first night, a mosaic with none first ascending.</summary>
-    internal static IReadOnlyList<MosaicRowViewModel> Sorted(IEnumerable<MosaicRowViewModel> rows, string key, bool ascending)
-    {
-        Comparison<MosaicRowViewModel> byKey = key switch
-        {
-            "panels" => (a, b) => a.Panels.CompareTo(b.Panels),
-            "integration" => (a, b) => a.IntegrationSeconds.CompareTo(b.IntegrationSeconds),
-            "frames" => (a, b) => a.Frames.CompareTo(b.Frames),
-            "date_range" => (a, b) => Nullable.Compare(a.FirstNight, b.FirstNight),
-            _ => (a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name),
-        };
-
-        var list = rows.ToList();
-        list.Sort((a, b) =>
-        {
-            var order = byKey(a, b);
-            if (!ascending)
-            {
-                order = -order;
-            }
-
-            return order != 0 ? order : StringComparer.OrdinalIgnoreCase.Compare(a.Name, b.Name);
-        });
-        return list;
-    }
-
-    // Selection and Delete selected.
-
-    public int SelectedMosaicCount => Mosaics.Count(row => row.IsSelected);
-
-    public bool HasSelectedMosaics => SelectedMosaicCount > 0;
-
-    public string DeleteSelectedText => $"Delete selected ({SelectedMosaicCount})";
-
-    public string DeleteSelectedConfirmText
-        => $"Delete {SelectedMosaicCount} mosaics? Their panels and nights are removed; no frame is touched.";
-
-    public bool AllMosaicsSelected
-    {
-        get => Mosaics.Count > 0 && Mosaics.All(row => row.IsSelected);
-        set
-        {
-            foreach (var row in Mosaics)
-            {
-                row.IsSelected = value;
-            }
-        }
-    }
-
-    [ObservableProperty]
-    public partial bool DeleteSelectedPending { get; private set; }
-
-    private bool CanDeleteSelected() => CanAct && HasSelectedMosaics;
-
-    [RelayCommand(CanExecute = nameof(CanDeleteSelected))]
-    private Task DeleteSelectedAsync()
-    {
-        if (!CanDeleteSelected())
-        {
-            return Task.CompletedTask;
-        }
-
-        if (!DeleteSelectedPending)
-        {
-            DeleteSelectedPending = true;
-            return Task.CompletedTask;
-        }
-
-        DeleteSelectedPending = false;
-        var items = Mosaics.Where(row => row.IsSelected).Select(row => (row.Id, row.Name)).ToList();
-        return RunBulkAsync(
-            DeleteJobKind, "Delete mosaics", "delete", "Deleted", items,
-            item => item.Name, item => Backend.Delete(item.Id));
-    }
-
-    [RelayCommand]
-    private void CancelDeleteSelected() => DeleteSelectedPending = false;
-
-    internal void OnMosaicSelectionChanged()
-    {
-        OnPropertyChanged(nameof(SelectedMosaicCount));
-        OnPropertyChanged(nameof(HasSelectedMosaics));
-        OnPropertyChanged(nameof(DeleteSelectedText));
-        OnPropertyChanged(nameof(DeleteSelectedConfirmText));
-        OnPropertyChanged(nameof(AllMosaicsSelected));
-        DeleteSelectedCommand.NotifyCanExecuteChanged();
-        if (!HasSelectedMosaics)
-        {
-            DeleteSelectedPending = false;
-        }
-    }
-
-    /// <summary>A single Delete removed this row (spec 12.17).</summary>
-    internal void RemoveMosaicRow(MosaicRowViewModel row)
-    {
-        Mosaics.Remove(row);
-        row.Dispose();
-        OnMosaicsChanged();
-    }
-
-    /// <summary>A rename moved this row's name; the sort follows it.</summary>
-    internal void OnMosaicRenamed() => ApplySort();
-
-    // Create mosaic.
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CreateButtonText))]
-    public partial bool IsCreateOpen { get; private set; }
-
-    public string CreateButtonText => IsCreateOpen ? "Cancel" : "Create mosaic";
-
-    [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(CreateCommand))]
-    public partial string NewMosaicName { get; set; }
-
-    [ObservableProperty]
-    public partial string? CreateError { get; private set; }
-
-    partial void OnNewMosaicNameChanged(string value) => CreateError = null;
-
-    [RelayCommand]
-    private void ToggleCreate()
-    {
-        IsCreateOpen = !IsCreateOpen;
-        NewMosaicName = "";
-        CreateError = null;
-    }
-
-    private bool CanCreate() => !string.IsNullOrWhiteSpace(NewMosaicName);
-
-    [RelayCommand(CanExecute = nameof(CanCreate))]
-    private void Create()
-    {
-        if (!CanCreate() || _disposed)
-        {
-            return;
-        }
-
-        var name = NewMosaicName.Trim();
-        CreateError = TryWrite(() => Backend.Create(name));
-        if (CreateError is null)
-        {
-            IsCreateOpen = false;
-            NewMosaicName = "";
-            _ = ReloadAsync(suggestions: false);
-        }
-    }
-
     /// <summary>Runs one write. Null on success, otherwise the inline sentence: a refusal's own,
     /// or "The change could not be saved. Try again." for a write that threw.</summary>
     internal string? TryWrite(Action write)
@@ -860,13 +554,14 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     }
 
     [RelayCommand]
-    private Task Retry() => ReloadAsync();
+    private Task RetrySuggestions() => ReloadAsync();
 
     // ---- loading -------------------------------------------------------------------------
 
     /// <summary>Reads the suggestions (unless <paramref name="suggestions"/> is false) and the
     /// mosaics table off the UI thread, then replaces both lists. Expanded rows, checked panels and
-    /// selections reset (spec 12.17's reload rule); the filter text survives.</summary>
+    /// selections reset (spec 12.17's reload rule); the filter text survives. The two reads fail
+    /// independently: each list shows its own failure sentence.</summary>
     public Task ReloadAsync(bool suggestions = true)
     {
         if (_disposed)
@@ -877,142 +572,64 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         return PendingLoad = LoadAsync(suggestions);
     }
 
-    private sealed record Loaded(
-        IReadOnlyList<(MosaicSuggestionRow Row, IReadOnlyList<SuggestionSessionRow> Sessions)>? Suggestions,
-        IReadOnlyDictionary<Guid, string> TargetNames,
-        IReadOnlyList<MosaicListRow>? Mosaics,
-        IReadOnlyList<CustomColumnDefinition> Definitions,
-        IReadOnlyList<CustomValueRow> Values);
+    private sealed record LoadedSuggestions(
+        IReadOnlyList<(MosaicSuggestionRow Row, IReadOnlyList<SuggestionSessionRow> Sessions)> Rows,
+        IReadOnlyDictionary<Guid, string> TargetNames);
 
     private async Task LoadAsync(bool suggestions)
     {
-        Loaded loaded;
+        var (pending, table) = await Task.Run(() => (suggestions ? ReadSuggestions() : null, Table.Read())).ConfigureAwait(false);
+        Post(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            if (suggestions)
+            {
+                ApplySuggestions(pending);
+            }
+
+            Table.Apply(table);
+        });
+    }
+
+    // Null when the read threw.
+    private LoadedSuggestions? ReadSuggestions()
+    {
         try
         {
-            loaded = await Task.Run(() => Read(suggestions)).ConfigureAwait(false);
+            var rows = Backend.ListPending().Select(row => (row, Backend.SuggestionSessions(row))).ToList();
+            var ids = rows.SelectMany(entry => entry.row.Panels.Select(panel => panel.TargetId)).ToHashSet();
+            IReadOnlyDictionary<Guid, string> names = ids.Count == 0 ? new Dictionary<Guid, string>() : Backend.TargetNames(ids);
+            return new LoadedSuggestions([.. rows], names);
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex, "The Mosaics page could not be loaded");
-            Post(() => LoadFailed = true);
-            return;
+            _logger.LogWarning(ex, "The mosaic suggestions could not be loaded");
+            return null;
         }
-
-        Post(() => Apply(loaded));
     }
 
-    private Loaded Read(bool suggestions)
+    private void ApplySuggestions(LoadedSuggestions? loaded)
     {
-        IReadOnlyList<(MosaicSuggestionRow, IReadOnlyList<SuggestionSessionRow>)>? pending = null;
-        IReadOnlyDictionary<Guid, string> names = new Dictionary<Guid, string>();
-        if (suggestions)
+        foreach (var row in _suggestions)
         {
-            pending = [.. Backend.ListPending().Select(row => (row, Backend.SuggestionSessions(row)))];
-            var ids = pending.SelectMany(entry => entry.Item1.Panels.Select(panel => panel.TargetId)).ToHashSet();
-            names = ids.Count == 0 ? names : Backend.TargetNames(ids);
+            row.PropertyChanged -= OnSuggestionChanged;
         }
 
-        var mosaics = Backend.ListMosaics();
-        var definitions = Backend.CustomColumns();
-        var values = mosaics.Count == 0 ? [] : Backend.MosaicValues([.. mosaics.Select(row => row.Id)]);
-        return new Loaded(pending, names, mosaics, definitions, values);
-    }
-
-    private void Apply(Loaded loaded)
-    {
-        if (_disposed)
+        _suggestions.Clear();
+        DismissAllPending = false;
+        SuggestionsLoadFailed = loaded is null;
+        foreach (var (row, sessions) in loaded?.Rows ?? [])
         {
-            return;
+            var added = new SuggestionRowViewModel(row, sessions, loaded!.TargetNames, this);
+            added.PropertyChanged += OnSuggestionChanged;
+            _suggestions.Add(added);
         }
 
-        LoadFailed = false;
-        if (loaded.Suggestions is { } pending)
-        {
-            foreach (var row in _suggestions)
-            {
-                row.PropertyChanged -= OnSuggestionChanged;
-            }
-
-            _suggestions.Clear();
-            DismissAllPending = false;
-            foreach (var (row, sessions) in pending)
-            {
-                var added = new SuggestionRowViewModel(row, sessions, loaded.TargetNames, this);
-                added.PropertyChanged += OnSuggestionChanged;
-                _suggestions.Add(added);
-            }
-
-            RefreshVisibleSuggestions();
-        }
-
-        ApplyDefinitions(loaded.Definitions);
-
-        foreach (var row in Mosaics)
-        {
-            row.Dispose();
-        }
-
-        Mosaics.Clear();
-        DeleteSelectedPending = false;
-        var values = loaded.Values
-            .Where(value => value.Key.MosaicId is not null)
-            .ToLookup(value => value.Key.MosaicId!.Value);
-        foreach (var row in Sorted(loaded.Mosaics!.Select(row => new MosaicRowViewModel(row, this, values[row.Id].ToList())), SortKey, SortAscending))
-        {
-            Mosaics.Add(row);
-        }
-
-        OnMosaicsChanged();
-    }
-
-    private void OnMosaicsChanged()
-    {
-        OnPropertyChanged(nameof(MosaicsHeading));
-        OnPropertyChanged(nameof(HasNoMosaics));
-        OnPropertyChanged(nameof(ShowSelectAllMosaics));
-        OnMosaicSelectionChanged();
-    }
-
-    // The picker is rebuilt when the mosaic-scope definitions changed, so a column created on the
-    // Custom columns tab reaches the gear on the next reload.
-    private void ApplyDefinitions(IReadOnlyList<CustomColumnDefinition> definitions)
-    {
-        var mosaicScope = CustomColumnSet.MosaicRow(definitions);
-        if (!mosaicScope.Select(column => (column.Id, column.Name)).SequenceEqual(
-                CustomColumnSet.MosaicRow(_definitions).Select(column => (column.Id, column.Name))))
-        {
-            Picker.Dispose();
-            Picker = ColumnPickerViewModel.ForMosaics(_display, _columnWriter, definitions);
-            UpdateSortGlyphs();
-        }
-
-        _definitions = definitions;
-        RefreshShownCustomColumns();
-    }
-
-    private void RefreshShownCustomColumns()
-    {
-        var visible = Picker.Columns.Where(column => column.IsVisible).Select(column => column.Key).ToHashSet(StringComparer.Ordinal);
-        ShownCustomColumns = [.. CustomColumnSet.MosaicRow(_definitions).Where(column => visible.Contains(column.Slug))];
-    }
-
-    // A picker toggle (here or another surface) was queued for this table: the custom cells follow.
-    private void OnColumnsWritten(string tableId, string[] keys)
-    {
-        if (_disposed || tableId != DisplaySettings.MosaicsTableId)
-        {
-            return;
-        }
-
-        _display = _display with
-        {
-            Columns = new Dictionary<string, string[]>(_display.Columns) { [tableId] = keys },
-        };
-        RefreshShownCustomColumns();
-        foreach (var row in Mosaics)
-        {
-            row.ReconcileCustomCells();
-        }
+        RefreshVisibleSuggestions();
     }
 
     // ---- gates and subscriptions -------------------------------------------------------------
@@ -1021,16 +638,12 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     {
         AcceptAllCommand.NotifyCanExecuteChanged();
         DismissAllCommand.NotifyCanExecuteChanged();
-        DeleteSelectedCommand.NotifyCanExecuteChanged();
         foreach (var row in _suggestions)
         {
             row.NotifyGates();
         }
 
-        foreach (var row in Mosaics)
-        {
-            row.NotifyGates();
-        }
+        Table.NotifyGates();
     }
 
     private void NotifyDetectionGate()
@@ -1082,18 +695,12 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         _lifetime.Cancel();
         _jobs.Running.CollectionChanged -= OnRunningChanged;
         _jobs.Recent.CollectionChanged -= OnRecentChanged;
-        _columnWriter.Changed -= OnColumnsWritten;
         if (_scanStatus is not null)
         {
             _scanStatus.PropertyChanged -= OnScanStatusChanged;
         }
 
-        Picker.Dispose();
-        foreach (var row in Mosaics)
-        {
-            row.Dispose();
-        }
-
+        Table.Dispose();
         _lifetime.Dispose();
     }
 

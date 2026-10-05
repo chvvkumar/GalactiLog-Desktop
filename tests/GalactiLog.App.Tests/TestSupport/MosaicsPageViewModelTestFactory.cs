@@ -35,3 +35,10 @@ internal sealed class MosaicsPageHarness : IDisposable
 
     public void Dispose() => Page.Dispose();
 }
+
+// Joins a Mosaics page's pending load from a synchronous test, the way
+// AnalysisViewModelTestFactory.Settle joins the Analysis page's. Bounded; true when it finished.
+internal static class MosaicsPageSettle
+{
+    public static bool Settle(MosaicsPageViewModel page) => page.PendingLoad.Wait(TimeSpan.FromSeconds(30));
+}

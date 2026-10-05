@@ -39,7 +39,7 @@ public class MosaicsViewTests
         });
         await harness.Page.PendingLoad;
         harness.Page.VisibleSuggestions[0].IsExpanded = true;
-        harness.Page.Mosaics[0].ToggleExpandCommand.Execute(null);
+        harness.Page.Table.Mosaics[0].ToggleExpandCommand.Execute(null);
 
         var view = new MosaicsView { DataContext = harness.Page };
         var window = new Window { Width = 1280, Height = 720, Content = view };

@@ -143,6 +143,10 @@
             </StackPanel>
           </Border>
 
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding SuggestionsLoadFailed}">
+            <TextBlock Text="{x:Static mos:MosaicsPageViewModel.SuggestionsLoadFailedText}" VerticalAlignment="Center" Foreground="{DynamicResource ColorError}" />
+            <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetrySuggestionsCommand}" />
+          </StackPanel>
           <TextBlock x:Name="NoSuggestionsText"
                      Text="{x:Static mos:MosaicsPageViewModel.NoSuggestionsText}"
                      IsVisible="{Binding HasNoSuggestions}"
@@ -303,7 +307,7 @@
       </ScrollViewer>
 
       <!-- ===== Right column: the mosaics table ===== -->
-      <ScrollViewer Grid.Column="1" Margin="8,0,0,0">
+      <ScrollViewer Grid.Column="1" Margin="8,0,0,0" DataContext="{Binding Table}" x:DataType="mos:MosaicsTableViewModel">
         <StackPanel Spacing="10" Margin="0,0,12,0">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -326,7 +330,7 @@
                           <StackPanel Spacing="2">
                             <TextBlock Text="{Binding Heading}"
                                        Margin="0,4,0,0"
-                                       IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.ShowGroupHeadings}"
+                                       IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.ShowGroupHeadings}"
                                        Foreground="{DynamicResource ColorTextTertiary}" />
                             <ItemsControl ItemsSource="{Binding Columns}">
                               <ItemsControl.ItemTemplate>
@@ -334,7 +338,7 @@
                                   <CheckBox Content="{Binding Title}"
                                             IsChecked="{Binding IsVisible, Mode=OneWay}"
                                             IsEnabled="{Binding CanHide}"
-                                            Command="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.ToggleCommand}"
+                                            Command="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.ToggleCommand}"
                                             CommandParameter="{Binding}" />
                                 </DataTemplate>
                               </ItemsControl.ItemTemplate>
@@ -375,17 +379,17 @@
           </StackPanel>
 
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LoadFailed}">
-            <TextBlock Text="{x:Static mos:MosaicsPageViewModel.LoadFailedText}" VerticalAlignment="Center" Foreground="{DynamicResource ColorError}" />
+            <TextBlock Text="{x:Static mos:MosaicsTableViewModel.LoadFailedText}" VerticalAlignment="Center" Foreground="{DynamicResource ColorError}" />
             <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetryCommand}" />
           </StackPanel>
           <TextBlock x:Name="NoMosaicsText"
-                     Text="{x:Static mos:MosaicsPageViewModel.NoMosaicsText}"
+                     Text="{x:Static mos:MosaicsTableViewModel.NoMosaicsText}"
                      IsVisible="{Binding HasNoMosaics}"
                      Foreground="{DynamicResource ColorTextTertiary}" />
 
           <CheckBox Content="Select all" IsChecked="{Binding AllMosaicsSelected}" IsVisible="{Binding ShowSelectAllMosaics}" />
 
-          <StackPanel Grid.IsSharedSizeScope="True" IsVisible="{Binding !HasNoMosaics}">
+          <StackPanel Grid.IsSharedSizeScope="True" IsVisible="{Binding ShowRows}">
             <!-- The header row. Each built-in header sorts; a custom column's header does not. -->
             <Grid MinHeight="30">
               <Grid.ColumnDefinitions>
@@ -486,13 +490,13 @@
                           <TextBlock Grid.Column="1" Text="{Binding Name}" Padding="8,0" VerticalAlignment="Center"
                                      TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextPrimary}" />
                           <TextBlock Grid.Column="2" Text="{Binding PanelsText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
-                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[1].IsVisible}" />
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.Columns[1].IsVisible}" />
                           <TextBlock Grid.Column="3" Text="{Binding IntegrationText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
-                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[2].IsVisible}" />
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.Columns[2].IsVisible}" />
                           <TextBlock Grid.Column="4" Text="{Binding FramesText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center"
-                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[3].IsVisible}" />
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.Columns[3].IsVisible}" />
                           <TextBlock Grid.Column="5" Text="{Binding DateRangeText}" Padding="8,0" VerticalAlignment="Center"
-                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Picker.Columns[4].IsVisible}" />
+                                     IsVisible="{Binding #Root.((mos:MosaicsPageViewModel)DataContext).Table.Picker.Columns[4].IsVisible}" />
                           <ItemsControl Grid.Column="6" ItemsSource="{Binding CustomCells}">
                             <ItemsControl.ItemsPanel>
                               <ItemsPanelTemplate>

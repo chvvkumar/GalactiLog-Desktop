@@ -21,14 +21,16 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
     /// <summary>The panel list's empty state.</summary>
     public const string NoPanelsText = "No panels yet.";
 
+    private readonly MosaicsTableViewModel _table;
     private readonly MosaicsPageViewModel _page;
     private IReadOnlyList<CustomValueRow> _values;
     private CustomCellGroup _cells = CustomCellGroup.Empty;
     private bool _disposed;
 
-    internal MosaicRowViewModel(MosaicListRow row, MosaicsPageViewModel page, IReadOnlyList<CustomValueRow> values)
+    internal MosaicRowViewModel(MosaicListRow row, MosaicsTableViewModel table, IReadOnlyList<CustomValueRow> values)
     {
-        _page = page;
+        _table = table;
+        _page = table.Page;
         _values = values;
         Id = row.Id;
         Name = row.Name;
@@ -80,7 +82,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
 
     internal void ReconcileCustomCells()
     {
-        var columns = _page.ShownCustomColumns;
+        var columns = _table.ShownCustomColumns;
         _cells = CustomCellFactory.Reconcile(
             _cells,
             columns,
@@ -97,7 +99,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool IsSelected { get; set; }
 
-    partial void OnIsSelectedChanged(bool value) => _page.OnMosaicSelectionChanged();
+    partial void OnIsSelectedChanged(bool value) => _table.OnMosaicSelectionChanged();
 
     /// <summary>A click on the row outside its controls (spec 12.17).</summary>
     [RelayCommand]
@@ -131,7 +133,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
         Error = _page.TryWrite(() => _page.Backend.Delete(Id));
         if (Error is null)
         {
-            _page.RemoveMosaicRow(this);
+            _table.RemoveMosaicRow(this);
         }
     }
 
@@ -195,13 +197,16 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(HasNoPanels));
         ApplyFigures(detail.Panels.Count, detail.IntegrationSeconds, detail.Frames, detail.FirstNight, detail.LastNight);
         AddPanel?.SetLabels([.. detail.Panels.Select(panel => panel.Label)]);
+
+        // The figures may have moved, so the row's place in the table may have too.
+        _table.ApplySort();
     }
 
     internal bool CanAct => _page.CanAct;
 
     internal string? RemovePanel(PanelDetail panel)
     {
-        var error = _page.TryWrite(() => _page.Backend.RemovePanel(panel));
+        var error = _page.TryWrite(() => _page.Backend.RemovePanel(panel.Id));
         if (error is null)
         {
             RefreshDetail();
@@ -254,7 +259,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
         {
             Name = name;
             IsRenaming = false;
-            _page.OnMosaicRenamed();
+            _table.ApplySort();
         }
     }
 

@@ -159,6 +159,8 @@ public sealed partial class AddPanelViewModel : ObservableObject, IDisposable
             return;
         }
 
+        // A pick belongs to the text it was made from: typing again drops it.
+        Chosen = null;
         PendingSearch = _searchWindow.Restart((generation, token) => RunSearchAsync(generation, value, token));
     }
 
