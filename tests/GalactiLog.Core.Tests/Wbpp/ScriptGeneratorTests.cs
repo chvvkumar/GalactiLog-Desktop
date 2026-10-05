@@ -9,7 +9,7 @@ namespace GalactiLog.Core.Tests.Wbpp;
 /// <summary>
 /// Spec 12.13's script contract. The parity cases compare both generators with the real web
 /// generators' own output, byte for byte, from the sixteen golden files under
-/// <c>docs/superpowers/work/phase16/golden/</c> that
+/// <c>tests/Fixtures/golden/</c> that
 /// <c>docs/superpowers/work/phase16/oracle/scripts_oracle.py</c> produced by running
 /// <c>wbpp_export.py</c> itself; not one expected byte is typed here. The departed golden is
 /// compared with the Python's own file in the other direction too: undoing the declared
@@ -1389,7 +1389,7 @@ public class ScriptGeneratorTests
 
     private static string ReadGolden(string fileName)
     {
-        var path = Path.Combine(FindRepoRoot(), "docs", "superpowers", "work", "phase16", "golden", fileName);
+        var path = Path.Combine(FindRepoRoot(), "tests", "Fixtures", "golden", fileName);
         Assert.True(File.Exists(path), $"golden file not found: {path}");
         return File.ReadAllText(path);
     }

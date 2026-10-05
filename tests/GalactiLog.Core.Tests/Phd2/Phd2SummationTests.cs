@@ -284,7 +284,7 @@ public class Phd2SummationTests
     private static IEnumerable<(int FrameCount, double RmsTotal, double RmsRa, double RmsDec)> ReadPhd2Nights()
     {
         var path = Path.Combine(
-            RepositoryRoot(), "docs", "superpowers", "work", "phase17", "realdata", "inputs.json");
+            RepositoryRoot(), "tests", "Fixtures", "realdata", "inputs.json");
         using var document = JsonDocument.Parse(File.ReadAllText(path));
 
         foreach (var night in document.RootElement.GetProperty("phd2_nights").EnumerateArray())

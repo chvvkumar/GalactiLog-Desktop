@@ -626,7 +626,7 @@ public class CompareTabTests : IDisposable
 
     // The parity condition on the rebuilt sentence: the tab's is the query's with ONLY the two
     // names different, on every branch. The three real scenarios are the user's own library,
-    // through docs/superpowers/work/phase17/realdata/oracle.json (compare_two_rigs_hfr, the
+    // through tests/Fixtures/realdata/oracle.json (compare_two_rigs_hfr, the
     // arcsecond branch; compare_two_rigs_fwhm, the pixel branch; compare_ha_oiii_hfr, the
     // arcsecond branch in filter mode), each with the oracle's own pct_u2_rounded as the figure
     // user ruling U2 requires and the web's own figure refused. The fourth is the equal-medians

@@ -31,7 +31,7 @@ namespace GalactiLog.Data.Tests.Queries;
 /// (<c>collision-map-a.md</c> section 3). The seeder is used for nothing here and is not edited.
 /// </para>
 /// <para>
-/// The real-data cases seed from <c>docs/superpowers/work/phase17/realdata/inputs.json</c>, which
+/// The real-data cases seed from <c>tests/Fixtures/realdata/inputs.json</c>, which
 /// lives in the repository, and assert against <c>oracle.json</c> beside it. Nothing under
 /// <c>C:\tmp</c> is read, so every one of them runs on a clean copy. Night, target and rig are
 /// ordinals in both files, so no case names a rig, a target or a place.
@@ -1508,7 +1508,7 @@ public class AnalysisQueryTests(ITestOutputHelper output)
 
     /// <summary>
     /// The user's own 416 LIGHT frames and five PHD2 night rows, seeded from
-    /// <c>docs/superpowers/work/phase17/realdata/inputs.json</c> and asserted against
+    /// <c>tests/Fixtures/realdata/inputs.json</c> and asserted against
     /// <c>oracle.json</c> beside it, both read from the repository so every case runs on a clean
     /// copy. <c>C:\tmp\p17-real</c> is never read.
     /// </summary>
@@ -1871,7 +1871,7 @@ public class AnalysisQueryTests(ITestOutputHelper output)
         private static JsonElement Load(string name)
             => JsonDocument
                 .Parse(System.IO.File.ReadAllText(
-                    SourceScan.SourceFile($"docs/superpowers/work/phase17/realdata/{name}")))
+                    SourceScan.SourceFile($"tests/Fixtures/realdata/{name}")))
                 .RootElement.Clone();
     }
 

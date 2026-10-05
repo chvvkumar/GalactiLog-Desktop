@@ -14,7 +14,7 @@ namespace GalactiLog.Core.Tests.Wbpp;
 //
 // The level table, the contamination counts, the default pick and the staging names are compared
 // against the real wbpp_export.py through the golden file this repository carries
-// (docs/superpowers/work/phase16/golden/levels/levels.json, written by levels_oracle.py with
+// (tests/Fixtures/golden/levels/levels.json, written by levels_oracle.py with
 // PYTHONHASHSEED=0). The oracle's parity cases are single-leaf, so the Python's set ordering
 // cannot show in them; the multi-leaf order, the Windows root shapes, the case-only difference,
 // the byte figure and ruling R6's distinctness are the port's own and are asserted directly.
@@ -847,7 +847,7 @@ public class FolderLevelsTests
     private static JsonElement Golden()
     {
         var path = Path.Combine(
-            FindRepoRoot(), "docs", "superpowers", "work", "phase16", "golden", "levels", "levels.json");
+            FindRepoRoot(), "tests", "Fixtures", "golden", "levels", "levels.json");
         return JsonDocument.Parse(File.ReadAllText(path)).RootElement;
     }
 

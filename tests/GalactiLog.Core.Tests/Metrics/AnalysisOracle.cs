@@ -3,7 +3,7 @@ using System.Text.Json;
 namespace GalactiLog.Core.Tests.Metrics;
 
 /// <summary>
-/// Reads the two Phase 17 real-data files, <c>docs/superpowers/work/phase17/realdata/inputs.json</c>
+/// Reads the two Phase 17 real-data files, <c>tests/Fixtures/realdata/inputs.json</c>
 /// and <c>oracle.json</c>, from the REPOSITORY, the way <c>ScriptGeneratorTests</c> reads its
 /// goldens: no csproj change, no copied content item and no path outside the clone, so every case
 /// built on them runs on a clean copy and on another machine (task2.md section 8, HANDOFF section
@@ -121,7 +121,7 @@ internal static class AnalysisOracle
     private static JsonDocument Load(string fileName)
     {
         var path = Path.Combine(
-            FindRepoRoot(), "docs", "superpowers", "work", "phase17", "realdata", fileName);
+            FindRepoRoot(), "tests", "Fixtures", "realdata", fileName);
 
         return JsonDocument.Parse(File.ReadAllText(path));
     }
