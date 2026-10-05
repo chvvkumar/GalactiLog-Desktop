@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using GalactiLog.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace GalactiLog.Data.Tests;
@@ -32,6 +34,11 @@ public class MigrationTests
         "custom_column_values",
         // Migration 0007 (SkippedFiles), spec 5.21.
         "skipped_files",
+        // Migration 0008 (Mosaics), spec 5.22 to 5.25.
+        "mosaics",
+        "mosaic_panels",
+        "mosaic_panel_sessions",
+        "mosaic_suggestions",
         "__EFMigrationsHistory",
         // EF Core 10 adds this internal table to serialize concurrent migration runs.
         // Not part of design-spec 5; a runtime detail of the migrations infrastructure.
@@ -115,6 +122,111 @@ public class MigrationTests
         var tableSql = TableSql(db.ConnectionString, "skipped_files");
         Assert.NotNull(tableSql);
         Assert.Contains("\"file_path\" TEXT COLLATE NOCASE", tableSql, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Migration 0008 (Mosaics, spec 5.22 to 5.25). The custom_column_values rebuild that adds the
+    // mosaic foreign key must not lose the raw SQL index of migration 0006, and the session
+    // index must fold a null frame label so two null-label rows of one triple collide.
+    [Fact]
+    public void Migrate_Mosaics_KeepsTheCustomValueIndex_AndCreatesTheMosaicIndexes()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+
+        var indexes = QueryNames(db.ConnectionString, "index");
+        foreach (var name in new[]
+        {
+            "uq_custom_column_value", "ix_custom_column_values_mosaic", "ux_mosaics_name",
+            "ux_mosaic_panels_mosaic_label", "ux_mosaic_panel_sessions_panel_target_date_label",
+            "ix_mosaic_panel_sessions_target_date", "ix_mosaic_suggestions_status",
+            "ix_mosaic_suggestions_dedup_signature", "ix_images_panel_label",
+        })
+        {
+            Assert.Contains(name, indexes);
+        }
+
+        AssertIndexSqlContains(db.ConnectionString, "uq_custom_column_value", "coalesce(\"mosaic_id\", '')");
+        AssertIndexSqlContains(db.ConnectionString, "ux_mosaic_panel_sessions_panel_target_date_label",
+            "coalesce(\"frame_label\", '') COLLATE NOCASE");
+        Assert.Contains("REFERENCES \"mosaics\"", TableSql(db.ConnectionString, "custom_column_values"),
+            System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Migrate_Mosaics_RollsBackAndReapplies()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.GetService<IMigrator>().Migrate("20261005022536_SkippedFiles");
+        }
+
+        var tables = QueryNames(db.ConnectionString, "table");
+        Assert.DoesNotContain("mosaics", tables);
+        Assert.DoesNotContain("mosaic_panel_sessions", tables);
+        Assert.Contains("uq_custom_column_value", QueryNames(db.ConnectionString, "index"));
+        Assert.DoesNotContain("panel_label", TableSql(db.ConnectionString, "images"), System.StringComparison.Ordinal);
+        Assert.DoesNotContain("mosaics", TableSql(db.ConnectionString, "custom_column_values"), System.StringComparison.Ordinal);
+
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.Database.Migrate();
+        }
+
+        Assert.Equal(ExpectedTables, QueryNames(db.ConnectionString, "table"));
+        Assert.Contains("uq_custom_column_value", QueryNames(db.ConnectionString, "index"));
+    }
+
+    // Spec 5.22: deleting a mosaic cascades to its panels, through them to their nights, and to
+    // its mosaic-scope custom values.
+    [Fact]
+    public void DeletingAMosaic_CascadesToPanelsSessionsAndCustomValues()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        var target = LibrarySeeder.AddTarget(db.ConnectionString, "NGC 7000");
+        var mosaic = System.Guid.NewGuid();
+        var panel = System.Guid.NewGuid();
+        var column = System.Guid.NewGuid();
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.Mosaics.Add(new Entities.Mosaic { Id = mosaic, Name = "NGC 7000" });
+            context.MosaicPanels.Add(new Entities.MosaicPanel { Id = panel, MosaicId = mosaic, PanelLabel = "Panel 1" });
+            context.MosaicPanelSessions.Add(new Entities.MosaicPanelSession
+            {
+                Id = System.Guid.NewGuid(), PanelId = panel, TargetId = target.Id,
+                SessionDate = new System.DateOnly(2026, 3, 1), Status = "included",
+            });
+            context.CustomColumns.Add(new Entities.CustomColumn
+            {
+                Id = column, Name = "Status", Slug = "custom_status", ColumnType = "text", AppliesTo = "mosaic",
+            });
+            context.CustomColumnValues.Add(new Entities.CustomColumnValue
+            {
+                Id = System.Guid.NewGuid(), ColumnId = column, MosaicId = mosaic, Value = "framing",
+            });
+            context.SaveChanges();
+        }
+
+        Execute(db.ConnectionString, "DELETE FROM mosaics");
+
+        Assert.Equal(0L, Count(db.ConnectionString, "mosaic_panels"));
+        Assert.Equal(0L, Count(db.ConnectionString, "mosaic_panel_sessions"));
+        Assert.Equal(0L, Count(db.ConnectionString, "custom_column_values"));
+        Assert.Equal(1L, Count(db.ConnectionString, "custom_columns"));
+    }
+
+    private static void Execute(string connectionString, string sql)
+    {
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+        context.Database.ExecuteSqlRaw(sql);
+    }
+
+    private static long Count(string connectionString, string table)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT count(*) FROM {table}";
+        return (long)command.ExecuteScalar()!;
     }
 
     private static string? TableSql(string connectionString, string tableName)

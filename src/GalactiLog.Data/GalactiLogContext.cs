@@ -26,6 +26,10 @@ public sealed class GalactiLogContext : DbContext
     public DbSet<CustomColumn> CustomColumns => Set<CustomColumn>();
     public DbSet<CustomColumnValue> CustomColumnValues => Set<CustomColumnValue>();
     public DbSet<SkippedFile> SkippedFiles => Set<SkippedFile>();
+    public DbSet<Mosaic> Mosaics => Set<Mosaic>();
+    public DbSet<MosaicPanel> MosaicPanels => Set<MosaicPanel>();
+    public DbSet<MosaicPanelSession> MosaicPanelSessions => Set<MosaicPanelSession>();
+    public DbSet<MosaicSuggestion> MosaicSuggestions => Set<MosaicSuggestion>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -57,6 +61,7 @@ public sealed class GalactiLogContext : DbContext
             e.HasIndex(x => x.AmbientTemp);
             e.HasIndex(x => x.Humidity);
             e.HasIndex(x => x.Airmass);
+            e.HasIndex(x => x.PanelLabel).HasDatabaseName("ix_images_panel_label");
             e.HasOne<Target>().WithMany().HasForeignKey(x => x.ResolvedTargetId).OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -220,6 +225,8 @@ public sealed class GalactiLogContext : DbContext
             e.HasIndex(x => x.MosaicId).HasDatabaseName("ix_custom_column_values_mosaic");
             e.HasOne<CustomColumn>().WithMany().HasForeignKey(x => x.ColumnId).OnDelete(DeleteBehavior.Cascade);
             e.HasOne<Target>().WithMany().HasForeignKey(x => x.TargetId).OnDelete(DeleteBehavior.Cascade);
+            // Phase 18 (ruling R2): a mosaic-scope value goes with its mosaic.
+            e.HasOne<Mosaic>().WithMany().HasForeignKey(x => x.MosaicId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // skipped_files (spec 5.21). COLLATE NOCASE for the reason the Image block states: the
@@ -227,6 +234,49 @@ public sealed class GalactiLogContext : DbContext
         modelBuilder.Entity<SkippedFile>(e =>
         {
             e.Property(x => x.FilePath).UseCollation("NOCASE");
+        });
+
+        // mosaics (spec 5.22). The name is unique case insensitively, so the database is the
+        // duplicate-name refusal of every create and rename path rather than each caller.
+        modelBuilder.Entity<Mosaic>(e =>
+        {
+            e.Property(x => x.Name).UseCollation("NOCASE");
+            e.Property(x => x.RotationAngle).HasDefaultValue(0d);
+            e.HasIndex(x => x.Name).IsUnique().HasDatabaseName("ux_mosaics_name");
+        });
+
+        // mosaic_panels (spec 5.23). One panel per label within a mosaic, case insensitively.
+        modelBuilder.Entity<MosaicPanel>(e =>
+        {
+            e.ToTable(t => t.HasCheckConstraint("CK_mosaic_panels_rotation", "rotation IN (0, 90, 180, 270)"));
+            e.Property(x => x.PanelLabel).UseCollation("NOCASE");
+            e.Property(x => x.Rotation).HasDefaultValue(0);
+            e.Property(x => x.FlipH).HasDefaultValue(false);
+            e.HasIndex(x => new { x.MosaicId, x.PanelLabel }).IsUnique().HasDatabaseName("ux_mosaic_panels_mosaic_label");
+            e.HasOne<Mosaic>().WithMany().HasForeignKey(x => x.MosaicId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // mosaic_panel_sessions (spec 5.24). The unique index is declared here over the four
+        // plain columns so the model knows it covers panel_id (no extra foreign-key index), but the
+        // migration creates it in raw SQL over coalesce(frame_label, '') COLLATE NOCASE, because a
+        // fluent index cannot carry the expression and SQLite treats two nulls as distinct.
+        // frame_label is NOCASE so a LINQ comparison folds case as the index does.
+        modelBuilder.Entity<MosaicPanelSession>(e =>
+        {
+            e.ToTable(t => t.HasCheckConstraint("CK_mosaic_panel_sessions_status", "status IN ('included', 'available')"));
+            e.Property(x => x.FrameLabel).UseCollation("NOCASE");
+            e.HasIndex(x => new { x.PanelId, x.TargetId, x.SessionDate, x.FrameLabel }).IsUnique()
+                .HasDatabaseName("ux_mosaic_panel_sessions_panel_target_date_label");
+            e.HasIndex(x => new { x.TargetId, x.SessionDate }).HasDatabaseName("ix_mosaic_panel_sessions_target_date");
+            e.HasOne<MosaicPanel>().WithMany().HasForeignKey(x => x.PanelId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<Target>().WithMany().HasForeignKey(x => x.TargetId).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // mosaic_suggestions (spec 5.25). Two indexes, exactly the ones the spec names.
+        modelBuilder.Entity<MosaicSuggestion>(e =>
+        {
+            e.HasIndex(x => x.Status).HasDatabaseName("ix_mosaic_suggestions_status");
+            e.HasIndex(x => x.DedupSignature).HasDatabaseName("ix_mosaic_suggestions_dedup_signature");
         });
     }
 }
