@@ -1,0 +1,656 @@
+using System.Text;
+using GalactiLog.App.Services;
+using GalactiLog.App.ViewModels;
+using GalactiLog.App.ViewModels.Mosaics;
+using GalactiLog.App.ViewModels.TargetDetail;
+using GalactiLog.Core.Io;
+using GalactiLog.Data.Queries;
+using GalactiLog.Data.Repositories;
+using Xunit;
+
+namespace GalactiLog.App.Tests.ViewModels.Mosaics;
+
+// Phase 18 Task 5, spec 12.17's mosaic detail page. Every collaborator is a delegate over
+// FakeMosaic, an in-memory mosaic that applies the repository's rules (the one-triple refusal,
+// Delete panel's refusal, Available hiding a triple any panel includes), so each test drives the
+// page the way the reader would and asserts what the page then shows.
+public sealed class MosaicDetailViewModelTests : IDisposable
+{
+    private static readonly Guid M31 = Guid.NewGuid();
+    private static readonly Guid M32 = Guid.NewGuid();
+    private static readonly Guid Ngc7000 = Guid.NewGuid();
+
+    private readonly string _root = Directory.CreateTempSubdirectory("galactilog-mosaic-detail-").FullName;
+    private readonly List<MosaicDetailViewModel> _pages = [];
+
+    public void Dispose()
+    {
+        foreach (var page in _pages)
+        {
+            page.Dispose();
+        }
+
+        if (Directory.Exists(_root))
+        {
+            Directory.Delete(_root, recursive: true);
+        }
+    }
+
+    private static DateOnly Night(int day) => new(2026, 3, day);
+
+    // Two panels of M 31 on the same night, kept apart by frame label (ruling R19a), plus nights
+    // of M 32 and NGC 7000 that no panel holds yet.
+    private static FakeMosaic TwoPanels()
+    {
+        var mosaic = new FakeMosaic();
+        mosaic.Catalogue.AddRange(
+        [
+            new(M31, "M 31", Night(1), "Panel 1", 4, 1200, "Ha"),
+            new(M31, "M 31", Night(2), "Panel 1", 6, 1800, "OIII"),
+            new(M31, "M 31", Night(1), "Panel 2", 2, 600, "Ha"),
+            new(M32, "M 32", Night(4), null, 3, 900, "Ha"),
+            new(Ngc7000, "NGC 7000", Night(5), null, 5, 1500, "SII"),
+        ]);
+        var one = mosaic.AddPanel("Panel 1");
+        var two = mosaic.AddPanel("Panel 2");
+        mosaic.Row(one, M31, Night(1), "Panel 1", included: true);
+        mosaic.Row(one, M31, Night(2), "Panel 1", included: false);
+        mosaic.Row(two, M31, Night(1), "Panel 2", included: true);
+        return mosaic;
+    }
+
+    private async Task<MosaicDetailViewModel> Open(
+        FakeMosaic mosaic, JobRegistry? jobs = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
+    {
+        var page = new MosaicDetailViewModel(
+            mosaic.Id, mosaic.Backend(), new AppWriter(_root), jobs,
+            post: action => action(), delay: delay ?? ((_, _) => Task.CompletedTask));
+        _pages.Add(page);
+        await page.PendingLoad;
+        return page;
+    }
+
+    [Fact]
+    public async Task Opening_ShowsTheNameTheSummaryLineAndOnePanelRowPerPanel()
+    {
+        var page = await Open(TwoPanels());
+
+        Assert.Equal("M 31 mosaic", page.Name);
+        Assert.Equal($"2 panels, {MetricText.Integration(1800)} total, 6 frames", page.SummaryText);
+        Assert.Equal(new[] { "Panel 1", "Panel 2" }, page.Panels.Select(panel => panel.Label));
+        Assert.False(page.LoadFailed);
+        Assert.False(page.CompositeCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AMosaicThatIsGone_ShowsTheLoadFailure()
+    {
+        var mosaic = TwoPanels();
+        mosaic.Deleted = true;
+
+        var page = await Open(mosaic);
+
+        Assert.True(page.LoadFailed);
+    }
+
+    [Fact]
+    public async Task Rename_RefusesATakenNameInline_AndSavesAFreeOne()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+
+        page.BeginRenameCommand.Execute(null);
+        page.RenameText = "  andromeda  ";
+        page.SaveRenameCommand.Execute(null);
+
+        Assert.Equal("A mosaic named \"andromeda\" already exists.", page.RenameError);
+        Assert.True(page.IsRenaming);
+        Assert.Equal("M 31 mosaic", mosaic.Name);
+
+        page.RenameText = "";
+        page.SaveRenameCommand.Execute(null);
+        Assert.Equal(MosaicMessages.EmptyName, page.RenameError);
+
+        page.RenameText = "Great Andromeda";
+        page.SaveRenameCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Null(page.RenameError);
+        Assert.False(page.IsRenaming);
+        Assert.Equal("Great Andromeda", page.Name);
+        Assert.Equal("Great Andromeda", mosaic.Name);
+    }
+
+    [Fact]
+    public async Task Notes_SaveOnceAfterTheIdleWindow_WithTheLastText()
+    {
+        var mosaic = TwoPanels();
+        var gate = new TaskCompletionSource();
+        var page = await Open(mosaic, delay: (_, token) => gate.Task.WaitAsync(token));
+
+        page.Notes.Text = "P";
+        page.Notes.Text = "Panel 2 needs Ha";
+        Assert.Empty(mosaic.NotesWrites);
+
+        gate.SetResult();
+        await page.Notes.PendingSave;
+
+        Assert.Equal(new[] { "Panel 2 needs Ha" }, mosaic.NotesWrites);
+        Assert.Equal(TimeSpan.FromSeconds(1), AutosaveField.IdleWindow);
+    }
+
+    [Fact]
+    public async Task ExportPanels_WithACancelledDialog_WritesNothing()
+    {
+        var page = await Open(TwoPanels());
+        string? suggested = null;
+        page.ExportDestinationPicker = name =>
+        {
+            suggested = name;
+            return Task.FromResult<string?>(null);
+        };
+
+        await page.ExportPanelsCommand.ExecuteAsync(null);
+
+        Assert.Equal("M_31_mosaic_panels.csv", suggested);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_root));
+        Assert.Null(page.Error);
+    }
+
+    [Fact]
+    public async Task ExportPanels_WritesOneCsvAtTheChosenPath_MatchingTheGoldenText()
+    {
+        var mosaic = TwoPanels();
+        mosaic.Panels[1] = (mosaic.Panels[1].Id, "Panel \"2\", east");
+        var page = await Open(mosaic);
+        var destination = Path.Combine(_root, "chosen.csv");
+        page.ExportDestinationPicker = _ => Task.FromResult<string?>(destination);
+
+        await page.ExportPanelsCommand.ExecuteAsync(null);
+
+        const string Golden =
+            "panel_label,targets,frames,integration_seconds,filters\n"
+            + "Panel 1,M 31,4,1200,Ha: 1200\n"
+            + "\"Panel \"\"2\"\", east\",M 31,2,600,Ha: 600\n";
+        Assert.Equal(new[] { destination }, Directory.EnumerateFileSystemEntries(_root));
+        var bytes = await File.ReadAllBytesAsync(destination);
+        Assert.Equal(Encoding.UTF8.GetBytes(Golden), bytes);
+        Assert.Null(page.Error);
+    }
+
+    [Fact]
+    public void BuildCsv_JoinsTargetsAndFilters_RoundsSeconds_AndQuotesOnlyWhatNeedsIt()
+    {
+        var panel = new PanelDetail(
+            Guid.NewGuid(), "Panel 1", 0, null, null, 0, false, [M31, M32], ["M 31", "M 32"], 3600.6, 12, 3, 0, 0, [], [],
+            new Dictionary<string, double> { ["OIII"] = 1200.5, ["Ha"] = 2400.1 });
+        var detail = new MosaicDetail(Guid.NewGuid(), "x", null, 0, 3600.6, 12, null, null, [], [panel], []);
+
+        Assert.Equal(
+            "panel_label,targets,frames,integration_seconds,filters\nPanel 1,M 31; M 32,12,3601,Ha: 2400; OIII: 1201\n",
+            MosaicDetailViewModel.BuildCsv(detail));
+    }
+
+    [Fact]
+    public async Task ExportPanels_AFailedWrite_SaysSoUnderTheHeader()
+    {
+        var page = await Open(TwoPanels());
+        page.ExportDestinationPicker = _ => Task.FromResult<string?>(Path.Combine(_root, "missing", "folder", "x.csv"));
+
+        await page.ExportPanelsCommand.ExecuteAsync(null);
+
+        Assert.Equal(MosaicDetailViewModel.ExportFailedText, page.Error);
+    }
+
+    [Fact]
+    public async Task DeleteMosaic_ArmsOnTheFirstPress_DeletesAndClosesOnTheSecond()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+        var closed = 0;
+        page.BackRequested += (_, _) => closed++;
+
+        page.DeleteMosaicCommand.Execute(null);
+        Assert.True(page.DeletePending);
+        Assert.False(mosaic.Deleted);
+
+        page.CancelDeleteCommand.Execute(null);
+        Assert.False(page.DeletePending);
+
+        page.DeleteMosaicCommand.Execute(null);
+        page.DeleteMosaicCommand.Execute(null);
+
+        Assert.True(mosaic.Deleted);
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public async Task IncludeAndRemove_RefreshTheSummaryAndThePanelFigures()
+    {
+        var page = await Open(TwoPanels());
+        var panel = page.Panels[0];
+        Assert.Equal("1 available", panel.AvailableText);
+
+        panel.Available.Single(night => night.Night.Date == Night(2)).IncludeCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal($"2 panels, {MetricText.Integration(3600)} total, 12 frames", page.SummaryText);
+        Assert.Equal(MetricText.Integration(3000), page.Panels[0].IntegrationText);
+        Assert.Equal("2", page.Panels[0].NightsText);
+        Assert.False(page.Panels[0].HasAvailable);
+
+        page.Panels[0].Included.Single(night => night.Night.Date == Night(1)).RemoveCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal(MetricText.Integration(1800), page.Panels[0].IntegrationText);
+        Assert.Equal("1 available", page.Panels[0].AvailableText);
+        Assert.Same(panel, page.Panels[0]);
+    }
+
+    [Fact]
+    public async Task IncludeAll_AndIncludeAllAvailable_IncludeEveryAvailableTriple()
+    {
+        var mosaic = TwoPanels();
+        mosaic.Row(mosaic.Panels[1].Id, M32, Night(4), null, included: false);
+        var page = await Open(mosaic);
+        Assert.True(page.IncludeAllAvailableCommand.CanExecute(null));
+
+        page.Panels[0].IncludeAllCommand.Execute(null);
+        await page.PendingLoad;
+        Assert.False(page.Panels[0].IncludeAllCommand.CanExecute(null));
+        Assert.True(page.Panels[1].HasAvailable);
+
+        page.IncludeAllAvailableCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.All(page.Panels, panel => Assert.False(panel.HasAvailable));
+        Assert.False(page.IncludeAllAvailableCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public async Task AsNewPanel_PrefillsTheNextSuffix_AndCreatesThePanelHoldingTheTriple()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+        var row = page.Panels[0].Available.Single();
+
+        row.BeginNewPanelCommand.Execute(null);
+        Assert.True(row.IsNamingNewPanel);
+        Assert.Equal("Panel 1 (b)", row.NewPanelLabel);
+
+        row.CreateNewPanelCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal(new[] { "Panel 1", "Panel 2", "Panel 1 (b)" }, page.Panels.Select(panel => panel.Label));
+        var created = Assert.Single(page.Panels[2].Included);
+        Assert.Equal("Panel 1", created.LabelText);
+        Assert.Equal(Night(2), created.Night.Date);
+    }
+
+    [Fact]
+    public async Task AsNewPanel_RefusesABlankOrTakenLabelInline()
+    {
+        var page = await Open(TwoPanels());
+        var row = page.Panels[0].Available.Single();
+        row.BeginNewPanelCommand.Execute(null);
+
+        row.NewPanelLabel = " ";
+        row.CreateNewPanelCommand.Execute(null);
+        Assert.Equal(MosaicMessages.EmptyLabel, row.Error);
+
+        row.NewPanelLabel = "panel 2";
+        row.CreateNewPanelCommand.Execute(null);
+        Assert.Equal("A panel named \"panel 2\" already exists in this mosaic.", row.Error);
+        Assert.True(row.IsNamingNewPanel);
+    }
+
+    [Fact]
+    public async Task DeletePanel_IsDisabledWhileANightIsIncluded_AndTwoPressOtherwise()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+        var panel = page.Panels[1];
+
+        Assert.False(panel.DeletePanelCommand.CanExecute(null));
+        Assert.Equal(PanelViewModel.DeleteDisabledTooltip, panel.DeleteTooltip);
+
+        panel.Included.Single().RemoveCommand.Execute(null);
+        await page.PendingLoad;
+        Assert.True(panel.DeletePanelCommand.CanExecute(null));
+        Assert.Null(panel.DeleteTooltip);
+
+        panel.DeletePanelCommand.Execute(null);
+        Assert.True(panel.DeletePending);
+        Assert.Equal("Delete panel Panel 2?", panel.DeleteConfirmText);
+        Assert.Equal(2, mosaic.Panels.Count);
+
+        panel.DeletePanelCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal(new[] { "Panel 1" }, page.Panels.Select(row => row.Label));
+    }
+
+    [Fact]
+    public async Task AddNightsFromAnyTarget_ListsThatTargetsTriplesInAvailable()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+        var form = page.Panels[0].AddNights;
+
+        form.SearchText = "NGC";
+        await form.PendingSearch!;
+        form.ChooseCommand.Execute(Assert.Single(form.SearchResults));
+        await page.PendingLoad;
+
+        var added = Assert.Single(page.Panels[0].Available, night => night.Night.TargetId == Ngc7000);
+        Assert.Equal("NGC 7000", added.TargetName);
+        Assert.Equal(PanelSessionViewModel.NoLabelText, added.LabelText);
+        Assert.Equal("SII 5", added.FiltersText);
+        Assert.Equal("", form.SearchText);
+    }
+
+    [Fact]
+    public async Task ATripleIncludedInASiblingPanel_IsAbsentFromAvailable_AndARefusalShowsInline()
+    {
+        // Panel 2's target is M 31 too, so it offers Panel 1's triple until Panel 1 includes it.
+        var page = await Open(TwoPanels());
+        var stale = page.Panels[1].Available.Single(night => night.Night.Date == Night(2));
+
+        page.Panels[0].Available.Single().IncludeCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.DoesNotContain(page.Panels[1].Available, night => night.Night.Date == Night(2));
+
+        // A stale row still on screen is refused by the repository with the triple sentence.
+        stale.IncludeCommand.Execute(null);
+        Assert.Equal(MosaicMessages.TripleInPanel(Night(2), "M 31", "Panel 1", "Panel 1"), stale.Error);
+    }
+
+    [Fact]
+    public async Task TheDeficit_ReadsBehindTheLeadingPanel_AndIsEmptyOnTheLeader()
+    {
+        var page = await Open(TwoPanels());
+
+        Assert.Equal("", page.Panels[0].DeficitText);
+        Assert.Equal(MetricText.Integration(600) + " behind", page.Panels[1].DeficitText);
+    }
+
+    [Fact]
+    public async Task TheDeficit_IsEmptyEverywhereWhileEveryPanelIsZero()
+    {
+        var mosaic = new FakeMosaic();
+        mosaic.AddPanel("Panel 1");
+        mosaic.AddPanel("Panel 2");
+
+        var page = await Open(mosaic);
+
+        Assert.All(page.Panels, panel => Assert.Equal("", panel.DeficitText));
+    }
+
+    [Fact]
+    public async Task TheLabelsBanner_AddsAPanelForTheChipsTargetAndLabel()
+    {
+        var mosaic = TwoPanels();
+        mosaic.Catalogue.Add(new(M31, "M 31", Night(6), "Panel 3", 2, 400, "Ha"));
+        mosaic.AvailableLabels.Add(new AvailableLabel(M31, "M 31", "Panel 3"));
+        var page = await Open(mosaic);
+        Assert.True(page.HasAvailableLabels);
+        var chip = Assert.Single(page.AvailableLabels);
+        Assert.Equal("Panel 3 on M 31", chip.Text);
+
+        chip.AddPanelCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal("Panel 3", page.Panels[2].Label);
+        Assert.Equal("Panel 3", Assert.Single(page.Panels[2].Included).LabelText);
+        Assert.False(page.HasAvailableLabels);
+    }
+
+    [Fact]
+    public async Task AFinishedScanOrDetectionJob_RereadsThePage()
+    {
+        var mosaic = TwoPanels();
+        var jobs = new JobRegistry(action => action());
+        var page = await Open(mosaic, jobs);
+        mosaic.Name = "Renamed elsewhere";
+
+        jobs.Begin("survey_image_fetch", "Unrelated").Finish(JobResult.Succeeded, "");
+        await page.PendingLoad;
+        Assert.Equal("M 31 mosaic", page.Name);
+
+        jobs.Begin(ScanStatusService.ScanJobKind, "Scan").Finish(JobResult.Succeeded, "");
+        await page.PendingLoad;
+        Assert.Equal("Renamed elsewhere", page.Name);
+
+        mosaic.Name = "Again";
+        jobs.Begin(ScanStatusService.MosaicDetectionJobKind, "Detection").Finish(JobResult.Succeeded, "");
+        await page.PendingLoad;
+        Assert.Equal("Again", page.Name);
+    }
+
+    [Fact]
+    public async Task ATargetLink_AsksToOpenThatTarget()
+    {
+        var page = await Open(TwoPanels());
+        Guid? opened = null;
+        page.OpenTargetRequested += (_, id) => opened = id;
+
+        page.Panels[0].Included.Single().OpenTargetCommand.Execute(null);
+
+        Assert.Equal(M31, opened);
+    }
+
+    [Theory]
+    [InlineData("M 31", "M_31_panels.csv")]
+    [InlineData("NGC 7000 (2026)", "NGC_7000__2026__panels.csv")]
+    [InlineData("Ünïcode", "_n_code_panels.csv")]
+    public void ExportFileName_ReplacesEveryCharacterOutsideAsciiLettersAndDigits(string name, string expected)
+        => Assert.Equal(expected, MosaicDetailViewModel.ExportFileName(name));
+}
+
+// The in-memory mosaic behind MosaicDetailViewModelTests. It applies the rules the page relies on
+// MosaicRepository and MosaicQueries for, in their simplest form, so a test reads what the page
+// shows after a write rather than which delegate was called.
+internal sealed class FakeMosaic
+{
+    internal sealed record Triple(Guid Target, string TargetName, DateOnly Date, string? Label, int Frames, double Seconds, string Filter);
+
+    internal sealed class SessionRow(Guid panel, Guid target, DateOnly date, string? label, bool included)
+    {
+        public Guid Panel { get; } = panel;
+
+        public Guid Target { get; } = target;
+
+        public DateOnly Date { get; } = date;
+
+        public string? Label { get; } = label;
+
+        public bool Included { get; set; } = included;
+
+        public bool Is(Guid target, DateOnly date, string? label)
+            => Target == target && Date == date && string.Equals(Label ?? "", label ?? "", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public Guid Id { get; } = Guid.NewGuid();
+
+    public string Name { get; set; } = "M 31 mosaic";
+
+    public bool Deleted { get; set; }
+
+    public List<string?> NotesWrites { get; } = [];
+
+    public List<(Guid Id, string Label)> Panels { get; } = [];
+
+    public List<SessionRow> Rows { get; } = [];
+
+    public List<Triple> Catalogue { get; } = [];
+
+    public List<AvailableLabel> AvailableLabels { get; } = [];
+
+    public Guid AddPanel(string label)
+    {
+        if (Panels.Any(panel => string.Equals(panel.Label, label, StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new DuplicatePanelLabelException(label);
+        }
+
+        var id = Guid.NewGuid();
+        Panels.Add((id, label));
+        return id;
+    }
+
+    public void Row(Guid panel, Guid target, DateOnly date, string? label, bool included)
+        => Rows.Add(new SessionRow(panel, target, date, label, included));
+
+    private string PanelLabel(Guid id) => Panels.Single(panel => panel.Id == id).Label;
+
+    private Triple Find(Guid target, DateOnly date, string? label)
+        => Catalogue.Single(triple => triple.Target == target && triple.Date == date
+            && string.Equals(triple.Label ?? "", label ?? "", StringComparison.OrdinalIgnoreCase));
+
+    private bool IncludedAnywhere(Guid target, DateOnly date, string? label)
+        => Rows.Any(row => row.Included && row.Is(target, date, label));
+
+    private static PanelNight NightOf(Triple triple)
+        => new(triple.Target, triple.TargetName, triple.Date, triple.Label,
+            new Dictionary<string, int> { [triple.Filter] = triple.Frames }, triple.Frames, triple.Seconds);
+
+    private List<Triple> AvailableOf(Guid panel)
+    {
+        var contributors = Rows.Where(row => row.Panel == panel).Select(row => row.Target).ToHashSet();
+        return [.. Catalogue
+            .Where(triple => contributors.Contains(triple.Target) && !IncludedAnywhere(triple.Target, triple.Date, triple.Label))
+            .OrderByDescending(triple => triple.Date)];
+    }
+
+    private void Include(Guid panel, Guid target, DateOnly date, string? label)
+    {
+        if (Rows.FirstOrDefault(row => row.Included && row.Panel != panel && row.Is(target, date, label)) is { } other)
+        {
+            throw new NightAlreadyInMosaicException(date, Find(target, date, label).TargetName, label, PanelLabel(other.Panel));
+        }
+
+        if (Rows.FirstOrDefault(row => row.Panel == panel && row.Is(target, date, label)) is { } existing)
+        {
+            existing.Included = true;
+        }
+        else
+        {
+            Row(panel, target, date, label, included: true);
+        }
+    }
+
+    public MosaicDetail? Read()
+    {
+        if (Deleted)
+        {
+            return null;
+        }
+
+        var panels = Panels.Select((panel, order) =>
+        {
+            var included = Rows.Where(row => row.Panel == panel.Id && row.Included)
+                .Select(row => Find(row.Target, row.Date, row.Label))
+                .OrderByDescending(triple => triple.Date)
+                .ToList();
+            var available = AvailableOf(panel.Id);
+            return new PanelDetail(
+                panel.Id, panel.Label, order, null, null, 0, false,
+                [.. included.Select(triple => triple.Target).Distinct()],
+                [.. included.Select(triple => triple.TargetName).Distinct()],
+                included.Sum(triple => triple.Seconds),
+                included.Sum(triple => triple.Frames),
+                included.Select(triple => (triple.Target, triple.Date)).Distinct().Count(),
+                available.Count,
+                0,
+                [.. included.Select(NightOf)],
+                [.. available.Select(NightOf)],
+                included.GroupBy(triple => triple.Filter).ToDictionary(group => group.Key, group => group.Sum(triple => triple.Seconds)));
+        }).ToList();
+
+        var leader = panels.Count == 0 ? 0 : panels.Max(panel => panel.IntegrationSeconds);
+        panels = [.. panels.Select(panel => panel with { DeficitSeconds = leader > 0 ? leader - panel.IntegrationSeconds : 0 })];
+        var labels = AvailableLabels
+            .Where(label => !Panels.Any(panel => string.Equals(panel.Label, label.Label, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+        return new MosaicDetail(
+            Id, Name, null, 0, panels.Sum(panel => panel.IntegrationSeconds), panels.Sum(panel => panel.Frames),
+            null, null, [], panels, labels);
+    }
+
+    public MosaicsBackend Backend() => new()
+    {
+        Detail = _ => Read(),
+        Rename = (_, name) =>
+        {
+            if (string.Equals(name, "Andromeda", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new DuplicateMosaicNameException(name);
+            }
+
+            Name = name;
+        },
+        Delete = _ => Deleted = true,
+        SetNotes = (_, notes) => NotesWrites.Add(notes),
+        IncludeNight = Include,
+        RemoveNight = (panel, target, date, label) => Rows.Single(row => row.Panel == panel && row.Is(target, date, label)).Included = false,
+        IncludeAll = panel =>
+        {
+            var available = AvailableOf(panel);
+            available.ForEach(triple => Include(panel, triple.Target, triple.Date, triple.Label));
+            return available.Count;
+        },
+        IncludeAllAvailable = _ =>
+        {
+            var count = 0;
+            foreach (var (panel, _) in Panels)
+            {
+                foreach (var triple in AvailableOf(panel))
+                {
+                    Include(panel, triple.Target, triple.Date, triple.Label);
+                    count++;
+                }
+            }
+
+            return count;
+        },
+        IncludeAsNewPanel = (_, _, target, date, label, newLabel) =>
+        {
+            var panel = AddPanel(newLabel);
+            Include(panel, target, date, label);
+            return panel;
+        },
+        AddTargetNights = (panel, target) =>
+        {
+            var added = Catalogue.Where(triple => triple.Target == target && !IncludedAnywhere(target, triple.Date, triple.Label)).ToList();
+            added.ForEach(triple => Row(panel, target, triple.Date, triple.Label, included: false));
+            return added.Count;
+        },
+        DeletePanel = panel =>
+        {
+            if (Rows.Any(row => row.Panel == panel && row.Included))
+            {
+                throw new PanelNotEmptyException();
+            }
+
+            Rows.RemoveAll(row => row.Panel == panel);
+            Panels.RemoveAll(entry => entry.Id == panel);
+        },
+        AddPanelWithTarget = (_, target, label) =>
+        {
+            var panel = AddPanel(label);
+            var triples = Catalogue.Where(triple => triple.Target == target
+                && string.Equals(triple.Label, label, StringComparison.OrdinalIgnoreCase)).ToList();
+            triples.ForEach(triple => Include(panel, target, triple.Date, triple.Label));
+            return new PanelAddResult(panel, triples.Count, 0);
+        },
+        SearchTargets = term =>
+        [
+            .. Catalogue
+                .Where(triple => triple.TargetName.Contains(term, StringComparison.OrdinalIgnoreCase))
+                .Select(triple => (triple.Target, triple.TargetName))
+                .Distinct()
+                .Select(target => new TargetSearchResult(target.Target, null, target.TargetName, null, null, 1, 1)),
+        ],
+    };
+}

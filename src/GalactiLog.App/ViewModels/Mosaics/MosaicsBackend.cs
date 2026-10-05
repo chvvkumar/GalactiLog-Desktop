@@ -64,6 +64,35 @@ public sealed record MosaicsBackend
     /// <summary>Normally <c>MosaicRepository.AddPanelWithTarget</c>.</summary>
     public Func<Guid, Guid, string, PanelAddResult> AddPanelWithTarget { get; init; } = (_, _, _) => new PanelAddResult(Guid.NewGuid(), 0, 0);
 
+    // ---- the mosaic detail page (spec 12.17, Phase 18 Task 5) ----------------------------------
+
+    /// <summary>Normally <c>MosaicRepository.SetNotes</c>; a blank value stores null.</summary>
+    public Action<Guid, string?> SetNotes { get; init; } = (_, _) => { };
+
+    /// <summary>(panel, target, night, frame label). Normally <c>MosaicRepository.IncludeNight</c>.</summary>
+    public Action<Guid, Guid, DateOnly, string?> IncludeNight { get; init; } = (_, _, _, _) => { };
+
+    /// <summary>(panel, target, night, frame label). Normally <c>MosaicRepository.RemoveNight</c>.</summary>
+    public Action<Guid, Guid, DateOnly, string?> RemoveNight { get; init; } = (_, _, _, _) => { };
+
+    /// <summary>By panel id. Normally <c>MosaicRepository.IncludeAll</c>.</summary>
+    public Func<Guid, int> IncludeAll { get; init; } = _ => 0;
+
+    /// <summary>By mosaic id. Normally <c>MosaicRepository.IncludeAllAvailable</c>.</summary>
+    public Func<Guid, int> IncludeAllAvailable { get; init; } = _ => 0;
+
+    /// <summary>(mosaic, from panel, target, night, frame label, new label). Normally
+    /// <c>MosaicRepository.IncludeAsNewPanel</c>.</summary>
+    public Func<Guid, Guid, Guid, DateOnly, string?, string, Guid> IncludeAsNewPanel { get; init; }
+        = (_, _, _, _, _, _) => Guid.NewGuid();
+
+    /// <summary>(panel, target). Normally <c>MosaicRepository.AddTargetNights</c>.</summary>
+    public Func<Guid, Guid, int> AddTargetNights { get; init; } = (_, _) => 0;
+
+    /// <summary>By panel id; refuses while the panel has an included row. Normally
+    /// <c>MosaicRepository.DeletePanel</c>.</summary>
+    public Action<Guid> DeletePanel { get; init; } = _ => { };
+
     /// <summary>Normally <c>TargetSearchQuery.Search</c>.</summary>
     public Func<string, IReadOnlyList<TargetSearchResult>> SearchTargets { get; init; } = _ => [];
 
