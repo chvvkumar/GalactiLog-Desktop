@@ -4,6 +4,7 @@ using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Io;
+using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
 using Xunit;
@@ -60,10 +61,11 @@ public sealed class MosaicDetailViewModelTests : IDisposable
     }
 
     private async Task<MosaicDetailViewModel> Open(
-        FakeMosaic mosaic, JobRegistry? jobs = null, Func<TimeSpan, CancellationToken, Task>? delay = null)
+        FakeMosaic mosaic, JobRegistry? jobs = null, Func<TimeSpan, CancellationToken, Task>? delay = null,
+        MosaicsBackend? backend = null)
     {
         var page = new MosaicDetailViewModel(
-            mosaic.Id, mosaic.Backend(), new AppWriter(_root), jobs,
+            mosaic.Id, backend ?? mosaic.Backend(), new AppWriter(_root), jobs,
             post: action => action(), delay: delay ?? ((_, _) => Task.CompletedTask));
         _pages.Add(page);
         await page.PendingLoad;
@@ -438,6 +440,152 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         page.Panels[0].Included.Single().OpenTargetCommand.Execute(null);
 
         Assert.Equal(M31, opened);
+    }
+
+    // Fix round 1. The overflow entry only arms the strip: choosing it twice deletes nothing.
+    [Fact]
+    public async Task TheDeleteMosaicMenuEntry_OnlyArmsTheStrip()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+
+        page.ArmDeleteMosaicCommand.Execute(null);
+        page.ArmDeleteMosaicCommand.Execute(null);
+
+        Assert.True(page.DeletePending);
+        Assert.False(mosaic.Deleted);
+    }
+
+    // Fix round 1. Closing after a confirmed delete flushes no note into the deleted mosaic.
+    [Fact]
+    public async Task ClosingAfterADelete_FlushesNoNote()
+    {
+        var mosaic = TwoPanels();
+        var gate = new TaskCompletionSource();
+        var page = await Open(mosaic, delay: (_, token) => gate.Task.WaitAsync(token));
+        page.Notes.Text = "typed, never saved";
+
+        page.DeleteMosaicCommand.Execute(null);
+        page.DeleteMosaicCommand.Execute(null);
+        page.Dispose();
+
+        Assert.True(mosaic.Deleted);
+        Assert.Empty(mosaic.NotesWrites);
+    }
+
+    // Fix round 1. An open As new panel row keeps its label and its inline refusal across a write
+    // elsewhere on the page and across a detection job's re-read, and the panel containers are
+    // updated rather than removed and re-added.
+    [Fact]
+    public async Task AnOpenAsNewPanelRow_SurvivesAWriteElsewhereAndADetectionReread()
+    {
+        var mosaic = TwoPanels();
+        var jobs = new JobRegistry(action => action());
+        var page = await Open(mosaic, jobs);
+        var panel = page.Panels[0];
+        var row = panel.Available.Single();
+        row.BeginNewPanelCommand.Execute(null);
+        row.NewPanelLabel = " ";
+        row.CreateNewPanelCommand.Execute(null);
+        row.NewPanelLabel = "Panel 1 east";
+        var removals = 0;
+        page.Panels.CollectionChanged += (_, e) =>
+        {
+            if (e.Action is System.Collections.Specialized.NotifyCollectionChangedAction.Remove
+                or System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+            {
+                removals++;
+            }
+        };
+
+        page.Panels[1].Included.Single().RemoveCommand.Execute(null);
+        await page.PendingLoad;
+        jobs.Begin(ScanStatusService.MosaicDetectionJobKind, "Detection").Finish(JobResult.Succeeded, "");
+        await page.PendingLoad;
+
+        Assert.Same(panel, page.Panels[0]);
+        Assert.Same(row, page.Panels[0].Available.Single(night => night.Night.Date == Night(2)));
+        Assert.True(row.IsNamingNewPanel);
+        Assert.Equal("Panel 1 east", row.NewPanelLabel);
+        Assert.Equal(MosaicMessages.EmptyLabel, row.Error);
+        Assert.Equal(0, removals);
+    }
+
+    // Fix round 1. A label being typed in the add panel form survives a re-read; an untouched
+    // box still follows the prefill.
+    [Fact]
+    public async Task TheAddPanelLabelBeingTyped_SurvivesAReread()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic);
+        Assert.Equal("Panel 3", page.AddPanel.Label);
+
+        mosaic.AddPanel("Panel 3");
+        await page.ReloadAsync();
+        Assert.Equal("Panel 4", page.AddPanel.Label);
+
+        page.AddPanel.Label = "East strip";
+        page.Panels[1].Included.Single().RemoveCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Equal("East strip", page.AddPanel.Label);
+    }
+
+    // Fix round 1. A panel row's refusal clears on the next successful re-read.
+    [Fact]
+    public async Task APanelRowsError_ClearsOnTheNextReread()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic, backend: mosaic.Backend() with { IncludeAll = _ => throw new InvalidOperationException("locked") });
+        var panel = page.Panels[0];
+
+        panel.IncludeAllCommand.Execute(null);
+        Assert.Equal(MosaicMessages.CouldNotSave, panel.Error);
+
+        page.Panels[1].Included.Single().RemoveCommand.Execute(null);
+        await page.PendingLoad;
+
+        Assert.Null(panel.Error);
+    }
+
+    // Fix round 1. Spec 12.17's header cells: every mosaic-scope column in display order with its
+    // stored value, and an edit writes under this mosaic's key.
+    [Fact]
+    public async Task TheCustomCells_AreTheMosaicColumnsInDisplayOrder_AndWriteUnderTheMosaicKey()
+    {
+        var mosaic = TwoPanels();
+        var owner = new CustomColumnDefinition(Guid.NewGuid(), "Owner", "custom_owner", CustomColumnType.Text, CustomColumnScope.Mosaic, [], 1, DateTime.UtcNow, 0);
+        var site = new CustomColumnDefinition(Guid.NewGuid(), "Site", "custom_site", CustomColumnType.Text, CustomColumnScope.Mosaic, [], 0, DateTime.UtcNow, 0);
+        var grade = new CustomColumnDefinition(Guid.NewGuid(), "Grade", "custom_grade", CustomColumnType.Text, CustomColumnScope.Target, [], 2, DateTime.UtcNow, 0);
+        var writes = new List<(Guid Column, CustomValueKey Key, string? Value)>();
+        IReadOnlyCollection<Guid>? asked = null;
+        var page = await Open(mosaic, backend: mosaic.Backend() with
+        {
+            CustomColumns = () => [owner, grade, site],
+            MosaicValues = ids =>
+            {
+                asked = ids;
+                return
+                [
+                    new CustomValueRow(owner.Id, CustomValueKey.ForMosaic(mosaic.Id), "Kumar"),
+                    new CustomValueRow(site.Id, CustomValueKey.ForMosaic(mosaic.Id), "Backyard"),
+                ];
+            },
+            WriteValue = (column, key, value) =>
+            {
+                writes.Add((column, key, value));
+                return new CustomWriteResult(CustomWriteStatus.Written, null);
+            },
+        });
+
+        Assert.Equal(new[] { mosaic.Id }, asked);
+        Assert.Equal(new[] { "Site", "Owner" }, page.CustomCells.Select(cell => cell.Label));
+        Assert.Equal(new[] { "Backyard", "Kumar" }, page.CustomCells.Select(cell => cell.Text!.Text));
+
+        page.CustomCells[1].Text!.Text = "Someone else";
+        await page.CustomCells[1].Text!.PendingSave;
+
+        Assert.Equal(new[] { (owner.Id, CustomValueKey.ForMosaic(mosaic.Id), (string?)"Someone else") }, writes);
     }
 
     [Theory]

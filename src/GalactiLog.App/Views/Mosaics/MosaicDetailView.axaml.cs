@@ -1,4 +1,7 @@
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Input;
+using Avalonia.VisualTree;
 using Avalonia.Platform.Storage;
 using GalactiLog.App.ViewModels.Mosaics;
 using Serilog;
@@ -35,6 +38,25 @@ public partial class MosaicDetailView : UserControl
             page.ExportDestinationPicker = null;
         }
     }
+
+    /// <summary>Escape goes Back, as on the target page, unless a text box has focus: there it
+    /// belongs to the box (the rename box cancels, the notes box keeps it).</summary>
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && !IsTypingInATextBox(e) && DataContext is MosaicDetailViewModel page)
+        {
+            page.BackCommand.Execute(null);
+            e.Handled = true;
+            return;
+        }
+
+        base.OnKeyDown(e);
+    }
+
+    private bool IsTypingInATextBox(KeyEventArgs e)
+        => TopLevel.GetTopLevel(this)?.FocusManager?.GetFocusedElement() is TextBox
+           || e.Source is TextBox
+           || (e.Source is Visual visual && visual.FindAncestorOfType<TextBox>() is not null);
 
     private void BindPicker()
     {

@@ -12,6 +12,12 @@
        arranger's placeholder band, a splitter that trades height between the band and the
        sessions region, and the sessions region in its own ScrollViewer. Every colour is a theme
        token, nothing sets FontSize, and no button is filled. -->
+  <!-- The target page's Back shortcuts (spec 12.4), so the overlay's two pages behave alike:
+       Alt+Left here, Escape in the code-behind because a text box owns Escape while it has focus. -->
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
+  </UserControl.KeyBindings>
+
   <Grid RowDefinitions="Auto,Auto,*,Auto,*" Margin="16">
 
     <!-- ===== Row 0: the header and the notes ===== -->
@@ -100,7 +106,7 @@
             <Button.Flyout>
               <MenuFlyout>
                 <MenuItem Header="Export panels (CSV)" Command="{Binding ExportPanelsCommand}" />
-                <MenuItem Header="Delete mosaic" Command="{Binding DeleteMosaicCommand}" />
+                <MenuItem Header="Delete mosaic" Command="{Binding ArmDeleteMosaicCommand}" />
               </MenuFlyout>
             </Button.Flyout>
           </Button>

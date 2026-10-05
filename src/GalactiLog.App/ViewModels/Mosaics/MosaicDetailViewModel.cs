@@ -74,6 +74,9 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     private int _generation;
     private bool _disposed;
 
+    // Set by a confirmed Delete mosaic: closing then flushes nothing into the deleted mosaic.
+    private bool _deleted;
+
     /// <param name="mosaicId">The mosaic this page shows.</param>
     /// <param name="backend">Every data collaborator, as delegates; the Mosaics page's own record.</param>
     /// <param name="appWriter">The application's one <c>AppWriter</c>, for Export panels.</param>
@@ -246,9 +249,15 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         Error = TryWrite(() => Backend.Delete(Id));
         if (Error is null)
         {
+            _deleted = true;
             BackRequested?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    /// <summary>The overflow menu entry: arms the strip and nothing else, so choosing the entry
+    /// twice never deletes without the strip's Confirm.</summary>
+    [RelayCommand]
+    private void ArmDeleteMosaic() => DeletePending = true;
 
     [RelayCommand]
     private void CancelDelete() => DeletePending = false;
@@ -487,14 +496,15 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
 
         OnPropertyChanged(nameof(HasAvailableLabels));
 
-        // Panel rows are kept by id across a re-read, so an expanded panel, a half-typed Add
-        // nights search and an open As new panel row survive an include elsewhere on the page.
+        // Panel rows are kept by id across a re-read and updated in place, and the collection is
+        // reconciled rather than cleared, so a panel's container (and the focus inside it), its
+        // expansion, a half-typed Add nights search and an open As new panel row survive an
+        // include elsewhere on the page or a scan's re-read. Each panel keeps its night rows by
+        // triple the same way (PanelViewModel.Apply).
         var labels = detail.Panels.Select(panel => panel.Label).ToList();
-        var seen = new HashSet<Guid>();
-        Panels.Clear();
+        var rows = new List<PanelViewModel>();
         foreach (var panel in detail.Panels)
         {
-            seen.Add(panel.Id);
             if (_panelsById.TryGetValue(panel.Id, out var row))
             {
                 row.Apply(panel);
@@ -505,17 +515,49 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
                 _panelsById[panel.Id] = row;
             }
 
-            Panels.Add(row);
+            rows.Add(row);
         }
 
-        foreach (var gone in _panelsById.Keys.Where(id => !seen.Contains(id)).ToList())
+        foreach (var gone in _panelsById.Keys.Except(detail.Panels.Select(panel => panel.Id)).ToList())
         {
             _panelsById[gone].Dispose();
             _panelsById.Remove(gone);
         }
 
+        Reconcile(Panels, rows);
+
+        // SetLabels re-prefills the label box and leaves a label the reader is typing alone.
         AddPanel.SetLabels(labels);
         IncludeAllAvailableCommand.NotifyCanExecuteChanged();
+    }
+
+    /// <summary>Makes <paramref name="target"/> hold <paramref name="wanted"/> in order with the
+    /// fewest collection changes: rows that left are removed, new rows inserted, moved rows moved.
+    /// A row that stays is never removed and re-added, so its container is kept.</summary>
+    internal static void Reconcile<T>(ObservableCollection<T> target, IReadOnlyList<T> wanted)
+        where T : class
+    {
+        var keep = wanted.ToHashSet(ReferenceEqualityComparer.Instance);
+        for (var index = target.Count - 1; index >= 0; index--)
+        {
+            if (!keep.Contains(target[index]))
+            {
+                target.RemoveAt(index);
+            }
+        }
+
+        for (var index = 0; index < wanted.Count; index++)
+        {
+            var current = target.IndexOf(wanted[index]);
+            if (current < 0)
+            {
+                target.Insert(index, wanted[index]);
+            }
+            else if (current != index)
+            {
+                target.Move(current, index);
+            }
+        }
     }
 
     // Spec 12.17: a scan or a detection job's end re-reads the page.
@@ -541,13 +583,16 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
             return;
         }
 
-        try
+        if (!_deleted)
         {
-            Task.WhenAll(Notes.FlushAsync(), _cells.FlushAsync()).Wait(TimeSpan.FromSeconds(2));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Flushing the mosaic page on close failed");
+            try
+            {
+                Task.WhenAll(Notes.FlushAsync(), _cells.FlushAsync()).Wait(TimeSpan.FromSeconds(2));
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "Flushing the mosaic page on close failed");
+            }
         }
 
         _disposed = true;

@@ -43,7 +43,9 @@ public sealed partial class AddPanelViewModel : TargetSearchForm
         _mosaicId = mosaicId;
         _add = add;
         _added = added;
+        _prefilling = true;
         Label = "";
+        _prefilling = false;
         SetLabels(labels);
     }
 
@@ -65,8 +67,37 @@ public sealed partial class AddPanelViewModel : TargetSearchForm
     [ObservableProperty]
     public partial string? Error { get; private set; }
 
-    /// <summary>Replaces the mosaic's labels and re-prefills the label box.</summary>
-    public void SetLabels(IReadOnlyList<string> labels) => Label = NextLabel(labels);
+    // True while the label box holds the reader's own edit rather than the prefill.
+    private bool _labelEdited;
+    private bool _prefilling;
+
+    /// <summary>Replaces the mosaic's labels and re-prefills the label box, unless the reader has
+    /// typed a label of their own since the last prefill: a re-read never overwrites typing.</summary>
+    public void SetLabels(IReadOnlyList<string> labels)
+    {
+        if (_labelEdited)
+        {
+            return;
+        }
+
+        _prefilling = true;
+        try
+        {
+            Label = NextLabel(labels);
+        }
+        finally
+        {
+            _prefilling = false;
+        }
+    }
+
+    partial void OnLabelChanged(string value)
+    {
+        if (!_prefilling)
+        {
+            _labelEdited = true;
+        }
+    }
 
     /// <summary>"Panel n" for the smallest n of 1 or more that no label carries, case insensitively.</summary>
     internal static string NextLabel(IReadOnlyList<string> labels)
@@ -109,6 +140,7 @@ public sealed partial class AddPanelViewModel : TargetSearchForm
             };
             Chosen = null;
             SearchText = "";
+            _labelEdited = false;
             _added();
         }
         catch (MosaicWriteException ex)

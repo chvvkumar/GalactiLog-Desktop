@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.ViewModels.Dashboard;
@@ -64,12 +65,10 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     public string AvailableText => MetricText.Count(Panel.Available.Count) + " available";
 
     /// <summary>Included rows, newest first, as the query orders them.</summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<PanelSessionViewModel> Included { get; private set; } = [];
+    public ObservableCollection<PanelSessionViewModel> Included { get; } = [];
 
     /// <summary>Available triples, newest first.</summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<PanelSessionViewModel> Available { get; private set; } = [];
+    public ObservableCollection<PanelSessionViewModel> Available { get; } = [];
 
     /// <summary>Add nights from any target, under the Available table.</summary>
     public AddNightsViewModel AddNights { get; }
@@ -83,8 +82,9 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     internal void Apply(PanelDetail panel)
     {
         Panel = panel;
-        Included = [.. panel.Included.Select(night => new PanelSessionViewModel(night, this, included: true))];
-        Available = [.. panel.Available.Select(night => new PanelSessionViewModel(night, this, included: false))];
+        Error = null;
+        Sync(Included, panel.Included, included: true);
+        Sync(Available, panel.Available, included: false);
         IncludeAllCommand.NotifyCanExecuteChanged();
         DeletePanelCommand.NotifyCanExecuteChanged();
         if (!CanDelete)
@@ -92,6 +92,33 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
             DeletePending = false;
         }
     }
+
+    // Night rows are kept by triple (target, night, frame label compared case insensitively) and
+    // updated in place, so an open As new panel row keeps its label and its inline refusal across
+    // a re-read.
+    private void Sync(ObservableCollection<PanelSessionViewModel> rows, IReadOnlyList<PanelNight> nights, bool included)
+    {
+        var existing = rows.ToDictionary(row => TripleKey(row.Night));
+        var wanted = new List<PanelSessionViewModel>();
+        foreach (var night in nights)
+        {
+            if (existing.TryGetValue(TripleKey(night), out var row))
+            {
+                row.Night = night;
+            }
+            else
+            {
+                row = new PanelSessionViewModel(night, this, included);
+            }
+
+            wanted.Add(row);
+        }
+
+        MosaicDetailViewModel.Reconcile(rows, wanted);
+    }
+
+    private static (Guid, DateOnly, string) TripleKey(PanelNight night)
+        => (night.TargetId, night.Date, (night.FrameLabel ?? "").ToUpperInvariant());
 
     /// <summary>Runs a write on this panel and re-reads the page.</summary>
     internal string? Write(Action write) => _page.Write(write);
@@ -158,13 +185,31 @@ public sealed partial class PanelSessionViewModel : ObservableObject
 
     internal PanelSessionViewModel(PanelNight night, PanelViewModel panel, bool included)
     {
-        Night = night;
+        _night = night;
         _panel = panel;
         IsIncluded = included;
         NewPanelLabel = "";
     }
 
-    public PanelNight Night { get; }
+    private PanelNight _night;
+
+    /// <summary>The triple and its figures as last read; a re-read updates them in place.</summary>
+    public PanelNight Night
+    {
+        get => _night;
+        internal set
+        {
+            if (SetProperty(ref _night, value))
+            {
+                OnPropertyChanged(nameof(NightText));
+                OnPropertyChanged(nameof(TargetName));
+                OnPropertyChanged(nameof(LabelText));
+                OnPropertyChanged(nameof(FiltersText));
+                OnPropertyChanged(nameof(FramesText));
+                OnPropertyChanged(nameof(IntegrationText));
+            }
+        }
+    }
 
     public bool IsIncluded { get; }
 
