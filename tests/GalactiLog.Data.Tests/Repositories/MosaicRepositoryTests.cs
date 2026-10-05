@@ -620,6 +620,35 @@ public class MosaicRepositoryTests : IDisposable
         Assert.Empty(context.MosaicPanels);
     }
 
+    // Review fix 4: only a pending row can be accepted.
+    [Fact]
+    public void Accept_ARowThatIsNoLongerPending_IsRefused()
+    {
+        var target = NewTarget("NGC 7000");
+        _repository.ReplacePending([Candidate("NGC 7000", target, "Panel 1", Night(1))]);
+        var id = _repository.ListPending().Single().Id;
+        _repository.Dismiss(id);
+
+        Assert.Throws<KeyNotFoundException>(() => _repository.Accept(id, ["Panel 1"]));
+        Assert.Empty(_repository.ExistingNames());
+    }
+
+    // Review fix 4: an entry whose target was merged away since detection writes no row.
+    [Fact]
+    public void Accept_SkipsATargetMergedAwaySinceDetection()
+    {
+        var kept = NewTarget("NGC 7000");
+        var gone = NewTarget("North America Nebula");
+        _repository.ReplacePending([Candidate("Field", [(kept, "Panel 1", [Night(1)]), (gone, "Panel 2", [Night(1)])])]);
+        new MergeRepository(new DatabaseConnectionString(_db.ConnectionString)).Merge(kept, gone);
+
+        var id = _repository.Accept(_repository.ListPending().Single().Id, ["Panel 1", "Panel 2"]);
+
+        var panel = Assert.Single(Panels(id));
+        Assert.Equal("Panel 1", panel.PanelLabel);
+        Assert.Equal(kept, Assert.Single(Rows(panel.Id)).TargetId);
+    }
+
     [Fact]
     public void Dismiss_SetsRejected_AndDismissedSignaturesPoolTheNightsOfOneSignature()
     {

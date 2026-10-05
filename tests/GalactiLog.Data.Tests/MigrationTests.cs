@@ -176,6 +176,74 @@ public class MigrationTests
         Assert.Contains("uq_custom_column_value", QueryNames(db.ConnectionString, "index"));
     }
 
+    // Review fix 2: the hand-written custom_column_values rebuild keeps every existing value, in
+    // all three target-keyed scopes, and the coalescing unique index still refuses a duplicate,
+    // going up and coming back down.
+    [Fact]
+    public void Migrate_Mosaics_KeepsExistingCustomValues_UpAndDown()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        Migrator(db.ConnectionString, "20261005022536_SkippedFiles");
+
+        LibrarySeeder.AddTarget(db.ConnectionString, "NGC 7000");
+        Execute(db.ConnectionString, """
+            INSERT INTO custom_columns (id, name, slug, column_type, applies_to, dropdown_options, display_order, created_at)
+              VALUES ('C1', 'Status', 'custom_status', 'text', 'target', NULL, 0, '2026-01-01 00:00:00');
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V1', 'C1', id, NULL, NULL, NULL, 'target', '2026-01-01 00:00:00' FROM targets;
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V2', 'C1', id, NULL, '2026-03-01', NULL, 'session', '2026-01-01 00:00:00' FROM targets;
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V3', 'C1', id, NULL, '2026-03-01', 'Askar 120 / ASI2600MC', 'rig', '2026-01-01 00:00:00' FROM targets;
+            """);
+        var before = ValueRows(db.ConnectionString);
+        Assert.Equal(3, before.Count);
+
+        Migrator(db.ConnectionString, null);
+        Assert.Equal(before, ValueRows(db.ConnectionString));
+        AssertDuplicateRefused(db.ConnectionString);
+
+        Migrator(db.ConnectionString, "20261005022536_SkippedFiles");
+        Assert.Equal(before, ValueRows(db.ConnectionString));
+        AssertDuplicateRefused(db.ConnectionString);
+    }
+
+    private static void Migrator(string connectionString, string? migration)
+    {
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+        context.GetService<IMigrator>().Migrate(migration);
+    }
+
+    private static List<string> ValueRows(string connectionString)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id || '|' || column_id || '|' || coalesce(target_id, '-') || '|' || coalesce(mosaic_id, '-') || '|'
+                   || coalesce(session_date, '-') || '|' || coalesce(rig_label, '-') || '|' || value || '|' || updated_at
+            FROM custom_column_values ORDER BY id
+            """;
+        var rows = new List<string>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add(reader.GetString(0));
+        }
+
+        return rows;
+    }
+
+    private static void AssertDuplicateRefused(string connectionString)
+    {
+        var failure = Record.Exception(() => Execute(connectionString, """
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+            SELECT 'DUP', column_id, target_id, mosaic_id, session_date, rig_label, 'again', updated_at
+            FROM custom_column_values WHERE id = 'V2'
+            """));
+        Assert.Contains("uq_custom_column_value", Assert.IsType<SqliteException>(failure).Message, System.StringComparison.Ordinal);
+    }
+
     // Spec 5.22: deleting a mosaic cascades to its panels, through them to their nights, and to
     // its mosaic-scope custom values.
     [Fact]

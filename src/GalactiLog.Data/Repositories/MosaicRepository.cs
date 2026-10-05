@@ -352,14 +352,30 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
     public Guid Accept(Guid suggestionId, IReadOnlyList<string> checkedLabels)
         => Write(context =>
         {
-            var suggestion = context.MosaicSuggestions.SingleOrDefault(row => row.Id == suggestionId)
-                ?? throw new KeyNotFoundException($"Suggestion {suggestionId} does not exist.");
+            // Only a pending row can be accepted: an accepted or dismissed one is a stale page, and
+            // answers as an unknown id does.
+            var suggestion = context.MosaicSuggestions
+                .SingleOrDefault(row => row.Id == suggestionId && row.Status == MosaicSuggestion.Pending)
+                ?? throw new KeyNotFoundException($"Suggestion {suggestionId} does not exist or is not pending.");
             var entries = ParseEntries(suggestion.SessionDates)
                 .Where(entry => checkedLabels.Any(label => SameLabel(label.Trim(), entry.Label)))
                 .ToList();
             if (entries.Count == 0)
             {
                 throw new MosaicWriteException(MosaicMessages.NoPanelChecked);
+            }
+
+            // A target merged away (or deleted) since detection has no frames of its own any more:
+            // its entries are skipped rather than written as rows that join nothing.
+            var entryTargets = entries.Select(entry => entry.TargetId).Distinct().ToList();
+            var live = context.Targets
+                .Where(target => entryTargets.Contains(target.Id) && target.MergedIntoId == null)
+                .Select(target => target.Id)
+                .ToHashSet();
+            entries = [.. entries.Where(entry => live.Contains(entry.TargetId))];
+            if (entries.Count == 0)
+            {
+                throw new KeyNotFoundException($"Suggestion {suggestionId} names no active target.");
             }
 
             var mosaic = CreateCore(context, suggestion.SuggestedName);
@@ -590,6 +606,16 @@ public sealed class MosaicRepository(DatabaseConnectionString connectionString)
         foreach (var row in moving)
         {
             row.TargetId = winnerId;
+        }
+
+        // Spec 5.22: updated_at moves on every write to a mosaic's nights.
+        var touched = rows.Where(row => moving.Contains(row.Row) || dropped.Contains(row.Row))
+            .Select(row => row.MosaicId)
+            .Distinct()
+            .ToList();
+        foreach (var mosaic in context.Mosaics.Where(mosaic => touched.Contains(mosaic.Id)).ToList())
+        {
+            Touch(mosaic);
         }
 
         return moving.Count;

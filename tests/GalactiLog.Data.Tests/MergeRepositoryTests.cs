@@ -1048,6 +1048,30 @@ public class MergeRepositoryTests : IDisposable
         Assert.All(SessionRows(), row => Assert.Equal(winner.Id, row.Target));
     }
 
+    // Review fix 5, spec 5.22: the rewrite is a write to the mosaic's nights.
+    [Fact]
+    public void Merge_TouchesTheUpdatedAtOfEveryMosaicItRewrote()
+    {
+        var winner = NewTarget("NGC 7000");
+        var loser = NewTarget("North America Nebula");
+        var (mosaics, id, first, _) = TwoPanelMosaic();
+        var untouched = mosaics.Create("Untouched");
+        mosaics.IncludeNight(first, loser.Id, Date(1), null);
+        DateTime before, beforeUntouched;
+        using (var context = Open())
+        {
+            before = context.Mosaics.Single(row => row.Id == id).UpdatedAt;
+            beforeUntouched = context.Mosaics.Single(row => row.Id == untouched).UpdatedAt;
+        }
+
+        Thread.Sleep(15);
+        _repository.Merge(winner.Id, loser.Id);
+
+        using var read = Open();
+        Assert.True(read.Mosaics.Single(row => row.Id == id).UpdatedAt > before);
+        Assert.Equal(beforeUntouched, read.Mosaics.Single(row => row.Id == untouched).UpdatedAt);
+    }
+
     // Two panels of one mosaic including the same triple after the rewrite: the panel earlier in
     // sort_order keeps its row, whichever target it came from.
     [Fact]

@@ -100,50 +100,60 @@ public sealed class MosaicDetectionPass(string connectionString, DetectionSettin
     // OBJECT as text: json_extract yields a SQLite number for an unquoted numeric card.
     private const string ObjectExpression = "CAST(json_extract(raw_headers, '$.OBJECT') AS TEXT)";
 
-    // Step 0 item 1 (ruling R6): one label per distinct (OBJECT, stored label) among LIGHT frames,
-    // and one UPDATE per pair whose label moved, so an unchanged row is never written.
+    // Step 0 item 1 (ruling R6): one scan reads every LIGHT row's id, OBJECT and stored label;
+    // the label is computed once per distinct OBJECT in memory, and only the rows whose label
+    // moved are written, by primary key, in one transaction with one prepared statement.
     private int Relabel(SqliteConnection connection)
     {
-        var pairs = new List<(string? Object, string? Stored)>();
+        var labels = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var moved = new List<(string Id, string? Label)>();
         using (var read = connection.CreateCommand())
         {
-            read.CommandText = $"SELECT {ObjectExpression}, panel_label FROM images WHERE {SqlFragments.LightFrameOnly} GROUP BY 1, 2";
+            read.CommandText = $"SELECT id, {ObjectExpression}, panel_label FROM images WHERE {SqlFragments.LightFrameOnly}";
             using var reader = read.ExecuteReader();
             while (reader.Read())
             {
-                pairs.Add((SqlReaders.ReadText(reader, 0), SqlReaders.ReadText(reader, 1)));
+                var name = SqlReaders.ReadText(reader, 1);
+                string? label;
+                if (name is null)
+                {
+                    label = null;
+                }
+                else if (!labels.TryGetValue(name, out label))
+                {
+                    label = LabelFor(name, settings.Keywords);
+                    labels[name] = label;
+                }
+
+                if (!string.Equals(label, SqlReaders.ReadText(reader, 2), StringComparison.Ordinal))
+                {
+                    moved.Add((reader.GetString(0), label));
+                }
             }
+        }
+
+        if (moved.Count == 0)
+        {
+            return 0;
         }
 
         using var transaction = connection.BeginTransaction();
         using var update = connection.CreateCommand();
         update.Transaction = transaction;
-        update.CommandText =
-            $"""
-            UPDATE images SET panel_label = $new
-            WHERE {SqlFragments.LightFrameOnly} AND {ObjectExpression} IS $object AND panel_label IS $old
-            """;
-        var newLabel = update.Parameters.Add("$new", SqliteType.Text);
-        var objectName = update.Parameters.Add("$object", SqliteType.Text);
-        var oldLabel = update.Parameters.Add("$old", SqliteType.Text);
+        update.CommandText = "UPDATE images SET panel_label = $label WHERE id = $id";
+        var newLabel = update.Parameters.Add("$label", SqliteType.Text);
+        var id = update.Parameters.Add("$id", SqliteType.Text);
+        update.Prepare();
 
-        var changed = 0;
-        foreach (var (name, stored) in pairs)
+        foreach (var row in moved)
         {
-            var label = LabelFor(name, settings.Keywords);
-            if (string.Equals(label, stored, StringComparison.Ordinal))
-            {
-                continue;
-            }
-
-            newLabel.Value = (object?)label ?? DBNull.Value;
-            objectName.Value = (object?)name ?? DBNull.Value;
-            oldLabel.Value = (object?)stored ?? DBNull.Value;
-            changed += update.ExecuteNonQuery();
+            newLabel.Value = (object?)row.Label ?? DBNull.Value;
+            id.Value = row.Id;
+            update.ExecuteNonQuery();
         }
 
         transaction.Commit();
-        return changed;
+        return moved.Count;
     }
 
     // Step 0 item 2 (ruling R10): LIGHT rows with all three geometry columns null read their

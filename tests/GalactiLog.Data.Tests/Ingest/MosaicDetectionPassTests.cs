@@ -3,6 +3,7 @@ using GalactiLog.Core.Mosaics;
 using GalactiLog.Data.Entities;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Repositories;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace GalactiLog.Data.Tests.Ingest;
@@ -125,6 +126,35 @@ public class MosaicDetectionPassTests : IDisposable
         Assert.Equal(1, result.Relabelled);
         Assert.Null(Lights().Single(image => image.RawHeaders!.Contains("IC 1396", StringComparison.Ordinal)).PanelLabel);
         Assert.DoesNotContain("IC 1396", _repository.ListPending().Select(row => row.SuggestedName));
+    }
+
+    // Review fix 1: the relabel writes by primary key and only the rows whose label moved. A
+    // trigger counts the UPDATEs that reach panel_label, independently of the pass's own count.
+    [Fact]
+    public void Relabel_WritesOnlyTheRowsWhoseLabelMoved()
+    {
+        Run();
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString, tracking: true)))
+        {
+            context.Database.ExecuteSqlRaw("""
+                CREATE TABLE label_writes (n INTEGER NOT NULL);
+                INSERT INTO label_writes VALUES (0);
+                CREATE TRIGGER count_label_writes AFTER UPDATE OF panel_label ON images
+                BEGIN UPDATE label_writes SET n = n + 1; END;
+                """);
+        }
+
+        Run();
+        Assert.Equal(0L, LabelWrites());
+
+        Run(Default with { Keywords = ["Panel"] });
+        Assert.Equal(1L, LabelWrites());
+    }
+
+    private long LabelWrites()
+    {
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString));
+        return context.Database.SqlQueryRaw<long>("SELECT n AS Value FROM label_writes").AsEnumerable().Single();
     }
 
     // ---- suggestions -------------------------------------------------------------------------
