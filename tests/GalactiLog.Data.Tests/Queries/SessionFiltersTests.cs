@@ -183,10 +183,11 @@ public class SessionFiltersTests
         Assert.Single(Regex.Matches(body, @"connection\.CreateCommand\(\)"));
         Assert.Single(Regex.Matches(body, @"command\.ExecuteReader\(\)"));
 
-        // Five SELECTs in the one command's text, read through four NextResult() advances off the
-        // one ExecuteReader() call above: palette, equipment, sessions, aliases, session filters.
-        Assert.Equal(5, Regex.Matches(body, @"^\s*SELECT", RegexOptions.Multiline).Count);
-        Assert.Equal(4, Regex.Matches(body, @"reader\.NextResult\(\);").Count);
+        // Six SELECTs in the one command's text, read through five NextResult() advances off the
+        // one ExecuteReader() call above: palette, equipment, sessions, aliases, session filters,
+        // and from Phase 18 the mosaic link set (spec 12.2, query step 6).
+        Assert.Equal(6, Regex.Matches(body, @"^\s*SELECT", RegexOptions.Multiline).Count);
+        Assert.Equal(5, Regex.Matches(body, @"reader\.NextResult\(\);").Count);
     }
 
     [Fact]

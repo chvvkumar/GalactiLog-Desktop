@@ -102,6 +102,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _openDetail = openDetail;
         _settings = settings;
         dashboard.TargetOpened += OnTargetOpened;
+        dashboard.MosaicOpened += OnMosaicOpenRequested;
 
         // Phase 14B Task 5. Spec 12.2's scan filter notice carries one action, Review, which
         // "opens Settings on the Library tab with the rule editor in view". Two pages, so the
@@ -545,6 +546,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _dashboard.TargetOpened -= OnTargetOpened;
+        _dashboard.MosaicOpened -= OnMosaicOpenRequested;
         _dashboard.ReviewScanFiltersRequested -= OnOpenSettingsRequested;
 
         // Null when nobody ever opened Statistics, which is the case F21 exists to make cheap.

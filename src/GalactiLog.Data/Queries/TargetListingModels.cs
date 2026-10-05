@@ -24,7 +24,10 @@ public sealed record SessionSummary(
 }
 
 /// <summary>One row of the dashboard target list (spec 12.2 "Target list columns"). A read
-/// model: entities never leave GalactiLog.Data.Queries.</summary>
+/// model: entities never leave GalactiLog.Data.Queries. <see cref="Mosaics"/> is spec 12.2's
+/// mosaic link set (Phase 18): the mosaics with an <c>included</c> row of this target, in ordinal
+/// case-insensitive name order, empty for an unresolved group; an init member so every existing
+/// <c>new TargetRow(</c> site keeps compiling.</summary>
 public sealed record TargetRow(
     string GroupKey,
     Guid? TargetId,
@@ -41,7 +44,10 @@ public sealed record TargetRow(
     IReadOnlyList<FilterBadge> Palette,
     IReadOnlyList<string> Equipment,
     IReadOnlyList<string> Aliases,
-    IReadOnlyList<SessionSummary> Sessions);
+    IReadOnlyList<SessionSummary> Sessions)
+{
+    public IReadOnlyList<MosaicLink> Mosaics { get; init; } = [];
+}
 
 /// <summary>One page of the target list plus the aggregates over the whole filtered set, which
 /// feed the summary strip. <see cref="Page"/> and <see cref="PageSize"/> are the clamped values

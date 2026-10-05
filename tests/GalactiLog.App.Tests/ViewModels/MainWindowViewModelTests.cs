@@ -634,6 +634,42 @@ public class MainWindowViewModelTests : IDisposable
         shell.Dispose();
     }
 
+    // Phase 18 Task 6, spec 12.2: a dashboard row's mosaic link lands on the shell's one route to
+    // the mosaic detail page, and does not open the row's Target detail.
+    [Fact]
+    public async Task ADashboardMosaicLink_OpensTheMosaicPageOnTheOverlay()
+    {
+        var mosaicId = Guid.NewGuid();
+        var row = SampleRow with { Mosaics = [new MosaicLink(mosaicId, "Alpha")] };
+        var dashboard = new DashboardViewModel(
+            _ => new TargetListingPage([row], 1, 44_640d, 148, 1, 50),
+            DashboardViewModelTestFactory.EmptyFacets,
+            () => [],
+            DashboardViewModelTestFactory.EmptyAliasMap,
+            new GeneralSettings(),
+            (_, _) => Task.CompletedTask,
+            post: action => action());
+        await dashboard.Filters.PendingReload!.WaitAsync(TimeSpan.FromSeconds(30));
+        DashboardViewModelTestFactory.Settle(dashboard);
+        var backend = new MosaicsBackend { Detail = id => new MosaicDetail(id, "Alpha", null, 0, 0, 0, null, null, [], [], []) };
+        var shell = new MainWindowViewModel(
+            new GeneralSettings(),
+            dashboard,
+            CreateStatusBar(),
+            TabFactory.CreateSettingsPage(),
+            CreateStatistics,
+            CreateAnalysis,
+            CreateActivity,
+            openDetail: (groupKey, sessionDate) => DetailFactory.Create(groupKey: groupKey, initialSessionDate: sessionDate).Settle().ViewModel,
+            openMosaic: id => new MosaicDetailViewModel(id, backend, new GalactiLog.Core.Io.AppWriter(Path.GetTempPath()), post: action => action()));
+
+        dashboard.Targets.OpenMosaicCommand.Execute(dashboard.Targets.Rows[0]);
+
+        var page = Assert.IsType<MosaicDetailViewModel>(shell.Detail);
+        Assert.Equal(mosaicId, page.Id);
+        shell.Dispose();
+    }
+
     // Settled first: a detail close re-queries the dashboard, and with the inline post its Load
     // replaces the rows on a pool thread.
     private static void ClickRow(DashboardViewModel dashboard)

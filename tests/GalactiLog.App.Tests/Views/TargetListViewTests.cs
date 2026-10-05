@@ -170,6 +170,41 @@ public class TargetListViewTests
         Assert.Contains("Collapse", texts);
     }
 
+    // Phase 18 Task 6, spec 12.2: the mosaic link sits in the Name cell of a row whose target has
+    // an included night in some mosaic and nowhere else; it opens the first mosaic by name and
+    // never the row's Target detail.
+    [AvaloniaFact]
+    public void TheMosaicLink_IsDrawnOnlyForATargetInAMosaic_AndOpensTheFirstByName()
+    {
+        var alpha = new MosaicLink(Guid.NewGuid(), "Alpha");
+        var beta = new MosaicLink(Guid.NewGuid(), "beta");
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([SampleRow with { Mosaics = [alpha, beta] }, WideRow], 120, 44_640d, 148, 1, 50));
+        var opened = new List<Guid>();
+        var targets = new List<TargetOpenRequest>();
+        list.MosaicOpened += (_, id) => opened.Add(id);
+        list.TargetOpened += (_, request) => targets.Add(request);
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        var links = view.GetVisualDescendants().OfType<Button>().Where(button => button.Name == "MosaicLink").ToList();
+        Assert.Equal(2, links.Count);
+        var shown = Assert.Single(links, link => link.IsEffectivelyVisible);
+        Assert.Same(list.Rows[0], shown.DataContext);
+        Assert.Equal("Mosaics: Alpha, beta", ToolTip.GetTip(shown));
+        Assert.Null(list.Rows[1].MosaicId);
+        Assert.Equal("Alpha", list.Rows[0].MosaicName);
+
+        shown.Command!.Execute(shown.CommandParameter);
+
+        Assert.Equal([alpha.MosaicId], opened);
+        Assert.Empty(targets);
+
+        list.Load(new TargetListingPage([SampleRow with { Mosaics = [beta] }], 1, 44_640d, 148, 1, 50));
+        Assert.Equal("Mosaic: beta", list.Rows[0].MosaicTooltip);
+    }
+
     [AvaloniaFact]
     public void TargetListView_EveryTextBlock_RendersAtAReadableSize()
     {
@@ -211,9 +246,10 @@ public class TargetListViewTests
 
         // The expander's own toggle inherits the row's DataContext too; the row button is the one
         // that passes the row as its command parameter.
+        // Phase 18: the mosaic link carries the row too, so it is excluded by name.
         var rowButton = Assert.Single(
             view.GetVisualDescendants().OfType<Button>(),
-            button => button.CommandParameter is TargetRowViewModel);
+            button => button.CommandParameter is TargetRowViewModel && button.Name != "MosaicLink");
 
         Assert.NotNull(rowButton.Command);
         Assert.IsType<TargetRowViewModel>(rowButton.CommandParameter);
@@ -412,7 +448,9 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = CreatePopulatedList() };
         ShowList(view);
 
-        Assert.Single(view.GetVisualDescendants().OfType<Button>(), button => button.CommandParameter is TargetRowViewModel);
+        Assert.Single(
+            view.GetVisualDescendants().OfType<Button>(),
+            button => button.CommandParameter is TargetRowViewModel && button.Name != "MosaicLink");
     }
 
     [AvaloniaFact]

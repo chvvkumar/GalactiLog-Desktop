@@ -215,6 +215,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             aliases: aliases);
         Targets.Changed += OnTargetsChanged;
         Targets.TargetOpened += OnTargetOpened;
+        Targets.MosaicOpened += OnMosaicOpened;
 
         // Spec 12.2's list must reflect what a scan just ingested. ScanStatusService has already
         // marshalled this onto the UI thread (Task 5) -- do not post again.
@@ -657,6 +658,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
     private void OnTargetOpened(object? sender, TargetOpenRequest request) => TargetOpened?.Invoke(this, request);
 
+    /// <summary>Re-raises the target list's mosaic link click (spec 12.2, Phase 18) for the shell,
+    /// on the same terms as <see cref="TargetOpened"/>.</summary>
+    public event EventHandler<Guid>? MosaicOpened;
+
+    private void OnMosaicOpened(object? sender, Guid mosaicId) => MosaicOpened?.Invoke(this, mosaicId);
+
     /// <summary>
     /// Spec 12.10's Run Scan button, on the "No frames catalogued yet" state. Progress is already
     /// rendered by the status bar (Task 5); this button shows none of its own.
@@ -947,6 +954,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Filters.SearchTextChanged -= OnSearchTextChanged;
         Targets.Changed -= OnTargetsChanged;
         Targets.TargetOpened -= OnTargetOpened;
+        Targets.MosaicOpened -= OnMosaicOpened;
         if (_scanStatus is not null)
         {
             _scanStatus.ScanFinished -= OnScanFinished;
