@@ -1756,8 +1756,9 @@ refused with the sentence of section 12.17.
 
 ### 5.24 mosaic_panel_sessions
 
-Phase 18. Mirrors `backend/app/models/mosaic_panel_session.py` with a target added. One row per
-night of one target that a panel holds, either counted or offered.
+Phase 18. Mirrors `backend/app/models/mosaic_panel_session.py` with a target and a frame label
+added (rulings R19 and R19a). One row per (target, night, frame label) triple that a panel holds,
+either counted or offered.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
@@ -1765,34 +1766,42 @@ night of one target that a panel holds, either counted or offered.
 | `panel_id` | TEXT GUID | no | FK `mosaic_panels.id`, on delete cascade. |
 | `target_id` | TEXT GUID | no | FK `targets.id`, on delete cascade. The target whose frames this night contributes (ruling R19). |
 | `session_date` | TEXT date | no | The imaging night (section 8.2). |
+| `frame_label` | TEXT | yes | The `images.panel_label` value this row admits, compared case insensitively. Null admits the frames of that target and night that carry no label (ruling R19a). |
 | `status` | TEXT | no | `included` or `available`, by a check constraint. `included` counts in every figure; `available` makes the target a contributor of the panel without counting the night. |
 
 Two indexes:
 
 | Index | Columns | Serves |
 | --- | --- | --- |
-| `ux_mosaic_panel_sessions_panel_target_date` | `panel_id`, `target_id`, `session_date`, unique | The upsert every include and remove performs, and the one row per night of one target per panel. |
+| `ux_mosaic_panel_sessions_panel_target_date_label` | `panel_id`, `target_id`, `session_date`, `coalesce(frame_label, '')` collated `NOCASE`, unique | The upsert every include and remove performs, and the one row per triple per panel. SQLite treats two nulls as distinct in a unique index, so the null label is folded to the empty string inside the index, the way `uq_custom_column_value` folds its unset key parts (section 5.20). A stored `frame_label` is never the empty string: the writer stores null for "no label". Declared in raw SQL inside the migration, because a fluent index cannot carry the expression. |
 | `ix_mosaic_panel_sessions_target_date` | `target_id`, `session_date` | The membership join below, from the frame side, and the dashboard link (section 12.2). |
 
-**The membership join.** A frame belongs to a panel when its `resolved_target_id` and its
-`session_date` match an `included` row of that panel. That is the whole of membership: there is no
-`images.panel_id` (ruling R19), nothing is stamped on a frame, and a frame changes panel only
-because a row changed. Every panel figure in section 12.17 (integration, frames, nights, filters,
+**The membership join (ruling R19a).** A frame belongs to a panel when its `resolved_target_id`, its
+`session_date` and its `panel_label` match an `included` row of that panel, the label compared case
+insensitively and a null `panel_label` matching a null `frame_label`. That is the whole of
+membership: there is no `images.panel_id` (ruling R19), nothing is stamped on a frame, and a frame
+changes panel only because a row changed. Because the label is part of the key, the four panels
+of "NGC 7000 Panel 1" to "Panel 4", which `StripPanel` resolves to one target (section 9), can
+share a night: each panel's rows admit only the frames carrying its own label. A panel's label and
+the `frame_label` of its rows are separate values: "As new panel" makes a panel `Panel 1 (b)` whose
+rows still admit frames labelled `Panel 1`. Every panel figure in section 12.17 (integration, frames, nights, filters,
 date range) counts the LIGHT frames this join reaches and no others. A frame with a null
 `session_date` or a null `resolved_target_id` belongs to no panel.
 
-**One night of one target sits in at most one panel of a mosaic.** At most one `included` row per
-(mosaic, `target_id`, `session_date`) across that mosaic's panels. The database cannot state this,
+**One triple sits in at most one panel of a mosaic (ruling R19a).** At most one `included` row
+per (mosaic, `target_id`, `session_date`, `frame_label`) across that mosaic's panels, the label
+compared as the index compares it. Two panels may include the same night of the same target when
+their frame labels differ. The database cannot state this,
 because the mosaic is one join away, so `MosaicRepository` checks it in the same transaction as
 every write that sets `included` and refuses the duplicate with the sentence of section 12.17. The
-Available lists of section 12.17 hide such a night, so no surface offers it. `available` rows are
-not bound by the rule: the same night may be offered in two panels until one of them includes it.
-The same night may sit in panels of two different mosaics; the rule is per mosaic.
+Available lists of section 12.17 hide such a triple, so no surface offers it. `available` rows are
+not bound by the rule: the same triple may be offered in two panels until one of them includes it.
+The same triple may sit in panels of two different mosaics; the rule is per mosaic.
 
 **A merge moves the rows to the winner.** A merge (section 12.9) rewrites `target_id` from the
 merged-away target to the winner on every row, in the merge's own transaction, because the winner
 is where the frames now resolve and a row left on the loser would join nothing. A row that would
-collide with an existing (panel, winner, night) row is dropped, keeping the existing row; a
+collide with an existing (panel, winner, night, frame label) row is dropped, keeping the existing row; a
 collision between an `included` row and an `available` row keeps the `included` one. An unmerge
 does not move rows back: the manifest records no mosaic rows, and after an unmerge the reader
 re-includes the nights from the detail page's Available table. That is a stated limit, not a defect.
@@ -1807,10 +1816,10 @@ produced (section 7.7). Rows are written only by the detection pass and by accep
 | `id` | TEXT GUID | no | PK. |
 | `suggested_name` | TEXT | no | The name the mosaic takes on accept: the base name, a campaign suffix when the run split campaigns, and a ` (#n)` suffix when the name was already used (section 7.7). |
 | `base_name` | TEXT | no | The panel token's base name, as the first panel's `OBJECT` spells it. |
-| `target_ids` | TEXT JSON | no | Array of target ids, one entry per suggested panel entry, parallel to `panel_labels`. A target appears once for each of its panels. |
-| `panel_labels` | TEXT JSON | no | Array of labels, parallel to `target_ids`. A label may appear twice when two targets carry the same panel number; accept combines them into one panel (section 7.7). |
-| `panel_patterns` | TEXT JSON | no | Array of the web's `OBJECT` pattern strings, parallel to `target_ids` (section 7.7). Kept as the record of which token produced each entry; no query in this port matches by it. |
-| `session_dates` | TEXT JSON | no | Array of arrays of `yyyy-MM-dd` dates, parallel to `target_ids`: the nights of this campaign for each entry. |
+| `target_ids` | TEXT JSON | no | Array of target ids, one per entry of `session_dates`, in its order. A target appears once for each of its panels. |
+| `panel_labels` | TEXT JSON | no | Array of labels, one per entry of `session_dates`, in its order. A label may appear twice when two targets carry the same panel number; accept combines them into one panel (section 7.7). |
+| `panel_patterns` | TEXT JSON | no | Array of the web's `OBJECT` pattern strings, one per entry of `session_dates`, in its order (section 7.7). Kept as the record of which token produced each entry; no query in this port matches by it. |
+| `session_dates` | TEXT JSON | no | The per-panel entries, the authoritative list: an array of `{target_id, label, pattern, dates}`, one per candidate, that is one per panel-token `OBJECT` of one target (section 7.7), where `dates` is the `yyyy-MM-dd` nights of this campaign on which that `OBJECT`'s frames were taken. The three arrays above are its projections, kept so the signature and the list read without parsing it. |
 | `status` | TEXT | no | `pending`, `accepted` or `rejected`. Dismiss writes `rejected`. |
 | `created_at` | TEXT datetime | no | UTC, set once. |
 | `confidence` | TEXT | no | `high` or `low` (section 7.7). |
@@ -1821,16 +1830,16 @@ produced (section 7.7). Rows are written only by the detection pass and by accep
 
 Two indexes: `ix_mosaic_suggestions_status` on `status`, which every list read filters on, and
 `ix_mosaic_suggestions_dedup_signature` on `dedup_signature`, which the dismissed-subset rule of
-section 7.7 reads. `session_dates` is an array parallel to the other three, where the web keys an
-object by label, because a label may repeat in this port's shape and an object would merge two
-targets' nights under one key.
+section 7.7 reads. `session_dates` is an array of entries, where the web keys an object by label,
+because a label may repeat in this port's shape and an object would merge two targets' nights under
+one key (ruling R19a).
 
 `accepted` and `rejected` rows are kept. Detection deletes `pending` rows only (section 7.7). An
 `accepted` row is read by nothing; deleting its mosaic leaves it in place.
 
 **The migration is the eighth**, `<stamp>_Mosaics`, at the next timestamp after
 `20261005022536_SkippedFiles`. It creates the four tables above with their indexes and check
-constraints; adds `images.panel_label` with `ix_images_panel_label`, and `images.ra_deg`,
+constraints, the unique index of section 5.24 in raw SQL for its coalesce expression; adds `images.panel_label` with `ix_images_panel_label`, and `images.ra_deg`,
 `images.dec_deg` and `images.width_px` (section 5.2); and adds the foreign key from
 `custom_column_values.mosaic_id` to `mosaics.id` with its cascade (ruling R2), and nothing else for
 custom columns: no column and no index. SQLite cannot add a foreign key to an existing table, so the
@@ -3006,24 +3015,29 @@ Every run begins with two maintenance passes, inside the detection job.
 
 #### Candidates
 
-A **candidate** is one panel token of one target: the key is (target, base name compared case
-insensitively, panel number). The pass reads, for every target with no `merged_into_id`, the
-distinct `OBJECT` strings of its LIGHT frames whose `panel_label` is not null, re-parses each with
-the token rule, and makes one candidate per key, the first `OBJECT` in ordinal order giving the
-base's spelling and the keyword. A target with several tokens (two panel names that resolved to one
-target) yields one candidate per token; a target with no token yields none, which is the web's
-never-absorb rule. Candidates are ordered by target id, ordinal, and then by `OBJECT`, ordinal; every
-"first" below is in that order.
+A **candidate** is one distinct panel-token `OBJECT` within one target, the web's
+`_build_candidates` rule (ruling R19a). The pass reads, for every target with no `merged_into_id`,
+the distinct `OBJECT` strings of its LIGHT frames whose `panel_label` is not null, re-parses each
+with the token rule, and makes one candidate per string. Several panels resolved to one target, as
+`StripPanel` makes "NGC 7000 Panel 1" to "Panel 4" resolve to NGC 7000 (section 9), therefore yield
+one candidate each, each with its own centre and its own nights. Within one target, a second
+`OBJECT` that parses to the same base, compared case insensitively, and the same number as an
+earlier one yields no candidate of its own, as in the web; its frames carry the same label, so they
+still count once their nights are included (section 5.24). A target with no token `OBJECT` yields
+no candidate, which is the web's never-absorb rule. Candidates are ordered by target id, ordinal,
+and then by `OBJECT`, ordinal; every "first" below is in that order.
 
-A candidate's **frames** are its target's LIGHT frames whose `OBJECT` parses to its base and
-number. From them:
+A candidate's **frames** are its target's LIGHT frames carrying its `OBJECT`, so its centre is a
+per-`OBJECT` centre and never the target's. From them:
 
 - **The centre** is the robust centre below, over the frames with a stored position, or none when
   no frame has one.
 - **The field of view**, in arcminutes, is `width_px * arcsec_per_pixel / 60` of the earliest frame
   by `capture_date`, then `id`, that carries both, or none. The web takes the first frame its query
   returned, which is not a defined order; this port fixes one.
-- **The nights** are the distinct non-null `session_date` values.
+- **The nights** are the distinct non-null `session_date` values: the nights on which this
+  `OBJECT` was shot, which become the `dates` of its entry in `mosaic_suggestions.session_dates`
+  (section 5.25), not every night of the target.
 
 **The robust centre** (`robust_median_center`). The declination is the median of the frames'
 declinations. The right ascension is unwrapped around a reference so the 0 and 360 seam does not
@@ -3136,11 +3150,12 @@ previous list in place:
 1. Read every `rejected` row's signature together with the union of its nights. Several dismissed
    rows sharing a signature pool their nights.
 2. Delete every `pending` row. `accepted` and `rejected` rows are untouched.
-3. Read the existing mosaic names and the **covered pairs**: every (target, night) held by an
-   `included` row in any mosaic.
+3. Read the existing mosaic names and the **covered triples**: every (target, night, frame
+   label) held by an `included` row in any mosaic.
 4. For each suggestion in emission order, skip it when its name before the unique-name step equals
    an existing mosaic's, compared case insensitively, because that campaign was already accepted;
-   skip it when it has at least one (target, night) pair and every pair is covered, which catches
+   skip it when it has at least one (target, night, label) triple, each entry's target and label
+   with each of its nights, and every triple is covered, which catches
    an accepted mosaic since renamed; skip it when its signature matches a dismissed signature and
    its nights are a subset of that signature's dismissed nights. Otherwise give it its unique name
    and insert it as `pending`.
@@ -3148,7 +3163,7 @@ previous list in place:
 A dismissed suggestion therefore stays away only while nothing new is shot: a later night over the
 same panels is not a subset and the suggestion returns, and a different set of targets or labels is
 a different signature. A target already in a mosaic is still read, so a new campaign of an accepted
-base can surface; the name and covered-pair checks are what keep an accepted campaign from coming
+base can surface; the name and covered-triple checks are what keep an accepted campaign from coming
 back.
 
 #### When it runs
@@ -3174,12 +3189,14 @@ the pass the same way.
 reader unchecked some (section 12.17). It is refused with "Select at least one panel to accept."
 when none is checked, and with "A mosaic named \"<name>\" already exists." when the suggested name
 is taken. Otherwise, in one transaction, it creates the mosaic with the suggested name; creates one
-panel per distinct checked label, in entry order, with `sort_order` from 0; writes an `included`
-row for each night of each checked entry, under the entry's target and the panel of its label; and
-writes an `available` row for each other night of that target whose LIGHT frames carry that label.
-An unchecked label creates no panel. Entries sharing a label share one panel. Where two entries
-would include the same night of the same target in two panels, the first panel in entry order takes
-it as `included` and the later one as `available`, the one-panel-per-night rule of section 5.24.
+panel per distinct checked label, in entry order, with `sort_order` from 0; writes, for each checked
+entry, an `included` row for each of its `dates` with the entry's one target and `frame_label` set
+to the panel's label, in the panel of that label; and writes an `available` row, same target and
+frame label, for each other night of that target whose LIGHT frames carry that label. An unchecked
+label creates no panel. Entries sharing a label share one panel. Two panels of one target sharing a
+night do not collide, because their frame labels differ (ruling R19a). Where two entries would
+include the same triple, the first in entry order takes it as `included` and the later as
+`available`, the rule of section 5.24.
 Accept sets the suggestion `accepted`. It asks nothing (ruling R13).
 
 **Dismiss** sets the suggestion `rejected` and keeps its signature and nights, which is what the
@@ -3187,8 +3204,9 @@ subset rule above reads. It deletes nothing else. Its confirm says that a dismis
 permanent (section 12.17).
 
 **Departures from the web, in one place.** No `needs_review` and no review clearing (ruling R11).
-Membership is the join of section 5.24 rather than `images.panel_id` and the retro-link that stamps
-it (ruling R19), so accept claims no frame. Detection runs at scan end as well as on the button
+Membership is the join of section 5.24 on target, night and frame label rather than
+`images.panel_id` and the retro-link that stamps it (rulings R19 and R19a), so accept claims no
+frame. Detection runs at scan end as well as on the button
 (ruling R4) and reads stored geometry rather than header JSON (ruling R10). Labels are recomputed by
 step 0 rather than at ingest alone (ruling R6). One-panel groups, the mixed keywords note and the
 "Positions not distinct" prefix are additions; candidate order, the field-of-view frame and the
@@ -7815,7 +7833,7 @@ Line breaks inside a paragraph are not significant.
 | `mosaic.about` | This mosaic's panels and the nights that count toward each, with the totals across all of them; the figures count only included nights. |
 | `mosaic.notes` | Free-form notes about this mosaic, saved a second after you stop typing. |
 | `mosaic.labels` | Panel labels found in the names of this mosaic's targets that no panel has yet; their frames count nowhere until you add a panel for the label. |
-| `mosaic.sessions` | Each panel lists the nights it counts as Included and the other nights of its targets as Available, and a night of one target can count in only one panel of a mosaic. |
+| `mosaic.sessions` | Each panel lists the nights it counts as Included and the other nights of its targets as Available, each night with the panel label its frames carry, and frames of one target, night and label can count in only one panel of a mosaic. |
 | `mosaic.create` | Makes a new mosaic, or grows an existing one, from the nights checked on this target, where nights given the same panel label become one panel. |
 
 The nine stacking export rows above are transcribed from `HelpTopics.cs` character for character,
@@ -10644,16 +10662,17 @@ Mosaics page), `pages/MosaicDetailPage.tsx` (the mosaic detail page) and
 `components/CreateMosaicDialog.tsx` (the Create mosaic dialog), with `backend/app/api/mosaics.py`
 and `backend/app/services/mosaic_stats.py` for their figures, amended by the plan's rulings. A
 mosaic is a named set of panels; a panel is a label holding nights, each night one target's
-`session_date`, and the frames a panel counts are the frames the membership join of section 5.24
-reaches. Reads go through `Data/Queries/MosaicQueries.cs` and return read models; every write goes
-through `Data/Repositories/MosaicRepository.cs`, the one place the one-panel-per-night rule is
+`session_date` together with the frame label it admits, and the frames a panel counts are the
+frames the membership join of section 5.24 reaches, on target, night and frame label (ruling
+R19a). Reads go through `Data/Queries/MosaicQueries.cs` and return read models; every write goes
+through `Data/Repositories/MosaicRepository.cs`, the one place the one-panel-per-triple rule is
 checked. Detection is section 7.7.
 
 **Figures.** Every figure on these surfaces counts LIGHT frames reached by the membership join and
 nothing else: a panel's integration is the sum of their `exposure_time`, its frames their count,
-its nights the number of its `included` rows, its targets the distinct targets of those rows, and
+its nights the number of distinct (target, night) pairs among its `included` rows, its targets the distinct targets of those rows, and
 its date range the first and last `session_date` among them. A mosaic's figures are the sums over
-its panels, which cannot count a frame twice because of the one-panel-per-night rule. Integration
+its panels, which cannot count a frame twice because of the one-panel-per-triple rule of section 5.24. Integration
 is shown in the integration formatter's form. Filter names are the canonical names of section 5.8.4.
 
 **Sentences** this section's refusals use, each shown inline beside the control that was refused,
@@ -10665,8 +10684,7 @@ never in a dialog and never as a toast:
 | A name another mosaic carries, compared case insensitively after trimming | "A mosaic named \"<name>\" already exists." |
 | A panel label that is empty | "Enter a panel label." |
 | A panel label another panel of the mosaic carries, compared case insensitively | "A panel named \"<label>\" already exists in this mosaic." |
-| A night of a target that an included row of another panel of the mosaic holds | "<night> of <target> is already in panel <label>." |
-| One night of one target given two labels in the Create mosaic dialog | "<night> has two panel labels. A night of one target counts in one panel only." |
+| A (target, night, frame label) triple that an included row of another panel of the mosaic holds | "<night> of <target> (<frame label, or no label>) is already in panel <label>." |
 | Accept with no panel checked | "Select at least one panel to accept." |
 | A keyword already in the list, compared case insensitively | "\"<keyword>\" is already a keyword." |
 | A write that threw rather than being refused | "The change could not be saved. Try again." |
@@ -10813,12 +10831,13 @@ page's header. It holds a target search `TextBox` watermarked "Search targets", 
 `TargetSearchQuery` with that query's own debounce once two characters are typed and lists the
 results under the box; a "Panel label" `TextBox`, prefilled with `Panel <n>` for the smallest n of 1
 or more that no panel of the mosaic carries; and an "Add" `Button.sm`, enabled once a target is
-chosen and the label is not blank. Add puts the chosen target's nights into the panel of that
-label, creating the panel at the end of `sort_order` when the mosaic has none: the nights whose
-LIGHT frames carry that `panel_label` when any frame of the target carries it, and every night of
-the target otherwise, each as an `included` row. A night an included row of another panel of the
-mosaic already holds is skipped, and the form's caption names how many were skipped ("2 nights
-already in another panel were skipped."). The web refuses a repeated target and label; the port
+chosen and the label is not blank. Add puts the chosen target's triples into the panel of that
+label, creating the panel at the end of `sort_order` when the mosaic has none, each as an
+`included` row: the distinct (night, frame label) pairs of the target's LIGHT frames whose
+`panel_label` equals that label when any frame of the target carries it, and every distinct
+(night, frame label) pair of the target otherwise, the null label included. A triple an included
+row of another panel of the mosaic already holds is skipped, and the form's caption names how many
+were skipped ("2 nights already in another panel were skipped."). The web refuses a repeated target and label; the port
 adds the target's nights to the existing panel, because a panel may hold any targets.
 
 The table's empty state is "No mosaics yet." A failed load shows "The mosaics could not be
@@ -10876,12 +10895,13 @@ own shape (section 12.4). An emptied box stores null.
 (target, `panel_label`) pair carried by LIGHT frames of a target that has any row in any panel of
 this mosaic, where no panel of this mosaic carries that label, compared case insensitively. Each
 chip carries an "Add panel" `Button.sm`, which runs the add panel rule above for that target and
-label. Such frames count in no panel until a panel holds their nights.
+label, so the new panel's rows carry that frame label. Such frames count in no panel until a panel
+holds their triples.
 
 **The sessions region.** A header row, "Panels and nights" with the `mosaic.sessions` glyph and two
 actions at its trailing end: **Include all available**, a `Button.sm` that includes every available
-night of every panel, panels taken in `sort_order` so that a night available in two panels goes to
-the first, disabled when no panel has an available night; and **Add panel**, which opens the add
+triple of every panel, panels taken in `sort_order` so that a triple available in two panels goes
+to the first, disabled when no panel has an available night; and **Add panel**, which opens the add
 panel form under the header.
 
 Under it, one row per panel in `sort_order`, an aligned table with a `Button.chevron` expander:
@@ -10892,43 +10912,53 @@ Under it, one row per panel in `sort_order`, an aligned table with a `Button.che
 | Targets | The primary names of the panel's targets, joined with ", ". |
 | Integration | The panel's integration. |
 | Frames | The panel's frame count. |
-| Nights | The number of included nights. |
+| Nights | The number of distinct (target, night) pairs among the included rows. |
 | Deficit | For every panel whose integration is below the **leading panel**, the one with the most, the difference as an integration followed by "behind", for example "2h 10m behind", in the secondary ink. Empty on the leading panel and on every panel while all are zero. A number, not a colour band: the arranger's tile overlays add the colour later. |
-| Available | A `Border.tag` in the warning ink reading "n available" while the panel has n available nights, and nothing at zero. |
-| Include all | A `Button.sm` that includes every available night of this panel, disabled at zero. |
+| Available | A `Border.tag` in the warning ink reading "n available" while the panel has n available rows of its Available table, and nothing at zero. |
+| Include all | A `Button.sm` that includes every available triple of this panel, disabled at zero. |
 | Delete panel | A `Button.sm` with the two-press inline confirm "Delete panel <label>?", enabled only while the panel has no included night, with the tooltip "Remove its included nights first." while disabled. Deleting removes the panel and its available rows. |
 
 An expanded panel shows two tables side by side, `Grid ColumnDefinitions="*,*"`, each under its own
 heading:
 
-- **Included**, the panel's included nights, newest first: Night; Target, the primary name, a link
-  that opens its Target detail page; Filters, the per-filter frame counts as "<filter> <count>"
-  joined with ", " in ordinal case-insensitive order; Frames; Integration; and **Remove**, a
+- **Included**, the panel's included rows, one per (target, night, frame label) triple, newest
+  first: Night; Target, the primary name, a link that opens its Target detail page; Label, the
+  frame label the row admits, or "No label" for null (ruling R19a); Filters, the per-filter frame counts as "<filter> <count>"
+  joined with ", " in ordinal case-insensitive order; Frames; Integration, the last three over the
+  frames that triple admits; and **Remove**, a
   `Button.sm` that turns the row `available`. Remove asks nothing: it deletes no row and is undone
   by Include.
-- **Available**, the panel's available nights, newest first, with the same five columns, then
-  **Include**, a `Button.sm` that makes the night `included` in this panel, and **As new panel**,
+- **Available**, the panel's available triples, newest first, with the same six columns, then
+  **Include**, a `Button.sm` that makes the triple `included` in this panel, and **As new panel**,
   a `Button.sm` that opens an inline row under it holding a "Panel label" `TextBox` prefilled with
   the **next suffix** and "Create" and "Cancel". Create makes a panel of that label at the end of
-  `sort_order` and includes the night in it. The next suffix of a label ending in a space and one
+  `sort_order` and includes the triple in it, its frame label unchanged, so `Panel 1 (b)` holds
+frames labelled `Panel 1`. The next suffix of a label ending in a space and one
   letter in parentheses is that label with the following letter, so `Panel 1 (b)` gives
   `Panel 1 (c)`; of any other label it is the label followed by ` (b)`, so `Panel 1` gives
   `Panel 1 (b)`. The web's browser prompt becomes the inline row.
 
-**A panel's Available nights** (ruling R19) are every night of every target that has any row on the
-panel, `included` or `available`, that carries at least one LIGHT frame of that target, except the
-nights this panel already includes and the nights another panel of this mosaic includes. A night
-another panel includes is hidden here rather than offered and then refused; the repository refuses
-it anyway if a stale page asks (section 5.24). Under the Available table sits **Add nights from any
+**A panel's Available triples** (rulings R19 and R19a) are the distinct (target, night, frame
+label) triples of the LIGHT frames of every target that has any row on the panel, `included` or
+`available`, the frame label being the frames' `panel_label` with null as its own value, except the
+triples included anywhere in this mosaic, this panel or another. A triple another panel includes
+is hidden here rather than offered and then refused; the repository refuses it anyway if a stale
+page asks (section 5.24). Under the Available table sits **Add nights from any
 target**, a target search on the same `TargetSearchQuery` and debounce as the add panel form;
-choosing a target writes an `available` row on this panel for each night of that target that no
-panel of this mosaic includes, so the target becomes one of the panel's contributors and its nights
-appear in Available, where Include takes them one at a time. "North America Nebula" nights can join
+choosing a target writes an `available` row on this panel for each (night, frame label) pair of
+that target's LIGHT frames whose triple no panel of this mosaic includes, so the target becomes one
+of the panel's contributors and its triples appear in Available, where Include takes them one at a time. "North America Nebula" nights can join
 an "NGC 7000" panel this way.
 
-**One night of one target counts in one panel of a mosaic** (section 5.24). Include, Include all,
-Include all available, As new panel, the add panel form, accept and the Create mosaic dialog all
-pass through the one repository check and the night sentence above.
+**One (target, night, frame label) triple counts in one panel of a mosaic** (section 5.24, ruling
+R19a). Two panels of one target may share a night when their frame labels differ, which is how the
+panels of one mosaic shot on one night keep their own frames. Include, Remove, Include all, Include
+all available, As new panel, Add nights from any target, the add panel form, accept and the Create
+mosaic dialog all carry the triple and pass through the one repository check and the triple
+sentence above.
+
+**The fixture** (Phase 18 Task 3) may give several panels of one target the same nights; the
+per-panel figures separate them by frame label.
 
 Every include, remove, add and delete re-reads the page's detail, so the summary line, the panel
 figures, the deficits and the available counts follow at once. The page also re-reads when a scan
@@ -10948,20 +10978,20 @@ glyph, and its subline "<target name>, n nights", "1 night" at one.
 | Name | `TextBox` | Prefilled with "<base> (<range>)". The base is the base name, by the token rule of section 7.7, carried by the most LIGHT frames of the checked nights, ties to the ordinally first, or the target's primary name when no frame carries a token. The range is the first and last checked nights as "Mar 2026", or "Mar 2026 - May 2026" when the months differ, the date range suffix of section 7.7. The prefill stays until the reader edits the box. |
 | Add to existing | `RadioButton` | Disabled with the tooltip "No existing mosaic includes this target." when no mosaic has a row of this target. Reveals the mosaic `ComboBox`. |
 | Mosaic | `ComboBox`, placeholder "Select a mosaic" | Every mosaic with at least one row, of either status, naming this target, ordered by name. |
-| Nights | An aligned table, one row per (checked night, frame `panel_label`) pair among the target's LIGHT frames on the checked nights: Night, Frames and a "Panel label" `TextBox`, prefilled with the frames' label, empty when they carry none, watermarked "For example, Panel 1" | Under it the caption "Nights with the same panel label are combined into one panel." |
+| Nights | An aligned table: each checked night's LIGHT frames of the target are grouped by their `panel_label`, and the table lists one row per (night, frame label) pair, newest night first: Night, Frame label ("No label" for null), Frames and a "Panel label" `TextBox`, prefilled with the frame label when there is one, empty otherwise, watermarked "For example, Panel 1" | Under it the caption "Nights with the same panel label are combined into one panel." |
 | Create | `Button`, the dialog's default button | Enabled when every label is non-blank after trimming and either New mosaic has a non-blank name or Add to existing has a mosaic chosen. |
 | Cancel | `Button` | Closes and writes nothing. |
 
 Create runs one transaction. With New mosaic it creates the mosaic, refusing a taken name with the
 sentence above under the Name box. Rows are grouped by trimmed label compared case insensitively;
 each group goes into the target mosaic's panel of that label, or a new panel at the end of
-`sort_order` when there is none; and each row's night is written as an `included` row of this
-target in that panel. Two rows of one night with different labels are refused with the two-labels
-sentence above, because a night of one target counts in one panel only, and a night another panel
-of an existing mosaic includes is refused with the night sentence. Any refusal writes nothing. On
-success the dialog closes and the mosaic detail page opens on the mosaic. The web claims frames per
-row by their original label; the port claims nothing, because membership is the join of section
-5.24.
+`sort_order` when there is none; and each row is written as an `included` row of this target, its
+night and its frame label, the frames' own `panel_label` and not the edited panel label, in that
+panel. Two rows of one night with different frame labels go into their panels without conflict
+(ruling R19a). A triple another panel of an existing mosaic includes is refused with the triple
+sentence. Any refusal writes nothing. On success the dialog closes and the mosaic detail page opens
+on the mosaic. The web claims frames per row by their original label; the port claims nothing,
+because the row's frame label is that claim and membership is the join of section 5.24.
 
 #### What is stored and what is not
 
@@ -12426,8 +12456,8 @@ page holds a placeholder band where the arranger goes, and its Composite button 
 
 **What the port does not take from it.** The web's `needs_review` flag, its Needs Review pill,
 Clear All Reviews and the Session Review banner (ruling R11). `images.panel_id` and
-`mosaic_panels.target_id`: membership is a join of target and night against a panel's nights,
-which may come from any target (ruling R19). The `pixel_coords` flag (ruling R8). The suggestion
+`mosaic_panels.target_id`: membership is a join of target, night and frame label against a
+panel's nights, which may come from any target (rulings R19 and R19a). The `pixel_coords` flag (ruling R8). The suggestion
 tile preview, which is the arranger in a read-only form and arrives with it. The toasts, the
 page-local progress bars and the browser confirm and prompt dialogs, which become the job registry,
 the Activity feed and inline confirms and fields (ruling R13). The settings tab: the three detection
