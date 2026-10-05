@@ -2417,48 +2417,72 @@ public static class AppHost
                 });
         });
 
-        // Spec 12.17's Mosaics page (Phase 18). A singleton for the reason the Analysis page is one:
-        // the filter text and the sort are session state. Every collaborator is a delegate (spec
-        // 18.3), bound here and nowhere else.
+        // Spec 12.17's mosaic collaborators (Phase 18), one record the Mosaics page and every mosaic
+        // detail page share. Every collaborator is a delegate (spec 18.3), bound here and nowhere
+        // else.
         builder.Services.AddSingleton(serviceProvider =>
         {
             var repository = serviceProvider.GetRequiredService<MosaicRepository>();
             var queries = serviceProvider.GetRequiredService<MosaicQueries>();
             var columns = serviceProvider.GetRequiredService<CustomColumnRepository>();
-            return new MosaicsPageViewModel(
-                new MosaicsBackend
-                {
-                    General = settingsStore.GetGeneral,
-                    MutateGeneral = settingsStore.MutateGeneral,
-                    RunDetection = serviceProvider.GetRequiredService<ScanCoordinator>().RunMosaicDetectionAsync,
-                    ListPending = repository.ListPending,
-                    SuggestionSessions = queries.SuggestionSessions,
-                    TargetNames = queries.TargetNames,
-                    Accept = repository.Accept,
-                    Dismiss = repository.Dismiss,
-                    ListMosaics = queries.List,
-                    Detail = queries.Detail,
-                    Create = repository.Create,
-                    Rename = repository.Rename,
-                    Delete = repository.Delete,
-                    RemovePanel = repository.RemovePanel,
-                    AddPanelWithTarget = repository.AddPanelWithTarget,
-                    SearchTargets = term => serviceProvider.GetRequiredService<TargetSearchQuery>().Search(term),
-                    CustomColumns = columns.List,
-                    MosaicValues = ids => columns.ValuesForMosaics(ids),
-                    WriteValue = columns.SetValue,
-                    EmitActionFailed = (message, details) => serviceProvider
-                        .GetRequiredService<ActivityRepository>()
-                        .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),
-                },
-                serviceProvider.GetRequiredService<JobRegistry>(),
-                settingsStore.GetDisplay(),
-                serviceProvider.GetRequiredService<DisplayColumnWriter>(),
-                serviceProvider.GetRequiredService<ScanStatusService>(),
-                post: null,
-                delay: null,
-                logger: serviceProvider.GetRequiredService<ILogger<MosaicsPageViewModel>>());
+            return new MosaicsBackend
+            {
+                General = settingsStore.GetGeneral,
+                MutateGeneral = settingsStore.MutateGeneral,
+                RunDetection = serviceProvider.GetRequiredService<ScanCoordinator>().RunMosaicDetectionAsync,
+                ListPending = repository.ListPending,
+                SuggestionSessions = queries.SuggestionSessions,
+                TargetNames = queries.TargetNames,
+                Accept = repository.Accept,
+                Dismiss = repository.Dismiss,
+                ListMosaics = queries.List,
+                Detail = queries.Detail,
+                Create = repository.Create,
+                Rename = repository.Rename,
+                Delete = repository.Delete,
+                RemovePanel = repository.RemovePanel,
+                AddPanelWithTarget = repository.AddPanelWithTarget,
+                SetNotes = repository.SetNotes,
+                IncludeNight = repository.IncludeNight,
+                RemoveNight = repository.RemoveNight,
+                IncludeAll = repository.IncludeAll,
+                IncludeAllAvailable = repository.IncludeAllAvailable,
+                IncludeAsNewPanel = repository.IncludeAsNewPanel,
+                AddTargetNights = repository.AddTargetNights,
+                DeletePanel = repository.DeletePanel,
+                SearchTargets = term => serviceProvider.GetRequiredService<TargetSearchQuery>().Search(term),
+                CustomColumns = columns.List,
+                MosaicValues = ids => columns.ValuesForMosaics(ids),
+                WriteValue = columns.SetValue,
+                EmitActionFailed = (message, details) => serviceProvider
+                    .GetRequiredService<ActivityRepository>()
+                    .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),
+            };
         });
+
+        // Spec 12.17's Mosaics page (Phase 18). A singleton for the reason the Analysis page is one:
+        // the filter text and the sort are session state.
+        builder.Services.AddSingleton(serviceProvider => new MosaicsPageViewModel(
+            serviceProvider.GetRequiredService<MosaicsBackend>(),
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            settingsStore.GetDisplay(),
+            serviceProvider.GetRequiredService<DisplayColumnWriter>(),
+            serviceProvider.GetRequiredService<ScanStatusService>(),
+            post: null,
+            delay: null,
+            logger: serviceProvider.GetRequiredService<ILogger<MosaicsPageViewModel>>()));
+
+        // Spec 12.17's mosaic detail page (Phase 18 Task 5): one page per open, on the shell's detail
+        // overlay, disposed by the shell when it closes. The page is the Phase 18 BeginExport caller
+        // (spec 2.1.1), so it takes the application's one AppWriter.
+        builder.Services.AddSingleton<Func<Guid, MosaicDetailViewModel>>(serviceProvider => mosaicId => new MosaicDetailViewModel(
+            mosaicId,
+            serviceProvider.GetRequiredService<MosaicsBackend>(),
+            appWriter,
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            post: null,
+            delay: null,
+            logger: serviceProvider.GetRequiredService<ILogger<MosaicDetailViewModel>>()));
 
         // Spec 12.6's Activity page (Phase 9 Task 4). A singleton for the reason DashboardViewModel
         // is one: the filter pills, the search term and the pages already loaded are session state,
@@ -2643,7 +2667,9 @@ public static class AppHost
             // builds its page through this delegate (ruling Q9).
             serviceProvider.GetRequiredService<Func<string, DateOnly?, TargetDetailViewModel>>(),
             // Spec 12.17's Mosaics page, second on the rail (ruling R3), lazy like the others.
-            serviceProvider.GetRequiredService<MosaicsPageViewModel>);
+            serviceProvider.GetRequiredService<MosaicsPageViewModel>,
+            // Spec 12.17's mosaic detail page, the overlay's second kind of page.
+            serviceProvider.GetRequiredService<Func<Guid, MosaicDetailViewModel>>());
 
             // Phase 9 FIXER item 2 and spec 5.8.1's content_width. The Settings Display tab writes
             // both keys while this shell is alive, so the window's root font size and the content

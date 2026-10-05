@@ -189,6 +189,11 @@
     <DataTemplate DataType="mosaics:MosaicsPageViewModel">
       <mosaicviews:MosaicsView />
     </DataTemplate>
+    <!-- Spec 12.17's mosaic detail page (Phase 18 Task 5), the detail overlay's second kind of
+         page beside the Target detail page, through MainWindowViewModel.Detail. -->
+    <DataTemplate DataType="mosaics:MosaicDetailViewModel">
+      <mosaicviews:MosaicDetailView />
+    </DataTemplate>
     <!-- Spec 12.14's Analysis page (Phase 17 Task 4), the sixth rail destination, plus the five
          tab bodies it hosts and the one stats card two of those tabs draw. All seven land here at
          once and this is the only file that carries them: Tasks 5 and 6 fill the five tab views

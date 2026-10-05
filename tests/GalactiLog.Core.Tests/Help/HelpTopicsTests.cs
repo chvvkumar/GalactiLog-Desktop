@@ -21,11 +21,12 @@ public class HelpTopicsTests
     // the count to 98. Unit D added `page.sky-view`, taking the count to 99.
     // The export wizard added `export.destination`, `export.method`, `export.review` and `export.result`, taking it to 103.
     // Phase 18 Task 4 added the Mosaics page's four `mosaics.*` ids, taking it to 107.
+    // Phase 18 Task 5 added the mosaic detail page's four `mosaic.*` ids, taking it to 111.
     [Fact]
-    public void All_Holds107Topics()
+    public void All_Holds111Topics()
     {
-        Assert.Equal(107, HelpTopics.All.Count);
-        Assert.Equal(107, HelpTopics.Ids.Count);
+        Assert.Equal(111, HelpTopics.All.Count);
+        Assert.Equal(111, HelpTopics.Ids.Count);
     }
 
     // Phase 18 Task 4. The four ids carry spec 12.12's titles.
@@ -34,7 +35,11 @@ public class HelpTopicsTests
     [InlineData("mosaics.keywords", "Detection keywords")]
     [InlineData("mosaics.suggestions", "Suggestions")]
     [InlineData("mosaics.table", "Mosaics table")]
-    public void TheFourMosaicsTopics_ExistAndCarryTheirTitles(string id, string title)
+    [InlineData("mosaic.about", "Mosaic")]
+    [InlineData("mosaic.notes", "Notes")]
+    [InlineData("mosaic.labels", "New panel labels")]
+    [InlineData("mosaic.sessions", "Panels and nights")]
+    public void TheMosaicTopics_ExistAndCarryTheirTitles(string id, string title)
         => Assert.Equal(title, HelpTopics.Get(id).Title);
 
     // A typo in the id or a paragraph that names no host would still leave the count at 103 (the

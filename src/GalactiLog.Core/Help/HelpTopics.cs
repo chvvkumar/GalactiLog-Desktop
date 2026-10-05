@@ -810,6 +810,23 @@ public static class HelpTopics
             "Every mosaic with its panel count, integration, frames and date range, where a header "
             + "click sorts, the column picker chooses the columns, and Expand renames the mosaic and "
             + "edits its panels."),
+
+        // Phase 18 Task 5: the mosaic detail page's four glyphs (spec 12.12, 12.17).
+        new("mosaic.about", "Mosaic",
+            "This mosaic's panels and the nights that count toward each, with the totals across all "
+            + "of them; the figures count only included nights."),
+
+        new("mosaic.notes", "Notes",
+            "Free-form notes about this mosaic, saved a second after you stop typing."),
+
+        new("mosaic.labels", "New panel labels",
+            "Panel labels found in the names of this mosaic's targets that no panel has yet; their "
+            + "frames count nowhere until you add a panel for the label."),
+
+        new("mosaic.sessions", "Panels and nights",
+            "Each panel lists the nights it counts as Included and the other nights of its targets as "
+            + "Available, each night with the panel label its frames carry, and frames of one target, "
+            + "night and label can count in only one panel of a mosaic."),
     ];
 
     /// <summary>The table indexed by id, ordinal. Built with <c>ToDictionary</c> on purpose: a

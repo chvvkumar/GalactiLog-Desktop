@@ -31,6 +31,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly Func<DiagnosticsViewModel>? _diagnosticsFactory;
     private readonly Func<string, DateOnly?, TargetDetailViewModel>? _openDetail;
     private readonly Func<MosaicsPageViewModel>? _mosaicsFactory;
+    private readonly Func<Guid, MosaicDetailViewModel>? _openMosaic;
 
     // Held for spec 12.2's Review route, which selects this page's Library tab. The same
     // instance the rail's "settings" entry carries.
@@ -74,6 +75,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// rail entry, lazy for the reason <paramref name="statistics"/> is. Optional for the reason
     /// <paramref name="diagnostics"/> is: null leaves the entry a placeholder, so a shell still
     /// constructs in a unit test with no queries. <c>AppHost</c> always supplies it.</param>
+    /// <param name="openMosaic">Builds spec 12.17's mosaic detail page for a mosaic id (Phase 18
+    /// Task 5), the overlay's second kind of page. Null leaves <see cref="OpenMosaic"/> inert, for
+    /// the reason <paramref name="openDetail"/> may be null.</param>
     public MainWindowViewModel(
         GeneralSettings general,
         DashboardViewModel dashboard,
@@ -84,9 +88,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Func<ActivityViewModel> activity,
         Func<DiagnosticsViewModel>? diagnostics = null,
         Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null,
-        Func<MosaicsPageViewModel>? mosaics = null)
+        Func<MosaicsPageViewModel>? mosaics = null,
+        Func<Guid, MosaicDetailViewModel>? openMosaic = null)
     {
         _mosaicsFactory = mosaics;
+        _openMosaic = openMosaic;
         StatusBar = statusBar;
         _dashboard = dashboard;
         _statisticsFactory = statistics;
@@ -225,14 +231,24 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private void OnMosaicOpenRequested(object? sender, Guid mosaicId) => OpenMosaic(mosaicId);
 
     /// <summary>
-    /// Spec 12.17's route to the mosaic detail page, raised by a Mosaics table row click. Phase 18
-    /// Task 5 builds the page and opens it on this shell's detail overlay here; until then the
-    /// route exists and does nothing.
+    /// Spec 12.17's route to the mosaic detail page: a Mosaics table row click, a dashboard mosaic
+    /// link and a completed Create mosaic dialog all land here. The page opens on this shell's one
+    /// detail overlay, closing whatever detail page was open (spec 12 shell: one detail page at a
+    /// time, of either kind). Its Back and a confirmed Delete mosaic close it; a target link on it
+    /// opens that target, which closes it.
     /// </summary>
     public void OpenMosaic(Guid mosaicId)
     {
-        // Task 5 fills this: build the MosaicDetailViewModel for mosaicId and show it on the overlay.
-        _ = mosaicId;
+        if (_openMosaic is null || _disposed)
+        {
+            return;
+        }
+
+        CloseDetailCore();
+        var page = _openMosaic(mosaicId);
+        page.BackRequested += OnDetailBackRequested;
+        page.OpenTargetRequested += OnMosaicTargetOpenRequested;
+        Detail = page;
     }
 
     private object BuildActivity()
@@ -320,13 +336,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// The pushed detail page, or null when the rail's own destination is showing. One nullable
-    /// overlay rather than a navigation stack: spec 12 has exactly one page that is not a rail
-    /// destination, and a stack for a depth of one is machinery with no user (ruling Q9).
+    /// The pushed detail page, or null when the rail's own destination is showing: a
+    /// <see cref="TargetDetailViewModel"/> or, from Phase 18, a <see cref="MosaicDetailViewModel"/>
+    /// (spec 12 shell). One nullable overlay rather than a navigation stack: a stack for a depth of
+    /// one is machinery with no user (ruling Q9).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPage))]
-    public partial TargetDetailViewModel? Detail { get; private set; }
+    public partial object? Detail { get; private set; }
 
     /// <summary>What the content region shows: the detail page when one is open, otherwise the
     /// rail destination. Raised whenever either changes.</summary>
@@ -487,16 +504,31 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     // CurrentPage, so nothing here raises either by hand.
     private void CloseDetailCore()
     {
-        if (Detail is not { } page)
+        switch (Detail)
         {
-            return;
-        }
+            case TargetDetailViewModel page:
+                page.BackRequested -= OnDetailBackRequested;
+                page.TargetRenamed -= OnDetailTargetRenamed;
+                page.OpenTargetRequested -= OnDetailOpenTargetRequested;
+                Detail = null;
+                page.Dispose();
+                break;
+            case MosaicDetailViewModel mosaic:
+                mosaic.BackRequested -= OnDetailBackRequested;
+                mosaic.OpenTargetRequested -= OnMosaicTargetOpenRequested;
+                Detail = null;
+                mosaic.Dispose();
 
-        page.BackRequested -= OnDetailBackRequested;
-        page.TargetRenamed -= OnDetailTargetRenamed;
-        page.OpenTargetRequested -= OnDetailOpenTargetRequested;
-        Detail = null;
-        page.Dispose();
+                // The mosaic page renames, edits and deletes the mosaic the Mosaics table shows
+                // under it, and that table reloads only on a job's end (ruling R5), so closing
+                // re-reads the table.
+                if (!_disposed)
+                {
+                    _ = _mosaics?.ReloadAsync(suggestions: false);
+                }
+
+                break;
+        }
     }
 
     /// <summary>

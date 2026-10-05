@@ -566,6 +566,74 @@ public class MainWindowViewModelTests : IDisposable
         shell.Dispose();
     }
 
+    // Phase 18 Task 5, spec 12 shell and 12.17: the overlay holds a target page or a mosaic page,
+    // one at a time. A Mosaics table row opens the mosaic page; Back closes it; a target link on it
+    // opens the target, which closes it; a rail click closes it.
+    [Fact]
+    public async Task AMosaicRow_OpensTheMosaicPageOnTheOverlay_UnderTheOneDetailRule()
+    {
+        var mosaicId = Guid.NewGuid();
+        var target = Guid.NewGuid();
+        var listReads = 0;
+        var backend = new MosaicsBackend
+        {
+            ListMosaics = () =>
+            {
+                listReads++;
+                return [new MosaicListRow(mosaicId, "M 31", 0, 0, 0, null, null, [])];
+            },
+            Detail = id => new MosaicDetail(id, "M 31", null, 0, 0, 0, null, null, [], [], []),
+        };
+        using var mosaics = new MosaicsPageHarness(backend);
+        var built = new List<MosaicDetailViewModel>();
+        var shell = new MainWindowViewModel(
+            new GeneralSettings(),
+            DashboardViewModelTestFactory.Create(),
+            CreateStatusBar(),
+            TabFactory.CreateSettingsPage(),
+            CreateStatistics,
+            CreateAnalysis,
+            CreateActivity,
+            openDetail: (groupKey, sessionDate) => DetailFactory.Create(groupKey: groupKey, initialSessionDate: sessionDate).Settle().ViewModel,
+            mosaics: () => mosaics.Page,
+            openMosaic: id =>
+            {
+                var page = new MosaicDetailViewModel(id, backend, new GalactiLog.Core.Io.AppWriter(Path.GetTempPath()), post: action => action());
+                built.Add(page);
+                return page;
+            });
+        shell.Selected = shell.Items[1];
+        await mosaics.Page.PendingLoad;
+
+        mosaics.Page.Table.Mosaics[0].OpenCommand.Execute(null);
+        var page = Assert.IsType<MosaicDetailViewModel>(shell.Detail);
+        Assert.Same(page, shell.CurrentPage);
+        Assert.Equal(mosaicId, page.Id);
+
+        // Back closes it, and the Mosaics table under it is re-read.
+        var readsBefore = listReads;
+        page.BackCommand.Execute(null);
+        Assert.Null(shell.Detail);
+        Assert.Same(mosaics.Page, shell.CurrentPage);
+        await mosaics.Page.PendingLoad;
+        Assert.True(listReads > readsBefore);
+
+        // A target link on the mosaic page replaces it with the target's page.
+        shell.OpenMosaic(mosaicId);
+        var second = Assert.IsType<MosaicDetailViewModel>(shell.Detail);
+        Assert.NotSame(page, second);
+        second.RequestOpenTarget(target);
+        Assert.IsType<TargetDetailViewModel>(shell.Detail);
+
+        // Opening a mosaic closes the target page, and a rail click closes the mosaic page.
+        shell.OpenMosaic(mosaicId);
+        Assert.IsType<MosaicDetailViewModel>(shell.Detail);
+        shell.Selected = shell.Items[0];
+        Assert.Null(shell.Detail);
+        Assert.Equal(3, built.Count);
+        shell.Dispose();
+    }
+
     // Settled first: a detail close re-queries the dashboard, and with the inline post its Load
     // replaces the rows on a pool thread.
     private static void ClickRow(DashboardViewModel dashboard)
