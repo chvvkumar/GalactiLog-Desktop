@@ -1751,7 +1751,7 @@ guard. `grid_row` and `grid_col` become `canvas_x` and `canvas_y` (ruling R8). T
 never read (section 19.1), so no column name needs to match it.
 
 One index, `ux_mosaic_panels_mosaic_label`, unique on (`mosaic_id`, `panel_label`): a mosaic holds
-one panel per label, compared case insensitively. A create or rename that would repeat a label is
+one panel per label, compared case insensitively. A create that would repeat a label is
 refused with the sentence of section 12.17.
 
 ### 5.24 mosaic_panel_sessions
@@ -1800,9 +1800,12 @@ The same triple may sit in panels of two different mosaics; the rule is per mosa
 
 **A merge moves the rows to the winner.** A merge (section 12.9) rewrites `target_id` from the
 merged-away target to the winner on every row, in the merge's own transaction, because the winner
-is where the frames now resolve and a row left on the loser would join nothing. A row that would
-collide with an existing (panel, winner, night, frame label) row is dropped, keeping the existing row; a
-collision between an `included` row and an `available` row keeps the `included` one. An unmerge
+is where the frames now resolve and a row left on the loser would join nothing. Collisions are
+resolved per (mosaic, winner, night, frame label), across the mosaic's panels and not only within
+one panel, so the rewrite cannot break the one-triple rule below: when it would leave the same
+triple `included` in two panels of one mosaic, the panel earlier in `sort_order` keeps its
+`included` row and the other row is dropped; an `available` row that would collide with any row of
+the same triple in the mosaic, of either status, is dropped. An unmerge
 does not move rows back: the manifest records no mosaic rows, and after an unmerge the reader
 re-includes the nights from the detail page's Available table. That is a stated limit, not a defect.
 
@@ -1824,7 +1827,7 @@ produced (section 7.7). Rows are written only by the detection pass and by accep
 | `created_at` | TEXT datetime | no | UTC, set once. |
 | `confidence` | TEXT | no | `high` or `low` (section 7.7). |
 | `discovery_source` | TEXT | no | `name`, `position` or `both` (section 7.7). |
-| `geometry` | TEXT JSON | yes | `{panels: [{target_id, label, ra, dec}], pitches: [arcmin], fov_arcmin}`, section 7.7. Null when no entry has a position. |
+| `geometry` | TEXT JSON | yes | `{panels: [{target_id, label, ra, dec}], pitches: [arcmin], fov_arcmin}`, section 7.7. Always written by detection, with null `ra` and `dec` on an entry without a position, an empty `pitches` and a null `fov_arcmin` when nothing supports them. The column stays nullable for a row no detection run wrote. |
 | `flags` | TEXT JSON | no | Array of review note sentences, empty for a high confidence row (section 7.7). |
 | `dedup_signature` | TEXT | no | The signature of section 7.7. |
 
@@ -2986,8 +2989,9 @@ removed; it is what panels of one mosaic share.
 | `NGC 7000 Panel 1` | `P` | none | none | null: `Panel` is not in the list, and `P` must be followed by digits |
 
 The number is the trailing digit run, anchored to the end of the name, so `Sh2-155 Panel 1` keeps
-the digits of its base, and a base needs at least one character, so a name that begins with a keyword
-(`Pelican 2` under `P`) carries no token.
+the digits of its base, and a base needs at least one character. `Pelican 2` under `P` carries no
+token because the only `P` is followed by letters, not by a separator and digits, and `2` alone is
+not a row and column pair.
 
 **The pattern per entry.** Each suggestion entry stores the web's `OBJECT` pattern for its token in
 `mosaic_suggestions.panel_patterns`: `%<base>%<keyword>%<number>%` for a keyword match and
@@ -3079,7 +3083,9 @@ group's base name is its first entry's base.
    combines them into one panel.
 3. **One panel.** Every candidate whose target is in no group from the first two paths is grouped
    by base name compared case insensitively, and each such base becomes a one-panel group with
-   discovery source `name`. The web drops these; the plan's fixture keeps a lone `IC 1396 P1` as a
+   discovery source `name`, provided that base, compared case insensitively, has no entry in any
+   name or position group. A leftover candidate of a base that is already grouped is dropped, as
+   the web drops it, so the path never duplicates a suggestion. The web drops these; the plan's fixture keeps a lone `IC 1396 P1` as a
    low confidence suggestion, so the port surfaces a first panel the reader may be starting a
    mosaic with, and dismissing it keeps it away under the rule below.
 
@@ -3211,7 +3217,9 @@ frame. Detection runs at scan end as well as on the button
 step 0 rather than at ingest alone (ruling R6). One-panel groups, the mixed keywords note and the
 "Positions not distinct" prefix are additions; candidate order, the field-of-view frame and the
 case of the unique-name comparison are fixed where the web left them to query order or compared
-case sensitively. Progress and outcomes go to the job registry and the Activity feed; nothing
+case sensitively. A candidate's nights are collected from its own target's frames carrying its
+`OBJECT` only, where the web runs an `ILIKE` of the panel pattern over every target's `OBJECT`;
+its centre is likewise taken over that one `OBJECT` string's frames of that target. Progress and outcomes go to the job registry and the Activity feed; nothing
 pushes a toast.
 
 ---
@@ -3485,7 +3493,7 @@ Port of `simbad.normalize_object_name` and `normalize_catalog_id`.
 | `Normalize(name)` | Trim outer whitespace, collapse every internal whitespace run to a single space, uppercase. Used as the DB matching key. |
 | `NormalizeDisplay(name)` | Same, without uppercasing. Used for display-quality names. |
 | `NormalizeCatalogId(id)` | Null or blank in, null out. Otherwise `Normalize(id)`. Null-safe because `catalog_id` is nullable. |
-| `StripPanel(name)` | Remove a trailing mosaic panel suffix, then trim. Regex `_PANEL_RE` from `simbad.py`. Mosaics are deferred, but the strip is kept so `M31 Panel 2` still resolves to M31 rather than creating a second target. |
+| `StripPanel(name)` | Remove a trailing mosaic panel suffix, then trim. Regex `_PANEL_RE` from `simbad.py`. The strip is kept so `M31 Panel 2` resolves to M31 rather than creating a second target; mosaic panels are told apart by `images.panel_label` and the frame label of section 5.24, not by target. |
 | `Compact(s)` | Uppercase, then remove spaces, hyphens, and underscores. Used for the substring filter tier in dashboard search. `target_listing._compact` uppercases, so the port does too; both sides of every comparison pass through this function, so the case only has to be consistent. |
 
 `normalization.py` in the web application is a different concern: it maps user-configured
@@ -5276,9 +5284,11 @@ text, and a comma separated common name is matched on its first entry, so a row 
 "NGC 1909 - the Witch Head Nebula" rather than that name with "the Witch Head Nebula" printed
 again beside it.
 
-**The mosaic link (Phase 18, ruling R19).** A row whose target has at least one night in any panel
-of any mosaic, `included` or `available` (section 5.24), carries a mosaic link in its Name cell,
-straight after the name and before the common name: a `Button.quiet` holding a drawn 2 by 2 tile
+**The mosaic link (Phase 18, ruling R19).** A row whose target has at least one `included` row in
+some panel of some mosaic (section 5.24) carries a mosaic link in its Name cell; a target with
+`available` rows only carries none, because Add nights from any target (section 12.17) writes
+`available` rows for every target the reader searches and must not decorate each of them. The
+link sits straight after the name and before the common name: a `Button.quiet` holding a drawn 2 by 2 tile
 glyph in the accent ink, the web's `TargetRow.tsx` glyph, with the tooltip "Mosaic: <name>" or,
 for a target in several mosaics, "Mosaics: <name>, <name>", names in ordinal case-insensitive
 order. Clicking it opens the mosaic detail page (section 12.17) of the first mosaic in that order
@@ -5423,7 +5433,7 @@ renders in `<main>`, beside `<TargetFeed />`, never inside `<Sidebar>`).
 4. Apply metric range filters per 12.2.1.
 5. Compute the page slice and the overall aggregates in the same round trip.
 6. Second pass over the page's groups only: filter distribution, equipment set, session
-   summaries, aliases, and from Phase 18 the mosaics each target has a night in (the mosaic link
+   summaries, aliases, and from Phase 18 the mosaics each target has an `included` night in (the mosaic link
    above).
 
 Filter and equipment criteria are expanded through the alias map before matching, so
@@ -7007,7 +7017,7 @@ act on.
 | Targets | Merge candidate list (section 12.9), merge history with undo, unresolved names with the retry action, and rename history. The rename history is read from `activity_events` (`user_action` / `target_renamed`, newest 50): there is no rename-history table, so the list is bounded by `general.activity_retention_days` like every other activity read, and a rename older than the retention window is gone. The tab header carries a **"New target"** button (Task 3 review, accepted; not "Create target", which is reserved for the row action below) that opens a form on this tab with six fields: primary name (required), object type, RA and Dec in degrees (both optional), catalog id (optional), and a comma-separated alias list. The object type control lists section 9.8's nine display categories, then its five solar system categories, then "Other", which reveals a free-text box; the empty choice leaves `object_type` null. Choosing a solar system category clears RA and Dec, because a fixed position is meaningless for a moving object, and sets the "user defined" checkbox, which otherwise ships checked and is the user's to clear. RA parses to 0 to 360 and Dec to -90 to 90 and both accept a blank; a value that is not a number or is out of range refuses the submit with the range in the message and writes nothing. Section 9.7 carries the rest: the alias construction, the two conflict refusals, the frame-driven retro-link, the created row being `name_locked` and `user_defined`, and the name-locked rule the created row lives under. Create target (PAR-001) also appears as a **"Create target"** row action on each unresolved name (section 12.8's Unresolved list is the read-only view of the same data): it opens the same form with the primary name pre-filled from that `OBJECT` string and that string already in the alias list, and on create it links every unresolved LIGHT frame whose normalized `OBJECT` matches the created name or an alias to the new target and closes a pending merge candidate for that name as accepted when one exists (section 9.7 step 5; a pending candidate is never required). Both entry points report what they did, in the form "Created <name>, linked <n> frames from <m> unresolved names", and a second create of the same name is refused with section 9.7's conflict sentence rather than creating a duplicate. |
 | Maintenance | Rebuild targets, retry unresolved, regenerate reference thumbnails (missing or all), regenerate frame thumbnails (purge and regenerate), prune activity events, and reset database with a typed confirmation. Regenerating reference thumbnails for all targets must ask for a forced render, which replaces each existing `reference/<target id>.jpg` (section 11.3); without it the pass re-offers every target, the cache serves the existing file as a hit, and the action reports a generated count while producing no new pixels. Regenerating frame thumbnails has no row-level record to consult, because `images.thumbnail_path` is never written (section 5.2), so purge-and-regenerate deletes `frames/` under the cache root and lets on-demand generation refill it, and there is no missing-only variant to offer. Rebuild targets deletes no `targets` row: it clears `images.resolved_target_id` for LIGHT frames whose target is not `user_defined`, deletes every `merge_candidates` row, clears the negative resolver cache, and re-resolves each distinct unresolved `OBJECT` name in cache-only mode under the resolution lease. `TargetResolver` reuses existing target rows by identity (section 9.5), so the delete buys nothing, and deleting one would take the `merge_manifests` rows that record merges into it with it. Reset database clears `activity_events`, `merge_manifests`, `merge_candidates`, `session_notes`, `target_catalog_memberships`, `images`, `skipped_files` (section 5.21; it is scan output in the same sense `images` is, and a cleared `images` table with surviving skipped rows would be inconsistent), `targets`, `scan_runs`, `catalog_cache` (the positive rows included, which is the clearing section 9.6 refers to), `phd2_frames`, `phd2_sessions`, `phd2_calibrations` and `phd2_logs` (Phase 15A, cleared children first inside the same transaction; they are scan output in the same sense `images` is, and a reset that left them would keep a guiding history for frames that no longer exist), `custom_column_values` and `custom_columns` (Phase 20, children first for the same reason: values reference both their column and their target, so a reset that left them would keep values naming targets that no longer exist), keeps `user_settings` so the scan roots, observer location, thumbnail cache path and the five tray and startup residency keys (section 12.11) survive, and leaves the shipped `openngc_catalog` and `static_catalog_entries` rows in place because `CatalogSeeder.LoadIfNeeded` is guarded by `general.catalogs_loaded_version` and clearing them without that flag would leave the resolver with no catalogue. The typed confirmation itemizes exactly these three lists, with the four guide-log tables and the two custom column tables named among the cleared. **Every entry in that list is a sentence stating what the reader loses, not a noun phrase naming a table**, because the list is what is read before the confirmation is typed: the two custom column entries therefore say that every value filled into a column of the reader's own goes, and that the columns themselves go so each has to be created again. The two shipped sentences read "Every value you typed into a column of your own" and "Every
 column you defined yourself, so each one has to be created again." It is armed by typing the
-literal phrase `RESET`, compared ordinally and case-sensitively. Smart rebuild (PAR-007, risk level Moderate, no confirm) repairs target data from the local database and the resolver cache with no network call at all, in six passes, each reporting its own count: frames pointing at a merged-away target are redirected to that merge's winner; unresolved LIGHT frames whose normalized `OBJECT` equals an alias of an active target are linked to it; every distinct normalized `OBJECT` seen on a target's own frames that is missing from that target's `aliases` is added to them; for each active target that is neither `name_locked` nor `user_defined` and that carries a `catalog_id` or a `common_name` (a target with neither is skipped, because `AliasCurator.BuildPrimaryName` answers "Unknown" for that pair and the unguarded pass would rename every uncatalogued target to it), a positive `catalog_cache` row keyed on the target's normalized `catalog_id` or, failing that, its normalized `primary_name` (never an alias, web parity) re-derives `catalog_id`, `common_name` and `primary_name` through the same curation a resolution uses (section 9.4.5); each remaining active target that is neither `name_locked` nor `user_defined` and whose `primary_name` disagrees with its `catalog_id` and `common_name` has its name rebuilt from them; and every `merge_candidates` row whose `suggested_target_id` names a row that is merged away, or is null with a `method` other than `orphan`, is deleted (a null `method` is spared by the same SQL `NOT IN` shape, and an `orphan` row is left for the Create target form to read). The six passes themselves create no `targets` row and delete none, for the reason rebuild targets deletes none; the action as a whole is not so scoped, because smart rebuild's own inline duplicate detection (below) orders itself at the end of the same action and can create a `targets` row when it reaches `DuplicateDetector` outcome 2, exactly as any other duplicate detection pass can (section 9.7). `Run_CreatesNoTargetRow` pins the six passes' own scope. Port of `backend/app/worker/tasks_target_rebuild.py::smart_rebuild_targets`, without that function's mosaic panel recomputation, which this port has no panels for, and without its queued follow-up tasks: duplicate detection (section 9.7) runs inline at the end of the same action instead. A resolver stub asserts the pass makes no network call. Catalog identity backfill (PAR-007, risk level Safe, no confirm) re-runs the identity matcher over unlinked frames: for each distinct `OBJECT` string carried by LIGHT frames with no `resolved_target_id`, most frames first, it resolves cache-only and, when the result matches an existing target by identity (section 9.5), links that name's unresolved LIGHT frames to it. A name that resolves to nothing, or to no existing target, is left orphaned for duplicate detection and the Create target form on the Targets tab. It reports linked names, linked frames and skipped names, creates no target, and is safely re-runnable. Port of `tasks_target_dedup.py::backfill_catalog_identity`, without that task's first phase, which repairs quote-corrupted cache rows from a data defect this port never had. Both actions take the resolution lease the way rebuild targets does and both refuse while a scan is running, per section 9.7's mutual exclusion. Every action on this tab registers with the job registry (section 12), so its progress and its outcome are in the status bar flyout as well as inline on the row, and the census test that pins registration counts the eight actions on this tab. |
+literal phrase `RESET`, compared ordinally and case-sensitively. Smart rebuild (PAR-007, risk level Moderate, no confirm) repairs target data from the local database and the resolver cache with no network call at all, in six passes, each reporting its own count: frames pointing at a merged-away target are redirected to that merge's winner; unresolved LIGHT frames whose normalized `OBJECT` equals an alias of an active target are linked to it; every distinct normalized `OBJECT` seen on a target's own frames that is missing from that target's `aliases` is added to them; for each active target that is neither `name_locked` nor `user_defined` and that carries a `catalog_id` or a `common_name` (a target with neither is skipped, because `AliasCurator.BuildPrimaryName` answers "Unknown" for that pair and the unguarded pass would rename every uncatalogued target to it), a positive `catalog_cache` row keyed on the target's normalized `catalog_id` or, failing that, its normalized `primary_name` (never an alias, web parity) re-derives `catalog_id`, `common_name` and `primary_name` through the same curation a resolution uses (section 9.4.5); each remaining active target that is neither `name_locked` nor `user_defined` and whose `primary_name` disagrees with its `catalog_id` and `common_name` has its name rebuilt from them; and every `merge_candidates` row whose `suggested_target_id` names a row that is merged away, or is null with a `method` other than `orphan`, is deleted (a null `method` is spared by the same SQL `NOT IN` shape, and an `orphan` row is left for the Create target form to read). The six passes themselves create no `targets` row and delete none, for the reason rebuild targets deletes none; the action as a whole is not so scoped, because smart rebuild's own inline duplicate detection (below) orders itself at the end of the same action and can create a `targets` row when it reaches `DuplicateDetector` outcome 2, exactly as any other duplicate detection pass can (section 9.7). `Run_CreatesNoTargetRow` pins the six passes' own scope. Port of `backend/app/worker/tasks_target_rebuild.py::smart_rebuild_targets`, without that function's mosaic panel recomputation, because panel membership in this port is a join of target, night and frame label (section 5.24) and there is no stored membership to recompute, and without its queued follow-up tasks: duplicate detection (section 9.7) runs inline at the end of the same action instead. A resolver stub asserts the pass makes no network call. Catalog identity backfill (PAR-007, risk level Safe, no confirm) re-runs the identity matcher over unlinked frames: for each distinct `OBJECT` string carried by LIGHT frames with no `resolved_target_id`, most frames first, it resolves cache-only and, when the result matches an existing target by identity (section 9.5), links that name's unresolved LIGHT frames to it. A name that resolves to nothing, or to no existing target, is left orphaned for duplicate detection and the Create target form on the Targets tab. It reports linked names, linked frames and skipped names, creates no target, and is safely re-runnable. Port of `tasks_target_dedup.py::backfill_catalog_identity`, without that task's first phase, which repairs quote-corrupted cache rows from a data defect this port never had. Both actions take the resolution lease the way rebuild targets does and both refuse while a scan is running, per section 9.7's mutual exclusion. Every action on this tab registers with the job registry (section 12), so its progress and its outcome are in the status bar flyout as well as inline on the row, and the census test that pins registration counts the eight actions on this tab. |
 | Diagnostics | Section 12.8. Also carries the `general.log_level` selector, which appears nowhere else: it is a troubleshooting control, not a preference, and it belongs beside the log viewer that shows its effect. Beside the level selector sit three retention editors (PAR-012), each a numeric box that validates its range before it writes and reverts to the stored value when it refuses: activity retention in days, `general.activity_retention_days`, 1 to 3650, which section 5.12 prunes against; application log retention in days, `general.app_log_retention_days`, 1 to 3650, which section 16.1 applies as the sink's retained file limit; and the log viewer row cap, `general.app_log_max_rows`, 1000 to 500000, which section 12.8 applies to the viewer and to its copy cap. Each writes through `SettingsStore.MutateGeneral`, and each states beside itself when it takes effect, because two are immediate and the log retention limit is not: it applies the next time GalactiLog starts, not at the next roll (section 16.1; the approved text read "next roll", corrected as a factual matter and the user is told). |
 | About | Version, git SHA, release channel, update check button, release notes, log folder link. |
 
@@ -7709,15 +7719,15 @@ document's own section for that surface.
 | `export.method` | Copy or script | The wizard's step help glyph on step 4, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
 | `export.review` | Review | The wizard's step help glyph on step 5, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
 | `export.result` | Result | The wizard's step help glyph on step 6, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
-| `mosaics.about` | Mosaics | The "Mosaics" page heading (`MosaicsView.axaml`) | web `MosaicsPage.tsx` |
-| `mosaics.keywords` | Detection keywords | The "Detection keywords" heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
-| `mosaics.suggestions` | Suggestions | The "Suggestions" heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
-| `mosaics.table` | Mosaics table | The mosaics table's heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
-| `mosaic.about` | Mosaic | The mosaic detail page's name (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
-| `mosaic.notes` | Notes | The "Notes" heading (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
-| `mosaic.labels` | New panel labels | The available labels banner's heading (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
+| `mosaics.about` | Mosaics | The "Mosaics" page heading (`MosaicsView.axaml`) | port-authored, 12.17 |
+| `mosaics.keywords` | Detection keywords | The "Detection keywords" heading (`MosaicsView.axaml`) | port-authored, 12.17 |
+| `mosaics.suggestions` | Suggestions | The "Suggestions" heading (`MosaicsView.axaml`) | port-authored, 12.17 |
+| `mosaics.table` | Mosaics table | The mosaics table's heading (`MosaicsView.axaml`) | port-authored, 12.17 |
+| `mosaic.about` | Mosaic | The mosaic detail page's name (`MosaicDetailView.axaml`) | port-authored, 12.17 |
+| `mosaic.notes` | Notes | The "Notes" heading (`MosaicDetailView.axaml`) | port-authored, 12.17 |
+| `mosaic.labels` | New panel labels | The available labels banner's heading (`MosaicDetailView.axaml`) | port-authored, 12.17 |
 | `mosaic.sessions` | Panels and nights | The sessions region's header row (`MosaicDetailView.axaml`) | port-authored, 12.17 |
-| `mosaic.create` | Create mosaic | The dialog's heading (`CreateMosaicWindow.axaml`) | web `CreateMosaicDialog.tsx` |
+| `mosaic.create` | Create mosaic | The dialog's heading (`CreateMosaicWindow.axaml`) | port-authored, 12.17 |
 
 **The paragraph texts.** Seed `HelpTopics` from this sub-table verbatim. A paragraph is one to
 five sentences of plain text with no markup; where the web's original used bold or italic runs for
@@ -11020,7 +11030,8 @@ file at the dialog's path and nothing else (section 2.1).
 9. **No suggestion tile preview** until the arranger exists (ruling R18).
 10. **The mosaic list sort persists** in `display.sort.mosaics`, not in browser storage.
 11. **Inline rows** replace the browser prompt for As new panel.
-12. **The dashboard link names every mosaic** a target is in and opens the first.
+12. **The dashboard link names every mosaic** a target has an `included` night in and opens the
+    first; `available` rows alone carry no link (section 12.2).
 13. **The add panel form adds to an existing panel** of the same label rather than refusing.
 14. **No filled buttons.** The web's filled Accept, Create, Detail and Composite buttons are
     outlined, because Run scan is the one filled button in the application (section 14); the
