@@ -1,0 +1,984 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:stats="using:GalactiLog.App.ViewModels.Stats"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="GalactiLog.App.Views.StatisticsView"
+             x:DataType="stats:StatisticsViewModel">
+  <!-- design-spec 12.5's ten sections, in the order that section's table lists them, over one
+       cached stats response. Every colour is a theme token; nothing sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios rather than point sizes (spec 14.4,
+       FontSizeTokenTest). Every chart sets Background="Transparent" here rather than in
+       ChartTheme, which is an Avalonia control property and not a LiveCharts setting.
+
+       Phase 15B took this page into the Ledger vocabulary (DESIGN.md section 4's two-worlds rule,
+       which fires on a structural edit to a page still in the old one): there is no Border.card
+       style and no non-zero CornerRadius anywhere in this file. Containment is alignment and the
+       shared Border.rule hairline, section headings are TextBlock Classes="t-label section", and
+       every type tier, figure and numeric alignment comes from Theme/Controls.axaml. Two local
+       styles remain, TextBlock.cell and TextBlock.cell-left, and each is a shared class plus one
+       ink setter: `num` carries the alignment and the tabular figures but no ink, and this page
+       renders about seventy data cells, so spelling a Foreground on each of them is the ledger's
+       shape for five cells and not for seventy. -->
+  <UserControl.Resources>
+    <!-- Ruling Q3. Three of the six cards this template serves carry a spec 12.12 topic on their
+         card title (stats.filter-usage, stats.top-targets and stats.ingest), and a glyph inside a
+         shared template would give all six the same topic id. Those three render their title in a
+         heading row of their own beside the glyph and apply BarChartBodyTemplate, which is the
+         same chart with the title left off; the other three keep BarChartTemplate, which is now
+         that body under a title. The chart markup is written once and neither the template nor
+         the view-model is copied. -->
+    <DataTemplate x:Key="BarChartBodyTemplate" DataType="stats:StatsBarChartViewModel">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding EmptyMessage}"
+                   IsVisible="{Binding IsEmpty}"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <lvc:CartesianChart Series="{Binding Series}"
+                            XAxes="{Binding XAxes}"
+                            YAxes="{Binding YAxes}"
+                            Background="Transparent"
+                            Height="260"
+                            IsVisible="{Binding !IsEmpty}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="BarChartTemplate" DataType="stats:StatsBarChartViewModel">
+      <StackPanel Spacing="4">
+        <TextBlock Text="{Binding Title}" Classes="t-label section" />
+        <ContentControl Content="{Binding}"
+                        ContentTemplate="{StaticResource BarChartBodyTemplate}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- The chevron band's two arms, the one disclosure idiom in the application (DESIGN.md
+         section 4). Written inline here rather than on the DisclosureBand control, which Phase 15B
+         Task 3 extracts for the session pane's four bands and which had not landed when this file
+         was written; the shape is the same pair, a Button.chevron beside a drawn Path. -->
+    <StreamGeometry x:Key="IconChevronRight">M6,3 L11,8 L6,13</StreamGeometry>
+    <StreamGeometry x:Key="IconChevronDown">M3,6 L8,11 L13,6</StreamGeometry>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- One setter each, and each is the one ink the shared class does not carry: a data cell is
+         given both classes, the shared right alignment and tabular figures plus the primary ink.
+         The reference page for this vocabulary keeps four local TextBlock styles of its own
+         (Views/TargetDetail/TargetDetailView.axaml:91-106), one of which, TextBlock.field-value, is
+         this shape exactly. -->
+    <Style Selector="TextBlock.cell">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
+    <Style Selector="TextBlock.cell-left">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Statistics"
+                   VerticalAlignment="Center"
+                   Classes="t-label section" />
+        <controls:HelpButton Topic="page.statistics" />
+      </StackPanel>
+      <Button x:Name="RefreshButton"
+              Grid.Column="1"
+              Content="Refresh"
+              Classes="sm"
+              Command="{Binding RefreshCommand}" />
+    </Grid>
+
+    <!-- Three states, never two at once: the load, the failure line and the empty state are
+         separate flags and ShowSections is derived from all three (spec 12.10). -->
+    <TextBlock x:Name="LoadingLine"
+               Grid.Row="1"
+               Text="Loading analytics..."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               IsVisible="{Binding IsLoading}" />
+    <TextBlock x:Name="FailureLine"
+               Grid.Row="1"
+               Text="Statistics could not be loaded."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               IsVisible="{Binding LoadFailed}" />
+    <TextBlock x:Name="EmptyState"
+               Grid.Row="1"
+               Text="No data yet. Run a scan."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               IsVisible="{Binding IsEmpty}" />
+
+    <ScrollViewer Grid.Row="1" IsVisible="{Binding ShowSections}" controls:WheelPassthrough.IsEnabled="True">
+      <StackPanel Spacing="16">
+
+        <!-- 1. Overview tiles. Spec 12.12 places stats.overview on the tile row, which has no
+             heading element; task1-report departure 11 says to add the glyph there rather than
+             invent a heading, so the row above the tiles carries the glyph alone. -->
+        <StackPanel Spacing="6">
+          <controls:HelpButton Topic="stats.overview" HorizontalAlignment="Left" />
+          <ItemsControl x:Name="OverviewTiles" ItemsSource="{Binding Overview.Tiles}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:OverviewTile">
+                <!-- Background Transparent, not decoration: a panel with no fill is not hit
+                     tested, and the tile's tooltip is what the row is for. -->
+                <Border Background="Transparent"
+                        Width="220"
+                        Margin="0,0,12,10"
+                        ToolTip.Tip="{Binding Tooltip}">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Label}" Classes="t-caption" />
+                    <TextBlock Text="{Binding Value}" Classes="figure" />
+                    <TextBlock Text="{Binding Subtitle}" Classes="t-caption" TextWrapping="Wrap" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- 2. Equipment performance -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Equipment performance" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.performance" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding Performance.EmptyMessage}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding Performance.IsEmpty}" />
+          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*,1.5*" IsVisible="{Binding !Performance.IsEmpty}">
+            <TextBlock Grid.Column="0" Text="Equipment" Classes="t-label" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="4"
+                       Text="Med HFR (px)"
+                       Classes="t-label num"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="Pixel HFR; only comparable within one optical train" />
+            <TextBlock Grid.Column="5"
+                       Text="Best HFR (px)"
+                       Classes="t-label num"
+                       TextTrimming="CharacterEllipsis"
+                       ToolTip.Tip="Pixel HFR; only comparable within one optical train" />
+            <TextBlock Grid.Column="6" Text="Med Ecc" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="7" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="8" Text="Filters" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+          </Grid>
+          <ItemsControl x:Name="PerformanceRows" ItemsSource="{Binding Performance.Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:EquipmentComboRowViewModel">
+                <StackPanel>
+                  <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*,1.5*">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                      <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                    Padding="6,0"
+                                    Content="+" />
+                      <TextBlock Text="{Binding Name}" Classes="cell-left" VerticalAlignment="Center" />
+                      <TextBlock Text="(grouped)"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{Binding Grouped}"
+                                 Foreground="{DynamicResource ColorTextTertiary}"
+                                 ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
+                    <TextBlock Grid.Column="2" Text="{Binding AvgSession}" Classes="num cell" />
+                    <TextBlock Grid.Column="3" Text="{Binding Integration}" Classes="num cell" />
+                    <TextBlock Grid.Column="4"
+                               Text="{Binding MedianHfr}"
+                               Classes="num cell"
+                               ToolTip.Tip="Pixel HFR; only comparable within this optical train, not graded across rigs" />
+                    <TextBlock Grid.Column="5"
+                               Text="{Binding BestHfr}"
+                               Classes="num cell"
+                               ToolTip.Tip="Pixel HFR; only comparable within this optical train, not graded across rigs" />
+                    <TextBlock Grid.Column="6"
+                               Text="{Binding MedianEccentricity.Text}"
+                               Foreground="{Binding MedianEccentricity.Brush}"
+                               ToolTip.Tip="{Binding MedianEccentricity.Tooltip}"
+                               Classes="num cell" />
+                    <StackPanel Grid.Column="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                      <TextBlock Text="{Binding MedianFwhm.Text}"
+                                 Foreground="{Binding MedianFwhm.Brush}"
+                                 ToolTip.Tip="{Binding MedianFwhm.Tooltip}"
+                                 Classes="num cell" />
+                      <!-- The web's FwhmValue annotation, and spec 12.5's "the count of frames carrying a
+                           fwhm value": a median over four frames must not read like a median over four
+                           hundred. -->
+                      <TextBlock Text="{Binding FwhmFrameCount}"
+                                 Classes="t-caption"
+                                 FontFeatures="tnum=1"
+                                 VerticalAlignment="Center" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="8" Text="{Binding Filters}" Classes="num cell" />
+                  </Grid>
+                  <ItemsControl ItemsSource="{Binding FilterRows}" IsVisible="{Binding IsExpanded}" Margin="24,0,0,0">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="stats:EquipmentFilterRow">
+                        <Grid ColumnDefinitions="2*,*,*,*,*,*,*">
+                          <TextBlock Grid.Column="0" Text="{Binding FilterName}" Classes="cell-left" />
+                          <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
+                          <TextBlock Grid.Column="2" Text="{Binding Integration}" Classes="num cell" />
+                          <TextBlock Grid.Column="3" Text="{Binding MedianHfr}" Classes="num cell" />
+                          <TextBlock Grid.Column="4" Text="{Binding BestHfr}" Classes="num cell" />
+                          <TextBlock Grid.Column="5" Text="{Binding MedianEccentricity}" Classes="num cell" />
+                          <TextBlock Grid.Column="6" Text="{Binding MedianFwhm}" Classes="num cell" />
+                        </Grid>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- 3. Guiding (spec 12.5's "The Guiding section (Phase 15B)"), placed immediately after
+             Equipment performance and before Equipment inventory, where the web places it and
+             where the user ruled it on 2026-09-19. Two cards over phd2_sessions, or the empty
+             notice in place of both. -->
+        <StackPanel x:Name="GuidingSection" Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Guiding" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.guiding" />
+            </StackPanel>
+          </Border>
+
+          <!-- The empty notice, both forms. The unmapped form wins when both are true, because a
+               library with logs and no mapping is one click from working and should not be told to
+               enable something it already enabled. -->
+          <StackPanel x:Name="GuidingEmptyNotice"
+                      Orientation="Horizontal"
+                      Spacing="6"
+                      IsVisible="{Binding Guiding.IsEmpty}">
+            <TextBlock Text="{Binding Guiding.EmptyNoticeText}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center" />
+            <Button x:Name="GuidingEmptyLink"
+                    Classes="quiet sm"
+                    Content="{Binding Guiding.EmptyNoticeLink}"
+                    Command="{Binding Guiding.OpenSettingsCommand}" />
+          </StackPanel>
+
+          <StackPanel Spacing="10" IsVisible="{Binding Guiding.ShowCards}">
+            <!-- The scorecard. Nine columns on the proportional-star shape the Equipment
+                 performance grid above already uses, with a floor on every one of them: an Auto
+                 column does not shrink when the arranged width is smaller than the sum
+                 (TargetDetailView.axaml:114, HANDOFF item 48), and nine Auto columns are how a
+                 header clips in a narrow window. Stars shrink together and the floors stop them
+                 collapsing into one another. -->
+            <TextBlock Text="Guiding scorecard" Classes="t-label" />
+            <Grid>
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" MinWidth="120" />
+                <ColumnDefinition Width="*" MinWidth="76" />
+                <ColumnDefinition Width="*" MinWidth="52" />
+                <ColumnDefinition Width="*" MinWidth="60" />
+                <ColumnDefinition Width="*" MinWidth="56" />
+                <ColumnDefinition Width="*" MinWidth="60" />
+                <ColumnDefinition Width="*" MinWidth="56" />
+                <ColumnDefinition Width="*" MinWidth="52" />
+                <ColumnDefinition Width="*" MinWidth="56" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="0"
+                         Text="Rig"
+                         Classes="t-label"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="The telescope mapped to the PHD2 profile. Cameras used under one telescope share a row." />
+              <TextBlock Grid.Column="1"
+                         Text="Sessions"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Guiding sessions catalogued for the rig. The smaller figure is the sessions with fewer than 100 guide frames, left out of the RMS figures." />
+              <TextBlock Grid.Column="2"
+                         Text="Hours"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Total guided time." />
+              <TextBlock Grid.Column="3"
+                         Text="RMS Total"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Typical guide error in arcseconds across both axes, weighted by frames. Lower is better; compare it against your image scale." />
+              <TextBlock Grid.Column="4"
+                         Text="RMS RA"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Guide error on the right ascension axis, in arcseconds. A high figure points at periodic error or polar alignment drift." />
+              <TextBlock Grid.Column="5"
+                         Text="RMS Dec"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Guide error on the declination axis, in arcseconds. A high figure points at balance or backlash." />
+              <TextBlock Grid.Column="6"
+                         Text="Filtered"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="RMS after short excursions are removed, so a gust or a cable snag does not dominate. The gap to RMS Total is how much of the error is spikes." />
+              <TextBlock Grid.Column="7"
+                         Text="Dec:RA"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Dec error divided by RA error. Near 1 is balanced; far from 1 says which axis to work on." />
+              <TextBlock Grid.Column="8"
+                         Text="Settle s"
+                         Classes="t-label num"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="Median time after a dither before guiding is back within limits. High values cost imaging time." />
+            </Grid>
+            <ItemsControl x:Name="GuidingScorecardRows" ItemsSource="{Binding Guiding.Rows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="stats:GuidingScorecardRow">
+                  <StackPanel>
+                    <Grid>
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="2*" MinWidth="120" />
+                        <ColumnDefinition Width="*" MinWidth="76" />
+                        <ColumnDefinition Width="*" MinWidth="52" />
+                        <ColumnDefinition Width="*" MinWidth="60" />
+                        <ColumnDefinition Width="*" MinWidth="56" />
+                        <ColumnDefinition Width="*" MinWidth="60" />
+                        <ColumnDefinition Width="*" MinWidth="56" />
+                        <ColumnDefinition Width="*" MinWidth="52" />
+                        <ColumnDefinition Width="*" MinWidth="56" />
+                      </Grid.ColumnDefinitions>
+                      <TextBlock Grid.Column="0"
+                                 Text="{Binding Rig}"
+                                 Classes="cell-left"
+                                 TextTrimming="CharacterEllipsis" />
+                      <StackPanel Grid.Column="1"
+                                  Orientation="Horizontal"
+                                  HorizontalAlignment="Right"
+                                  Spacing="4">
+                        <TextBlock Text="{Binding Sessions}" Classes="num cell" />
+                        <TextBlock Text="{Binding GatedNote}"
+                                   Classes="t-caption"
+                                   IsVisible="{Binding HasGatedNote}"
+                                   VerticalAlignment="Center" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="2" Text="{Binding Hours}" Classes="num cell" />
+                      <TextBlock Grid.Column="3"
+                                 Text="{Binding RmsTotal.Text}"
+                                 Foreground="{Binding RmsTotal.Brush}"
+                                 ToolTip.Tip="{Binding RmsTotal.Tooltip}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Column="4"
+                                 Text="{Binding RmsRa.Text}"
+                                 Foreground="{Binding RmsRa.Brush}"
+                                 ToolTip.Tip="{Binding RmsRa.Tooltip}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Column="5"
+                                 Text="{Binding RmsDec.Text}"
+                                 Foreground="{Binding RmsDec.Brush}"
+                                 ToolTip.Tip="{Binding RmsDec.Tooltip}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Column="6" Text="{Binding Filtered}" Classes="num cell" />
+                      <TextBlock Grid.Column="7" Text="{Binding DecRaRatio}" Classes="num cell" />
+                      <TextBlock Grid.Column="8" Text="{Binding SettleSeconds}" Classes="num cell" />
+                    </Grid>
+                    <!-- The guide-exposure sub-row. Absent, not blank, when no session of the rig
+                         carried an exposure. -->
+                    <TextBlock Text="{Binding GuideExposure}"
+                               Classes="t-caption"
+                               IsVisible="{Binding HasGuideExposure}"
+                               Margin="0,0,0,2" />
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- RMS by altitude band. One quarter dome per rig in a wrapping grid: the arcs wrap
+                 through the WrapPanel's own behaviour and no width is measured to choose a
+                 layout. -->
+            <Border Classes="rule" Padding="0,0,0,6" Margin="0,6,0,0">
+              <TextBlock Text="RMS by altitude band" Classes="t-label" />
+            </Border>
+            <!-- A library whose guiding sessions all carry a null alt_deg, which is the ASIAIR
+                 shape, has rigs on the scorecard and no band row at all. The web guards this whole
+                 block on the same condition and prints one line in its place
+                 (GuidingAltitude.tsx:195-198); without the guard the card drew an empty grid, two
+                 legends explaining wedges that were not there, and a disclosure onto an empty
+                 table. Review finding P2-2. -->
+            <TextBlock x:Name="AltitudeEmptyState"
+                       Text="{x:Static stats:GuidingViewModel.NoRowsText}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding !Guiding.HasArcs}" />
+            <ItemsControl x:Name="AltitudeArcs"
+                          ItemsSource="{Binding Guiding.Arcs}"
+                          IsVisible="{Binding Guiding.HasArcs}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="stats:AltitudeRig">
+                  <StackPanel Width="210" Margin="0,0,12,12" Spacing="2">
+                    <TextBlock Text="{Binding Telescope}" Classes="t-label" TextWrapping="Wrap" />
+                    <TextBlock Text="{Binding Subtitle}"
+                               Classes="t-caption"
+                               FontFeatures="tnum=1"
+                               TextWrapping="Wrap" />
+                    <!-- The arc and its tooltip share one Panel so the tooltip overlays the
+                         dome rather than stacking under it (review finding P3-2). Stacked, the card
+                         grew by the tooltip's height on every hover, and a WrapPanel row takes its
+                         tallest item, so the whole row of cards below jumped down while the reader
+                         was still pointing at a wedge. The web positions it absolutely for the same
+                         reason (GuidingAltitude.tsx:358). -->
+                    <Panel>
+                      <controls:AltitudeArc x:Name="Arc"
+                                            Wedges="{Binding Wedges}"
+                                            OutlineBrush="{DynamicResource ColorBorderEmphasis}"
+                                            ValueBrush="{DynamicResource ColorTextPrimary}"
+                                            LabelBrush="{DynamicResource ColorTextTertiary}" />
+                    <!-- The wedge tooltip, the seven figures spec 12.5 names, bound rather than
+                         attached: an attached string tip cannot carry a table and cannot answer
+                         focus, and this card must answer both. An elevated fill and a one pixel
+                         rule, no corner radius, because it is read over the drawing beneath it. -->
+                    <Border x:Name="WedgeTooltip"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Bottom"
+                            Background="{DynamicResource ColorBgElevated}"
+                            BorderBrush="{DynamicResource ColorBorderDefault}"
+                            BorderThickness="1"
+                            Padding="6,4"
+                            IsHitTestVisible="False"
+                            IsVisible="{Binding #Arc.HoveredWedge, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <Grid ColumnDefinitions="Auto,*"
+                          ColumnSpacing="10"
+                          RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+                      <TextBlock Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="2"
+                                 Text="{Binding #Arc.HoveredWedge.Rig}"
+                                 Classes="t-label"
+                                 TextWrapping="Wrap" />
+                      <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                                 Text="{Binding #Arc.HoveredWedge.BandLabel}"
+                                 Classes="t-caption" />
+                      <TextBlock Grid.Row="2" Grid.Column="0" Text="RMS total" Classes="t-caption" />
+                      <TextBlock Grid.Row="2" Grid.Column="1"
+                                 Text="{Binding #Arc.HoveredWedge.RmsTotal}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Row="3" Grid.Column="0" Text="RMS RA" Classes="t-caption" />
+                      <TextBlock Grid.Row="3" Grid.Column="1"
+                                 Text="{Binding #Arc.HoveredWedge.RmsRa}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Row="4" Grid.Column="0" Text="RMS Dec" Classes="t-caption" />
+                      <TextBlock Grid.Row="4" Grid.Column="1"
+                                 Text="{Binding #Arc.HoveredWedge.RmsDec}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Row="5" Grid.Column="0" Text="Sessions" Classes="t-caption" />
+                      <TextBlock Grid.Row="5" Grid.Column="1"
+                                 Text="{Binding #Arc.HoveredWedge.Sessions}"
+                                 Classes="num cell" />
+                      <TextBlock Grid.Row="6" Grid.Column="0" Text="vs above 60" Classes="t-caption" />
+                      <TextBlock Grid.Row="6" Grid.Column="1"
+                                 Text="{Binding #Arc.HoveredWedge.RatioText}"
+                                 Classes="num cell" />
+                    </Grid>
+                    </Border>
+                    </Panel>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock x:Name="AltitudeLegend"
+                       Text="{x:Static stats:GuidingViewModel.RankingLegend}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding Guiding.HasArcs}" />
+            <TextBlock Text="{x:Static stats:GuidingViewModel.GeometryLegend}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding Guiding.HasArcs}" />
+
+            <!-- The table view: exactly the figures the wedges carry and no others, which is what
+                 makes it a view of the same data rather than a second answer. -->
+            <Button x:Name="AltitudeTableBand"
+                    Classes="chevron"
+                    HorizontalAlignment="Left"
+                    IsVisible="{Binding Guiding.HasArcs}"
+                    Command="{Binding Guiding.ToggleTableCommand}">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <Path Data="{StaticResource IconChevronRight}"
+                      Stroke="{DynamicResource ColorTextTertiary}"
+                      StrokeThickness="1.6"
+                      StrokeLineCap="Round"
+                      StrokeJoin="Round"
+                      Width="16"
+                      Height="16"
+                      IsVisible="{Binding !Guiding.IsTableExpanded}" />
+                <Path Data="{StaticResource IconChevronDown}"
+                      Stroke="{DynamicResource ColorTextTertiary}"
+                      StrokeThickness="1.6"
+                      StrokeLineCap="Round"
+                      StrokeJoin="Round"
+                      Width="16"
+                      Height="16"
+                      IsVisible="{Binding Guiding.IsTableExpanded}" />
+                <TextBlock Text="Table view" Classes="t-label" VerticalAlignment="Center" />
+              </StackPanel>
+            </Button>
+            <StackPanel x:Name="AltitudeTable" Spacing="2">
+              <StackPanel.IsVisible>
+                <MultiBinding Converter="{x:Static BoolConverters.And}">
+                  <Binding Path="Guiding.HasArcs" />
+                  <Binding Path="Guiding.IsTableExpanded" />
+                </MultiBinding>
+              </StackPanel.IsVisible>
+              <Grid ColumnDefinitions="2*,2*,*,*,*,*">
+                <TextBlock Grid.Column="0" Text="Rig" Classes="t-label" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="1" Text="Band" Classes="t-label" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="2" Text="Sessions" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="3" Text="RMS Total" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="4" Text="RMS RA" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+                <TextBlock Grid.Column="5" Text="RMS Dec" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+              </Grid>
+              <ItemsControl x:Name="AltitudeTableRows" ItemsSource="{Binding Guiding.TableRows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="stats:AltitudeTableRow">
+                    <Grid ColumnDefinitions="2*,2*,*,*,*,*">
+                      <TextBlock Grid.Column="0" Text="{Binding Rig}" Classes="cell-left" />
+                      <TextBlock Grid.Column="1" Text="{Binding Band}" Classes="cell-left" />
+                      <TextBlock Grid.Column="2" Text="{Binding Sessions}" Classes="num cell" />
+                      <TextBlock Grid.Column="3" Text="{Binding RmsTotal}" Classes="num cell" />
+                      <TextBlock Grid.Column="4" Text="{Binding RmsRa}" Classes="num cell" />
+                      <TextBlock Grid.Column="5" Text="{Binding RmsDec}" Classes="num cell" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </StackPanel>
+        </StackPanel>
+
+        <!-- 4. Equipment inventory: cameras first, then telescopes, each in the server's order -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Equipment inventory" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.inventory" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding Inventory.EmptyMessage}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding Inventory.IsEmpty}" />
+          <TextBlock Text="Cameras" Classes="t-label" />
+          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
+            <TextBlock Grid.Column="0" Text="Name" Classes="t-label" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="Nights" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Text="Targets" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="4" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="5" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="6" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="7" Text="Guiding" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+          </Grid>
+          <ItemsControl x:Name="CameraRows" ItemsSource="{Binding Inventory.Cameras}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:EquipmentInventoryRow">
+                <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{Binding Name}" Classes="cell-left" />
+                    <TextBlock Text="(grouped)"
+                               IsVisible="{Binding Grouped}"
+                               Foreground="{DynamicResource ColorTextTertiary}"
+                               ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
+                  <TextBlock Grid.Column="2" Text="{Binding Nights}" Classes="num cell" />
+                  <TextBlock Grid.Column="3" Text="{Binding TargetCount}" Classes="num cell" />
+                  <TextBlock Grid.Column="4" Text="{Binding AvgSession}" Classes="num cell" />
+                  <TextBlock Grid.Column="5" Text="{Binding Integration}" Classes="num cell" />
+                  <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <TextBlock Text="{Binding MedianFwhm}" Classes="num cell" />
+                    <!-- The web's FwhmValue annotation (review finding M2). -->
+                    <TextBlock Text="{Binding FwhmFrameCount}"
+                               Classes="t-caption"
+                               FontFeatures="tnum=1"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="7" Text="{Binding MedianGuidingRms}" Classes="num cell" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Telescopes" Classes="t-label" />
+          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
+            <TextBlock Grid.Column="0" Text="Name" Classes="t-label" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="2" Text="Nights" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="3" Text="Targets" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="4" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="5" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="6" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+            <TextBlock Grid.Column="7" Text="Guiding" Classes="t-label num" TextTrimming="CharacterEllipsis" />
+          </Grid>
+          <ItemsControl x:Name="TelescopeRows" ItemsSource="{Binding Inventory.Telescopes}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:EquipmentInventoryRow">
+                <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
+                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
+                    <TextBlock Text="{Binding Name}" Classes="cell-left" />
+                    <TextBlock Text="(grouped)"
+                               IsVisible="{Binding Grouped}"
+                               Foreground="{DynamicResource ColorTextTertiary}"
+                               ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
+                  <TextBlock Grid.Column="2" Text="{Binding Nights}" Classes="num cell" />
+                  <TextBlock Grid.Column="3" Text="{Binding TargetCount}" Classes="num cell" />
+                  <TextBlock Grid.Column="4" Text="{Binding AvgSession}" Classes="num cell" />
+                  <TextBlock Grid.Column="5" Text="{Binding Integration}" Classes="num cell" />
+                  <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
+                    <TextBlock Text="{Binding MedianFwhm}" Classes="num cell" />
+                    <!-- The web's FwhmValue annotation (review finding M2). -->
+                    <TextBlock Text="{Binding FwhmFrameCount}"
+                               Classes="t-caption"
+                               FontFeatures="tnum=1"
+                               VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock Grid.Column="7" Text="{Binding MedianGuidingRms}" Classes="num cell" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <!-- Spec 13's Equipment performance comparison, a grouped column over the same rigs -->
+        <ContentControl x:Name="EquipmentComparisonChart"
+                        Content="{Binding EquipmentComparisonChart}"
+                        ContentTemplate="{StaticResource BarChartTemplate}" />
+
+        <!-- 5. Filter usage, and 6. Top targets, side by side as the web lays them out -->
+        <Grid ColumnDefinitions="*,*">
+          <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,10,0">
+            <Border Classes="rule" Padding="0,0,0,6">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{Binding FilterUsageChart.Title}"
+                           Classes="t-label section"
+                           VerticalAlignment="Center" />
+                <controls:HelpButton Topic="stats.filter-usage" />
+              </StackPanel>
+            </Border>
+            <ContentControl x:Name="FilterUsageChart"
+                            Content="{Binding FilterUsageChart}"
+                            ContentTemplate="{StaticResource BarChartBodyTemplate}" />
+            <ItemsControl x:Name="FilterUsageRows" ItemsSource="{Binding FilterUsageRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="stats:FilterUsageRow">
+                  <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
+                    <Border Grid.Column="0"
+                            Width="10"
+                            Height="10"
+                            Margin="0,0,6,0"
+                            VerticalAlignment="Center"
+                            Background="{Binding Tint}" />
+                    <TextBlock Grid.Column="1" Text="{Binding FilterName}" Classes="cell-left" />
+                    <TextBlock Grid.Column="2" Text="{Binding Integration}" Classes="num cell" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="8" Margin="10,0,0,0">
+            <Border Classes="rule" Padding="0,0,0,6">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Text="{Binding TopTargetsChart.Title}"
+                           Classes="t-label section"
+                           VerticalAlignment="Center" />
+                <controls:HelpButton Topic="stats.top-targets" />
+              </StackPanel>
+            </Border>
+            <ContentControl x:Name="TopTargetsChart"
+                            Content="{Binding TopTargetsChart}"
+                            ContentTemplate="{StaticResource BarChartBodyTemplate}" />
+            <ItemsControl x:Name="TopTargetRows" ItemsSource="{Binding TopTargetRows}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="stats:TopTargetRow">
+                  <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,1">
+                    <TextBlock Grid.Column="0"
+                               Text="{Binding Rank}"
+                               Margin="0,0,6,0"
+                               Classes="t-caption"
+                               FontFeatures="tnum=1" />
+                    <TextBlock Grid.Column="1" Text="{Binding Name}" Classes="cell-left" />
+                    <TextBlock Grid.Column="2" Text="{Binding Integration}" Classes="num cell" />
+                  </Grid>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </Grid>
+
+        <!-- 7. Timeline or calendar -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ToggleButton x:Name="TimelineToggle"
+                            Content="Timeline"
+                            IsChecked="{Binding ShowTimeline, Mode=TwoWay}" />
+              <ToggleButton x:Name="CalendarToggle"
+                            Content="Calendar"
+                            IsChecked="{Binding !ShowTimeline, Mode=TwoWay}" />
+              <!-- Spec 12.12's stats.timeline sits on this toggle row, which is the section's
+                   only heading element (task1-report departure 11). -->
+              <controls:HelpButton Topic="stats.timeline" />
+            </StackPanel>
+          </Border>
+
+          <StackPanel x:Name="TimelinePane" Spacing="6" IsVisible="{Binding ShowTimeline}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox x:Name="GranularitySelector"
+                        ItemsSource="{Binding Timeline.GranularityOptions}"
+                        SelectedValue="{Binding Timeline.Granularity, Mode=TwoWay}"
+                        SelectedValueBinding="{Binding Value}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="stats:GranularityOption">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <!-- Five explicit buttons rather than an ItemsControl over PresetLabels: a
+                   templated button would have to reach back out of its item's data context to
+                   find the command, and spec 12.5 names exactly these five. -->
+              <StackPanel x:Name="PresetButtons" Orientation="Horizontal" Spacing="4">
+                <Button Content="All"
+                        Classes="sm"
+                        Command="{Binding Timeline.SelectPresetCommand}"
+                        CommandParameter="{x:Static stats:TimelineRangePreset.All}" />
+                <Button Content="1Y"
+                        Classes="sm"
+                        Command="{Binding Timeline.SelectPresetCommand}"
+                        CommandParameter="{x:Static stats:TimelineRangePreset.OneYear}" />
+                <Button Content="Q"
+                        Classes="sm"
+                        Command="{Binding Timeline.SelectPresetCommand}"
+                        CommandParameter="{x:Static stats:TimelineRangePreset.Quarter}" />
+                <Button Content="M"
+                        Classes="sm"
+                        Command="{Binding Timeline.SelectPresetCommand}"
+                        CommandParameter="{x:Static stats:TimelineRangePreset.Month}" />
+                <Button Content="W"
+                        Classes="sm"
+                        Command="{Binding Timeline.SelectPresetCommand}"
+                        CommandParameter="{x:Static stats:TimelineRangePreset.Week}" />
+              </StackPanel>
+              <ToggleButton x:Name="ImagedOnlyToggle"
+                            Content="Imaged only"
+                            IsChecked="{Binding Timeline.ImagedOnly, Mode=TwoWay}" />
+              <TextBlock Text="{Binding Timeline.AllPeriodsLabel}"
+                         VerticalAlignment="Center"
+                         Classes="t-caption" />
+            </StackPanel>
+
+            <TextBlock Text="{Binding Timeline.EmptyMessage}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding Timeline.IsEmpty}" />
+            <!-- Spec 12.5's wheel zoom and drag pan (Phase 14C, UI layout ruling 13): the five
+                 handlers convert a pointer gesture to the view-model's period arithmetic, in
+                 StatisticsView.axaml.cs. The wheel handler is attached in the code-behind with
+                 handledEventsToo, not here: LiveCharts marks every wheel handled in its own
+                 constructor-time subscription regardless of ZoomMode, so a markup handler never
+                 ran. Ctrl with the wheel steps the granularity; a plain wheel scrolls the page
+                 through the ScrollViewer's WheelPassthrough above. ZoomMode="None" makes
+                 LiveCharts' own zoom and pan a no-op (it still swallows the wheel): the web's
+                 continuous zoom level and its pinch gesture are not ported, and the three explicit
+                 granularities stay the only zoom this chart has. PointerCaptureLost discards a
+                 drag left half open by a lost capture (a window deactivation, a context menu)
+                 rather than leaving it for the next press to inherit.
+
+                 The four attributes are load bearing and StatisticsTimelineInputTests drives the
+                 handler methods directly rather than the events, so no input case fails if one is
+                 dropped. StatisticsViewTests.TimelineChart_CarriesAllFourPointerHandlers is the
+                 case that does. -->
+            <lvc:CartesianChart x:Name="TimelineChart"
+                                Series="{Binding Timeline.Series}"
+                                XAxes="{Binding Timeline.XAxes}"
+                                YAxes="{Binding Timeline.YAxes}"
+                                DataPointerDownCommand="{Binding Timeline.PointClickedCommand}"
+                                Background="Transparent"
+                                Height="280"
+                                ZoomMode="None"
+                                IsVisible="{Binding !Timeline.IsEmpty}"
+                                PointerPressed="OnTimelinePointerPressed"
+                                PointerMoved="OnTimelinePointerMoved"
+                                PointerReleased="OnTimelinePointerReleased"
+                                PointerCaptureLost="OnTimelinePointerCaptureLost" />
+            <TextBlock x:Name="EfficiencyLegend"
+                       Text="% = exposure time / astronomical dark hours, per rig on multi-rig nights"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding Timeline.HasEfficiency}" />
+          </StackPanel>
+
+          <StackPanel x:Name="CalendarPane" Spacing="6" IsVisible="{Binding ShowCalendar}">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <ComboBox x:Name="CalendarRangeSelector"
+                        ItemsSource="{Binding Calendar.RangeOptions}"
+                        SelectedItem="{Binding Calendar.SelectedRange, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="stats:CalendarRangeOption">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+              <TextBlock Text="Less" VerticalAlignment="Center" Classes="t-caption" />
+              <ItemsControl x:Name="CalendarLegend" ItemsSource="{Binding Calendar.Legend}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal" Spacing="2" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="stats:CalendarLegendSwatch">
+                    <Border Width="12"
+                            Height="12"
+                            VerticalAlignment="Center"
+                            Background="{Binding Brush}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <TextBlock Text="More" VerticalAlignment="Center" Classes="t-caption" />
+            </StackPanel>
+            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+              <!-- HorizontalAlignment Left is load bearing (review finding I3): a stretched
+                   child inside a ScrollContentPresenter is arranged at max(desired, viewport),
+                   so the control would be measured at the web's 16 unit pitch (measure sees an
+                   infinite width inside a horizontal scroller) and drawn at up to 28, spilling
+                   the grid past its own bounds. Aligned left, the arrange width is the desired
+                   width and the scroller still supplies the horizontal overflow. -->
+              <controls:CalendarHeatmap x:Name="CalendarGrid"
+                                        HorizontalAlignment="Left"
+                                        VerticalAlignment="Top"
+                                        Cells="{Binding Calendar.Cells}"
+                                        MonthLabels="{Binding Calendar.MonthLabels}"
+                                        WeekCount="{Binding Calendar.WeekCount}"
+                                        LabelBrush="{DynamicResource ColorTextTertiary}" />
+            </ScrollViewer>
+            <TextBlock x:Name="CalendarTooltip"
+                       Text="{Binding #CalendarGrid.HoveredTooltip}"
+                       Classes="t-caption"
+                       TextWrapping="Wrap" />
+          </StackPanel>
+        </StackPanel>
+
+        <!-- 8. Data quality -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Data quality" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.data-quality" />
+            </StackPanel>
+          </Border>
+          <TextBlock x:Name="DataQualityEmptyState"
+                     Text="{Binding DataQuality.EmptyMessage}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding DataQuality.IsEmpty}" />
+          <!-- Spec 7.2's pooled eccentricity source, beside the exclusion count that is measured
+               against it. -->
+          <TextBlock x:Name="EccentricitySource"
+                     Text="{Binding DataQuality.EccentricitySource, StringFormat='Eccentricity source: {0}'}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding !DataQuality.IsEmpty}" />
+          <ItemsControl x:Name="DataQualityFigures" ItemsSource="{Binding DataQuality.Figures}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:DataQualityFigure">
+                <Border Background="Transparent"
+                        Width="160"
+                        Margin="0,0,12,10"
+                        ToolTip.Tip="{Binding Tooltip}">
+                  <StackPanel Spacing="2">
+                    <TextBlock Text="{Binding Label}" Classes="t-caption" />
+                    <TextBlock Text="{Binding Value}" Classes="figure" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <Grid ColumnDefinitions="*,*">
+            <ContentControl x:Name="HfrPixelChart"
+                            Grid.Column="0"
+                            Margin="0,0,10,0"
+                            Content="{Binding HfrPixelChart}"
+                            ContentTemplate="{StaticResource BarChartTemplate}" />
+            <ContentControl x:Name="HfrArcsecChart"
+                            Grid.Column="1"
+                            Margin="10,0,0,0"
+                            Content="{Binding HfrArcsecChart}"
+                            ContentTemplate="{StaticResource BarChartTemplate}" />
+          </Grid>
+        </StackPanel>
+
+        <!-- 9. Storage -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding Storage.Title}" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.storage" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="{Binding Storage.EmptyMessage}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding Storage.IsEmpty}" />
+          <ItemsControl x:Name="StorageFigures" ItemsSource="{Binding Storage.Figures}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="stats:StorageFigure">
+                <StackPanel Width="220" Margin="0,0,12,10" Spacing="2">
+                  <TextBlock Text="{Binding Label}" Classes="t-caption" />
+                  <TextBlock Text="{Binding Value}" Classes="figure" />
+                  <TextBlock Text="{Binding Subtitle}" Classes="t-caption" TextWrapping="Wrap" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <lvc:PieChart x:Name="StoragePie"
+                        Series="{Binding Storage.Series}"
+                        Background="Transparent"
+                        Height="240"
+                        IsVisible="{Binding !Storage.IsEmpty}" />
+        </StackPanel>
+
+        <!-- 10. Ingest history -->
+        <StackPanel Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding IngestHistoryChart.Title}"
+                         Classes="t-label section"
+                         VerticalAlignment="Center" />
+              <controls:HelpButton Topic="stats.ingest" />
+            </StackPanel>
+          </Border>
+          <ContentControl x:Name="IngestHistoryChart"
+                          Content="{Binding IngestHistoryChart}"
+                          ContentTemplate="{StaticResource BarChartBodyTemplate}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

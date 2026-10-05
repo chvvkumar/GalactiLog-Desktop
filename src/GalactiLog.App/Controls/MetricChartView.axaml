@@ -1,0 +1,466 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             x:Class="GalactiLog.App.Controls.MetricChartView"
+             x:DataType="detail:MetricChartViewModel">
+  <!-- design-spec 13's two Target detail charts. One control for both: the axes and the series
+       differ and the chrome does not, so the pill row, the scope affordance and the empty state
+       are defined once here and MetricChartViewModel's two subclasses fill them.
+
+       P12 R9 removed two things. The collapse Expander is gone: each chart now lives in a
+       collapsed band whose toggle is the disclosure, and a band containing an expander
+       containing a chart is the nesting the direction refuses. The
+       legend under the chart is gone too: the pills are the legend and the box repeated them.
+
+       Phase 24 R3: the night chart's pill row ends with a Guiding pill. On, the guide graph takes
+       the plot's slot, the five-layer legend takes the filter pills' slot and one line of the
+       night's guiding figures sits under the pill row; the metric pills dim and keep their set.
+
+       Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios (0.500 to 0.786), not
+       point sizes, so binding one to FontSize renders sub-pixel text; FontSizeTokenTest fails the
+       build on it. Every colour is a theme token, a fixed metric-* series token, or a filter's
+       configured colour, which is user data and spec 14.5's one legitimate non-token colour. -->
+  <UserControl.Styles>
+    <!-- The plot is this control's starred row with no fixed height. A chart measured with
+         unbounded height reports none, so in an Auto host (the page's "Trend across nights"
+         band is a StackPanel) the row is the 260 floor below; the session pane's short starred
+         zone marks the view "fills" and the second block lifts the floor. -->
+    <Style Selector="Border#PlotHost">
+      <Setter Property="MinHeight" Value="260" />
+    </Style>
+    <Style Selector="controls|MetricChartView.fills Border#PlotHost">
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*">
+    <!-- R9's one pill row. The two strips keep their own names, their own sources and their own
+         templates; what changed is that they sit side by side with a 1 px rule between them
+         instead of stacking, and that a pill is a flat outline with a 7 px filled dot in its
+         colour instead of a 2 px tinted border. -->
+    <WrapPanel Grid.Row="0" x:Name="PillRow" Orientation="Horizontal">
+      <!-- Spec 13's selected-metric set, as the same ToggleOptionViewModel pills the dashboard's
+           filter panel uses, each dotted with the metric-* token its series is drawn in. Toggling
+           one writes graph.enabled_metrics through the shared selection's single write chain.
+           Disabled, which is the theme's dimmed form, while the guide trace is drawn. -->
+      <ItemsControl x:Name="MetricPills"
+                    Margin="0,0,10,0"
+                    ItemsSource="{Binding MetricPills}"
+                    IsEnabled="{Binding !ShowsGuiding}"
+                    VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="detail:MetricPill">
+            <ToggleButton IsChecked="{Binding Toggle.IsSelected, Mode=TwoWay}"
+                          Margin="0,0,4,0"
+                          Padding="8,3"
+                          CornerRadius="3">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Width="7" Height="7" Fill="{Binding Tint}" VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Toggle.Label}" />
+              </StackPanel>
+            </ToggleButton>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Border Width="1"
+              VerticalAlignment="Stretch"
+              Margin="0,2,10,2"
+              Background="{DynamicResource ColorBorderDefault}" />
+
+      <!-- Spec 13's optional per-filter splits. The "overall" sentinel carries no tint: its
+           series is coloured by the metric token, so it gets no dot at all rather than a grey one.
+           Every other pill is the filter's configured colour (spec 14.5), already resolved by the
+           shared selection. Hidden while the guide legend takes this slot. -->
+      <ItemsControl x:Name="FilterPills"
+                    Margin="0,0,10,0"
+                    ItemsSource="{Binding Selection.Filters}"
+                    IsVisible="{Binding !ShowsGuiding}"
+                    VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="dash:ToggleOptionViewModel">
+            <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                          Margin="0,0,4,0"
+                          Padding="8,3"
+                          CornerRadius="3">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Ellipse Width="7"
+                         Height="7"
+                         Fill="{Binding Tint}"
+                         IsVisible="{Binding HasTint}"
+                         VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Label}" />
+              </StackPanel>
+            </ToggleButton>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- The guide graph's legend, in the filter pills' slot while the guide trace is drawn:
+           five entries in the draw list's order, each a swatch and a label, each a toggle. A
+           hidden entry is struck through and its layer is not drawn at all; the entries are
+           the graph's own and keep their state while the pill is off. Five explicit entries
+           rather than an ItemsControl, because each swatch binds its own token. -->
+      <WrapPanel x:Name="GuideLegend"
+                 Orientation="Horizontal"
+                 Margin="0,0,10,0"
+                 IsVisible="{Binding ShowsGuiding}"
+                 VerticalAlignment="Center">
+        <ToggleButton x:Name="GuideLegendRa"
+                      Margin="0,0,4,0"
+                      Padding="8,3"
+                      CornerRadius="3"
+                      IsChecked="{Binding Guiding.Graph.Legend[0].IsShown, Mode=TwoWay, FallbackValue=True}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricGuiding}" />
+            <TextBlock Text="RA" IsVisible="{Binding Guiding.Graph.Legend[0].IsShown, FallbackValue=True}" />
+            <TextBlock Text="RA"
+                       TextDecorations="Strikethrough"
+                       IsVisible="{Binding !Guiding.Graph.Legend[0].IsShown, FallbackValue=False}" />
+          </StackPanel>
+        </ToggleButton>
+        <ToggleButton x:Name="GuideLegendDec"
+                      Margin="0,0,4,0"
+                      Padding="8,3"
+                      CornerRadius="3"
+                      IsChecked="{Binding Guiding.Graph.Legend[1].IsShown, Mode=TwoWay, FallbackValue=True}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricFwhm}" />
+            <TextBlock Text="Dec" IsVisible="{Binding Guiding.Graph.Legend[1].IsShown, FallbackValue=True}" />
+            <TextBlock Text="Dec"
+                       TextDecorations="Strikethrough"
+                       IsVisible="{Binding !Guiding.Graph.Legend[1].IsShown, FallbackValue=False}" />
+          </StackPanel>
+        </ToggleButton>
+        <ToggleButton x:Name="GuideLegendStarLost"
+                      Margin="0,0,4,0"
+                      Padding="8,3"
+                      CornerRadius="3"
+                      IsChecked="{Binding Guiding.Graph.Legend[2].IsShown, Mode=TwoWay, FallbackValue=True}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricWorst}" />
+            <TextBlock Text="Star lost" IsVisible="{Binding Guiding.Graph.Legend[2].IsShown, FallbackValue=True}" />
+            <TextBlock Text="Star lost"
+                       TextDecorations="Strikethrough"
+                       IsVisible="{Binding !Guiding.Graph.Legend[2].IsShown, FallbackValue=False}" />
+          </StackPanel>
+        </ToggleButton>
+        <ToggleButton x:Name="GuideLegendDither"
+                      Margin="0,0,4,0"
+                      Padding="8,3"
+                      CornerRadius="3"
+                      IsChecked="{Binding Guiding.Graph.Legend[3].IsShown, Mode=TwoWay, FallbackValue=True}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricEccentricity}" />
+            <TextBlock Text="Dither" IsVisible="{Binding Guiding.Graph.Legend[3].IsShown, FallbackValue=True}" />
+            <TextBlock Text="Dither"
+                       TextDecorations="Strikethrough"
+                       IsVisible="{Binding !Guiding.Graph.Legend[3].IsShown, FallbackValue=False}" />
+          </StackPanel>
+        </ToggleButton>
+        <ToggleButton x:Name="GuideLegendSettling"
+                      Margin="0,0,4,0"
+                      Padding="8,3"
+                      CornerRadius="3"
+                      IsChecked="{Binding Guiding.Graph.Legend[4].IsShown, Mode=TwoWay, FallbackValue=True}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <!-- The settle band's own ink is a background, so on a swatch sitting on a
+                 background it needs an edge to be a swatch at all. -->
+            <Rectangle Width="10"
+                       Height="2"
+                       VerticalAlignment="Center"
+                       Fill="{DynamicResource ColorBgHover}"
+                       Stroke="{DynamicResource ColorBorderDefault}"
+                       StrokeThickness="1" />
+            <TextBlock Text="Settling" IsVisible="{Binding Guiding.Graph.Legend[4].IsShown, FallbackValue=True}" />
+            <TextBlock Text="Settling"
+                       TextDecorations="Strikethrough"
+                       IsVisible="{Binding !Guiding.Graph.Legend[4].IsShown, FallbackValue=False}" />
+          </StackPanel>
+        </ToggleButton>
+      </WrapPanel>
+
+      <Border Width="1"
+              VerticalAlignment="Stretch"
+              Margin="0,2,10,2"
+              IsVisible="{Binding HasRigPills}"
+              Background="{DynamicResource ColorBorderDefault}" />
+
+      <!-- Spec 13's rig pills (PAR-004), beside the metric and filter rows and on a multi-rig
+           target only. A pill carries its dash pattern as a short drawn line rather than the 7
+           pixel dot a metric pill carries, because the colour on this page belongs to the metric
+           and the dash is the rig's only mark. Rig 0's array is empty, so its line is solid.
+
+           The state is per visit and is not persisted (spec 13): it names which of tonight's rigs
+           the reader is looking at, which is not a preference, so there is no graph key for it.
+           These pills and the frame table's own rig pills are separate filters and do not drive
+           each other: one hides a line, the other hides a row. -->
+      <ItemsControl x:Name="RigPills"
+                    Margin="0,0,10,0"
+                    ItemsSource="{Binding RigPills}"
+                    IsVisible="{Binding HasRigPills}"
+                    VerticalAlignment="Center">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="detail:RigPill">
+            <ToggleButton IsChecked="{Binding Toggle.IsSelected, Mode=TwoWay}"
+                          Margin="0,0,4,0"
+                          Padding="8,3"
+                          CornerRadius="3">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <Line StartPoint="0,0"
+                      EndPoint="18,0"
+                      StrokeThickness="2"
+                      StrokeDashArray="{Binding StrokeDashArray}"
+                      Stroke="{DynamicResource ColorTextSecondary}"
+                      VerticalAlignment="Center" />
+                <TextBlock Text="{Binding Toggle.Label}" />
+              </StackPanel>
+            </ToggleButton>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- Phase 24 R3's Guiding pill, on the night chart only and disabled on a night with no
+           guide log. Exclusive with the metric dots; stored as graph.show_guiding beside the
+           metric and filter choices. -->
+      <Border Width="1"
+              VerticalAlignment="Stretch"
+              Margin="0,2,10,2"
+              IsVisible="{Binding HasGuidingPill}"
+              Background="{DynamicResource ColorBorderDefault}" />
+      <ToggleButton x:Name="GuidingPill"
+                    Margin="0,0,10,0"
+                    Padding="8,3"
+                    CornerRadius="3"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding HasGuidingPill}"
+                    IsEnabled="{Binding IsGuidingAvailable}"
+                    IsChecked="{Binding ShowGuiding, Mode=TwoWay}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <Ellipse Width="7" Height="7" Fill="{DynamicResource ColorMetricGuiding}" VerticalAlignment="Center" />
+          <TextBlock Text="Guiding" />
+        </StackPanel>
+      </ToggleButton>
+
+      <!-- What the host puts at the end of the pill row, such as its help glyph. -->
+      <ContentControl x:Name="PillRowEndHost"
+                      Content="{Binding $parent[controls:MetricChartView].PillRowEnd}"
+                      VerticalAlignment="Center" />
+    </WrapPanel>
+
+    <!-- Decision Q21: default_chart_sessions is how many of the newest sessions the cross-session
+         chart opens with, and this is the affordance that widens it. Unpersisted, and absent
+         entirely on the per-session chart, which has no session scope. -->
+    <StackPanel Grid.Row="1"
+                x:Name="SessionScope"
+                Orientation="Horizontal"
+                Spacing="8"
+                Margin="0,6,0,0"
+                IsVisible="{Binding HasSessionScope}">
+      <CheckBox Content="All sessions" IsChecked="{Binding ShowAllSessions, Mode=TwoWay}" />
+      <TextBlock Text="{Binding SessionScopeText}"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+    </StackPanel>
+
+    <!-- Spec 12.4's seven figures on one line, the whole night's, only while the guide trace is
+         drawn; under them, the state the section reports when there is nothing to plot. A figure
+         with no value draws nothing, its label included. -->
+    <StackPanel Grid.Row="1"
+                x:Name="GuidingStats"
+                Spacing="4"
+                Margin="0,6,0,0"
+                IsVisible="{Binding ShowsGuiding}">
+      <WrapPanel Orientation="Horizontal" IsVisible="{Binding Guiding.HasSummary, FallbackValue=False}">
+        <StackPanel Orientation="Horizontal"
+                    Margin="0,0,14,0"
+                    IsVisible="{Binding Guiding.HasRms, FallbackValue=False}">
+          <TextBlock Classes="t-label" Text="RMS" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Classes="t-label"
+                     x:Name="GuidingRms"
+                     Text="{Binding Guiding.RmsText, FallbackValue=''}"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorMetricGuiding}" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal"
+                    Margin="0,0,14,0"
+                    IsVisible="{Binding Guiding.HasRmsRa, FallbackValue=False}">
+          <TextBlock Classes="t-label" Text="RA" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Classes="t-label" x:Name="GuidingRmsRa" Text="{Binding Guiding.RmsRaText, FallbackValue=''}" VerticalAlignment="Center" />
+        </StackPanel>
+        <StackPanel Orientation="Horizontal"
+                    Margin="0,0,14,0"
+                    IsVisible="{Binding Guiding.HasRmsDec, FallbackValue=False}">
+          <TextBlock Classes="t-label" Text="Dec" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock Classes="t-label" x:Name="GuidingRmsDec" Text="{Binding Guiding.RmsDecText, FallbackValue=''}" VerticalAlignment="Center" />
+        </StackPanel>
+        <TextBlock Classes="t-label" Text="Sessions" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+        <TextBlock Classes="t-label"
+                   x:Name="GuidingSessions"
+                   Text="{Binding Guiding.SessionsText, FallbackValue=''}"
+                   Margin="0,0,14,0"
+                   VerticalAlignment="Center" />
+        <TextBlock Classes="t-label" Text="Star lost" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+        <TextBlock Classes="t-label"
+                   x:Name="GuidingStarLost"
+                   Text="{Binding Guiding.StarLostText, FallbackValue=''}"
+                   Margin="0,0,14,0"
+                   VerticalAlignment="Center" />
+        <TextBlock Classes="t-label" Text="Dithers" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+        <TextBlock Classes="t-label"
+                   x:Name="GuidingDithers"
+                   Text="{Binding Guiding.DithersText, FallbackValue=''}"
+                   Margin="0,0,14,0"
+                   VerticalAlignment="Center" />
+        <TextBlock Classes="t-label" Text="Settle" Margin="0,0,4,0" VerticalAlignment="Center" Foreground="{DynamicResource ColorTextTertiary}" />
+        <TextBlock Classes="t-label"
+                   x:Name="GuidingSettle"
+                   Text="{Binding Guiding.SettleText, FallbackValue=''}"
+                   Margin="0,0,6,0"
+                   VerticalAlignment="Center" />
+        <!-- The failed run is the only part of this line that carries its own ink, because it
+             is the only part that reports a fault. -->
+        <TextBlock Classes="t-label"
+                   x:Name="GuidingSettleFailed"
+                   Text="{Binding Guiding.SettleFailedText, FallbackValue=''}"
+                   IsVisible="{Binding Guiding.HasSettleFailed, FallbackValue=False}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorWarning}" />
+      </WrapPanel>
+      <TextBlock x:Name="GuidingLoading"
+                 Classes="t-label"
+                 Text="Loading this night's guiding..."
+                 Foreground="{DynamicResource ColorTextTertiary}"
+                 IsVisible="{Binding Guiding.IsLoading, FallbackValue=False}" />
+      <TextBlock x:Name="GuidingNotice"
+                 Classes="t-label"
+                 Text="{Binding Guiding.PlotNoticeText, FallbackValue=''}"
+                 Foreground="{DynamicResource ColorTextTertiary}"
+                 IsVisible="{Binding Guiding.HasPlotNotice, FallbackValue=False}"
+                 TextWrapping="Wrap" />
+      <!-- A guide-log failure never takes the night down: it is one line here. -->
+      <TextBlock x:Name="GuidingFailure"
+                 Classes="t-label"
+                 Text="This night's guiding could not be loaded. See the log for details."
+                 Foreground="{DynamicResource ColorWarning}"
+                 IsVisible="{Binding Guiding.HasFailure, FallbackValue=False}"
+                 TextWrapping="Wrap" />
+    </StackPanel>
+
+    <TextBlock Grid.Row="2"
+               x:Name="EmptyState"
+               Text="No data for the selected metrics."
+               Margin="0,6,0,0"
+               IsVisible="{Binding ShowsEmpty}"
+               Foreground="{DynamicResource ColorTextTertiary}" />
+
+    <!-- Background="Transparent" is spec 13's first global-configuration bullet, "chart
+         background transparent so the page gradient shows through". It belongs here rather than
+         in ChartTheme because it is an Avalonia control property and not a LiveCharts setting;
+         ChartTheme's own comment says the same thing from the other side.
+
+         The host Border is what carries the floor (the two style blocks above), so the empty
+         state hides the host and the floor with it.
+
+         LegendPosition is Hidden by P12 R9, which is also rc5.4's own default: the pill row above
+         names every plotted series in its own colour, and the legend box under the chart repeated
+         that list a second time. Setting it explicitly rather than relying on the default keeps
+         the decision visible in the file that made it. -->
+    <Border Grid.Row="3"
+            x:Name="PlotHost"
+            Margin="0,6,0,0"
+            IsVisible="{Binding ShowsOverlaid}">
+      <lvc:CartesianChart x:Name="Chart"
+                          LegendPosition="Hidden"
+                          Series="{Binding Series}"
+                          XAxes="{Binding XAxes}"
+                          YAxes="{Binding YAxes}"
+                          Sections="{Binding Sections}"
+                          DrawMargin="{Binding DrawMargin}"
+                          DataPointerDownCommand="{Binding PointPressedCommand}"
+                          Background="Transparent" />
+    </Border>
+
+    <!-- The guide graph in the plot's slot while the Guiding pill is on: the night's shared axis
+         under the timeline, so it labels no clock of its own, and its own gestures (Ctrl-wheel
+         zooms time, Ctrl-Shift-wheel zooms arcseconds, a drag pans, a double click resets, a
+         plain wheel scrolls the pane). The eight inks are the tokens the section bound. -->
+    <controls:GuideGraph Grid.Row="3"
+                         x:Name="GuidePlot"
+                         Margin="0,6,0,0"
+                         IsVisible="{Binding ShowsGuiding}"
+                         Model="{Binding Guiding.Graph, FallbackValue={x:Null}}"
+                         LaneAxis="{Binding LaneAxis}"
+                         Strip="{Binding Strip}"
+                         TextElement.FontFamily="{StaticResource FontMono}"
+                         RaBrush="{DynamicResource ColorMetricGuiding}"
+                         DecBrush="{DynamicResource ColorMetricFwhm}"
+                         DropBrush="{DynamicResource ColorMetricWorst}"
+                         DitherBrush="{DynamicResource ColorMetricEccentricity}"
+                         SettleBrush="{DynamicResource ColorBgHover}"
+                         AxisBrush="{DynamicResource ColorBorderEmphasis}"
+                         GridBrush="{DynamicResource ColorBorderDefault}"
+                         LabelBrush="{DynamicResource ColorTextTertiary}" />
+
+    <!-- The laned form: one chart per toggled metric, each on its own y axis and with the same
+         left and right plot edges. The lanes share the viewport and scroll only past 96 px each,
+         so the pill rows above stay in place. -->
+    <ScrollViewer Grid.Row="3"
+                  x:Name="LanesScroll"
+                  controls:WheelPassthrough.IsEnabled="True"
+                  Margin="0,6,0,0"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled"
+                  IsVisible="{Binding ShowsLanes}">
+      <ItemsControl x:Name="Lanes"
+                    ItemsSource="{Binding Lanes}"
+                    MinHeight="{Binding #LanesScroll.Viewport.Height}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="1" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="detail:ChartLane">
+            <!-- The title reads across the lane's top left, in the plot's top margin, because a
+                 rotated axis name is longer than a short lane. -->
+            <Grid>
+              <lvc:CartesianChart MinHeight="96"
+                                  LegendPosition="Hidden"
+                                  Series="{Binding Series}"
+                                  DataPointerDownCommand="{Binding $parent[ItemsControl].((detail:MetricChartViewModel)DataContext).PointPressedCommand}"
+                                  XAxes="{Binding XAxes}"
+                                  YAxes="{Binding YAxes}"
+                                  DrawMargin="{Binding DrawMargin}"
+                                  Background="Transparent" />
+              <TextBlock x:Name="LaneTitle"
+                         Classes="t-label"
+                         Text="{Binding Title}"
+                         HorizontalAlignment="Left"
+                         VerticalAlignment="Top"
+                         IsHitTestVisible="False" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

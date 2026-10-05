@@ -1,0 +1,103 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.PerFilterTablePart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel">
+
+  <UserControl.Styles>
+    <StyleInclude Source="/Views/TargetDetail/Parts/PartStyles.axaml" />
+  </UserControl.Styles>
+
+  <!-- Spec 12.4's per-filter medians and per-filter detail rows as one table, joined by filter
+       name, so one filter's figures are read in one place instead of the same filter list
+       twice 400 pixels apart. A filter shot at more than one exposure keeps its sub-rows. -->
+  <Grid x:Name="FilterTable"
+        RowDefinitions="Auto,Auto"
+        Grid.IsSharedSizeScope="True">
+    <Grid Grid.Row="0" x:Name="FilterTableHeader" Classes="tab-row">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" MinWidth="110" SharedSizeGroup="FilterName" />
+        <ColumnDefinition Width="Auto" MinWidth="78" SharedSizeGroup="FilterHfr" />
+        <ColumnDefinition Width="Auto" MinWidth="66" SharedSizeGroup="FilterEcc" />
+        <ColumnDefinition Width="Auto" MinWidth="78" SharedSizeGroup="FilterFwhm" />
+        <ColumnDefinition Width="Auto" MinWidth="66" SharedSizeGroup="FilterRms" />
+        <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="FilterStars" />
+        <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="FilterExp" />
+        <ColumnDefinition Width="Auto" MinWidth="74" SharedSizeGroup="FilterFrames" />
+        <ColumnDefinition Width="*" MinWidth="70" />
+      </Grid.ColumnDefinitions>
+      <Border Grid.Column="0" Grid.ColumnSpan="9" Classes="rule" />
+      <TextBlock Grid.Column="0" Classes="t-label" Text="Filter" />
+      <TextBlock Grid.Column="1" Classes="t-label num" Text="HFR px" />
+      <TextBlock Grid.Column="2" Classes="t-label num" Text="Ecc" />
+      <TextBlock Grid.Column="3" Classes="t-label num" Text="FWHM &quot;" />
+      <TextBlock Grid.Column="4" Classes="t-label num" Text="RMS &quot;" />
+      <TextBlock Grid.Column="5" Classes="t-label num" Text="Stars" />
+      <TextBlock Grid.Column="6" Classes="t-label num" Text="Exp s" />
+      <TextBlock Grid.Column="7" Classes="t-label num" Text="Frames" />
+      <TextBlock Grid.Column="8" Classes="t-label num" Text="Int h" />
+    </Grid>
+
+    <ItemsControl Grid.Row="1" x:Name="FilterRowsList" ItemsSource="{Binding FilterRows}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="detail:FilterTableRowViewModel">
+          <Grid Classes="tab-row" Classes.sub="{Binding IsSubRow}">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" MinWidth="110" SharedSizeGroup="FilterName" />
+              <ColumnDefinition Width="Auto" MinWidth="78" SharedSizeGroup="FilterHfr" />
+              <ColumnDefinition Width="Auto" MinWidth="66" SharedSizeGroup="FilterEcc" />
+              <ColumnDefinition Width="Auto" MinWidth="78" SharedSizeGroup="FilterFwhm" />
+              <ColumnDefinition Width="Auto" MinWidth="66" SharedSizeGroup="FilterRms" />
+              <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="FilterStars" />
+              <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="FilterExp" />
+              <ColumnDefinition Width="Auto" MinWidth="74" SharedSizeGroup="FilterFrames" />
+              <ColumnDefinition Width="*" MinWidth="70" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+              <Ellipse Width="7"
+                       Height="7"
+                       Margin="0,0,5,0"
+                       VerticalAlignment="Center"
+                       Fill="{Binding Swatch.Brush}"
+                       IsVisible="{Binding Swatch, Converter={x:Static ObjectConverters.IsNotNull}}" />
+              <TextBlock Text="{Binding FilterName}" />
+            </StackPanel>
+            <TextBlock Grid.Column="1" Classes="num" Text="{Binding MedianHfrText}" />
+            <TextBlock Grid.Column="2" Classes="num" Text="{Binding MedianEccentricityText}" />
+            <TextBlock Grid.Column="3" Classes="num" Text="{Binding MedianFwhmText}" />
+            <TextBlock Grid.Column="4" Classes="num" Text="{Binding MedianGuidingRmsText}" />
+            <TextBlock Grid.Column="5" Classes="num" Text="{Binding MedianDetectedStarsText}" />
+            <TextBlock Grid.Column="6"
+                       Classes="num"
+                       Classes.muted="{Binding IsExposureCount}"
+                       Text="{Binding ExposureTimeText}" />
+            <TextBlock Grid.Column="7" Classes="num" Text="{Binding FrameCountText}" />
+            <TextBlock Grid.Column="8" Classes="num" Text="{Binding IntegrationText}" />
+
+            <!-- Spec 12.4 item 2's rig label row, on a multi-rig night
+                 only. A full-width row in this same grid: it spans the nine existing
+                 columns, adds none, changes no MinWidth and changes no
+                 SharedSizeGroup, so the filter table and the ranges table stay
+                 aligned and the pane's 1074 breakpoint is untouched.
+
+                 The nine cells are left in place rather than hidden one by one: a
+                 label row carries no filter name, no swatch and no figure, so every
+                 one of them renders empty underneath this.
+
+                 The two runs themselves are RigLabelRowTemplate in
+                 Theme/Controls.axaml, shared with the ranges table below, which
+                 differs from this one only in the column span. -->
+            <ContentControl Grid.Column="0"
+                            Grid.ColumnSpan="9"
+                            x:Name="FilterRigLabelRow"
+                            Content="{Binding LabelRow}"
+                            ContentTemplate="{StaticResource RigLabelRowTemplate}"
+                            IsVisible="{Binding IsRigLabel}" />
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Grid>
+</UserControl>

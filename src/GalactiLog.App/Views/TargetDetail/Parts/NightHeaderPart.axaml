@@ -1,0 +1,44 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightHeaderPart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel">
+  <!-- The night's title and spec 12.4's facts as the comp's one line. The loading indicator and
+       the failed-expansion callout sit on this part's own second line, so a failure is stated at
+       the top of the night rather than in the middle of it. The notes disclosure is the Session
+       notes section at the bottom of the lanes (P24 R17), not a button here. -->
+  <StackPanel Spacing="6">
+    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="NightHeader"
+                   Classes="t-stat"
+                   Text="{Binding NightHeaderText}"
+                   VerticalAlignment="Center" />
+        <controls:HelpButton Topic="target.night" />
+        <controls:HelpButton x:Name="NightDetailHelp" Topic="target.night-detail" />
+      </StackPanel>
+      <TextBlock Grid.Column="1"
+                 x:Name="FactsLine"
+                 Classes="t-label"
+                 Text="{Binding FactsLineText}"
+                 TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center" />
+    </Grid>
+
+    <TextBlock x:Name="LoadingIndicator"
+               Classes="t-caption"
+               Text="{Binding LoadingText}"
+               IsVisible="{Binding IsLoading}" />
+
+    <!-- A failed session query is a line on the pane, never an exception on the UI thread and
+         never a blank page: the ledger row beside it still holds every collapsed figure. -->
+    <Border x:Name="FailureCallout"
+            Classes="callout warn"
+            IsVisible="{Binding HasFailure}">
+      <TextBlock Text="This session could not be loaded. See the log for details. Select another night and come back to try again."
+                 TextWrapping="Wrap" />
+    </Border>
+  </StackPanel>
+</UserControl>

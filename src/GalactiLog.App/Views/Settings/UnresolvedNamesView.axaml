@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.UnresolvedNamesView"
+             x:Name="Root"
+             x:DataType="settings:UnresolvedNamesViewModel">
+  <!-- design-spec 9.7 and 12.7: the distinct unresolved OBJECT names with their frame counts, the
+       retry action that clears every negative cache row and re-runs resolution, and the create
+       target row action (PAR-001). The same control renders in Phase 10's Diagnostics page
+       (spec 12.8), which is why the section is a UserControl over its own view-model rather than
+       markup inside the Targets tab.
+
+       Phase 14B Task 3 moved this file into the Observing Ledger vocabulary (DESIGN.md section 8):
+       no card chrome, no radius of its own, a hairline Border.rule under the section heading and under
+       each row, the type tiers on the heading and the captions, and the shared button classes.
+       Every colour is a theme token (spec 14) and nothing here sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios, not point sizes. -->
+  <StackPanel x:Name="UnresolvedNamesSection" Spacing="10">
+    <Border Classes="rule" Padding="0,0,0,6">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+          <TextBlock Classes="t-label section"
+                     Text="Unresolved names"
+                     VerticalAlignment="Center" />
+          <controls:HelpButton Topic="settings.targets.unresolved" />
+        </StackPanel>
+        <!-- The retry sits in the section header, with its progress line beneath. -->
+        <Button Grid.Column="1"
+                x:Name="RetryUnresolvedButton"
+                Classes="sm"
+                Content="Retry unresolved"
+                Command="{Binding RetryCommand}" />
+      </Grid>
+    </Border>
+
+    <TextBlock x:Name="RetryProgressText"
+               Classes="t-caption"
+               Text="{Binding RetryProgress}"
+               TextWrapping="Wrap"
+               IsVisible="{Binding RetryProgress, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <TextBlock x:Name="RetrySummaryText"
+               Classes="t-caption"
+               Text="{Binding RetrySummary}"
+               TextWrapping="Wrap"
+               IsVisible="{Binding RetrySummary, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <!-- Spec 12.10, verbatim, including the full stop. Hidden while the first load is in
+         flight, so it does not flash before the rows arrive. -->
+    <TextBlock x:Name="AllResolvedText"
+               Classes="t-caption"
+               Text="Every OBJECT name resolved."
+               IsVisible="{Binding ShowAllResolved}" />
+
+    <!-- A query that threw, so the section is not a bare header. No exception text on screen;
+         the log carries that. -->
+    <TextBlock x:Name="LoadFailedText"
+               Classes="t-caption"
+               Text="The unresolved names could not be loaded."
+               IsVisible="{Binding LoadFailed}" />
+
+    <ItemsControl x:Name="UnresolvedNameList" ItemsSource="{Binding Names}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate DataType="settings:UnresolvedNameRowViewModel">
+          <Border Classes="rule" Padding="12,10">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                <TextBlock Classes="section"
+                           Text="{Binding Name}"
+                           TextTrimming="CharacterEllipsis" />
+                <!-- TextBlock.num already carries tnum=1, so the figure needs no FontFeatures of
+                     its own. -->
+                <TextBlock Classes="t-caption num"
+                           Text="{Binding FrameCountText}"
+                           VerticalAlignment="Center" />
+              </StackPanel>
+
+              <StackPanel Grid.Column="1"
+                          Orientation="Horizontal"
+                          Spacing="6"
+                          VerticalAlignment="Center">
+                <!-- Spec 12.7's Create target row action (PAR-001): opens the Targets tab's own
+                     form with this name pre-filled and already in the alias list. With no form
+                     registered the command's CanExecute renders it disabled. -->
+                <Button x:Name="CreateTargetFromNameButton"
+                        Classes="sm"
+                        Content="Create target"
+                        Command="{Binding #Root.((settings:UnresolvedNamesViewModel)DataContext).CreateTargetCommand}"
+                        CommandParameter="{Binding}" />
+                <!-- Opens spec 12.9's merge dialog with this name as the merged-away side. With no
+                     dialog registered the command's CanExecute renders it disabled, the pattern
+                     Phase 6 used for the preview action. -->
+                <Button Classes="sm"
+                        Content="Assign to target"
+                        Command="{Binding #Root.((settings:UnresolvedNamesViewModel)DataContext).AssignCommand}"
+                        CommandParameter="{Binding}" />
+              </StackPanel>
+            </Grid>
+          </Border>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

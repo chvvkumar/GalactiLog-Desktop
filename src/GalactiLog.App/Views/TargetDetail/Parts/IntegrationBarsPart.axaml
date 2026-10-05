@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:local="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.IntegrationBarsPart"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+          <!-- One bar per filter in its tint, the longest at the full column, hours at the end.
+               Hidden when the group used no filter. The name and bar columns are shared across
+               the items, so the bars line up whatever the names measure. -->
+          <Panel>
+          <Panel x:Name="SmallForm">
+          <ItemsControl x:Name="IntegrationBars"
+                        Grid.IsSharedSizeScope="True"
+                        ItemsSource="{Binding Totals.IntegrationBars}"
+                        IsVisible="{Binding Totals.HasIntegrationBars, FallbackValue=False}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="detail:IntegrationBarViewModel">
+                <Grid ColumnSpacing="8" Margin="0,0,20,2">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="IntegrationBarName" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="IntegrationBarLength" />
+                    <ColumnDefinition Width="Auto" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0"
+                             Classes="t-caption"
+                             Text="{Binding FilterName}"
+                             MaxWidth="90"
+                             TextTrimming="CharacterEllipsis"
+                             ToolTip.Tip="{Binding FilterName}"
+                             VerticalAlignment="Center" />
+                  <Border Grid.Column="1"
+                          Height="6"
+                          Width="{Binding BarWidth}"
+                          HorizontalAlignment="Left"
+                          VerticalAlignment="Center"
+                          Background="{Binding Brush}" />
+                  <TextBlock Grid.Column="2" Classes="t-caption num" Text="{Binding HoursText}" VerticalAlignment="Center" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          </Panel>
+
+          <!-- The full form: one 30 px row per filter on one scale, the track filling the
+               width. A segment is a night, in ledger order, 1 px apart. -->
+          <Panel x:Name="FullForm" IsVisible="False">
+          <ItemsControl x:Name="FullIntegrationBars"
+                        Grid.IsSharedSizeScope="True"
+                        ItemsSource="{Binding Totals.IntegrationBars}"
+                        IsVisible="{Binding Totals.HasIntegrationBars, FallbackValue=False}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="detail:IntegrationBarViewModel">
+                <Grid Height="30" ColumnSpacing="8">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="FullBarName" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="FullBarHours" />
+                    <ColumnDefinition Width="Auto" SharedSizeGroup="FullBarShortBy" />
+                  </Grid.ColumnDefinitions>
+                  <TextBlock Grid.Column="0"
+                             Classes="t-caption"
+                             Text="{Binding FilterName}"
+                             MaxWidth="90"
+                             TextTrimming="CharacterEllipsis"
+                             ToolTip.Tip="{Binding FilterName}"
+                             VerticalAlignment="Center" />
+                  <Grid Grid.Column="1" Height="14" VerticalAlignment="Center">
+                    <ItemsControl x:Name="Track"
+                                  ItemsSource="{Binding Segments}"
+                                  Background="{DynamicResource ColorBgSurface}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="detail:IntegrationSegmentViewModel">
+                          <Border Height="14"
+                                  Margin="0,0,1,0"
+                                  Background="{Binding Brush}"
+                                  ToolTip.Tip="{Binding Tip}">
+                            <Border.Width>
+                              <MultiBinding Converter="{x:Static local:IntegrationBarsPart.SegmentWidth}">
+                                <Binding Path="Fraction" />
+                                <Binding Path="Bounds.Width" RelativeSource="{RelativeSource AncestorType=ItemsControl}" />
+                              </MultiBinding>
+                            </Border.Width>
+                          </Border>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <Border x:Name="GoalTick"
+                            Width="1"
+                            HorizontalAlignment="Left"
+                            Background="{DynamicResource ColorTextPrimary}"
+                            IsVisible="{Binding GoalFraction, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <Border.Margin>
+                        <MultiBinding Converter="{x:Static local:IntegrationBarsPart.GoalOffset}">
+                          <Binding Path="GoalFraction" />
+                          <Binding Path="Bounds.Width" RelativeSource="{RelativeSource AncestorType=Grid}" />
+                        </MultiBinding>
+                      </Border.Margin>
+                    </Border>
+                  </Grid>
+                  <TextBlock Grid.Column="2" Classes="t-caption num" Text="{Binding HoursText}" VerticalAlignment="Center" />
+                  <TextBlock Grid.Column="3"
+                             x:Name="ShortBy"
+                             Classes="t-caption"
+                             Text="{Binding ShortByText}"
+                             VerticalAlignment="Center" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          </Panel>
+          </Panel>
+</UserControl>

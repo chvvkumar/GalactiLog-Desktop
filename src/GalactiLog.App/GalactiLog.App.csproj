@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <AssemblyName>GalactiLog</AssemblyName>
+    <ApplicationIcon>Assets\GalactiLog.ico</ApplicationIcon>
+    <!-- Spec 12.7's git SHA. The SDK appends "+<sha>" to AssemblyInformationalVersion from
+         SourceRevisionId, which SourceLink sets from the working copy and which the release
+         workflow also passes explicitly (release.yml, Task 5); BuildInfo reads the part after the
+         first "+". Set explicitly although it is the SDK default, so a future default change
+         shows up here rather than as a silently empty About field (ruling Q13). -->
+    <IncludeSourceRevisionInInformationalVersion>true</IncludeSourceRevisionInInformationalVersion>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="..\..\Catalogs\**\*" LinkBase="Catalogs" CopyToOutputDirectory="PreserveNewest" />
+    <AvaloniaResource Include="Assets\**" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\GalactiLog.Core\GalactiLog.Core.csproj" />
+    <ProjectReference Include="..\GalactiLog.Data\GalactiLog.Data.csproj" />
+    <ProjectReference Include="..\GalactiLog.Cli\GalactiLog.Cli.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" />
+    <PackageReference Include="Avalonia.Desktop" />
+    <PackageReference Include="Avalonia.Themes.Fluent" />
+    <PackageReference Include="Avalonia.Controls.ColorPicker" />
+    <PackageReference Include="CommunityToolkit.Mvvm" />
+    <PackageReference Include="LiveChartsCore.SkiaSharpView.Avalonia" />
+    <PackageReference Include="Serilog" />
+    <PackageReference Include="Serilog.Extensions.Hosting" />
+    <PackageReference Include="Serilog.Sinks.File" />
+    <PackageReference Include="Serilog.Sinks.Console" />
+    <PackageReference Include="Velopack" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" />
+  </ItemGroup>
+</Project>

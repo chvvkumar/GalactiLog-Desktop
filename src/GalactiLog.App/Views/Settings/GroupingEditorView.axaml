@@ -1,0 +1,223 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:sys="using:System"
+             x:Class="GalactiLog.App.Views.Settings.GroupingEditorView"
+             x:Name="Root"
+             x:DataType="settings:GroupingEditorViewModel">
+  <!-- Port of the web's GroupingEditor.tsx: a two-column editor, discovered names not yet in a
+       group on the left, canonical groups on the right. One shared view for filters, cameras and
+       telescopes (design-lessons rule 1 at the third occurrence); ShowColorPicker toggles the
+       colour swatch and its picker, the only difference between the three uses. Every colour
+       is a theme token except the two swatch fills, which are user data arriving as an
+       ImmutableSolidColorBrush from AliasGroupViewModel.SwatchBrush and
+       DiscoveredNameViewModel.SwatchBrush (spec 14.5); nothing here sets FontSize. -->
+  <Grid ColumnDefinitions="*,*" RowDefinitions="Auto">
+    <!-- Left column: Ungrouped. -->
+    <StackPanel Grid.Column="0" Spacing="8" Margin="0,0,12,0">
+      <TextBlock Foreground="{DynamicResource ColorTextSecondary}"
+                 FontWeight="SemiBold"
+                 Text="{Binding Ungrouped.Count, StringFormat='Ungrouped ({0})'}" />
+
+      <TextBlock x:Name="AllGroupedText"
+                 Text="All items are grouped"
+                 FontStyle="Italic"
+                 IsVisible="{Binding HasNoUngrouped}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <ScrollViewer MaxHeight="360">
+        <ItemsControl x:Name="UngroupedList" ItemsSource="{Binding Ungrouped}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:DiscoveredNameViewModel">
+              <Grid ColumnDefinitions="Auto,Auto,*,Auto" Margin="0,0,0,4">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding IsChecked, Mode=TwoWay}" />
+                <!-- R2(c): every ungrouped discovered name carries a swatch, seeded through the
+                     one resolution spine, and choosing a colour promotes the name to a one-name
+                     group. Ruling Q25's shape: a Button.quiet whose content is the filled Border,
+                     so the button chrome stays the shared vocabulary's and the colour lives in the
+                     content rather than in a view-declared button style. -->
+                <Button Grid.Column="1"
+                        x:Name="UngroupedColorSwatchButton"
+                        Classes="quiet"
+                        Padding="0"
+                        Margin="4,0"
+                        MinHeight="14"
+                        VerticalAlignment="Center"
+                        ToolTip.Tip="Choose this filter's colour"
+                        IsVisible="{Binding #Root.((settings:GroupingEditorViewModel)DataContext).ShowColorPicker}">
+                  <Border Width="14" Height="14"
+                          CornerRadius="3"
+                          Background="{Binding SwatchBrush}" />
+                  <Button.Flyout>
+                    <!-- The ungrouped pick commits once, when the flyout closes, and not per
+                         ColorChanged (review P2-2): the commit promotes the row to a one-name
+                         group, which tears the row out of Ungrouped, so a per-change commit would
+                         keep the first pixel of a drag and orphan the open flyout. ColorChanged
+                         still tracks the drag on the row's own swatch. -->
+                    <Flyout Placement="BottomEdgeAlignedLeft"
+                            Closed="OnUngroupedPickerClosed">
+                      <ColorView x:Name="UngroupedColorPicker"
+                                 Color="{Binding SwatchBrush.Color, Mode=OneWay}"
+                                 ColorChanged="OnUngroupedColorChanged"
+                                 IsAlphaEnabled="False"
+                                 IsAlphaVisible="False"
+                                 IsHexInputVisible="True"
+                                 IsColorPaletteVisible="False" />
+                    </Flyout>
+                  </Button.Flyout>
+                </Button>
+                <TextBlock Grid.Column="2"
+                           Text="{Binding Name}"
+                           TextTrimming="CharacterEllipsis"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+                <TextBlock Grid.Column="3"
+                           Text="{Binding CountLabel}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource ColorTextTertiary}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Button x:Name="GroupSelectedButton"
+                Content="{Binding CheckedCount, StringFormat='Group Selected ({0})'}"
+                Padding="10,3"
+                Command="{Binding GroupSelectedCommand}" />
+      </StackPanel>
+
+      <!-- "Add to..." (the web's hover menu): one button per existing group, shown once there is
+           somewhere to add to. -->
+      <ItemsControl x:Name="AddToGroupList"
+                    ItemsSource="{Binding Groups}"
+                    IsVisible="{Binding CanAddToExistingGroup}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <WrapPanel Orientation="Horizontal" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="settings:AliasGroupViewModel">
+            <Button Content="{Binding Canonical, StringFormat='Add to {0}'}"
+                    Margin="0,0,6,6"
+                    Padding="8,2"
+                    Command="{Binding #Root.((settings:GroupingEditorViewModel)DataContext).AddToGroupCommand}"
+                    CommandParameter="{Binding}" />
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+
+    <!-- Right column: Groups. Rendered as spec 12.7's "table of canonical filters" when
+         ShowColorPicker is true; the same shape without the colour column for cameras and
+         telescopes. -->
+    <StackPanel Grid.Column="1" Spacing="8">
+      <TextBlock Foreground="{DynamicResource ColorTextSecondary}"
+                 FontWeight="SemiBold"
+                 Text="{Binding Groups.Count, StringFormat='Groups ({0})'}" />
+
+      <TextBlock x:Name="NoGroupsText"
+                 Text="No groups yet - select items on the left to create one"
+                 FontStyle="Italic"
+                 IsVisible="{Binding HasNoGroups}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <ScrollViewer MaxHeight="360">
+        <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:AliasGroupViewModel">
+              <Border Background="{DynamicResource ColorBgElevated}"
+                      CornerRadius="{StaticResource RadiusSm}"
+                      Padding="8"
+                      Margin="0,0,0,6">
+                <StackPanel Spacing="4">
+                  <Grid ColumnDefinitions="Auto,*">
+                    <!-- R2(b): the swatch opens a real colour picker. The picker carries its own
+                         hex field (IsHexInputVisible), which is where hex entry now lives; the
+                         standalone #RRGGBB TextBox this row used to carry is gone. -->
+                    <Button Grid.Column="0"
+                            x:Name="ColorSwatchButton"
+                            Classes="quiet"
+                            Padding="0"
+                            Margin="0,0,6,0"
+                            MinHeight="18"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="Choose this filter's colour"
+                            IsVisible="{Binding #Root.((settings:GroupingEditorViewModel)DataContext).ShowColorPicker}">
+                      <Border Width="18" Height="18"
+                              CornerRadius="4"
+                              Background="{Binding SwatchBrush}" />
+                      <Button.Flyout>
+                        <Flyout Placement="BottomEdgeAlignedLeft">
+                          <ColorView x:Name="GroupColorPicker"
+                                     Color="{Binding SwatchBrush.Color, Mode=OneWay}"
+                                     ColorChanged="OnGroupColorChanged"
+                                     IsAlphaEnabled="False"
+                                     IsAlphaVisible="False"
+                                     IsHexInputVisible="True"
+                                     IsColorPaletteVisible="False" />
+                        </Flyout>
+                      </Button.Flyout>
+                    </Button>
+                    <Panel Grid.Column="1">
+                      <Button x:Name="RenameButton"
+                              Content="{Binding Canonical}"
+                              FontWeight="SemiBold"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Padding="0"
+                              ToolTip.Tip="Click to rename"
+                              IsVisible="{Binding !IsRenaming}"
+                              Command="{Binding BeginRenameCommand}" />
+                      <TextBox x:Name="RenameBox"
+                               Text="{Binding RenameText, Mode=TwoWay}"
+                               IsVisible="{Binding IsRenaming}"
+                               Background="{DynamicResource ColorBgInput}"
+                               Foreground="{DynamicResource ColorTextPrimary}"
+                               PropertyChanged="OnRenameBoxPropertyChanged"
+                               LostFocus="OnRenameBoxLostFocus">
+                        <TextBox.KeyBindings>
+                          <KeyBinding Gesture="Enter" Command="{Binding CommitRenameCommand}" />
+                          <KeyBinding Gesture="Escape" Command="{Binding CancelRenameCommand}" />
+                        </TextBox.KeyBindings>
+                      </TextBox>
+                    </Panel>
+                  </Grid>
+                  <ItemsControl x:Name="AliasChips" ItemsSource="{Binding Aliases}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="sys:String">
+                        <Border Background="{DynamicResource ColorBgSurface}"
+                                CornerRadius="{StaticResource RadiusSm}"
+                                Padding="6,2"
+                                Margin="0,0,4,4">
+                          <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="{Binding}" Foreground="{DynamicResource ColorTextSecondary}" />
+                            <Button Content="x"
+                                    Padding="2,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Foreground="{DynamicResource ColorError}"
+                                    Command="{Binding $parent[ItemsControl].((settings:AliasGroupViewModel)DataContext).RemoveAliasCommand}"
+                                    CommandParameter="{Binding}" />
+                          </StackPanel>
+                        </Border>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </ScrollViewer>
+    </StackPanel>
+  </Grid>
+</UserControl>

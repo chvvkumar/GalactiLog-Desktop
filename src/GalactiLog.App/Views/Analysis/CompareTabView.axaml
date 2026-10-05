@@ -1,0 +1,128 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:queries="using:GalactiLog.Data.Queries"
+             x:Class="GalactiLog.App.Views.Analysis.CompareTabView"
+             x:DataType="analysis:CompareTabViewModel">
+  <!-- design-spec 12.14's Compare tab body.
+
+       NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all seven heading rows and all
+       seven placements are in Views/AnalysisView.axaml. The state sentence and the Retry are the
+       base's and are drawn once by that file's shared tab section template, above this body; the
+       mixed plate scale callout never applies to this tab at all, because IsPixelMetric is false.
+
+       Ledger vocabulary: Theme/Controls.axaml classes only, theme tokens only, x:DataType on the
+       root, no Border.card, no non-zero CornerRadius and no local Button, Border.tag or
+       Border.callout style. The segment takes the same shipped Button.sm page pair the filter
+       bar's granularity segment takes. -->
+  <UserControl.Resources>
+    <!-- The grouped marker on the label half only and never in the wire value:
+         the page's one marker, the literal the Statistics equipment rows draw in tertiary ink,
+         with the tooltip declared once on EquipmentComboRowViewModel and aliased by
+         SharedFilterViewModel. -->
+    <DataTemplate x:Key="GroupChoiceTemplate" x:DataType="analysis:CompareGroupChoice">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+        <TextBlock Text="{x:Static analysis:SharedFilterViewModel.GroupedMarker}"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding Grouped}"
+                   Foreground="{DynamicResource ColorTextTertiary}"
+                   ToolTip.Tip="{x:Static analysis:SharedFilterViewModel.GroupedTooltip}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- The page's one metric choice shape. -->
+    <DataTemplate x:Key="MetricChoiceTemplate" x:DataType="analysis:AnalysisMetricChoice">
+      <TextBlock Text="{Binding Label}" />
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <StackPanel Spacing="8">
+
+    <!-- OUTSIDE the result region, and this is the tab the rule matters most on: Compare
+         publishes a non-queryable state before anything is chosen, so these two group pickers are
+         the only thing that can ever make it queryable. Hiding them beside the chart would leave
+         the tab permanently unreachable. -->
+    <WrapPanel x:Name="Controls">
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Compare by" Classes="t-caption" />
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="EquipmentButton"
+                  Classes="sm page"
+                  Classes.current="{Binding IsEquipmentMode}"
+                  Content="Equipment"
+                  Command="{Binding SelectModeCommand}"
+                  CommandParameter="{x:Static queries:CompareMode.Equipment}" />
+          <Button x:Name="FilterButton"
+                  Classes="sm page"
+                  Classes.current="{Binding IsFilterMode}"
+                  Content="Filter"
+                  Command="{Binding SelectModeCommand}"
+                  CommandParameter="{x:Static queries:CompareMode.Filter}" />
+        </StackPanel>
+      </StackPanel>
+
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Metric" Classes="t-caption" />
+        <ComboBox x:Name="MetricPicker"
+                  Width="200"
+                  ItemsSource="{x:Static analysis:CompareTabViewModel.MetricChoices}"
+                  ItemTemplate="{StaticResource MetricChoiceTemplate}"
+                  SelectedItem="{Binding SelectedMetricChoice, Mode=TwoWay}" />
+      </StackPanel>
+
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Group A" Classes="t-caption" />
+        <ComboBox x:Name="GroupAPicker"
+                  Width="230"
+                  ItemsSource="{Binding GroupChoices}"
+                  SelectedItem="{Binding SelectedGroupA, Mode=TwoWay}"
+                  ItemTemplate="{StaticResource GroupChoiceTemplate}" />
+      </StackPanel>
+
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Group B" Classes="t-caption" />
+        <ComboBox x:Name="GroupBPicker"
+                  Width="230"
+                  ItemsSource="{Binding GroupChoices}"
+                  SelectedItem="{Binding SelectedGroupB, Mode=TwoWay}"
+                  ItemTemplate="{StaticResource GroupChoiceTemplate}" />
+      </StackPanel>
+    </WrapPanel>
+
+    <!-- The tab's ONE result region, bound to the base's ShowsResult. The box plot, the verdict
+         and the two stats cards are inside it; every control above is outside. -->
+    <StackPanel x:Name="ResultRegion" Spacing="8" IsVisible="{Binding ShowsResult}">
+      <lvc:CartesianChart x:Name="CompareChart"
+                          LegendPosition="Hidden"
+                          Series="{Binding Chart.Series}"
+                          XAxes="{Binding Chart.XAxes}"
+                          YAxes="{Binding Chart.YAxes}"
+                          Background="Transparent"
+                          Height="280" />
+
+      <!-- Spec 12.14's verdict, printed exactly as Analysis.CompareVerdict built it. -->
+      <TextBlock x:Name="Verdict"
+                 Text="{Binding Verdict}"
+                 Classes="t-label"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding Verdict, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+      <!-- Spec 12.14's one not-comparable sentence, in the SECONDARY ink. The web's second
+           sentence, the one that reads the two arcsecond medians, is unreachable and is not
+           built. -->
+      <TextBlock x:Name="NotComparableNote"
+                 Text="{x:Static analysis:CompareTabViewModel.NotComparableText}"
+                 Classes="t-caption"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorTextSecondary}"
+                 IsVisible="{Binding IsNotComparable}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="24">
+        <ContentControl x:Name="CardA" Content="{Binding CardA}" />
+        <ContentControl x:Name="CardB" Content="{Binding CardB}" />
+      </StackPanel>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

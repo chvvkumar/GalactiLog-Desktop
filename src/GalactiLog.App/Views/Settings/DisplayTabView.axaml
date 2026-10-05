@@ -1,0 +1,375 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:conv="using:GalactiLog.App.Converters"
+             xmlns:dashboard="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.DisplayTabView"
+             x:Name="Root"
+             x:DataType="settings:DisplayTabViewModel">
+  <!-- design-spec 12.7's Display tab: the theme picker, text size, content width, the dashboard's
+       default page size, the cross-session chart's default scope, the six metric groups with
+       their field checkboxes, and a column picker per persisted table.
+
+       Everything except the metric groups saves immediately, matching the web's own split.
+
+       The field checkboxes use spec 14.4's label tier. Scales.axaml's FontSize* keys are ratios
+       to the root size, not point sizes, so they reach a FontSize through MultiplyConverter over
+       the window's inherited size (questions.md Q24). FontSizeTokenTest matches a FontSize
+       attribute whose whole value is a FontSize* resource reference, so this form passes it and
+       that test is unchanged. -->
+  <UserControl.Resources>
+    <conv:MultiplyConverter x:Key="Multiply" />
+  </UserControl.Resources>
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The display settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the display settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- Appearance: theme, text size, content width (spec 14, 14.4, and 5.8.1's
+           content_width). -->
+      <Border x:Name="AppearanceSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Appearance"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.display.appearance" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Theme" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="ThemeBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding Themes}"
+                      SelectedItem="{Binding SelectedTheme, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:ThemeOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Text size" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="TextSizeBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding TextSizeChoices}"
+                      SelectedItem="{Binding SelectedTextSize, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:TextSizeOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Content width" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="ContentWidthBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding ContentWidthChoices}"
+                      SelectedItem="{Binding SelectedContentWidth, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:ContentWidthOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Defaults: the dashboard page size (spec 12.2) and the cross-session chart scope
+           (spec 5.8.3, questions.md Q23). -->
+      <Border x:Name="DefaultsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Defaults"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.display.defaults" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Targets per page" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="PageSizeBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding PageSizeOptions}"
+                      SelectedItem="{Binding SelectedPageSize, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:PageSizeOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Target chart opens on" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="ChartSessionsBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding ChartSessionsChoices}"
+                      SelectedItem="{Binding SelectedChartSessions, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:ChartSessionsOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="The chart's own All sessions toggle widens the scope for the rest of the session and is deliberately not saved."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Metric visibility (spec 5.8.2). The one part of this tab behind a Save button. -->
+      <Border x:Name="MetricVisibilitySection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Metric visibility"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.display.metrics" />
+          </StackPanel>
+          <TextBlock Text="A group that is off hides its columns everywhere, whatever the column pickers below say."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <Border x:Name="GroupsChangedElsewhereBanner"
+                  IsVisible="{Binding GroupsChangedElsewhere}"
+                  Background="{DynamicResource ColorWarningCalloutFill}"
+                  BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
+                  BorderThickness="1"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Padding="12,8">
+            <TextBlock Text="The stored metric visibility changed elsewhere. Revert to load it; saving now keeps what is on screen."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorWarning}" />
+          </Border>
+
+          <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:DisplayMetricGroupViewModel">
+                <!-- Six collapsible groups, each with a chevron and a group enable switch, which
+                     is what spec 12.7 and the web's own DisplayTab both specify. The Expander
+                     supplies the chevron; IsExpanded is presentation only and is never persisted
+                     (review minor 2). The enable switch sits in the header so it is reachable
+                     without expanding the group. -->
+                <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch"
+                          Margin="0,0,0,8">
+                  <Expander.Header>
+                    <CheckBox Content="{Binding Label}"
+                              IsChecked="{Binding IsEnabled, Mode=TwoWay}"
+                              Foreground="{DynamicResource ColorTextPrimary}" />
+                  </Expander.Header>
+                  <ItemsControl ItemsSource="{Binding Fields}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="settings:DisplayMetricFieldViewModel">
+                        <!-- Disabled rather than hidden while the group is off, and Fluent's own
+                             disabled state is what dims it. The stored field flag is untouched
+                             either way (spec 5.8.2). -->
+                        <CheckBox Content="{Binding Label}"
+                                  IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                                  IsEnabled="{Binding IsGroupEnabled}"
+                                  FontSize="{Binding $parent[Window].FontSize, Converter={StaticResource Multiply}, ConverterParameter={StaticResource FontSizeLabel}}"
+                                  Foreground="{DynamicResource ColorTextSecondary}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </Expander>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="SaveGroupsButton"
+                    Content="Save metric visibility"
+                    Padding="12,4"
+                    Command="{Binding SaveGroupsCommand}" />
+            <Button x:Name="RevertGroupsButton"
+                    Content="Revert"
+                    Padding="12,4"
+                    Command="{Binding RevertGroupsCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- A column picker per persisted table (spec 12.7's Display row, spec 5.8.2). -->
+      <Border x:Name="DashboardColumnsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <ContentControl x:Name="DashboardColumnsRegion" Content="{Binding DashboardColumns}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate DataType="settings:ColumnPickerViewModel">
+              <StackPanel Spacing="6">
+                <TextBlock Text="{Binding Title}"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+                <!-- Spec 12.15: the picker lists custom columns under a "Custom" heading below the
+                     built-in ones, so the list is the picker's own Groups rather than its flat
+                     Columns. ShowGroupHeadings is false while there is only one group, which is
+                     every library with no target-scope custom column, so a reader who has defined
+                     none sees exactly the list this tab drew before Phase 20. The dashboard picker
+                     is the one picker on this tab that can hold both groups: the frames picker's
+                     rows are always built-in and the ledger picker's are always custom. -->
+                <ItemsControl x:Name="DashboardColumnList" ItemsSource="{Binding Groups}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="settings:ColumnGroupViewModel">
+                      <StackPanel Spacing="2">
+                        <TextBlock x:Name="DashboardColumnGroupHeading"
+                                   Text="{Binding Heading}"
+                                   Margin="0,4,0,0"
+                                   IsVisible="{Binding #Root.((settings:DisplayTabViewModel)DataContext).DashboardColumns.ShowGroupHeadings}"
+                                   Foreground="{DynamicResource ColorTextTertiary}" />
+                        <ItemsControl ItemsSource="{Binding Columns}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate DataType="dashboard:ColumnViewModel">
+                              <!-- IsChecked is one way and the click goes through the picker's command,
+                           so the un-hideable name column and a group-gated frame column cannot be
+                           turned off by a click the view-model would then refuse. Both refusals
+                           are also unreachable, because IsEnabled is false for exactly them.
+
+                           Verification B1: Mode=OneWay is explicit. CheckBox.IsChecked binds two
+                           way BY DEFAULT, so the comment above was describing markup that did not
+                           exist: the click wrote IsVisible through the binding and then the
+                           command toggled it back, the two cancelled, and no box on this tab ever
+                           changed. The gear flyout's identical picker in
+                           Dashboard/TargetListView.axaml has always spelled Mode=OneWay, which is
+                           why it worked and this did not. Pre-existing since Phase 12. -->
+                              <CheckBox Content="{Binding Title}"
+                                        IsChecked="{Binding IsVisible, Mode=OneWay}"
+                                        IsEnabled="{Binding CanHide}"
+                                        Command="{Binding #Root.((settings:DisplayTabViewModel)DataContext).DashboardColumns.ToggleCommand}"
+                                        CommandParameter="{Binding}"
+                                        Foreground="{DynamicResource ColorTextSecondary}" />
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+      </Border>
+
+      <Border x:Name="FrameColumnsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{Binding FramesColumns.Title}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock Text="A column whose metric group is off is disabled here: the group toggle wins."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+          <ItemsControl x:Name="FrameColumnList" ItemsSource="{Binding FramesColumns.Columns}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="dashboard:ColumnViewModel">
+                <!-- Verification B1, the same fix as the dashboard picker above: CheckBox
+                     .IsChecked binds two way by default, so the click and the command cancelled. -->
+                <CheckBox Content="{Binding Title}"
+                          IsChecked="{Binding IsVisible, Mode=OneWay}"
+                          IsEnabled="{Binding IsGroupEnabled}"
+                          Command="{Binding #Root.((settings:DisplayTabViewModel)DataContext).FramesColumns.ToggleCommand}"
+                          CommandParameter="{Binding}"
+                          Foreground="{DynamicResource ColorTextSecondary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Spec 12.4 and 12.15's Nights ledger column picker (Task 6c, ruling C4). The ledger's
+           built-in columns are not hideable and are not in this list; this picker's rows are
+           custom slugs alone, so it can legally hold none, which is amendment 2.9's empty state. -->
+      <Border x:Name="LedgerColumnsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="{Binding LedgerColumns.Title}"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.display.ledger-columns" />
+          </StackPanel>
+          <TextBlock x:Name="LedgerColumnsEmptyText"
+                     Text="{Binding LedgerColumns.EmptyStateText}"
+                     IsVisible="{Binding LedgerColumns.IsEmpty}"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+          <ItemsControl x:Name="LedgerColumnList"
+                        IsVisible="{Binding !LedgerColumns.IsEmpty}"
+                        ItemsSource="{Binding LedgerColumns.Columns}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="dashboard:ColumnViewModel">
+                <!-- Verification B1, the same fix as the two pickers above: CheckBox.IsChecked
+                     binds two way by default, so the click and the command would cancel. -->
+                <CheckBox Content="{Binding Title}"
+                          IsChecked="{Binding IsVisible, Mode=OneWay}"
+                          IsEnabled="{Binding CanHide}"
+                          Command="{Binding #Root.((settings:DisplayTabViewModel)DataContext).LedgerColumns.ToggleCommand}"
+                          CommandParameter="{Binding}"
+                          Foreground="{DynamicResource ColorTextSecondary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorMessage}"
+                 IsVisible="{Binding HasErrorMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+      <TextBlock x:Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorSuccess}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

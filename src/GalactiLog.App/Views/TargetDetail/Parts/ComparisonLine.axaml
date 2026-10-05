@@ -1,0 +1,41 @@
+<WrapPanel xmlns="https://github.com/avaloniaui"
+           xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+           xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+           x:Class="GalactiLog.App.Views.TargetDetail.Parts.ComparisonLine"
+           x:Name="Root"
+           x:DataType="detail:SessionCardViewModel"
+           Orientation="Horizontal"
+           IsVisible="{Binding HasComparison}">
+  <WrapPanel.Styles>
+    <!-- The comparison sentence. A run marked IsFigure is a worse delta by construction, so one
+         flag carries both the figure weight and the worse ink. -->
+    <Style Selector="TextBlock.crun">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    </Style>
+    <Style Selector="TextBlock.crun.worse">
+      <Setter Property="Foreground" Value="{DynamicResource ColorMetricWorst}" />
+    </Style>
+  </WrapPanel.Styles>
+
+  <!-- The comparison sentence. The trailing note is never omitted while the sentence is present,
+       because a night median against a target mean is not like for like. -->
+  <ItemsControl ItemsSource="{Binding ComparisonRuns}" Margin="0,0,6,0">
+    <ItemsControl.ItemsPanel>
+      <ItemsPanelTemplate>
+        <WrapPanel Orientation="Horizontal" />
+      </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
+    <ItemsControl.ItemTemplate>
+      <DataTemplate x:DataType="detail:LogLineRunViewModel">
+        <TextBlock Classes="crun"
+                   Classes.figure="{Binding IsFigure}"
+                   Classes.worse="{Binding IsFigure}"
+                   Text="{Binding Text}"
+                   Margin="0,0,5,0" />
+      </DataTemplate>
+    </ItemsControl.ItemTemplate>
+  </ItemsControl>
+  <TextBlock Classes="t-caption"
+             Text="(night medians against target means)"
+             VerticalAlignment="Center" />
+</WrapPanel>

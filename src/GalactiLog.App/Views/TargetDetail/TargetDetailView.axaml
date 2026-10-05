@@ -1,0 +1,319 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:queries="using:GalactiLog.Data.Queries"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.TargetDetailView"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+  <!-- Phase 12's Observing Ledger. A target page is an observing log, not a dashboard: one
+       aligned ledger of nights with the target's own averages as its first row, one night open
+       beside it. Colour is spent only on data (the filter inks and the one worse ink); light is
+       spent only on state (the selected row is lit, never coloured). No cards, no tinted button
+       fills, no pill badges, no coloured left edges, no uppercase tracked labels, and no Unicode
+       glyph standing in for an icon: every chevron and arrow here is a drawn Path.
+
+       There is no page-level scroll. The workbench is a fixed-height grid and the two lists
+       scroll inside it, which is what gives the frame table the page's remaining height.
+
+       Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios (0.500 to 0.786), not
+       point sizes, so binding one to FontSize renders sub-pixel text; FontSizeTokenTest fails the
+       build on it. The four type tiers reach their size through Theme/Controls.axaml's t-hero,
+       t-stat, t-label and t-caption classes (P12 R5's probe verdict was yes). Every colour is a
+       theme token except a filter's own configured colour, which is user data and arrives as an
+       ImmutableSolidColorBrush on FilterSwatchViewModel. -->
+  <UserControl.Resources>
+    <sys:Double x:Key="DetailFieldLabelWidth">150</sys:Double>
+    <!-- Spec 12.4's object type pencil (PAR-009). Drawn in one stroke weight like the chevrons
+         above, never a Unicode glyph standing in for an icon (DESIGN.md, Refused). It is declared
+         here rather than in Theme/Controls.axaml because this is the only view that draws it and
+         that file is owned this phase by two other tasks; ControlStyleScanTest needles styles, not
+         geometries. The second figure is the ferrule band across the pencil's body. -->
+    <StreamGeometry x:Key="IconPencil">M3,13 L3.8,10.2 L10.9,3.1 L12.9,5.1 L5.8,12.2 Z M9.4,4.6 L11.4,6.6</StreamGeometry>
+    <!-- The drawer's close cross, drawn in the same stroke weight. -->
+    <StreamGeometry x:Key="IconCross">M4,4 L12,12 M12,4 L4,12</StreamGeometry>
+  </UserControl.Resources>
+
+  <!-- Ruling Q11's shortcuts. Escape is not here: it closes the drawer when the drawer is open
+       and goes back otherwise, and a KeyBinding cannot express that order, so it lives in
+       OnKeyDown.
+
+       These three carry no text-editor guard and cannot be given one from this control, which is
+       the phase review's P3-6 left open: F2 while the drawer's notes box has focus begins a rename
+       over the user's typing. The code-behind's remarks record what was measured. -->
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+D" Command="{Binding ToggleDetailsCommand}" />
+    <KeyBinding Gesture="F2" Command="{Binding BeginRenameCommand}" />
+    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
+  </UserControl.KeyBindings>
+
+  <UserControl.Styles>
+    <StyleInclude Source="/Views/TargetDetail/Parts/PartStyles.axaml" />
+    <!-- One definition each for the repeated text roles of the Details drawer, so a row is four
+         lines of markup rather than nine and a colour change is one edit (spec 14.4). -->
+    <Style Selector="TextBlock.field-label">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+      <Setter Property="Width" Value="{StaticResource DetailFieldLabelWidth}" />
+    </Style>
+    <Style Selector="TextBlock.field-value">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.stat-value">
+      <!-- Tabular figures, so a column of numbers lines up (spec 14.4). -->
+      <Setter Property="FontFeatures" Value="tnum=1" />
+    </Style>
+
+  </UserControl.Styles>
+
+  <SplitView x:Name="DetailsDrawer"
+             PanePlacement="Right"
+             OpenPaneLength="380"
+             IsPaneOpen="{Binding IsDetailsOpen}"
+             DisplayMode="{Binding DetailsDisplayMode}"
+             PaneBackground="{DynamicResource ColorBgSurface}">
+    <!-- The page's least frequent content, behind one click: the catalogue text, the target notes,
+         the lit night's notes and the merge history (panel-ia.md section 4). -->
+    <SplitView.Pane>
+      <ScrollViewer>
+        <StackPanel x:Name="DetailsPaneContent" Margin="16,14" Spacing="10">
+          <!-- The close cross at the top of the pane: the Details button and Escape close it too,
+               but a pane that slides in owes the reader a way out where the eye lands. -->
+          <Border Classes="rule" Padding="0,0,0,6">
+            <Grid ColumnDefinitions="*,Auto">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="t-label section" Text="About" VerticalAlignment="Center" />
+                <controls:HelpButton Topic="target.about" />
+              </StackPanel>
+              <Button Grid.Column="1"
+                      x:Name="CloseDetailsButton"
+                      Classes="chevron"
+                      VerticalAlignment="Center"
+                      Command="{Binding ToggleDetailsCommand}"
+                      ToolTip.Tip="Close the details pane">
+                <Path Data="{StaticResource IconCross}"
+                      Stroke="{DynamicResource ColorTextSecondary}"
+                      StrokeThickness="1.6"
+                      StrokeLineCap="Round"
+                      Width="16"
+                      Height="16" />
+              </Button>
+            </Grid>
+          </Border>
+
+          <!-- The header block: label/value pairs, each row bound to its own Has* flag so a
+               target with no SAC text shows no empty SAC row. -->
+          <Border x:Name="HeaderBlock" IsVisible="{Binding Header, Converter={x:Static ObjectConverters.IsNotNull}}">
+           <StackPanel Spacing="3">
+            <StackPanel Spacing="3" DataContext="{Binding Header}" x:DataType="detail:TargetHeaderViewModel">
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasAliases}">
+                <TextBlock Classes="field-label" Text="Aliases" />
+                <ItemsControl ItemsSource="{Binding Aliases}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="sys:String">
+                      <Border Classes="tag" Margin="0,0,4,4">
+                        <TextBlock Text="{Binding}" />
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+
+              <!-- Spec 12.4's object type edit (PAR-009). The pencil swaps the read-only value for
+                   a combo box of section 9.8's display categories; choosing an entry commits at
+                   once and the box swaps back, and Escape cancels. Escape is TargetDetailView's
+                   OnPreviewKeyDown and not a fourth page level KeyBinding, for the reason written
+                   out there: the Details SplitView closes its own pane on Escape and marks the key
+                   handled, so a bubbling handler on this box only ever worked while this box held
+                   the focus, which it does not after a pencil click. The code behind focuses this
+                   box when it opens as well, so the common path never needs the page at all.
+
+                   The row is drawn whenever there is a type to read or a target to give one to, so
+                   a target whose object_type is null, and a target the user has just set to Other,
+                   both keep the pencil. An obj: group has neither and shows no row at all. -->
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding ShowObjectTypeRow}">
+                <TextBlock Classes="field-label" Text="Object type" />
+                <TextBlock x:Name="ObjectTypeValue"
+                           Classes="field-value"
+                           Text="{Binding ObjectType}"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding !IsEditingObjectType}" />
+                <Button x:Name="ObjectTypeEditButton"
+                        Classes="chevron"
+                        VerticalAlignment="Center"
+                        Margin="4,0,0,0"
+                        Command="{Binding BeginEditObjectTypeCommand}"
+                        IsVisible="{Binding CanBeginEditObjectType}"
+                        ToolTip.Tip="Edit the object type">
+                  <Path Data="{StaticResource IconPencil}"
+                        Stroke="{DynamicResource ColorTextTertiary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16" />
+                </Button>
+                <!-- The box opens unseeded and carries the target's current category as its
+                     placeholder, so choosing the entry the target already has is a selection like
+                     any other and closes the editor instead of leaving it stuck (Task 6 review
+                     P3). The commit refuses to write that one, so the placeholder is what the
+                     reader reads and not a value that gets rewritten. -->
+                <ComboBox x:Name="ObjectTypeEditor"
+                          MinWidth="170"
+                          VerticalAlignment="Center"
+                          ItemsSource="{Binding ObjectTypeChoices}"
+                          SelectedItem="{Binding SelectedObjectTypeChoice}"
+                          PlaceholderText="{Binding ObjectCategory}"
+                          IsVisible="{Binding IsEditingObjectType}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal">
+                <TextBlock Classes="field-label" Text="Category" />
+                <TextBlock Classes="field-value" Text="{Binding ObjectCategory}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasConstellation}">
+                <TextBlock Classes="field-label" Text="Constellation" />
+                <TextBlock Classes="field-value" Text="{Binding Constellation}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasRa}">
+                <TextBlock Classes="field-label" Text="Right ascension" />
+                <TextBlock Classes="field-value stat-value mono" Text="{Binding RaText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasDec}">
+                <TextBlock Classes="field-label" Text="Declination" />
+                <TextBlock Classes="field-value stat-value mono" Text="{Binding DecText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasSize}">
+                <TextBlock Classes="field-label" Text="Size" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding SizeText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasPositionAngle}">
+                <TextBlock Classes="field-label" Text="Position angle" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding PositionAngleText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasVMag}">
+                <TextBlock Classes="field-label" Text="V magnitude" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding VMagText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasSurfaceBrightness}">
+                <TextBlock Classes="field-label" Text="Surface brightness (mag/arcsec^2)" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding SurfaceBrightnessText}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasSacDescription}">
+                <TextBlock Classes="field-label" Text="SAC description" />
+                <TextBlock Classes="field-value" Text="{Binding SacDescription}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasSacNotes}">
+                <TextBlock Classes="field-label" Text="SAC notes" />
+                <TextBlock Classes="field-value" Text="{Binding SacNotes}" />
+              </StackPanel>
+              <StackPanel Orientation="Horizontal" IsVisible="{Binding HasCatalogMemberships}">
+                <TextBlock Classes="field-label" Text="Catalogs" />
+                <ItemsControl ItemsSource="{Binding CatalogMemberships}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="queries:CatalogMembershipBadge">
+                      <Border Classes="tag" Margin="0,0,4,4">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                          <TextBlock Text="{Binding CatalogName}" />
+                          <TextBlock Text="{Binding CatalogNumber}" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </StackPanel>
+
+            <!-- Spec 12.4's arcsecond HFR mean. It lives here rather than in the ledger, which
+                 carries HFR in pixels and has no tenth column, and it sits beside the plate-scale
+                 facts it is derived from: the scale bar over the reference thumbnail measures the
+                 same frame geometry. Bound outside the header's own DataContext because the figure
+                 belongs to the totals, not to the catalogue block. -->
+            <StackPanel Orientation="Horizontal" IsVisible="{Binding Totals.HasAvgHfrArcsec, FallbackValue=False}">
+              <TextBlock Classes="field-label" Text="Mean HFR (arcsec)" />
+              <TextBlock x:Name="MeanHfrArcsecValue"
+                         Classes="field-value stat-value"
+                         Text="{Binding Totals.AvgHfrArcsecText}" />
+            </StackPanel>
+            <TextBlock Classes="disclosure"
+                       Text="{Binding Totals.HfrArcsecDisclosure}"
+                       IsVisible="{Binding Totals.HasHfrArcsecDisclosure, FallbackValue=False}" />
+           </StackPanel>
+          </Border>
+
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Notes" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="target.notes" />
+            </StackPanel>
+          </Border>
+
+          <!-- Target notes: one second idle autosave, a saving indicator, and a warning callout
+               when a write failed. Disabled for an obj: group, which has no target row to key on.
+               No Expander any more: the drawer is the disclosure. -->
+          <StackPanel x:Name="NotesBox" Spacing="6" IsEnabled="{Binding CanEditNotes}">
+            <TextBox x:Name="NotesTextBox"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MinHeight="90"
+                     Text="{Binding Notes.Text, Mode=TwoWay}" />
+            <TextBlock Classes="disclosure" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
+            <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+              <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource ColorWarning}" />
+            </Border>
+          </StackPanel>
+
+          <!-- Session notes: the lit night's own box (one per member night on a merged card), under
+               the target notes so both kinds of note are one drawer away. Absent for an obj: group,
+               which has no target id to key a note on, and while no night is lit. -->
+          <StackPanel x:Name="SessionNotesSection"
+                      Spacing="10"
+                      IsVisible="{Binding ReviewSession.HasNotesBox, FallbackValue=False}">
+            <Border Classes="rule" Padding="0,0,0,6">
+              <StackPanel Orientation="Horizontal" Spacing="6">
+                <TextBlock Classes="t-label section" Text="Session notes" VerticalAlignment="Center" />
+                <controls:HelpButton Topic="target.session-notes" />
+              </StackPanel>
+            </Border>
+            <parts:NightNotesPart x:Name="NightNotesPart" DataContext="{Binding ReviewSession}" />
+          </StackPanel>
+
+          <!-- target.merge-history and the hosted MergeHistoryView's own
+               settings.targets.merge-history render one above the other here: two topics with two
+               paragraphs on two headings that happen to stack, which is what spec 12.12's table
+               asks for. Neither is a duplicate of the other and the hosting is unchanged. -->
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Merge history" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="target.merge-history" />
+            </StackPanel>
+          </Border>
+
+          <!-- Spec 12.9's merge history for this target: one row per manifest whose winner is
+               this target, each with its undo. Null for an obj: group, which has absorbed
+               nothing, and the ContentControl then renders nothing. The template is App.axaml's,
+               shared with the Settings Targets tab. -->
+          <ContentControl x:Name="MergeHistoryRegion" Content="{Binding MergeHistory}" />
+        </StackPanel>
+      </ScrollViewer>
+    </SplitView.Pane>
+
+    <!-- The layout the registry resolves; it inherits this page's DataContext. -->
+    <SplitView.Content>
+      <ContentControl x:Name="LayoutHost" />
+    </SplitView.Content>
+  </SplitView>
+</UserControl>

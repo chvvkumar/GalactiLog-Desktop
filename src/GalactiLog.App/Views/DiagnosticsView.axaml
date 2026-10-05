@@ -1,0 +1,185 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:diagnostics="using:GalactiLog.App.ViewModels.Diagnostics"
+             x:Class="GalactiLog.App.Views.DiagnosticsView"
+             x:DataType="diagnostics:DiagnosticsViewModel">
+  <!-- design-spec 12.8's Diagnostics page: seven field groups read once per refresh from one
+       immutable snapshot, in the spec table's order (Database, Scan, Resolver, Unresolved,
+       Errors, Versions, Paths).
+
+       Every colour is a DynamicResource theme token and nothing sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios rather than point sizes (spec 14.4,
+       FontSizeTokenTest).
+
+       A plain ItemsControl, not a virtualising panel (coordinator ruling Q31). Six of the seven
+       groups hold fewer than fifteen rows; the Unresolved group hosts the existing
+       UnresolvedNamesView, whose own virtualisation is whatever Phase 7 gave it, and Task 2's
+       log viewer brings its own.
+
+       The page does not poll. It refreshes on the Refresh button and on
+       ScanStatusService.ScanFinished, which is the view-model's only automatic trigger. -->
+  <UserControl.Resources>
+    <!-- One label-and-value row. Two columns: the label at a fixed width so the values line up
+         down the whole page, and the value as SelectableTextBlock so a support request can copy a
+         path or a version out of it. -->
+    <DataTemplate x:Key="DiagnosticsFieldRow" DataType="diagnostics:DiagnosticsFieldViewModel">
+      <Grid ColumnDefinitions="220,*" Margin="0,2">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding Label}"
+                   TextWrapping="Wrap"
+                   Margin="0,0,12,0"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <SelectableTextBlock Grid.Column="1"
+                             Text="{Binding Value}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="Auto,*" Margin="24">
+
+    <!-- Header: the action bar and the instant the groups on screen were read. -->
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Margin="0,0,0,16">
+      <StackPanel Grid.Column="0" Spacing="4">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock x:Name="PageTitle"
+                     Text="Diagnostics"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <controls:HelpButton Topic="page.diagnostics" />
+        </StackPanel>
+        <TextBlock x:Name="GeneratedAtLine"
+                   Text="{Binding GeneratedAtText}"
+                   IsVisible="{Binding GeneratedAtText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <!-- Spec 12.10's export outcome: where the bundle went, or why it did not go there. A
+             plain TextBlock rather than a SelectableTextBlock, because DiagnosticsViewTests walks
+             every SelectableTextBlock on the page and requires a value in each, and this line has
+             none until an export has happened. -->
+        <TextBlock x:Name="ExportStatusLine"
+                   Text="{Binding ExportStatus}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding ExportStatus, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+      </StackPanel>
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <TextBlock x:Name="BusyLine"
+                   Text="Reading..."
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsRefreshing}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <Button x:Name="RefreshButton"
+                Content="Refresh"
+                Padding="14,4"
+                Command="{Binding RefreshCommand}" />
+
+        <!-- Phase 10 Task 3, spec 16.3. The save dialog behind this button lives in this file's
+             code-behind and reaches the view-model through a Func<Task<string?>> seam
+             (coordinator ruling Q10), which is the only place a path outside app data can enter
+             the application. -->
+        <TextBlock x:Name="ExportingLine"
+                   Text="Exporting..."
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsExporting}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <Button x:Name="ExportBundleButton"
+                Content="Export diagnostics bundle"
+                Padding="14,4"
+                Command="{Binding ExportBundleCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- The sentence lives on the view-model as DiagnosticsViewModel.FailureText and is bound
+         here, so rewording it is one edit rather than two that can drift apart. -->
+    <TextBlock Grid.Row="1"
+               x:Name="FailureLine"
+               Text="{Binding FailureMessage}"
+               TextWrapping="Wrap"
+               IsVisible="{Binding LoadFailed}"
+               Foreground="{DynamicResource ColorError}" />
+
+    <ScrollViewer Grid.Row="1" IsVisible="{Binding !LoadFailed}">
+      <StackPanel Spacing="8">
+
+        <ItemsControl x:Name="DiagnosticsGroupList" ItemsSource="{Binding Groups}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="diagnostics:DiagnosticsGroupViewModel">
+              <!-- Task 7's Observing Ledger vocabulary move: no card border and no corner rounding
+                   around a group (DESIGN.md section 8). The Expander's own header and toggle
+                   already carry the section boundary; a bordered card around it was a nested
+                   container DESIGN.md refuses. A hairline rule underneath separates one group from
+                   the next in its place. -->
+              <StackPanel Margin="0,0,0,8">
+                <Expander IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                          HorizontalAlignment="Stretch">
+                  <!-- Ruling Q2: seven spec 12.12 topics, one markup site. The glyph binds
+                       HelpTopicId, which DiagnosticsGroupViewModel derives from the group's own
+                       key by one total switch that throws on an unknown key, and the census reads
+                       that switch's produced set rather than restating the seven ids. Unrolling
+                       this list into seven literal blocks would delete a data-driven list to
+                       satisfy a string scan. -->
+                  <Expander.Header>
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                      <TextBlock Text="{Binding Title}"
+                                 Classes="t-label section"
+                                 VerticalAlignment="Center" />
+                      <controls:HelpButton Topic="{Binding HelpTopicId}" />
+                    </StackPanel>
+                  </Expander.Header>
+
+                  <StackPanel Spacing="8">
+                    <ItemsControl ItemsSource="{Binding Fields}"
+                                  ItemTemplate="{StaticResource DiagnosticsFieldRow}" />
+
+                    <!-- The Scan group's per-root watcher rows. Empty for the other six groups,
+                         so the template stays one shape rather than a switch over seven. -->
+                    <ItemsControl ItemsSource="{Binding WatcherRoots}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate DataType="diagnostics:WatcherRootViewModel">
+                          <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                            <SelectableTextBlock Grid.Column="0"
+                                                 Text="{Binding Root}"
+                                                 TextWrapping="Wrap"
+                                                 Margin="0,0,12,0"
+                                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                            <!-- An unreachable root reads in the error token, because an unplugged
+                                 drive is the answer to most "why did nothing ingest" questions. -->
+                            <Panel Grid.Column="1">
+                              <TextBlock Text="{Binding StatusText}"
+                                         IsVisible="{Binding Reachable}"
+                                         Foreground="{DynamicResource ColorTextSecondary}" />
+                              <TextBlock Text="{Binding StatusText}"
+                                         IsVisible="{Binding !Reachable}"
+                                         Foreground="{DynamicResource ColorError}" />
+                            </Panel>
+                          </Grid>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <!-- The Unresolved group hosts the shared UnresolvedNamesViewModel through the
+                         App.axaml template, so spec 9.7's retry button here is the existing one
+                         and not a second entry point into UnresolvedRetry. Null for every other
+                         group, which renders nothing. -->
+                    <ContentControl Content="{Binding Content}" />
+                  </StackPanel>
+                </Expander>
+                <Border Classes="rule" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Spec 12.8's log viewer (Phase 10 Task 2), rendered through the App.axaml template for
+             LogViewerViewModel. It carries the general.log_level selector, which spec 12.7 says
+             appears nowhere else in the application. Null in the unit tests that assert the seven
+             groups on their own, which renders nothing. -->
+        <ContentControl x:Name="LogViewerRegion" Content="{Binding LogViewer}" />
+
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

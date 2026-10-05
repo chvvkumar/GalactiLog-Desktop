@@ -1,0 +1,318 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:sys="using:System"
+        xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+        xmlns:merge="using:GalactiLog.App.ViewModels.Merge"
+        x:Class="GalactiLog.App.Views.Merge.MergeDialogWindow"
+        x:Name="Root"
+        x:DataType="merge:MergeDialogViewModel"
+        Title="Preview merge"
+        Width="720"
+        MinHeight="320"
+        MaxHeight="900"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.9's merge preview. A modal Window, not a page: MainWindowViewModel.Detail is
+       the shell's only non-rail overlay (ruling Q9). Every colour is a theme token (spec 14) and
+       nothing here sets FontSize, because Scales.axaml's FontSize* keys are ratios, not point
+       sizes. -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="TitleText"
+                   Text="Preview merge"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <controls:HelpButton Topic="page.merge" />
+      </StackPanel>
+
+      <!-- The same fuzzy, alias-aware search the dashboard uses, through the same query and the
+           same SearchResultViewModel: one ranking at one threshold, never a second. -->
+      <Border x:Name="SearchPanel"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <StackPanel Spacing="8">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Text="Find a target"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <!-- The two-way toggle for which side the box is choosing. An unresolved OBJECT
+                 result cannot be the winner; ChooseCommand's CanExecute disables it. -->
+            <CheckBox Grid.Column="1"
+                      x:Name="SearchChoosesWinnerToggle"
+                      Content="Choose the surviving target"
+                      Foreground="{DynamicResource ColorTextSecondary}"
+                      IsChecked="{Binding SearchChoosesWinner, Mode=TwoWay}" />
+          </Grid>
+          <TextBox x:Name="SearchBox"
+                   Watermark="Search targets"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding SearchText, Mode=TwoWay}" />
+          <ItemsControl x:Name="SearchResultList" ItemsSource="{Binding SearchResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="dash:SearchResultViewModel">
+                <Button HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="6,3"
+                        Command="{Binding #Root.((merge:MergeDialogViewModel)DataContext).ChooseCommand}"
+                        CommandParameter="{Binding}">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding DisplayName}"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+                    <TextBlock Text="{Binding CategoryText}"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+                    <TextBlock Text="{Binding MatchedText}"
+                               IsVisible="{Binding HasMatchedText}"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+                    <TextBlock Text="{Binding FrameCountText}"
+                               IsVisible="{Binding HasFrameCount}"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+                  </StackPanel>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <!-- Spec 12.9's side-by-side comparison, with the swap control between the columns. -->
+      <Grid ColumnDefinitions="*,Auto,*">
+        <Border Grid.Column="0"
+                x:Name="WinnerColumn"
+                IsVisible="{Binding Winner, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource ColorBgSurface}"
+                BorderBrush="{DynamicResource ColorBorderEmphasis}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusMd}"
+                Padding="12">
+          <StackPanel Spacing="6" DataContext="{Binding Winner}"
+                      x:DataType="merge:MergeSideViewModel">
+            <TextBlock Text="Survives"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorSuccess}" />
+            <TextBlock Text="{Binding Name}"
+                       TextWrapping="Wrap"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasCatalogId}">
+              <TextBlock Text="Catalog id" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding CatalogId}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasAliases}">
+              <TextBlock Text="Aliases" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding AliasesText}" TextWrapping="Wrap"
+                         ToolTip.Tip="{Binding AliasesText}"
+                         Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Type" Foreground="{DynamicResource ColorTextTertiary}" />
+              <WrapPanel Grid.Column="1">
+                <TextBlock Text="{Binding ObjectType}" IsVisible="{Binding HasObjectType}"
+                           TextWrapping="Wrap" Margin="0,0,6,0"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+                <TextBlock Text="{Binding ObjectCategory}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextSecondary}" />
+              </WrapPanel>
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasRa}">
+              <TextBlock Text="RA" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding RaText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasDec}">
+              <TextBlock Text="Dec" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding DecText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Frames" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding FrameCountText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Integration" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding IntegrationText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Sessions" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding SessionCountText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasFirstSession}">
+              <TextBlock Text="First session" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding FirstSessionText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasLastSession}">
+              <TextBlock Text="Last session" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding LastSessionText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Button Grid.Column="1"
+                x:Name="SwapButton"
+                Content="Swap"
+                Margin="10,0"
+                Padding="10,3"
+                VerticalAlignment="Center"
+                Command="{Binding SwapCommand}" />
+
+        <Border Grid.Column="2"
+                x:Name="LoserColumn"
+                IsVisible="{Binding Loser, Converter={x:Static ObjectConverters.IsNotNull}}"
+                Background="{DynamicResource ColorBgSurface}"
+                BorderBrush="{DynamicResource ColorBorderDefault}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusMd}"
+                Padding="12">
+          <StackPanel Spacing="6" DataContext="{Binding Loser}"
+                      x:DataType="merge:MergeSideViewModel">
+            <TextBlock Text="Merged away"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorWarning}" />
+            <TextBlock Text="{Binding Name}"
+                       TextWrapping="Wrap"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasCatalogId}">
+              <TextBlock Text="Catalog id" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding CatalogId}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasAliases}">
+              <TextBlock Text="Aliases" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding AliasesText}" TextWrapping="Wrap"
+                         ToolTip.Tip="{Binding AliasesText}"
+                         Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Type" Foreground="{DynamicResource ColorTextTertiary}" />
+              <WrapPanel Grid.Column="1">
+                <TextBlock Text="{Binding ObjectType}" IsVisible="{Binding HasObjectType}"
+                           TextWrapping="Wrap" Margin="0,0,6,0"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+                <TextBlock Text="{Binding ObjectCategory}" TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextSecondary}" />
+              </WrapPanel>
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasRa}">
+              <TextBlock Text="RA" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding RaText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasDec}">
+              <TextBlock Text="Dec" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding DecText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Frames" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding FrameCountText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Integration" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding IntegrationText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+              <TextBlock Text="Sessions" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding SessionCountText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasFirstSession}">
+              <TextBlock Text="First session" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding FirstSessionText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+            <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasLastSession}">
+              <TextBlock Text="Last session" Foreground="{DynamicResource ColorTextTertiary}" />
+              <TextBlock Grid.Column="1" Text="{Binding LastSessionText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+            </Grid>
+          </StackPanel>
+        </Border>
+      </Grid>
+
+      <!-- What will happen: the frames that move, the aliases the winner gains, the loser's
+           fate. These are the figures confirm reports back. -->
+      <Border x:Name="WhatWillHappenPanel"
+              Background="{DynamicResource ColorBgElevated}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="What will happen"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <Grid ColumnDefinitions="100,*" ColumnSpacing="6">
+            <TextBlock Text="Frames to move" Foreground="{DynamicResource ColorTextTertiary}" />
+            <TextBlock Grid.Column="1" x:Name="FramesToMoveText"
+                       Text="{Binding FramesToMoveText}"
+                       TextWrapping="Wrap" Foreground="{DynamicResource ColorTextPrimary}" />
+          </Grid>
+          <Grid ColumnDefinitions="100,*" ColumnSpacing="6" IsVisible="{Binding HasAliasesToAdd}">
+            <TextBlock Text="Aliases to add" Foreground="{DynamicResource ColorTextTertiary}" />
+            <TextBlock Grid.Column="1" x:Name="AliasesToAddText"
+                       Text="{Binding AliasesToAddText}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+          </Grid>
+          <TextBlock x:Name="LoserFateText"
+                     Text="{Binding LoserFateText}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Spec 12.9's colliding session dates, with section 9.7's note-merge rule stated once. -->
+      <Border x:Name="CollidingSessionsPanel"
+              IsVisible="{Binding HasCollidingSessions}"
+              Background="{DynamicResource ColorWarningCalloutFill}"
+              BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="Sessions with notes on both sides"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="NoteMergeExplanationText"
+                     Text="{Binding NoteMergeExplanation}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <ItemsControl x:Name="CollidingDateList" ItemsSource="{Binding CollidingSessionDates}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Foreground="{DynamicResource ColorTextPrimary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorText}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorError}" />
+
+      <TextBlock x:Name="ConfirmSummaryText"
+                 Text="{Binding ConfirmSummary}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding ConfirmSummary, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorSuccess}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton"
+                Content="Cancel"
+                Padding="14,4"
+                Command="{Binding CancelCommand}" />
+        <Button x:Name="MergeButton"
+                Content="Merge"
+                Padding="14,4"
+                Command="{Binding ConfirmCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

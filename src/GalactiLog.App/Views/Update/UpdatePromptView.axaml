@@ -1,0 +1,57 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:update="using:GalactiLog.App.ViewModels.Update"
+        x:Class="GalactiLog.App.Views.Update.UpdatePromptView"
+        x:Name="Root"
+        x:DataType="update:UpdatePromptViewModel"
+        Title="Update available"
+        Width="560"
+        MinHeight="280"
+        MaxHeight="800"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 17.1's confirmation before an update is applied. A modal Window opened through
+       ModalHost, the one modal host in this application, in the shape ResetConfirmWindow
+       established. Every colour is a theme token (spec 14). The release notes are text: spec 19.2
+       rules out an embedded browser, and the releases page opens in the default browser from the
+       About tab instead. -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <TextBlock x:Name="TitleText"
+                 Text="{x:Static update:UpdatePromptViewModel.Title}"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+
+      <SelectableTextBlock x:Name="SummaryText"
+                           Text="{Binding Summary}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <Border x:Name="ReleaseNotesPanel"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <SelectableTextBlock x:Name="ReleaseNotesText"
+                             Text="{Binding ReleaseNotes}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="LaterButton"
+                Content="{x:Static update:UpdatePromptViewModel.LaterLabel}"
+                Padding="14,4"
+                Command="{Binding LaterCommand}" />
+        <Button x:Name="InstallButton"
+                Content="{x:Static update:UpdatePromptViewModel.InstallLabel}"
+                Padding="14,4"
+                Command="{Binding InstallAndRestartCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

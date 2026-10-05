@@ -1,0 +1,147 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.MaintenanceTabView"
+             x:Name="Root"
+             x:DataType="settings:MaintenanceTabViewModel">
+  <!-- design-spec 12.7's Maintenance tab: one card per action, in the spec row's order. Every
+       colour is a theme token (spec 14) and nothing here sets FontSize, because Scales.axaml's
+       FontSize* keys are ratios, not point sizes.
+
+       The cards are data: MaintenanceTabViewModel builds six MaintenanceActionViewModels and this
+       file renders whatever is in the list, so a seventh action is a list entry and not a seventh
+       block of markup. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <!-- Spec 12.12 places settings.maintenance on the tab's first row, which is this intro
+           line: the tab has no section heading to hang it on (task1-report departure 12). The row
+           is a grid rather than a horizontal stack so the intro keeps wrapping. -->
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Grid.Column="0"
+                   x:Name="IntroText"
+                   Text="Maintenance actions run one at a time, and none of them is available while a scan is running."
+                   TextWrapping="Wrap"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <controls:HelpButton Grid.Column="1" Topic="settings.maintenance" />
+      </Grid>
+
+      <ItemsControl x:Name="MaintenanceActionList" ItemsSource="{Binding Actions}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="settings:MaintenanceActionViewModel">
+            <Border Background="{DynamicResource ColorBgSurface}"
+                    BorderBrush="{DynamicResource ColorBorderDefault}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusMd}"
+                    Padding="16"
+                    Margin="0,0,0,12">
+              <StackPanel Spacing="10">
+
+                <Grid ColumnDefinitions="*,Auto">
+                  <TextBlock Grid.Column="0"
+                             Text="{Binding Title}"
+                             FontWeight="SemiBold"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+                  <!-- The web's colour-coded risk chip. Destructive reads in the error token so
+                       the two cards that delete something do not look like the four that do
+                       not. -->
+                  <Border Grid.Column="1"
+                          Background="{DynamicResource ColorBgElevated}"
+                          BorderBrush="{DynamicResource ColorBorderDefault}"
+                          BorderThickness="1"
+                          CornerRadius="{StaticResource RadiusSm}"
+                          Padding="8,2"
+                          VerticalAlignment="Center">
+                    <Panel>
+                      <TextBlock Text="{Binding RiskText}"
+                                 IsVisible="{Binding !IsDestructive}"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+                      <TextBlock Text="{Binding RiskText}"
+                                 IsVisible="{Binding IsDestructive}"
+                                 FontWeight="SemiBold"
+                                 Foreground="{DynamicResource ColorError}" />
+                    </Panel>
+                  </Border>
+                </Grid>
+
+                <TextBlock Text="{Binding Description}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextTertiary}" />
+
+                <ItemsControl ItemsSource="{Binding Buttons}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="settings:MaintenanceButtonViewModel">
+                      <Panel>
+                        <Button Content="{Binding Label}"
+                                IsVisible="{Binding !IsDestructive}"
+                                Padding="14,4"
+                                Margin="0,0,8,0"
+                                Command="{Binding Command}" />
+                        <!-- A button that deletes something does not look like one that does
+                             not. -->
+                        <Button Content="{Binding Label}"
+                                IsVisible="{Binding IsDestructive}"
+                                Padding="14,4"
+                                Margin="0,0,8,0"
+                                BorderBrush="{DynamicResource ColorError}"
+                                Foreground="{DynamicResource ColorError}"
+                                Command="{Binding Command}" />
+                      </Panel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- The web's inline two-click confirm, used by rebuild targets. The reset action
+                     uses a typed confirmation in a modal instead, which is a stronger gate. -->
+                <Border IsVisible="{Binding ConfirmPending}"
+                        Background="{DynamicResource ColorWarningCalloutFill}"
+                        BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
+                        BorderThickness="1"
+                        CornerRadius="{StaticResource RadiusSm}"
+                        Padding="12,8">
+                  <StackPanel Spacing="8">
+                    <TextBlock Text="This rewrites every frame assignment. Press the button above again to confirm."
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorWarning}" />
+                    <Button Content="Cancel"
+                            Padding="12,3"
+                            HorizontalAlignment="Left"
+                            Command="{Binding CancelConfirmCommand}" />
+                  </StackPanel>
+                </Border>
+
+                <TextBlock Text="{Binding Progress}"
+                           TextWrapping="Wrap"
+                           IsVisible="{Binding IsRunning}"
+                           Foreground="{DynamicResource ColorTextSecondary}" />
+
+                <!-- Spec 12.10's failure line is coloured, so it does not read as an outcome.
+                     Two blocks rather than a converter, the shape the risk chip above uses. -->
+                <Panel IsVisible="{Binding HasSummary}">
+                  <TextBlock Text="{Binding Summary}"
+                             TextWrapping="Wrap"
+                             IsVisible="{Binding !Failed}"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+                  <TextBlock Text="{Binding Summary}"
+                             TextWrapping="Wrap"
+                             IsVisible="{Binding Failed}"
+                             Foreground="{DynamicResource ColorError}" />
+                </Panel>
+
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

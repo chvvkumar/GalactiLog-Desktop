@@ -1,0 +1,41 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- The two tables. This is the third occurrence of the shared size row pattern in this phase
+       (Task 4's ledger, then these two), so it is the same pattern applied rather than three
+       inventions: one Grid per row, identical ColumnDefinitions, one SharedSizeGroup per numeric
+       column and one starred text column, all inside one IsSharedSizeScope. A generic table
+       control is the abstraction that never pays: the three tables have different columns. -->
+  <Style Selector="Grid.tab-row">
+    <Setter Property="MinHeight" Value="26" />
+  </Style>
+  <Style Selector="Grid.tab-row &gt; TextBlock">
+    <Setter Property="Margin" Value="6,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+  <!-- The name cell's margin is a setter and never an inline attribute on the StackPanel, for
+       the reason stated at the bottom of this block: an inline value is a LocalValue and
+       outranks a style setter, so declaring it on the element would leave the .sub indent below
+       inert at zero pixels. -->
+  <Style Selector="Grid.tab-row &gt; StackPanel">
+    <Setter Property="Margin" Value="6,0" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Grid.tab-row.sub TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <!-- The comp's indent, absolute rather than relative: comp-observing-ledger.html:162 sets
+       padding-left 26px on a sub-row's first cell against the 8px every other cell carries, and
+       26 is the figure that reads as "under the filter above" at this type size. Only the left
+       edge moves; the right stays on the row's own 6. -->
+  <Style Selector="Grid.tab-row.sub &gt; StackPanel">
+    <Setter Property="Margin" Value="26,0,6,0" />
+  </Style>
+  <Style Selector="TextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+  <Style Selector="TextBlock.disclosure">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    <Setter Property="TextWrapping" Value="Wrap" />
+  </Style>
+</Styles>

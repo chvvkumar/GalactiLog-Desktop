@@ -1,0 +1,531 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:sys="using:System"
+        xmlns:wbpp="using:GalactiLog.App.ViewModels.TargetDetail.Wbpp"
+        x:Class="GalactiLog.App.Views.TargetDetail.Wbpp.WbppExportWindow"
+        x:DataType="wbpp:WbppExportWizardViewModel"
+        Title="Export for stacking"
+        Width="1000"
+        MinWidth="860"
+        Height="780"
+        MinHeight="560"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.13's Export for stacking as a six-step wizard on the shared WizardFrame. Nothing
+       here reaches the file system; the writes live in the view-models. Theme tokens only, no type
+       size, and no default button: Enter never writes. -->
+
+  <Window.DataTemplates>
+
+    <!-- Step 1: the session rows and their level trees. -->
+    <DataTemplate DataType="wbpp:FoldersStep">
+      <StackPanel Spacing="14">
+        <!-- Spec 12.13's empty export warning, above the parts it is about. -->
+        <Border x:Name="EmptyExportWarning"
+                Classes="callout warn"
+                IsVisible="{Binding Page.HasEmptyExportWarning}">
+          <TextBlock x:Name="EmptyExportText"
+                     Text="{Binding Page.EmptyExportText}"
+                     TextWrapping="Wrap" />
+        </Border>
+
+        <TextBlock x:Name="LevelsLoadingLine"
+                   Text="Reading the folders for these nights"
+                   IsVisible="{Binding Page.IsLoading}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+
+            <ItemsControl x:Name="SessionRows" ItemsSource="{Binding Page.Sessions}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="wbpp:SessionLevelViewModel">
+                  <Border Margin="0,0,0,8"
+                          Padding="10"
+                          CornerRadius="4"
+                          Background="{DynamicResource ColorBgSurface}"
+                          BorderThickness="1"
+                          BorderBrush="{DynamicResource ColorBorderDefault}">
+                    <StackPanel Spacing="4">
+    
+                      <!-- The session row: the date, the night's frame count, and the chosen folder's
+                           leading path in the secondary ink with its own name in the primary ink. The
+                           split is made once on the view-model. -->
+                      <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding DateText}"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"
+                                   Foreground="{DynamicResource ColorTextPrimary}" />
+    
+                        <TextBlock Grid.Column="1"
+                                   Margin="12,0,0,0"
+                                   Text="{Binding FrameCountText}"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+    
+                        <!-- The two inks live in a Grid whose leading-path column is starred, not in a
+                             horizontal StackPanel: a StackPanel measures its children at infinite
+                             width along the stacking axis, which makes TextTrimming inert and lets a
+                             real N.I.N.A. path overflow the column and draw over the button beside
+                             it. The starred column bounds the measure, so the trimming works. -->
+                        <Grid Grid.Column="2"
+                              Margin="16,0,8,0"
+                              ColumnDefinitions="*,Auto"
+                              VerticalAlignment="Center"
+                              IsVisible="{Binding HasLevels}">
+                          <TextBlock x:Name="ChosenLeadingPathText"
+                                     Grid.Column="0"
+                                     Text="{Binding ChosenLeadingPath}"
+                                     HorizontalAlignment="Right"
+                                     TextTrimming="CharacterEllipsis"
+                                     Foreground="{DynamicResource ColorTextSecondary}" />
+                          <TextBlock x:Name="ChosenOwnNameText"
+                                     Grid.Column="1"
+                                     Text="{Binding ChosenOwnName}"
+                                     Foreground="{DynamicResource ColorTextPrimary}" />
+                        </Grid>
+    
+                        <!-- Spec 12.13's Every level contaminated row: the chosen level's own cost
+                             badge is shown here as well as in the tree, because the tree is closed
+                             when the page opens and a cost nobody sees is no cost at all. The strings
+                             are the chosen row's and are never recomputed. -->
+                        <TextBlock x:Name="ChosenOtherNightsBadge"
+                                   Grid.Column="3"
+                                   Margin="0,0,10,0"
+                                   Text="{Binding ChosenOtherNightsBadge}"
+                                   IsVisible="{Binding HasChosenOtherNightsBadge}"
+                                   VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding ChosenOtherNightsTooltip}"
+                                   Foreground="{DynamicResource ColorWarning}" />
+    
+                        <TextBlock x:Name="ChosenOtherTargetsBadge"
+                                   Grid.Column="4"
+                                   Margin="0,0,10,0"
+                                   Text="{Binding ChosenOtherTargetsBadge}"
+                                   IsVisible="{Binding HasChosenOtherTargetsBadge}"
+                                   VerticalAlignment="Center"
+                                   ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}"
+                                   Foreground="{DynamicResource ColorWarning}" />
+    
+                        <Button x:Name="ChangeFolderButton"
+                                Grid.Column="5"
+                                Classes="quiet sm"
+                                Content="{Binding ToggleLabel}"
+                                IsVisible="{Binding HasLevels}"
+                                Command="{Binding ToggleCommand}" />
+                      </Grid>
+    
+                      <!-- Spec 12.13's rename note, on the rows it happens to and on no others. The
+                           name is FolderLevels.StagingNames' answer and is never re-derived here. -->
+                      <TextBlock Text="{Binding StagingName, StringFormat='Copied under {0}'}"
+                                 IsVisible="{Binding HasStagingName}"
+                                 ToolTip.Tip="{Binding StagingNameTooltip}"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+    
+                      <!-- Seam review ruling 3's partial case: the night keeps its levels and states
+                           the count its levels leave behind, read from SessionLevels and never
+                           subtracted from two figures. -->
+                      <TextBlock Text="{Binding LeftoverText}"
+                                 IsVisible="{Binding HasLeftoverText}"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource ColorWarning}" />
+    
+                      <!-- The same shape for the frames that sit in the scan root itself on a night
+                           whose other frames sit deeper: no level can carry them. The two counts are
+                           independent and both are stated when both are non zero. -->
+                      <TextBlock Text="{Binding RootFramesText}"
+                                 IsVisible="{Binding HasRootFramesText}"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource ColorWarning}" />
+    
+                      <!-- One of spec 12.13's four unavailable sentences, verbatim. -->
+                      <TextBlock Text="{Binding UnavailableText}"
+                                 IsVisible="{Binding HasUnavailableText}"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+    
+                      <StackPanel Spacing="2" IsVisible="{Binding IsExpanded}">
+                        <!-- The scan root anchors the top of the tree as a non-selectable line, which
+                             is what makes the rows below read as steps into it. -->
+                        <TextBlock Text="{Binding ScanRoot}"
+                                   Foreground="{DynamicResource ColorTextTertiary}" />
+    
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="wbpp:LevelRowViewModel">
+                              <Grid Margin="{Binding Indent}"
+                                    ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
+                                <!-- The folder name is the radio's own automation name: the one
+                                     control that picks a folder would otherwise announce nothing, and
+                                     the name beside it is an inert TextBlock. -->
+                                <RadioButton Grid.Column="0"
+                                             GroupName="{Binding GroupName}"
+                                             AutomationProperties.Name="{Binding FolderName}"
+                                             IsChecked="{Binding IsChosen, Mode=TwoWay}"
+                                             VerticalAlignment="Center" />
+    
+                                <TextBlock Grid.Column="1"
+                                           Margin="4,0,8,0"
+                                           Text="{Binding FolderName}"
+                                           VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis"
+                                           ToolTip.Tip="{Binding Level.Path}"
+                                           Foreground="{DynamicResource ColorTextPrimary}" />
+    
+                                <TextBlock Grid.Column="2"
+                                           Margin="0,0,10,0"
+                                           Text="{Binding FrameCountText}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+    
+                                <!-- Spec 12.13's cost badges, in the warning ink, with the names
+                                     themselves on the tooltip. A contaminated level is selectable:
+                                     the cost is advisory, and choosing one is how a user deliberately
+                                     copies a whole night folder that two targets share. -->
+                                <TextBlock Grid.Column="3"
+                                           Margin="0,0,10,0"
+                                           Text="{Binding OtherNightsBadge}"
+                                           IsVisible="{Binding HasOtherNights}"
+                                           VerticalAlignment="Center"
+                                           ToolTip.Tip="{Binding OtherNightsTooltip}"
+                                           Foreground="{DynamicResource ColorWarning}" />
+    
+                                <TextBlock Grid.Column="4"
+                                           Margin="0,0,10,0"
+                                           Text="{Binding OtherTargetsBadge}"
+                                           IsVisible="{Binding HasOtherTargets}"
+                                           VerticalAlignment="Center"
+                                           ToolTip.Tip="{Binding OtherTargetsTooltip}"
+                                           Foreground="{DynamicResource ColorWarning}" />
+    
+                                <TextBlock Grid.Column="5"
+                                           Text="{Binding BytesText}"
+                                           VerticalAlignment="Center"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+                              </Grid>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </StackPanel>
+                  </Border>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+        <StackPanel Orientation="Horizontal" Spacing="16">
+          <TextBlock x:Name="FooterFrameCount"
+                     Text="{Binding Page.FrameCountText}"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="FooterFolderCount"
+                     Text="{Binding Page.FolderCountText}"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="FooterSize"
+                     Text="{Binding Page.SizeText}"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 2: the quality panel's slot. App.axaml maps the panel's view-model to its view. -->
+    <DataTemplate DataType="wbpp:QualityStep">
+      <StackPanel Spacing="14">
+        <TextBlock Text="Optionally leave out light frames that miss your limits. With no limits set, every frame is copied."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <TextBlock x:Name="QualityLoadingLine"
+                   Text="Reading the frames for these nights"
+                   IsVisible="{Binding Page.IsLoading}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <ContentControl x:Name="QualityPanelRegion" Content="{Binding Page.QualityPanel}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 3: the staging root, the subfolder box, the exclusions and Save as defaults. -->
+    <DataTemplate DataType="wbpp:DestinationStep">
+      <StackPanel Spacing="8">
+        <TextBlock Text="Staging folder" Foreground="{DynamicResource ColorTextSecondary}" />
+
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBox Grid.Column="0"
+                   x:Name="StagingPathBox"
+                   Text="{Binding Page.StagingPath, Mode=TwoWay}"
+                   Watermark="Choose a folder outside your library"
+                   LostFocus="OnStagingPathLostFocus" />
+          <Button Grid.Column="1"
+                  x:Name="StagingPickerButton"
+                  Margin="8,0,0,0"
+                  Content="Browse"
+                  Padding="14,4"
+                  Command="{Binding Page.PickStagingFolderCommand}" />
+        </Grid>
+
+        <Border x:Name="StagingError"
+                Classes="callout warn"
+                IsVisible="{Binding Page.HasStagingError}">
+          <TextBlock Text="{Binding Page.StagingError}" TextWrapping="Wrap" />
+        </Border>
+
+        <CheckBox x:Name="SubfolderCheckBox"
+                  Content="{Binding SubfolderLabel}"
+                  IsChecked="{Binding Page.IsSubfolderOn, Mode=TwoWay}" />
+
+        <TextBlock x:Name="CopyDestinationText"
+                   Classes="mono"
+                   Text="{Binding Page.CopyDestination}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+          <TextBlock Text="Excluded folder patterns, one per line"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <controls:HelpButton Topic="export.settings" />
+        </StackPanel>
+
+        <TextBox x:Name="ExclusionsBox"
+                 AcceptsReturn="True"
+                 MinHeight="120"
+                 Text="{Binding Page.ExclusionsText, Mode=TwoWay}" />
+
+        <Border x:Name="ExclusionError"
+                Classes="callout warn"
+                IsVisible="{Binding Page.HasExclusionError}">
+          <TextBlock Text="{Binding Page.ExclusionError}" TextWrapping="Wrap" />
+        </Border>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="SaveAsDefaultsButton"
+                  Content="Save as defaults"
+                  Padding="14,4"
+                  Command="{Binding Page.SaveAsDefaultsCommand}" />
+          <TextBlock x:Name="SavedConfirmation"
+                     Text="Saved"
+                     VerticalAlignment="Center"
+                     IsVisible="{Binding Page.IsSavedConfirmed}"
+                     Foreground="{DynamicResource ColorSuccess}" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 4: Copy now or Generate script. -->
+    <DataTemplate DataType="wbpp:MethodStep">
+      <StackPanel Spacing="10">
+        <RadioButton x:Name="CopyNowRadio"
+                     GroupName="ExportMethod"
+                     Content="Copy now: GalactiLog copies the folders into the staging folder"
+                     IsChecked="{Binding IsCopyNow, Mode=TwoWay}" />
+        <RadioButton x:Name="ScriptRadio"
+                     GroupName="ExportMethod"
+                     Content="Generate a script that you run yourself"
+                     IsChecked="{Binding IsScript, Mode=TwoWay}" />
+        <StackPanel Margin="28,0,0,0" Spacing="6" IsEnabled="{Binding IsScript}">
+          <RadioButton x:Name="PowerShellRadio"
+                       GroupName="ScriptFlavour"
+                       Content="PowerShell (.ps1)"
+                       IsChecked="{Binding IsPowerShell, Mode=TwoWay}" />
+          <RadioButton x:Name="BashRadio"
+                       GroupName="ScriptFlavour"
+                       Content="Shell (.sh)"
+                       IsChecked="{Binding IsBash, Mode=TwoWay}" />
+        </StackPanel>
+        <TextBlock Text="Both write into the same staging folder and skip the same folders."
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 5: the summary, the blocks and warnings, and the running copy's progress. -->
+    <DataTemplate DataType="wbpp:ReviewStep">
+      <StackPanel Spacing="10">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="4">
+          <TextBlock Grid.Row="0" Text="Nights" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ReviewNights" Text="{Binding NightsText}" />
+          <TextBlock Grid.Row="1" Text="Folders" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Page.FolderCountText}" />
+          <TextBlock Grid.Row="2" Text="Frames" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Page.FrameCountText}" />
+          <TextBlock Grid.Row="3" Text="Size" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Page.SizeText}" />
+          <TextBlock Grid.Row="4" Text="Destination" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="4" Grid.Column="1" x:Name="ReviewDestination" Classes="mono" TextWrapping="Wrap" Text="{Binding DestinationText}" />
+          <TextBlock Grid.Row="5" Text="Method" Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Grid.Row="5" Grid.Column="1" x:Name="ReviewMethod" Text="{Binding MethodText}" />
+        </Grid>
+
+        <TextBlock Text="{Binding Page.FooterNoteText}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+
+        <ItemsControl x:Name="ReviewBlocks" ItemsSource="{Binding Blocks}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <Border Classes="callout warn" Margin="0,0,0,6">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{DynamicResource ColorError}" />
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <ItemsControl x:Name="ReviewWarnings" ItemsSource="{Binding Warnings}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="sys:String">
+              <Border Classes="callout warn" Margin="0,0,0,6">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock x:Name="FileSafetyText"
+                   Text="{x:Static wbpp:ReviewStep.FileSafetyText}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+
+        <StackPanel Spacing="4" IsVisible="{Binding IsCopying}">
+          <ProgressBar x:Name="CopyProgressBar"
+                       Minimum="0" Maximum="100"
+                       Value="{Binding ProgressPercent, Mode=OneWay}"
+                       Foreground="{DynamicResource ColorAccent}"
+                       Background="{DynamicResource ColorBgElevated}" />
+          <TextBlock x:Name="CopyProgressText" Text="{Binding ProgressText}" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 6: the outcome and its actions; the script's part for the Script method. -->
+    <DataTemplate DataType="wbpp:ResultStep">
+      <StackPanel Spacing="10">
+        <TextBlock x:Name="OutcomeText"
+                   Text="{Binding OutcomeText}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+
+        <StackPanel Spacing="8" IsVisible="{Binding IsCopyResult}">
+          <TextBlock x:Name="CountsText" Text="{Binding CountsText}" TextWrapping="Wrap" />
+          <TextBlock Text="Present but different size, left untouched:"
+                     IsVisible="{Binding HasDifferentSize}"
+                     Foreground="{DynamicResource ColorWarning}" />
+          <ItemsControl x:Name="DifferentSizeList" ItemsSource="{Binding DifferentSizePaths}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Classes="mono" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Failed:"
+                     IsVisible="{Binding HasFailures}"
+                     Foreground="{DynamicResource ColorError}" />
+          <ItemsControl x:Name="FailureList" ItemsSource="{Binding FailureLines}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Classes="mono" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="Stopped part way, left with partial contents:"
+                     IsVisible="{Binding HasPartials}"
+                     Foreground="{DynamicResource ColorWarning}" />
+          <ItemsControl x:Name="PartialList" ItemsSource="{Binding PartialPaths}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}" Classes="mono" TextWrapping="Wrap" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <StackPanel x:Name="ScriptPart" Spacing="8" IsVisible="{Binding IsScriptResult}">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section" Text="Script" />
+            <controls:HelpButton Topic="export.script" />
+          </StackPanel>
+          <TextBlock x:Name="ScriptPathText"
+                     Classes="mono"
+                     Text="{Binding Page.ScriptPath}"
+                     TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="CopyScriptButton"
+                    Content="Copy script"
+                    Padding="14,4"
+                    Command="{Binding Page.CopyScriptCommand}" />
+            <Button x:Name="ShowScriptButton"
+                    Content="{Binding Page.ScriptToggleLabel}"
+                    Padding="14,4"
+                    Command="{Binding Page.ToggleScriptCommand}" />
+          </StackPanel>
+          <TextBlock x:Name="RunCommandText"
+                     Classes="mono"
+                     Text="{Binding Page.RunCommandText}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBox x:Name="ScriptTextBox"
+                   IsReadOnly="True"
+                   AcceptsReturn="True"
+                   MaxHeight="320"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto"
+                   IsVisible="{Binding Page.IsScriptShown}"
+                   Text="{Binding Page.ScriptText, Mode=OneWay}" />
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="OpenFolderButton"
+                  Content="Open folder"
+                  Padding="14,4"
+                  Command="{Binding $parent[Window].((wbpp:WbppExportWizardViewModel)DataContext).OpenFolderCommand}" />
+          <Button x:Name="CopyPathButton"
+                  Content="Copy path"
+                  Padding="14,4"
+                  Command="{Binding $parent[Window].((wbpp:WbppExportWizardViewModel)DataContext).CopyPathCommand}" />
+          <Button x:Name="StartAnotherButton"
+                  Content="Start another export"
+                  Padding="14,4"
+                  Command="{Binding $parent[Window].((wbpp:WbppExportWizardViewModel)DataContext).StartAnotherCommand}" />
+          <Button x:Name="SaveReportButton"
+                  Content="Save report"
+                  Padding="14,4"
+                  IsVisible="{Binding HasProblems}"
+                  Command="{Binding $parent[Window].((wbpp:WbppExportWizardViewModel)DataContext).SaveReportCommand}" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
+  </Window.DataTemplates>
+
+  <controls:WizardFrame x:Name="Frame">
+    <controls:WizardFrame.HelpSlot>
+      <!-- The six export.* topics, one per step; the census expands this one site through
+           WbppExportStepViewModel.HelpTopicIds. -->
+      <controls:HelpButton Topic="{Binding HelpTopicId}" />
+    </controls:WizardFrame.HelpSlot>
+    <controls:WizardFrame.HeaderExtra>
+      <StackPanel x:Name="HeadingRow" Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="SublineText"
+                   Text="{Binding Page.SublineText}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <controls:HelpButton Topic="page.export-stacking" />
+      </StackPanel>
+    </controls:WizardFrame.HeaderExtra>
+    <controls:WizardFrame.FooterExtra>
+      <Button Grid.Column="0"
+              x:Name="CloseButton"
+              Content="Close"
+              Command="{Binding CloseCommand}" />
+      <StackPanel Grid.Column="1"
+                  Orientation="Horizontal"
+                  Spacing="8"
+                  HorizontalAlignment="Right">
+        <Button x:Name="CancelCopyButton"
+                Content="Cancel"
+                IsVisible="{Binding Review.IsCopying}"
+                Command="{Binding CancelCopyCommand}" />
+        <Button x:Name="CommitButton"
+                Classes="primary"
+                Content="{Binding Review.CommitLabel}"
+                IsVisible="{Binding IsReviewStep}"
+                Command="{Binding CommitCommand}" />
+      </StackPanel>
+    </controls:WizardFrame.FooterExtra>
+  </controls:WizardFrame>
+</Window>

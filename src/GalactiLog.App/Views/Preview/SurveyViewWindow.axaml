@@ -1,0 +1,124 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:preview="using:GalactiLog.App.ViewModels.Preview"
+        xmlns:survey="using:GalactiLog.Core.Survey"
+        x:Class="GalactiLog.App.Views.Preview.SurveyViewWindow"
+        x:DataType="preview:SurveyViewViewModel"
+        Title="{Binding Title}"
+        Width="1280"
+        Height="900"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- Spec 12.4's Sky view window on spec 11.5's preview shell. The plus and minus keys are in
+       OnKeyDown because a KeyBinding gesture names one key and these are four, with or without
+       Shift. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding CloseCommand}" />
+  </Window.KeyBindings>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <Border Grid.Row="0"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <Grid ColumnDefinitions="*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+          <TextBlock x:Name="TitleText"
+                     Text="{Binding Title}"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+          <controls:HelpButton Topic="page.sky-view" />
+        </StackPanel>
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+          <ComboBox x:Name="SurveyCombo"
+                    MinWidth="180"
+                    ItemsSource="{Binding SurveyOptions}"
+                    SelectedItem="{Binding SelectedSurvey, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="survey:SurveyOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+          <Button x:Name="ResetButton"
+                  Content="Reset"
+                  Padding="10,3"
+                  Command="{Binding ResetCommand}" />
+          <Button x:Name="RefreshButton"
+                  Content="Refresh"
+                  Padding="10,3"
+                  Command="{Binding RefreshCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
+
+    <Border x:Name="Viewport"
+            Grid.Row="1"
+            Focusable="True"
+            IsTabStop="False"
+            ClipToBounds="True"
+            Background="{DynamicResource ColorBgBase}">
+      <Panel>
+        <Image x:Name="SurveyImage"
+               Source="{Binding Image}"
+               Stretch="Uniform"
+               RenderTransformOrigin="50%,50%">
+          <Image.RenderTransform>
+            <TransformGroup>
+              <ScaleTransform ScaleX="{Binding Scale}" ScaleY="{Binding Scale}" />
+              <TranslateTransform X="{Binding OffsetX}" Y="{Binding OffsetY}" />
+            </TransformGroup>
+          </Image.RenderTransform>
+        </Image>
+
+        <TextBlock x:Name="SentenceText"
+                   Text="{Binding Sentence}"
+                   IsVisible="{Binding HasSentence}"
+                   MaxWidth="560"
+                   TextWrapping="Wrap"
+                   TextAlignment="Center"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+
+        <ProgressBar x:Name="LoadingBar"
+                     IsIndeterminate="True"
+                     IsVisible="{Binding IsLoading}"
+                     Width="120"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Bottom"
+                     Margin="0,0,0,24" />
+      </Panel>
+    </Border>
+
+    <Border Grid.Row="2"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,1,0,0"
+            Padding="16,10">
+      <Grid ColumnDefinitions="*,Auto,Auto" ColumnSpacing="16">
+        <TextBlock Grid.Column="0"
+                   x:Name="HintText"
+                   Text="Drag to pan, wheel or + and - to zoom"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <TextBlock Grid.Column="1"
+                   x:Name="CaptionText"
+                   Text="{Binding Caption}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <Button Grid.Column="2"
+                x:Name="CloseButton"
+                Content="Close (Esc)"
+                Padding="14,4"
+                Command="{Binding CloseCommand}" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

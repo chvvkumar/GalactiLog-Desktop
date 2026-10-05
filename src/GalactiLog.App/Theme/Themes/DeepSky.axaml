@@ -1,0 +1,149 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- deep-sky theme tokens (spec 14.1). 41 SolidColorBrush entries (Phase 14C adds the
+       scrollbar group): 5 surface + 2 border + 3 text + 3 accent + 4 semantic + 10 metric +
+       2 indicator + 2 badge + 7 filter + 3 scrollbar = 41. -->
+  <SolidColorBrush x:Key="ColorBgBase" Color="#00000000" />
+  <SolidColorBrush x:Key="ColorBgSurface" Color="#D9101219" />
+  <SolidColorBrush x:Key="ColorBgElevated" Color="#E6181B26" />
+  <SolidColorBrush x:Key="ColorBgHover" Color="#B31E2230" />
+  <SolidColorBrush x:Key="ColorBgInput" Color="#E60C0E14" />
+
+  <SolidColorBrush x:Key="ColorBorderDefault" Color="#14FFFFFF" />
+  <SolidColorBrush x:Key="ColorBorderEmphasis" Color="#26FFFFFF" />
+
+  <SolidColorBrush x:Key="ColorTextPrimary" Color="#FFE2E8F0" />
+  <SolidColorBrush x:Key="ColorTextSecondary" Color="#FF94A3B8" />
+  <SolidColorBrush x:Key="ColorTextTertiary" Color="#FF7A8BA4" />
+
+  <SolidColorBrush x:Key="ColorAccent" Color="#FF7AA2F7" />
+  <SolidColorBrush x:Key="ColorAccentHover" Color="#FF9DBCFF" />
+  <SolidColorBrush x:Key="ColorAccentPressed" Color="#FF5B84D8" />
+
+  <!-- The four semantic colours are declared as Color values first so the callout composites
+       below can derive from them (spec 14.5) instead of repeating a literal. The four token
+       brushes themselves are unchanged. -->
+  <Color x:Key="ColorSuccessValue">#FF4ADE80</Color>
+  <Color x:Key="ColorWarningValue">#FFFBBF24</Color>
+  <Color x:Key="ColorErrorValue">#FFF87171</Color>
+  <Color x:Key="ColorInfoValue">#FF60A5FA</Color>
+
+  <SolidColorBrush x:Key="ColorSuccess" Color="{StaticResource ColorSuccessValue}" />
+  <SolidColorBrush x:Key="ColorWarning" Color="{StaticResource ColorWarningValue}" />
+  <SolidColorBrush x:Key="ColorError" Color="{StaticResource ColorErrorValue}" />
+  <SolidColorBrush x:Key="ColorInfo" Color="{StaticResource ColorInfoValue}" />
+
+  <SolidColorBrush x:Key="ColorMetricIntegration" Color="#FF60A5FA" />
+  <SolidColorBrush x:Key="ColorMetricFrames" Color="#FF4ADE80" />
+  <SolidColorBrush x:Key="ColorMetricHfr" Color="#FFFBBF24" />
+  <SolidColorBrush x:Key="ColorMetricEccentricity" Color="#FFC084FC" />
+  <SolidColorBrush x:Key="ColorMetricFwhm" Color="#FF38BDF8" />
+  <SolidColorBrush x:Key="ColorMetricStars" Color="#FF2DD4BF" />
+  <SolidColorBrush x:Key="ColorMetricGuiding" Color="#FFFB7185" />
+  <SolidColorBrush x:Key="ColorMetricTemp" Color="#FF38BDF8" />
+  <SolidColorBrush x:Key="ColorMetricGain" Color="#FF86EFAC" />
+  <SolidColorBrush x:Key="ColorMetricTime" Color="#FFFCA5A5" />
+
+  <SolidColorBrush x:Key="ColorMetricBest" Color="#FF4ADE80" />
+  <SolidColorBrush x:Key="ColorMetricWorst" Color="#FFF87171" />
+
+  <SolidColorBrush x:Key="ColorBadgeBg" Color="#D9181B26" />
+  <SolidColorBrush x:Key="ColorBadgeText" Color="#FFCBD5E1" />
+
+  <SolidColorBrush x:Key="ColorFilterHa" Color="#FFE05555" />
+  <SolidColorBrush x:Key="ColorFilterOiii" Color="#FF4A9FE8" />
+  <SolidColorBrush x:Key="ColorFilterSii" Color="#FFE8B84A" />
+  <SolidColorBrush x:Key="ColorFilterL" Color="#FFD8D8D8" />
+  <SolidColorBrush x:Key="ColorFilterR" Color="#FFE86060" />
+  <SolidColorBrush x:Key="ColorFilterG" Color="#FF60C060" />
+  <SolidColorBrush x:Key="ColorFilterB" Color="#FF6080E8" />
+
+  <!-- Thin scrollbar tokens (spec 14, Phase 14C ruling E3). Each starts equal to an existing
+       token: ColorScrollbarThumb equals this theme's ColorBorderEmphasis, ColorScrollbarThumbHover
+       equals its ColorTextTertiary, and the track is transparent in all three dictionaries. -->
+  <SolidColorBrush x:Key="ColorScrollbarThumb" Color="#26FFFFFF" />
+  <SolidColorBrush x:Key="ColorScrollbarThumbHover" Color="#FF7A8BA4" />
+  <SolidColorBrush x:Key="ColorScrollbarTrack" Color="#00000000" />
+
+  <!-- The platform Fluent ScrollBar theme's own keys, aliased to the three tokens above (spec 14,
+       fixer-list item 1, which reverses ruling E3 and withdraws the hand-written control theme).
+       Additional resources, not counted among the 41 tokens, and the same StaticResource-to-a-
+       sibling shape the callout composites below already use.
+
+       The alias has to live in the swapped dictionary rather than in Theme/Controls.axaml beside
+       ScrollBarSize: that file is parsed once at startup, so a StaticResource in it would freeze
+       on whichever theme App.axaml had merged, and a ResourceDictionary entry cannot carry a
+       DynamicResource, being a constructed object rather than a binding target. Swapping the
+       dictionary moves the whole set at once, and the three tokens above stay the one place a
+       scrollbar colour is written.
+
+       The six names are Avalonia 11.3.21's, read from
+       src/Avalonia.Themes.Fluent/Controls/ScrollBar.xaml: ScrollBarPanningThumbBackground is the
+       hairline thumb at rest, ScrollBarThumbBackgroundColor the full width thumb while the bar is
+       expanded, the two Fill keys its pointer-over and pressed states, and the two Track keys the
+       strip behind it. Pressed takes the hover token because spec 14 allows the bar no third
+       colour, and Fluent, unlike the web, does declare a pressed rule. -->
+  <StaticResource x:Key="ScrollBarPanningThumbBackground" ResourceKey="ColorScrollbarThumb" />
+  <StaticResource x:Key="ScrollBarThumbBackgroundColor" ResourceKey="ColorScrollbarThumb" />
+  <StaticResource x:Key="ScrollBarThumbFillPointerOver" ResourceKey="ColorScrollbarThumbHover" />
+  <StaticResource x:Key="ScrollBarThumbFillPressed" ResourceKey="ColorScrollbarThumbHover" />
+  <StaticResource x:Key="ScrollBarTrackFill" ResourceKey="ColorScrollbarTrack" />
+  <StaticResource x:Key="ScrollBarTrackFillPointerOver" ResourceKey="ColorScrollbarTrack" />
+
+  <!-- The platform Fluent ComboBox and DatePicker themes' own ink keys, aliased to this theme's
+       text tokens by the same mechanism, and for the same reason, as the six ScrollBar aliases
+       above. Additional resources, not counted among the 41 tokens.
+
+       Both control themes set a Foreground of their own, which outranks what a window hands down,
+       so the application's default ink (Theme/Controls.axaml's Window style) never reaches them.
+       Without these the combo box text drew in FluentTheme's pure white and the three date
+       placeholders in its neutral grey, colours no dictionary here declares, which is what the
+       launched look measured on red-light. The ten names are Avalonia 11.3.21's, read from
+       src/Avalonia.Themes.Fluent/Controls/ComboBox.xaml and DatePicker.xaml: the rest, focused and
+       focused-pressed inks take the primary token, the disabled and placeholder inks the tertiary
+       one. TextControlPlaceholderForeground is the platform's single placeholder ink and is shared
+       with every TextBox watermark, which takes the same tertiary token here. -->
+  <StaticResource x:Key="ComboBoxForeground" ResourceKey="ColorTextPrimary" />
+  <StaticResource x:Key="ComboBoxForegroundFocused" ResourceKey="ColorTextPrimary" />
+  <StaticResource x:Key="ComboBoxForegroundFocusedPressed" ResourceKey="ColorTextPrimary" />
+  <StaticResource x:Key="ComboBoxForegroundDisabled" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="ComboBoxPlaceHolderForeground" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="ComboBoxPlaceHolderForegroundFocusedPressed" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="DatePickerButtonForeground" ResourceKey="ColorTextPrimary" />
+  <StaticResource x:Key="DatePickerButtonForegroundPressed" ResourceKey="ColorTextPrimary" />
+  <StaticResource x:Key="DatePickerButtonForegroundDisabled" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="ColorTextTertiary" />
+
+  <!-- Callout composites (spec 14.5): the semantic colour at 20 percent as fill and 50 percent as
+       border, with full-strength text supplied by the semantic token itself. FIXER LIST F12: the
+       spec named the recipe but the dictionary had no mechanism for it, so the two dashboard
+       banners were painting themselves with ColorBgElevated. Opacity on a derived brush is the
+       mechanism; the button composite (15/30 percent, 25 on hover) and the focus ring the spec
+       also names are the same shape when a style needs them. Additional resources, not counted
+       among the 41 tokens. -->
+  <SolidColorBrush x:Key="ColorSuccessCalloutFill" Color="{StaticResource ColorSuccessValue}" Opacity="0.2" />
+  <SolidColorBrush x:Key="ColorSuccessCalloutBorder" Color="{StaticResource ColorSuccessValue}" Opacity="0.5" />
+  <SolidColorBrush x:Key="ColorWarningCalloutFill" Color="{StaticResource ColorWarningValue}" Opacity="0.2" />
+  <SolidColorBrush x:Key="ColorWarningCalloutBorder" Color="{StaticResource ColorWarningValue}" Opacity="0.5" />
+  <SolidColorBrush x:Key="ColorErrorCalloutFill" Color="{StaticResource ColorErrorValue}" Opacity="0.2" />
+  <SolidColorBrush x:Key="ColorErrorCalloutBorder" Color="{StaticResource ColorErrorValue}" Opacity="0.5" />
+  <SolidColorBrush x:Key="ColorInfoCalloutFill" Color="{StaticResource ColorInfoValue}" Opacity="0.2" />
+  <SolidColorBrush x:Key="ColorInfoCalloutBorder" Color="{StaticResource ColorInfoValue}" Opacity="0.5" />
+
+  <!-- Page background (spec 14.2). Additional resources, not counted among the 41 tokens.
+
+       This is also the background every Window root in the application paints, the main window and
+       the five dialogs alike, and it is the only token that may be used there. ColorBgBase above
+       is fully transparent on purpose: the panels inside a window sit over this gradient and rely
+       on that. A Window root painted with ColorBgBase has nothing behind it, so the desktop shows
+       through and the dialog is unreadable, which is what a user reported against the installed
+       1.0.0-alpha.1 build. WindowBackgroundsTest is what fails if a sixth dialog repeats it. -->
+
+  <Color x:Key="ColorGradientFromValue">#FF0A0C14</Color>
+  <Color x:Key="ColorGradientToValue">#FF0F1320</Color>
+
+  <LinearGradientBrush x:Key="BrushPageBackground" StartPoint="0%,0%" EndPoint="100%,100%">
+    <GradientStop Color="{StaticResource ColorGradientFromValue}" Offset="0" />
+    <GradientStop Color="{StaticResource ColorGradientToValue}" Offset="1" />
+  </LinearGradientBrush>
+</ResourceDictionary>

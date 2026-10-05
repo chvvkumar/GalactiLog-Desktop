@@ -1,0 +1,111 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:GalactiLog.App.ViewModels"
+        xmlns:views="using:GalactiLog.App.Views"
+        xmlns:conv="using:GalactiLog.App.Converters"
+        xmlns:avc="using:Avalonia.Data.Converters"
+        x:Class="GalactiLog.App.Views.MainWindow"
+        x:DataType="vm:MainWindowViewModel"
+        Icon="avares://GalactiLog/Assets/GalactiLog.ico"
+        Title="GalactiLog"
+        Width="1280" Height="800"
+        MinWidth="1280" MinHeight="720"
+        Background="{DynamicResource BrushPageBackground}"
+        FontSize="{Binding RootFontSize}">
+  <!-- FIXER item 2, spec 14.4: the root font size is a setting, carried here as FontSize so every
+       control in the window inherits it and every relative size scales. Scales.axaml's FontSize*
+       keys stay ratios and nothing binds one to a FontSize; a control that needs a tier
+       multiplies the inherited size by the ratio (questions.md Q24). -->
+  <Grid RowDefinitions="*,Auto" ColumnDefinitions="Auto,*">
+    <!-- The rail collapses to a 48px strip on the chevron: the item labels hide and each
+         destination shows its icon with its title as a tooltip. Width is bound rather than
+         toggled by IsVisible so the content column reflows in step. -->
+    <Border Grid.Row="0" Grid.Column="0"
+            x:Name="NavigationColumn"
+            Width="{Binding NavRailWidth}"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,0,1,0">
+     <Grid RowDefinitions="Auto,*">
+      <Button Grid.Row="0"
+              x:Name="NavRailToggle"
+              Classes="chevron"
+              HorizontalAlignment="Right"
+              Margin="0,8,8,4"
+              Command="{Binding ToggleNavRailCommand}"
+              ToolTip.Tip="Collapse or expand the navigation">
+        <Panel>
+          <Path Data="{StaticResource IconChevronLeft}"
+                Classes="icon-glyph"
+                Width="16"
+                Height="16"
+                IsVisible="{Binding !IsNavRailCollapsed}" />
+          <Path Data="{StaticResource IconChevronRight}"
+                Classes="icon-glyph"
+                Width="16"
+                Height="16"
+                IsVisible="{Binding IsNavRailCollapsed}" />
+        </Panel>
+      </Button>
+      <ListBox Grid.Row="1"
+               x:Name="NavigationRail"
+               Classes="rail"
+               Classes.collapsed="{Binding IsNavRailCollapsed}"
+               Padding="0,8"
+               ItemsSource="{Binding Items}"
+               SelectedItem="{Binding Selected, Mode=TwoWay}"
+               Tapped="OnNavigationRailTapped">
+      <ListBox.ItemTemplate>
+        <DataTemplate DataType="vm:NavigationItem">
+          <!-- Two blocks, one shown at a time, so a collapsed rail still lists every destination.
+               The flag comes from the shell through the rail rather than through the item, which
+               knows nothing about the rail's width. The collapsed item's title tip is on the
+               ListBoxItem itself, through Theme/Controls.axaml's ListBox.rail.collapsed style,
+               so the whole 48 px entry answers a hover, not this Panel's content box. -->
+          <Panel>
+            <TextBlock Text="{Binding Title}"
+                       IsVisible="{Binding !$parent[ListBox].((vm:MainWindowViewModel)DataContext).IsNavRailCollapsed}" />
+            <Path Classes="icon-glyph"
+                  Width="16"
+                  Height="16"
+                  Data="{Binding IconKey, Converter={x:Static conv:IconConverters.KeyToGeometry}}"
+                  IsVisible="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).IsNavRailCollapsed}" />
+
+            <!-- Spec 12.6's rail badge (PAR-017): the Activity entry's unseen count, while it is
+                 above zero, shown whether the rail is expanded or collapsed. NavigationItem stays
+                 a plain sealed class (section 7.3), so the two conditions are gated through the
+                 parent shell's own MainWindowViewModel.UnseenActivityCount, the same $parent
+                 binding trick the two TextBlocks above already use. -->
+            <Border x:Name="UnseenBadge"
+                    Classes="tag"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Margin="0,-4,-4,0">
+              <Border.IsVisible>
+                <MultiBinding Converter="{x:Static avc:BoolConverters.And}">
+                  <Binding Path="Key" Converter="{x:Static conv:NavigationBadgeConverters.IsActivityKey}" />
+                  <Binding Path="$parent[ListBox].((vm:MainWindowViewModel)DataContext).UnseenActivityCount"
+                           Converter="{x:Static conv:NavigationBadgeConverters.IsPositive}" />
+                </MultiBinding>
+              </Border.IsVisible>
+              <TextBlock Text="{Binding $parent[ListBox].((vm:MainWindowViewModel)DataContext).UnseenActivityCount}"
+                         Classes="num" />
+            </Border>
+          </Panel>
+        </DataTemplate>
+      </ListBox.ItemTemplate>
+      </ListBox>
+     </Grid>
+    </Border>
+    <ContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
+                    Content="{Binding CurrentPage}"
+                    MaxWidth="{Binding ContentMaxWidth}"
+                    HorizontalAlignment="Stretch" />
+    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+            x:Name="StatusBar"
+            Height="32"
+            Background="{DynamicResource ColorBgElevated}">
+      <views:StatusBarView DataContext="{Binding StatusBar}" />
+    </Border>
+  </Grid>
+</Window>

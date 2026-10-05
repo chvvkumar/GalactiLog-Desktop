@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.SettingsView"
+             x:DataType="settings:SettingsViewModel">
+  <!-- design-spec 12.7's Settings page: a tab strip over the ten tabs plus a content region,
+       the same structure as MainWindow's rail plus content region rather than a second layout
+       idiom. Phase 7 makes the Targets tab real; the other nine are PlaceholderPageViewModel
+       entries and resolve through Application.DataTemplates like every other page.
+
+       SelectionMode is AlwaysSelected, unlike the shell rail: CurrentTab reads Selected.Page, so
+       the page always has a tab. Every colour is a theme token (spec 14); nothing here sets
+       FontSize, because Scales.axaml's FontSize* keys are ratios. -->
+  <Grid ColumnDefinitions="Auto,*">
+    <!-- Spec 12.12 places page.settings on the tab strip, which carries no heading of its own, so
+         the glyph takes a row above the strip and no page title is invented for it. The strip's
+         width, surface and right rule move to this border, so the glyph row shares them and the
+         vertical rule between the strip and the content region stays unbroken. -->
+    <Border Grid.Column="0"
+            x:Name="SettingsTabStripColumn"
+            Width="180"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,0,1,0">
+      <Grid RowDefinitions="Auto,*">
+        <controls:HelpButton Grid.Row="0"
+                             Topic="page.settings"
+                             HorizontalAlignment="Right"
+                             Margin="0,8,8,0" />
+        <ListBox Grid.Row="1"
+                 x:Name="SettingsTabStrip"
+                 Classes="rail compact"
+                 Padding="0,8"
+                 SelectionMode="AlwaysSelected"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 ItemsSource="{Binding Tabs}"
+                 SelectedItem="{Binding Selected, Mode=TwoWay}">
+          <ListBox.ItemTemplate>
+            <DataTemplate DataType="vm:NavigationItem">
+              <TextBlock Text="{Binding Title}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Border>
+
+    <ContentControl Grid.Column="1"
+                    x:Name="SettingsTabRegion"
+                    Margin="16"
+                    Content="{Binding CurrentTab}"
+                    HorizontalAlignment="Stretch" />
+  </Grid>
+</UserControl>

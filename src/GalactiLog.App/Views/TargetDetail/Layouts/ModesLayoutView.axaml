@@ -1,0 +1,112 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+             xmlns:layouts="using:GalactiLog.App.Views.TargetDetail.Layouts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Layouts.ModesLayoutView"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+  <!-- Layout C, Question Modes (spec 6.1). The nights ledger is a sidebar whose width the handle
+       beside it sets; the findings' and frames' narrow forms follow the right region's width. -->
+  <Grid x:Name="PageRows" RowDefinitions="Auto,Auto,*" Margin="20,18,20,12">
+    <parts:TargetHeaderPart x:Name="TargetHeaderPart" Grid.Row="0" />
+
+    <StackPanel x:Name="ModeSwitch" Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+      <ToggleButton x:Name="NightReviewButton"
+                    Content="Night review"
+                    CommandParameter="{x:Static layouts:TargetPageMode.NightReview}" />
+      <ToggleButton x:Name="CompareNightsButton"
+                    Content="Compare nights"
+                    CommandParameter="{x:Static layouts:TargetPageMode.CompareNights}" />
+      <ToggleButton x:Name="IntegrationButton"
+                    Content="Integration"
+                    CommandParameter="{x:Static layouts:TargetPageMode.Integration}" />
+    </StackPanel>
+
+    <Grid x:Name="ReviewGrid" Grid.Row="2" ColumnDefinitions="Auto,Auto,*" Margin="0,12,0,0">
+      <ScrollViewer x:Name="LeftColumn"
+                    Grid.Column="0"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+        <parts:NightsLedgerPart x:Name="NightsLedgerPart" Classes="host-sized" />
+      </ScrollViewer>
+
+      <layouts:SidebarHandle x:Name="SidebarHandle" Grid.Column="1" />
+
+      <Panel x:Name="RightRegion" Grid.Column="2">
+        <!-- Night review: the lanes in their own scrolling region, capped by the code-behind at
+             the handle's height (LanesFloor with nothing stored); the frames table below takes the
+             rest and scrolls on its own. -->
+        <Grid x:Name="NightReviewRegion"
+              DataContext="{Binding ReviewSession}"
+              RowDefinitions="Auto,Auto,*">
+          <ScrollViewer x:Name="LanesRegion"
+                        controls:WheelPassthrough.IsEnabled="True"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+              <!-- The two section headers at a line's height, not Fluent's 48: the metrics header
+                   line is charged to the lanes floor, and at 1280 x 720 the chart whole at rest and
+                   one frame row leave it 24 px. -->
+              <StackPanel.Resources>
+                <x:Double x:Key="ExpanderMinHeight">24</x:Double>
+              </StackPanel.Resources>
+              <parts:NightHeaderPart x:Name="NightHeaderPart" />
+              <parts:NightMetricsSection x:Name="NightMetricsSection" />
+              <parts:NightTimelinePart x:Name="NightTimelinePart" Margin="0,12,0,0" />
+              <!-- A chart has no natural height inside a scroll viewer, so the code-behind fixes
+                   one: whatever the lanes handle leaves under the timeline, so the one handle sizes
+                   the chart and the frames together. The session notes are in the Details drawer. -->
+              <parts:NightMetricsPart x:Name="NightMetricsPart" Margin="0,12,0,0" Height="180" />
+            </StackPanel>
+          </ScrollViewer>
+          <layouts:LanesHandle x:Name="LanesHandle" Grid.Row="1" />
+          <!-- The frames at the full width of the right column (P24 R22): the findings column
+               beside them went, and the outlier pills in the frames chrome took its job. -->
+          <Grid x:Name="FramesRegion" Grid.Row="2">
+            <parts:FramesPart x:Name="FramesPart" />
+          </Grid>
+        </Grid>
+
+        <!-- Compare nights: the All or Checked switch above both, the chart with its lanes scrolling
+             inside it, then the table at its natural height up to the share the code-behind sets,
+             scrolling inside its host beyond that. -->
+        <Grid x:Name="CompareNightsRegion" RowDefinitions="Auto,*,Auto" IsVisible="False">
+          <StackPanel x:Name="CheckedSwitch"
+                      Orientation="Horizontal"
+                      Spacing="4"
+                      IsEnabled="{Binding !!SelectedNights.Count}">
+            <ToggleButton x:Name="AllNightsToggle"
+                          Content="All nights"
+                          IsChecked="{Binding !TargetChart.CheckedOnly, Mode=TwoWay}" />
+            <ToggleButton x:Name="CheckedNightsToggle"
+                          Content="Checked nights"
+                          IsChecked="{Binding TargetChart.CheckedOnly, Mode=TwoWay}" />
+          </StackPanel>
+          <parts:TrendChartPart x:Name="TrendChartPart" Grid.Row="1" Margin="0,8,0,0" IsLaned="True" />
+          <ScrollViewer x:Name="CompareTableHost"
+                        Grid.Row="2"
+                        Margin="0,8,0,0"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled">
+            <parts:CompareTablePart x:Name="CompareTablePart" />
+          </ScrollViewer>
+        </Grid>
+
+        <!-- Integration: one scroll viewer holding the full bars, then the tables, at
+             their natural heights. -->
+        <Grid x:Name="IntegrationRegion" IsVisible="False">
+          <ScrollViewer x:Name="IntegrationScroll"
+                        VerticalScrollBarVisibility="Auto"
+                        HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="16">
+              <parts:IntegrationBarsPart x:Name="IntegrationBarsPart" IsFull="True" />
+              <parts:IntegrationTablesPart x:Name="IntegrationTablesPart" />
+            </StackPanel>
+          </ScrollViewer>
+        </Grid>
+      </Panel>
+    </Grid>
+  </Grid>
+</UserControl>

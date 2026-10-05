@@ -1,0 +1,265 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.StorageTabView"
+             x:Name="Root"
+             x:DataType="settings:StorageTabViewModel">
+  <!-- design-spec 12.7's Storage tab: the thumbnail cache path with a picker and a free-space
+       readout, the preview resolution, the preview cache size in megabytes, and the thumbnail
+       width. Spec 11.3's three facts (relocation moves nothing, the key includes the width, the
+       eviction floor is 100 MB) are on screen here rather than in a comment.
+
+       The folder picker is an Avalonia storage-provider call in this view's code-behind, handed
+       to the view-model as a plain string, so the view-model stays constructible with no window
+       (HANDOFF.md section 5). Nothing here creates, moves or deletes a file. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The storage settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the storage settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- Data location (spec 12.7, 17.2). First, because it is the parent of the default cache
+           location below it. Nothing here moves or deletes anything: a picked folder is recorded
+           as a pending move and the copy happens on the next start. -->
+      <Border x:Name="DataLocationSection"
+              IsVisible="{Binding HasDataLocation}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Data location"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.storage.data-location" />
+          </StackPanel>
+          <TextBlock x:Name="DataRootNoteText"
+                     Text="{Binding DataRootNote}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="DataRootBox"
+                     IsReadOnly="True"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding DataRootPath, Mode=OneWay}" />
+            <Button Grid.Column="1"
+                    x:Name="BrowseDataRootButton"
+                    Content="Browse"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Click="OnBrowseDataRoot" />
+          </Grid>
+
+          <TextBlock x:Name="DataRootSourceText"
+                     Text="{Binding DataRootSourceText}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+
+          <TextBlock x:Name="DataRootErrorText"
+                     Text="{Binding DataRootError}"
+                     IsVisible="{Binding HasDataRootError}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+
+          <Grid x:Name="PendingMoveRow"
+                IsVisible="{Binding HasPendingMove}"
+                ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       x:Name="PendingMoveNoteText"
+                       Text="{Binding PendingMoveNote}"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorWarning}" />
+            <Button Grid.Column="1"
+                    x:Name="CancelDataRootMoveButton"
+                    Content="Cancel move"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Command="{Binding CancelDataRootMoveCommand}" />
+          </Grid>
+
+          <!-- Ruling Q9.4, said out loud: the old location is never deleted. -->
+          <TextBlock x:Name="PreviousDataRootNoteText"
+                     Text="{Binding PreviousDataRootNote}"
+                     IsVisible="{Binding PreviousDataRootNote, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Cache location (spec 11.3). -->
+      <Border x:Name="CacheLocationSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Thumbnail cache location"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.storage.thumbnail-cache" />
+          </StackPanel>
+          <TextBlock Text="Leave this empty to use the default folder under the application data root."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="CacheDirBox"
+                     Watermark="Default location"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding ThumbnailCacheDir, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <Button Grid.Column="1"
+                    x:Name="BrowseCacheDirButton"
+                    Content="Browse"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Click="OnBrowseCacheDir" />
+          </Grid>
+
+          <TextBlock x:Name="CacheDirErrorText"
+                     Text="{Binding CacheDirError}"
+                     IsVisible="{Binding HasCacheDirError}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+
+          <TextBlock x:Name="FreeSpaceText"
+                     Text="{Binding FreeSpaceText}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+
+          <!-- Spec 11.3, verbatim in substance: the application does not move user-visible
+               files. -->
+          <TextBlock x:Name="RelocationNote"
+                     Text="{Binding RelocationNote}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Preview rendering and its cache bound (spec 11.3, 11.5). -->
+      <Border x:Name="PreviewSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="File preview"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.storage.file-preview" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Preview resolution" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="PreviewResolutionBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding PreviewResolutionChoices}"
+                      SelectedItem="{Binding SelectedPreviewResolution, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:PreviewResolutionOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock Text="How large the zoomed-in preview image is. Native means it matches the camera's full resolution."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Preview cache size (MB)" Foreground="{DynamicResource ColorTextSecondary}" />
+            <!-- Committed on blur or Enter, as the web's own input is. Enter is handled in the
+                 code-behind, which drops focus: that is what the LostFocus binding commits on. -->
+            <TextBox x:Name="PreviewCacheMbBox"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     KeyDown="OnCommitFieldKeyDown"
+                     Text="{Binding PreviewCacheMbText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock Text="How much disk space to use for cached previews. When this limit is reached, the oldest previews are removed to make room for new ones."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+            <!-- FIXER item 20 and spec 5.8.1: say the floor rather than accept a value that will
+                 not be honoured. -->
+            <TextBlock x:Name="CacheFloorNote"
+                       Text="{Binding CacheFloorNote}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+            <TextBlock x:Name="CacheMbNoteText"
+                       Text="{Binding CacheMbNote}"
+                       IsVisible="{Binding HasCacheMbNote}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorWarning}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Thumbnail width (spec 11.3). -->
+      <Border x:Name="ThumbnailSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Thumbnails"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.storage.thumbnails" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Thumbnail width (px)" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBox x:Name="ThumbnailWidthBox"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     KeyDown="OnCommitFieldKeyDown"
+                     Text="{Binding ThumbnailWidthText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock x:Name="ThumbnailWidthErrorText"
+                       Text="{Binding ThumbnailWidthError}"
+                       IsVisible="{Binding HasThumbnailWidthError}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+
+          <!-- Spec 11.3: the cache key includes the width, so nothing needs purging. -->
+          <TextBlock x:Name="NoPurgeNote"
+                     Text="{Binding NoPurgeNote}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorMessage}"
+                 IsVisible="{Binding HasErrorMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+      <TextBlock x:Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorSuccess}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

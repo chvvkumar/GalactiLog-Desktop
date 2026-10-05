@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GalactiLog.Data\GalactiLog.Data.csproj" />
+    <!-- Task 8's end-to-end test builds its fixture folder with the shared FitsBuilder /
+         XisfBuilder / CsvBuilder (spec 18.2), the same way GalactiLog.Cli.Tests does,
+         instead of hand-rolling a third copy of a FITS writer. -->
+    <ProjectReference Include="..\GalactiLog.Core.Tests\GalactiLog.Core.Tests.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Catalogs\**\*" LinkBase="Catalogs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+</Project>

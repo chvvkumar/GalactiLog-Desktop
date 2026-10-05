@@ -1,0 +1,128 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             x:Class="GalactiLog.App.Views.Analysis.DistributionsTabView"
+             x:DataType="analysis:DistributionsTabViewModel">
+  <!-- design-spec 12.14's Distributions tab body.
+
+       NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all seven heading rows and all
+       seven placements are in Views/AnalysisView.axaml, and no other markup file carries them.
+       The mixed plate scale callout, the state sentence and the Retry are the base's and
+       are drawn once by that file's shared tab section template, ABOVE this body, which is what
+       puts the warning above the pixel-domain note below without either file ordering the other.
+
+       Ledger vocabulary: Theme/Controls.axaml classes only, theme tokens only, x:DataType on the
+       root, no Border.card, no non-zero CornerRadius and no local Button, Border.tag or
+       Border.callout style, which ControlStyleScanTest fails the build on. The segment takes the
+       same shipped pair the filter bar's granularity segment takes, Button.sm page with current on
+       the chosen half, and declares no class of its own. -->
+  <UserControl.Resources>
+    <!-- The page's one metric choice shape, declared once for both halves' pickers. -->
+    <DataTemplate x:Key="MetricChoiceTemplate" x:DataType="analysis:AnalysisMetricChoice">
+      <TextBlock Text="{Binding Label}" />
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <StackPanel Spacing="8">
+
+    <!-- OUTSIDE the result region, and live in every state including Empty, TooFew, Failed and
+         Loading: a reader who filtered the chart into emptiness has to be able to filter back out
+         of it. -->
+    <WrapPanel x:Name="Controls">
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Chart" Classes="t-caption" />
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="HistogramButton"
+                  Classes="sm page"
+                  Classes.current="{Binding IsHistogram}"
+                  Content="Histogram"
+                  Command="{Binding ShowHistogramCommand}" />
+          <Button x:Name="BoxPlotButton"
+                  Classes="sm page"
+                  Classes.current="{Binding IsBoxPlot}"
+                  Content="Box Plot"
+                  Command="{Binding ShowBoxPlotCommand}" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- Each half keeps its own metric picker, which is what "both keep their own controls"
+           means: the histogram offers all twenty metrics and the box plot the ten Y candidates,
+           so one shared picker could not hold both lists. -->
+      <StackPanel Spacing="2" Margin="0,0,12,8" IsVisible="{Binding IsHistogram}">
+        <TextBlock Text="Metric" Classes="t-caption" />
+        <ComboBox x:Name="HistogramMetricPicker"
+                  Width="230"
+                  ItemsSource="{x:Static analysis:DistributionsTabViewModel.HistogramMetricChoices}"
+                  ItemTemplate="{StaticResource MetricChoiceTemplate}"
+                  SelectedItem="{Binding SelectedHistogramMetricChoice, Mode=TwoWay}" />
+      </StackPanel>
+
+      <StackPanel Spacing="2" Margin="0,0,12,8" IsVisible="{Binding IsBoxPlot}">
+        <TextBlock Text="Metric" Classes="t-caption" />
+        <ComboBox x:Name="BoxMetricPicker"
+                  Width="230"
+                  ItemsSource="{x:Static analysis:DistributionsTabViewModel.BoxMetricChoices}"
+                  ItemTemplate="{StaticResource MetricChoiceTemplate}"
+                  SelectedItem="{Binding SelectedBoxMetricChoice, Mode=TwoWay}" />
+      </StackPanel>
+
+      <StackPanel Spacing="2" Margin="0,0,12,8" IsVisible="{Binding IsBoxPlot}">
+        <TextBlock Text="Group by" Classes="t-caption" />
+        <ComboBox x:Name="GroupByPicker"
+                  Width="160"
+                  ItemsSource="{x:Static analysis:DistributionsTabViewModel.GroupByLabels}"
+                  SelectedIndex="{Binding GroupByIndex, Mode=TwoWay}" />
+      </StackPanel>
+    </WrapPanel>
+
+    <!-- Spec 12.14's pixel-domain note, a caption in secondary ink and never a callout. It is a
+         different statement from the base's mixed plate scale warning above and both are shown
+         when both apply. -->
+    <TextBlock x:Name="PixelNote"
+               Text="{x:Static analysis:DistributionsTabViewModel.PixelNoteText}"
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               Foreground="{DynamicResource ColorTextSecondary}"
+               IsVisible="{Binding PixelNoteVisible}" />
+
+    <!-- The tab's ONE result region. Spec 12.14's States
+         table draws no chart in "Loading, first result", "No row matches the filters", the
+         too-few rows or a failure, and keeps the last result drawn through "Loading, refresh",
+         which is exactly what AnalysisTabViewModel.ShowsResult answers. The chart and the stats
+         card go INSIDE; every control above stays outside. Exactly one ResultRegion per tab view,
+         which AnalysisResultRegionCensusTest enforces by file name. -->
+    <StackPanel x:Name="ResultRegion" Spacing="8" IsVisible="{Binding ShowsResult}">
+
+      <!-- Background Transparent is spec 13's global rule: the page gradient shows through. A
+           fixed Height because a chart with an unbounded height measures to zero or to infinity
+           depending on the panel. LegendPosition Hidden by P12 R9; the four tooltip and legend
+           paints are Theme/Controls.axaml's one choke point and are never set here. -->
+      <lvc:CartesianChart x:Name="HistogramChart"
+                          LegendPosition="Hidden"
+                          Series="{Binding Histogram.Series}"
+                          XAxes="{Binding Histogram.XAxes}"
+                          YAxes="{Binding Histogram.YAxes}"
+                          Sections="{Binding Histogram.Sections}"
+                          Background="Transparent"
+                          Height="280"
+                          IsVisible="{Binding IsHistogram}" />
+
+      <lvc:CartesianChart x:Name="BoxPlotChart"
+                          LegendPosition="Hidden"
+                          Series="{Binding BoxPlot.Series}"
+                          XAxes="{Binding BoxPlot.XAxes}"
+                          YAxes="{Binding BoxPlot.YAxes}"
+                          Background="Transparent"
+                          Height="280"
+                          IsVisible="{Binding IsBoxPlot}" />
+
+      <!-- Spec 12.14's one stats card, below the histogram only. The card hides itself when the
+           summary is absent, which is StatsCardViewModel's own IsVisible. -->
+      <ContentControl x:Name="SkewnessCard"
+                      Content="{Binding Card}"
+                      HorizontalAlignment="Left"
+                      IsVisible="{Binding IsHistogram}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

@@ -1,0 +1,344 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:setup="using:GalactiLog.App.ViewModels.Setup"
+        xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+        x:Class="GalactiLog.App.Views.Setup.SetupWizardWindow"
+        x:Name="Root"
+        x:DataType="setup:SetupWizardViewModel"
+        Title="Set up GalactiLog"
+        Width="760"
+        Height="620"
+        MinWidth="560"
+        MinHeight="480"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.1's five-step setup wizard. A modal Window opened through ModalHost, the one
+       modal host in this application. Every colour is a theme token (spec 14) and nothing here
+       sets FontSize, because Scales.axaml's FontSize* keys are ratios, not point sizes.
+
+       Not dismissible by Escape or by the title bar, matching the web's onClose={() => {}}: a
+       half-configured application is a worse state than a wizard the user has to click through,
+       and "Skip setup" is the deliberate exit. The code-behind suppresses both.
+
+       Folder pickers are Avalonia storage-provider calls in the code-behind, handed to the step
+       view-models as plain strings (HANDOFF.md section 5). -->
+
+  <Window.DataTemplates>
+
+    <!-- Step 1. Spec 12.1: the chosen folders, a picker, a remove button each, and the shallow
+         probe's live count per folder plus a total. -->
+    <DataTemplate DataType="setup:ScanFoldersStepViewModel">
+      <StackPanel Spacing="12">
+        <TextBlock Text="Choose the folders GalactiLog should scan. Each folder is its own boundary, so folders may not be nested inside one another."
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <Button x:Name="AddFolderButton"
+                Content="Add folder..."
+                HorizontalAlignment="Left"
+                Click="OnAddScanFolder" />
+
+        <TextBlock x:Name="NoFoldersText"
+                   Text="No folders chosen yet."
+                   IsVisible="{Binding !HasFolders}"
+                   Classes="t-caption" />
+
+        <ItemsControl x:Name="FolderList" ItemsSource="{Binding Folders}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="setup:SetupScanFolderViewModel">
+              <Border Classes="rule" Padding="10,6" Margin="0,0,0,6">
+                <Grid ColumnDefinitions="*,Auto">
+                  <StackPanel Grid.Column="0" Spacing="2">
+                    <TextBlock Text="{Binding Path}"
+                               TextWrapping="Wrap"
+                               Classes="mono"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+                    <TextBlock Text="{Binding CountText}"
+                               Classes="t-caption" />
+                  </StackPanel>
+                  <Button Grid.Column="1"
+                          Content="Remove"
+                          Classes="sm"
+                          VerticalAlignment="Center"
+                          Command="{Binding $parent[ItemsControl].((setup:ScanFoldersStepViewModel)DataContext).RemoveFolderCommand}"
+                          CommandParameter="{Binding}" />
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <TextBlock x:Name="FolderTotalText"
+                   Text="{Binding TotalText}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <TextBlock x:Name="FolderErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding HasErrorMessage}"
+                   Foreground="{DynamicResource ColorError}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 2. Spec 12.1, 17.2 and 11.3: the data location and the cache location, each with a
+         picker, plus a free-space readout for the cache volume. -->
+    <DataTemplate DataType="setup:ThumbnailCacheStepViewModel">
+      <StackPanel Spacing="12">
+        <StackPanel x:Name="DataLocationPanel"
+                    IsVisible="{Binding HasDataLocation}"
+                    Spacing="8">
+          <!-- Phase 14B fixer, fixer list item 55 (task9-review P3): the shared class, not the
+               hand-set SemiBold plus ColorTextPrimary pair idiom 3 replaced on StepHeaderText. -->
+          <TextBlock Text="Data location" Classes="t-label section" />
+          <TextBlock x:Name="DataRootNoteText"
+                     Text="{Binding DataRootNote}"
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+            <TextBox Grid.Column="0"
+                     x:Name="DataRootBox"
+                     IsReadOnly="True"
+                     Watermark="Data location"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding DataRootPath, Mode=OneWay}" />
+            <Button Grid.Column="1"
+                    x:Name="BrowseDataRootButton"
+                    Content="Browse..."
+                    Click="OnBrowseDataRoot" />
+          </Grid>
+
+          <TextBlock x:Name="DataRootSourceText"
+                     Text="{Binding DataRootSourceText}"
+                     Classes="t-label" />
+
+          <TextBlock x:Name="DataRootErrorText"
+                     Text="{Binding DataRootError}"
+                     TextWrapping="Wrap"
+                     IsVisible="{Binding HasDataRootError}"
+                     Foreground="{DynamicResource ColorError}" />
+
+          <Grid x:Name="PendingMoveRow"
+                IsVisible="{Binding HasPendingMove}"
+                ColumnDefinitions="*,Auto"
+                ColumnSpacing="8">
+            <TextBlock Grid.Column="0"
+                       x:Name="PendingMoveNoteText"
+                       Text="{Binding PendingMoveNote}"
+                       TextWrapping="Wrap"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorWarning}" />
+            <Button Grid.Column="1"
+                    x:Name="CancelDataRootMoveButton"
+                    Content="Cancel move"
+                    Command="{Binding CancelDataRootMoveCommand}" />
+          </Grid>
+        </StackPanel>
+
+        <TextBlock Text="Where thumbnails and previews are cached. The default is inside the application data folder."
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <Grid ColumnDefinitions="*,Auto" ColumnSpacing="8">
+          <TextBox Grid.Column="0"
+                   x:Name="CachePathBox"
+                   Watermark="Thumbnail cache location"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding CachePath, Mode=TwoWay}" />
+          <Button Grid.Column="1"
+                  x:Name="BrowseCacheButton"
+                  Content="Browse..."
+                  Click="OnBrowseCacheDir" />
+        </Grid>
+
+        <TextBlock x:Name="CachePathErrorText"
+                   Text="{Binding PathError}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding HasPathError}"
+                   Foreground="{DynamicResource ColorError}" />
+
+        <TextBlock x:Name="FreeSpaceText"
+                   Text="{Binding FreeSpaceText}"
+                   Classes="t-label" />
+
+        <TextBlock x:Name="RelocationNoteText"
+                   Text="{Binding RelocationNote}"
+                   TextWrapping="Wrap"
+                   Classes="t-caption" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 3. Spec 12.1 step 3 and spec 8.3. -->
+    <DataTemplate DataType="setup:ObserverLocationStepViewModel">
+      <StackPanel Spacing="12">
+        <TextBlock Text="{Binding Intro}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+          <StackPanel Grid.Column="0" Spacing="4">
+            <TextBlock Text="Latitude" Classes="t-label" />
+            <TextBox x:Name="LatitudeBox"
+                     Watermark="42.3601"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding LatitudeText, Mode=TwoWay}" />
+            <TextBlock x:Name="LatitudeErrorText"
+                       Text="{Binding LatitudeError}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding HasLatitudeError}"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Spacing="4">
+            <TextBlock Text="Longitude" Classes="t-label" />
+            <TextBox x:Name="LongitudeBox"
+                     Watermark="-71.0589"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding LongitudeText, Mode=TwoWay}" />
+            <TextBlock x:Name="LongitudeErrorText"
+                       Text="{Binding LongitudeError}"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding HasLongitudeError}"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+        </Grid>
+
+        <StackPanel Spacing="4">
+          <TextBlock Text="Observer timezone" Classes="t-label" />
+          <ComboBox x:Name="TimezoneBox"
+                    MinWidth="280"
+                    HorizontalAlignment="Left"
+                    ItemsSource="{Binding Timezones}"
+                    SelectedItem="{Binding SelectedTimezone, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="settings:TimezoneOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+
+        <CheckBox x:Name="ImagingNightCheckBox"
+                  Content="Group frames by imaging night"
+                  IsChecked="{Binding UseImagingNight, Mode=TwoWay}" />
+
+        <TextBlock x:Name="BlankLongitudeNoteText"
+                   Text="{Binding BlankLongitudeNote}"
+                   TextWrapping="Wrap"
+                   Classes="t-caption" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 4. Spec 12.1 step 4: the interval presets, the watcher, and calibration frames. -->
+    <DataTemplate DataType="setup:ScanOptionsStepViewModel">
+      <StackPanel Spacing="12">
+        <TextBlock x:Name="ScanOptionsIntroText"
+                   Text="{Binding Intro}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <CheckBox x:Name="IncludeCalibrationCheckBox"
+                  Content="Catalog calibration frames (darks, flats, bias)"
+                  IsChecked="{Binding IncludeCalibration, Mode=TwoWay}" />
+
+        <CheckBox x:Name="WatcherCheckBox"
+                  Content="Watch the chosen folders for new files"
+                  IsChecked="{Binding WatcherEnabled, Mode=TwoWay}" />
+
+        <CheckBox x:Name="AutoScanCheckBox"
+                  Content="Scan automatically on a schedule"
+                  IsChecked="{Binding AutoScanEnabled, Mode=TwoWay}" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding AutoScanEnabled}">
+          <TextBlock Text="Scan interval"
+                     VerticalAlignment="Center"
+                     Classes="t-label" />
+          <ComboBox x:Name="IntervalBox"
+                    Width="160"
+                    ItemsSource="{Binding IntervalOptions}"
+                    SelectedItem="{Binding SelectedInterval, Mode=TwoWay}">
+            <ComboBox.ItemTemplate>
+              <DataTemplate x:DataType="settings:IntervalOption">
+                <TextBlock Text="{Binding Label}" />
+              </DataTemplate>
+            </ComboBox.ItemTemplate>
+          </ComboBox>
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Step 5. Spec 12.1 step 5, spec 10.4's envelope and 10.5's cancellation. -->
+    <DataTemplate DataType="setup:FirstScanStepViewModel">
+      <StackPanel Spacing="12">
+        <TextBlock Text="{Binding Intro}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Button x:Name="StartScanButton"
+                  Content="Start scan"
+                  Classes="sm"
+                  Command="{Binding StartScanCommand}" />
+          <Button x:Name="CancelScanButton"
+                  Content="Cancel"
+                  Classes="sm"
+                  Command="{Binding CancelScanCommand}" />
+        </StackPanel>
+
+        <ProgressBar x:Name="ScanProgressBar"
+                     Minimum="0" Maximum="100"
+                     Value="{Binding ScanPercent, Mode=OneWay}"
+                     IsIndeterminate="{Binding IsScanIndeterminate}"
+                     IsVisible="{Binding IsScanRunning}"
+                     Foreground="{DynamicResource ColorAccent}"
+                     Background="{DynamicResource ColorBgElevated}" />
+
+        <TextBlock x:Name="ScanMessageText"
+                   Text="{Binding ScanMessage}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+
+        <TextBlock x:Name="ScanSummaryText"
+                   Text="{Binding Summary}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding HasSummary}"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+      </StackPanel>
+    </DataTemplate>
+
+  </Window.DataTemplates>
+
+  <!-- The header, step body, step error and Back and Next are the shared WizardFrame. -->
+  <controls:WizardFrame x:Name="Frame">
+    <controls:WizardFrame.HelpSlot>
+      <!-- Spec 12.12 places the five setup.* topics on each wizard step's heading, which is one
+           row for all five steps. The glyph binds the step's own topic, and the placement census
+           expands this one site through SetupStepViewModel.HelpTopicIds. -->
+      <controls:HelpButton Topic="{Binding HelpTopicId}" />
+    </controls:WizardFrame.HelpSlot>
+    <controls:WizardFrame.HeaderExtra>
+      <TextBlock Text="Settings are saved as you go. You can change any of them later under Settings."
+                 TextWrapping="Wrap"
+                 Classes="t-caption" />
+    </controls:WizardFrame.HeaderExtra>
+    <!-- Phase 14B fixer, fixer list item 56 (task9-review P3): no footer button carries
+         Classes="sm". DESIGN.md section 4 scopes sm to dense rows, and this footer is not one. -->
+    <controls:WizardFrame.FooterExtra>
+      <Button Grid.Column="0"
+              x:Name="SkipSetupButton"
+              Content="Skip setup"
+              Command="{Binding SkipSetupCommand}" />
+      <Button Grid.Column="3"
+              x:Name="FinishButton"
+              Content="Finish"
+              IsVisible="{Binding IsLastStep}"
+              Command="{Binding FinishCommand}" />
+    </controls:WizardFrame.FooterExtra>
+  </controls:WizardFrame>
+</Window>

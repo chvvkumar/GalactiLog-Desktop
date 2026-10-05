@@ -1,0 +1,299 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.TargetHeaderPart"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+  <!-- The page's rows 0 and 1: the identity line, the rename editor, the log line, the
+       disclosure sentence and the six status lines. -->
+  <UserControl.Styles>
+    <StyleInclude Source="/Views/TargetDetail/Parts/PartStyles.axaml" />
+  </UserControl.Styles>
+
+      <Grid RowDefinitions="Auto,Auto">
+        <!-- Row 0: the identity line, the log line and the reference thumbnail. -->
+        <Grid Grid.Row="0"
+              x:Name="IdentityLine"
+              ColumnDefinitions="*,Auto"
+              RowDefinitions="Auto,Auto,Auto,Auto,Auto">
+          <Grid Grid.Row="0" Grid.Column="0" ColumnDefinitions="*,Auto">
+            <!-- The names are a DockPanel, not a horizontal StackPanel, and that is the blocker
+                 fix for the identity line (Phase 12 verification, deviation 2). A horizontal
+                 StackPanel measures its children at infinite width, so the names grew past the
+                 star column they sit in and the first action button was drawn on top of the
+                 other-names text at the shipped 1280x800 window: both were painted, one over the
+                 other. That button was the standing Copy frame list one, which Phase 16 replaced
+                 with the Export flyout; the defect was in the panel and not in the button. A
+                 DockPanel measures each child against what the children before it left, so every
+                 name here trims into the width the actions leave and nothing is laid out under
+                 them. Every child trims, which is what makes that true: a child whose desired
+                 width ignores the constraint would still be arranged past the edge.
+
+                 A DockPanel rather than a WrapPanel, which would also contain them: the identity
+                 line sits above the workbench, the page has no scroll of its own, and the
+                 workbench is the starred row that gives the frame table its height, so a second
+                 line here is a row taken off the frame table at exactly the window size where it
+                 has the fewest (phase review P1-2).
+
+                 LastChildFill is off and every child docks left by default, so this reads in the
+                 order it draws. Spacing is a margin on each child rather than the panel's,
+                 because a DockPanel has none. -->
+            <DockPanel Grid.Column="0" LastChildFill="False" VerticalAlignment="Center">
+              <Button x:Name="BackButton" Classes="quiet" Command="{Binding BackCommand}" VerticalAlignment="Center" Margin="0,0,12,0">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Path Data="{StaticResource IconChevronLeft}"
+                        Stroke="{DynamicResource ColorTextSecondary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16" />
+                  <TextBlock Text="Back" VerticalAlignment="Center" />
+                </StackPanel>
+              </Button>
+
+              <!-- The page's title, not the header's: a merged-away key has no header, and
+                   binding Header.Name left it empty (Phase 7 FIXER item 18). -->
+              <TextBlock x:Name="PrimaryName"
+                         Classes="t-hero"
+                         Text="{Binding Title}"
+                         IsVisible="{Binding !IsRenaming}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         TextTrimming="CharacterEllipsis" />
+              <!-- Spec 12.12's page.target, docked immediately after the primary name.
+
+                   The placement is right and the reasoning it used to carry was not (Task 2B
+                   review P3). A DockPanel measures each child against what the children before it
+                   left, so the glyph's fixed 28 by 20 does not make it immune: a long enough
+                   primary name squeezes it like anything else. What the fixed size does buy is
+                   that the glyph never asks for more than 28, so the name beside it, which trims,
+                   is the element that gives way first. -->
+              <controls:HelpButton Topic="page.target" Margin="0,0,12,0" />
+              <TextBlock x:Name="OtherNames"
+                         Text="{Binding Header.AliasesText}"
+                         IsVisible="{Binding Header.HasAliases, FallbackValue=False}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource ColorTextSecondary}" />
+              <TextBlock Classes="t-caption"
+                         Text="{Binding Header.ObjectCategory}"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         TextTrimming="CharacterEllipsis" />
+              <Border Classes="tag" Margin="0,0,12,0" IsVisible="{Binding Header.NameLocked, FallbackValue=False}">
+                <TextBlock Text="name locked" TextTrimming="CharacterEllipsis" />
+              </Border>
+              <Border Classes="tag" Margin="0,0,12,0" IsVisible="{Binding Header.IsUserDefined, FallbackValue=False}">
+                <TextBlock Text="user defined" TextTrimming="CharacterEllipsis" />
+              </Border>
+            </DockPanel>
+
+            <!-- The frequent action stays a button; the three rare ones are in the overflow
+                 flyout (P12 R10, panel-workflow.md). Polish wave 9 ruling 1: Export lives in the
+                 Nights ledger's header row, because every one of its entries acts on checked
+                 nights. -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+              <Button x:Name="RevealFolderButton" Content="Reveal folder" Command="{Binding RevealFolderCommand}" />
+              <!-- Spec 12.4: absent, not disabled, with no RA, Dec or target id;
+                   disabled with a tooltip while Survey downloads is off. -->
+              <Button x:Name="SurveyViewButton"
+                      Content="Sky view"
+                      Command="{Binding OpenSurveyViewCommand}"
+                      IsVisible="{Binding ShowsSurveyViewButton}"
+                      ToolTip.Tip="{Binding SurveyViewTooltip}"
+                      ToolTip.ShowOnDisabled="True" />
+              <Button x:Name="OverflowButton" Classes="quiet" Padding="9,0">
+                <Button.Content>
+                  <!-- Drawn, never a Unicode glyph. Three dots as three filled circles on a 16
+                       box, which is the path the comp uses; filled, so this is the one icon here
+                       that takes Fill rather than Stroke. -->
+                  <Path Width="16"
+                        Height="16"
+                        Fill="{DynamicResource ColorTextSecondary}"
+                        Data="M3,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0
+                              M8,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0
+                              M13,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0" />
+                </Button.Content>
+                <Button.Flyout>
+                  <MenuFlyout>
+                    <MenuItem x:Name="RenameButton" Header="Rename" Command="{Binding BeginRenameCommand}" />
+                    <!-- Spec 12.4's "merge into another target" (spec 12.9). Opens the modal with
+                         this target as the winner; the dialog's own search box chooses the loser.
+                         Disabled for an obj: group, which has no targets row to survive a merge. -->
+                    <MenuItem x:Name="MergeButton" Header="Merge into another target" Command="{Binding MergeCommand}" />
+                    <!-- Spec 12.4's re-resolve, behind the one constant on the view model. -->
+                    <MenuItem x:Name="ReResolveButton"
+                              Header="Re-resolve"
+                              Command="{Binding ReResolveCommand}"
+                              IsVisible="{x:Static detail:TargetDetailViewModel.ReResolveAvailable}" />
+                    <!-- Spec 12.16, rulings B5 and B9. A Separator, as LogViewerView.axaml:225,
+                         never a Border.rule inside a menu, hidden with both submenus; each submenu
+                         is hidden while its own list is empty and its leaf items are built by
+                         Theme/Controls.axaml's IntegrationSendItemTheme. -->
+                    <Separator IsVisible="{Binding ShowIntegrationSeparator}" />
+                    <MenuItem x:Name="SendToNinaMenuItem"
+                              Header="Send to NINA"
+                              ItemsSource="{Binding NinaSendItems}"
+                              ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
+                              IsVisible="{Binding HasNinaSendItems}" />
+                    <MenuItem x:Name="SlewStellariumMenuItem"
+                              Header="Slew Stellarium"
+                              ItemsSource="{Binding StellariumSendItems}"
+                              ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
+                              IsVisible="{Binding HasStellariumSendItems}" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              <Button x:Name="DetailsButton" Classes="quiet" Command="{Binding ToggleDetailsCommand}">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <TextBlock Text="Details" VerticalAlignment="Center" />
+                  <!-- The chevron points at the drawer's edge while it is shut and back the other
+                       way while it is open, so the button reads as the pane's state. -->
+                  <Path x:Name="DetailsClosedChevron"
+                        Data="{StaticResource IconChevronRight}"
+                        Stroke="{DynamicResource ColorTextSecondary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16"
+                        IsVisible="{Binding !IsDetailsOpen}" />
+                  <Path x:Name="DetailsOpenChevron"
+                        Data="{StaticResource IconChevronLeft}"
+                        Stroke="{DynamicResource ColorTextSecondary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16"
+                        IsVisible="{Binding IsDetailsOpen}" />
+                </StackPanel>
+              </Button>
+            </StackPanel>
+          </Grid>
+
+          <!-- The inline rename editor, in the title's own place: separate from the displayed
+               name so cancelling restores it, and the commit button stays disabled while the box
+               is empty. -->
+          <StackPanel Grid.Row="1" Grid.Column="0"
+                      x:Name="RenameEditor"
+                      Orientation="Horizontal"
+                      Spacing="6"
+                      Margin="0,6,0,0"
+                      IsVisible="{Binding IsRenaming}">
+            <TextBox Width="260" Text="{Binding RenameText, Mode=TwoWay}" />
+            <Button Content="Save" Command="{Binding CommitRenameCommand}" />
+            <Button Content="Cancel" Command="{Binding CancelRenameCommand}" />
+          </StackPanel>
+
+          <!-- The log line. The figures carry the figure class (weight 600, tabular, primary
+               ink); the connecting words inherit secondary ink from the panel, so a style setter
+               on a figure still wins over the inherited value. The wording is built once in
+               TargetTotalsViewModel rather than as a dozen literals here. -->
+          <WrapPanel Grid.Row="2" Grid.Column="0"
+                     x:Name="LogLine"
+                     Orientation="Horizontal"
+                     Margin="0,8,0,0"
+                     TextElement.Foreground="{DynamicResource ColorTextSecondary}">
+            <ItemsControl ItemsSource="{Binding Totals.LogLineRuns}" Margin="0,0,10,0">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="detail:LogLineRunViewModel">
+                  <TextBlock Text="{Binding Text}" Classes.figure="{Binding IsFigure}" Margin="0,0,5,0" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <ItemsControl x:Name="LogLineFilters" ItemsSource="{Binding Totals.FilterSwatches}" Margin="0,0,10,0" ItemTemplate="{StaticResource FilterSwatchTemplate}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+            </ItemsControl>
+
+            <TextBlock x:Name="LogLineEquipment"
+                       Text="{Binding Totals.LogLineEquipmentText}"
+                       IsVisible="{Binding Totals.HasLogLineEquipment, FallbackValue=False}" />
+
+            <TextBlock x:Name="IntegrationFigures"
+                       Margin="10,0,0,0"
+                       Text="{Binding Totals.IntegrationFiguresText}"
+                       IsVisible="{Binding Totals.HasIntegrationBars, FallbackValue=False}" />
+          </WrapPanel>
+
+          <!-- Spec 12.4's two disclosures, joined into one tertiary sentence. Hidden when neither
+               applies. -->
+          <TextBlock Grid.Row="4" Grid.Column="0"
+                     x:Name="LogLineDisclosure"
+                     Classes="t-caption"
+                     Margin="0,4,0,0"
+                     TextWrapping="Wrap"
+                     Text="{Binding Totals.LogLineDisclosureText}"
+                     IsVisible="{Binding Totals.HasLogLineDisclosure, FallbackValue=False}" />
+        </Grid>
+
+        <!-- Row 1: the six status lines, which are absent on a healthy page. -->
+        <StackPanel Grid.Row="1" Spacing="6" Margin="0,10,0,0">
+          <Border Classes="callout error"
+                  x:Name="RenameErrorCallout"
+                  IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock Text="{Binding RenameError}" TextWrapping="Wrap" Foreground="{DynamicResource ColorError}" />
+          </Border>
+
+          <TextBlock x:Name="ReResolveStatus"
+                     Classes="disclosure"
+                     Text="{Binding ReResolveStatus}"
+                     IsVisible="{Binding ReResolveStatus, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <!-- Spec 12.16, "The result line": the AstroBin CSV registers no job and reports here,
+               where Copy Frame List's own kind of inline result would. -->
+          <TextBlock x:Name="AstroBinCsvResultLine"
+                     Classes="disclosure"
+                     Text="{Binding AstroBinCsvResultText}"
+                     IsVisible="{Binding AstroBinCsvResultText, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+          <!-- Ruling Q4: a stale group key renders a one-line callout naming the key plus the
+               Back button above, never a blank page and never a UI-thread exception. -->
+          <Border Classes="callout warn" x:Name="MissingCallout" IsVisible="{Binding ShowStaleKeyCallout}">
+            <TextBlock Text="{Binding MissingText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorWarning}" />
+          </Border>
+
+          <!-- FIXER LIST item 14, ruling Q12: a merged-away target says so and offers the winner.
+               A Grid, not a horizontal StackPanel: a StackPanel gives its child infinite width, so
+               TextWrapping never fires and a long winner name clips instead of wrapping. -->
+          <Border Classes="callout warn" x:Name="MergedAwayCallout" IsVisible="{Binding IsMergedAway}">
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0"
+                         x:Name="MergedAwayText"
+                         Text="{Binding MergedAwayText}"
+                         TextWrapping="Wrap"
+                         VerticalAlignment="Center"
+                         Margin="0,0,12,0"
+                         Foreground="{DynamicResource ColorWarning}" />
+              <Button Grid.Column="1"
+                      x:Name="OpenMergedIntoButton"
+                      Classes="sm"
+                      Content="{Binding OpenMergedIntoText}"
+                      VerticalAlignment="Center"
+                      Command="{Binding OpenMergedIntoCommand}" />
+            </Grid>
+          </Border>
+
+          <Border Classes="callout error"
+                  x:Name="LoadFailureCallout"
+                  IsVisible="{Binding LastFailure, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock Text="This page could not be loaded. See the log for details."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </Border>
+        </StackPanel>
+      </Grid>
+</UserControl>

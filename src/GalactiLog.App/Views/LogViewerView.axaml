@@ -1,0 +1,286 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:diagnostics="using:GalactiLog.App.ViewModels.Diagnostics"
+             x:Class="GalactiLog.App.Views.LogViewerView"
+             x:Name="Root"
+             x:DataType="diagnostics:LogViewerViewModel">
+  <!-- design-spec 12.8's log viewer: a virtualized list over the current Serilog file and the
+       retained rolled files, with a minimum level filter, free-text search, a follow-tail toggle,
+       copy selection, copy all, open log folder, and the general.log_level selector.
+
+       TWO LEVEL PICKERS, and they are not the same control. "Show" is the view filter: it narrows
+       what is displayed from what was already captured. "Capture" is general.log_level: it changes
+       what Serilog records from now on (spec 12.7, 16.1). They sit in separate bands, with the
+       capture picker behind its own label and separator, so they cannot be mistaken for one
+       another.
+
+       Every colour is a DynamicResource theme token and nothing sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios rather than point sizes (spec 14.4,
+       FontSizeTokenTest). -->
+  <UserControl.Resources>
+    <!-- The rows' viewport height. It has to be a fixed bound rather than a share of the window:
+         this list sits inside the Diagnostics page's vertical ScrollViewer, so the height
+         available to it is infinite and only an explicit bound makes a viewport for
+         VirtualizingStackPanel to virtualise against. The same shape FrameTableView settled on
+         (TRACKING section 6 item 12), and the same known ceiling applies. -->
+    <sys:Double x:Key="LogRowsViewportHeight">360</sys:Double>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto">
+
+      <!-- Spec 12.12 places diagnostics.log-viewer on the log viewer's heading. Task 14B Task 7:
+           the Observing Ledger vocabulary move drops the card border and its corner rounding (DESIGN.md
+           section 8); the hairline rule below the heading row is what carries containment now,
+           the same shape TargetDetailView's "About" heading uses. -->
+      <Border Grid.Row="0" Classes="rule" Padding="0,0,0,6" Margin="0,0,0,8">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="Log viewer"
+                     Classes="t-label section"
+                     VerticalAlignment="Center" />
+          <controls:HelpButton Topic="diagnostics.log-viewer" />
+        </StackPanel>
+      </Border>
+
+      <!-- The view controls: what is shown from what was already captured. -->
+      <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto" Margin="0,0,0,8">
+        <!-- The grid is positionally indexed, so logviewer.show wraps the label rather than
+             taking a column of its own. -->
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" Margin="0,0,6,0">
+          <TextBlock Text="Show"
+                     Classes="t-label section"
+                     VerticalAlignment="Center" />
+          <controls:HelpButton Topic="logviewer.show" />
+        </StackPanel>
+        <ComboBox Grid.Column="1"
+                  x:Name="ShowLevelPicker"
+                  MinWidth="130"
+                  ItemsSource="{Binding Levels}"
+                  SelectedItem="{Binding MinimumLevel, Mode=TwoWay}"
+                  ToolTip.Tip="Hides entries below this level. It does not change what is recorded." />
+        <TextBox Grid.Column="2"
+                 x:Name="SearchBox"
+                 Margin="12,0"
+                 Watermark="Search messages"
+                 Text="{Binding Search, Mode=TwoWay}"
+                 ToolTip.Tip="Matches the message text only" />
+        <ToggleButton Grid.Column="3"
+                      x:Name="FollowTailToggle"
+                      Content="Follow tail"
+                      Classes="sm"
+                      Margin="0,0,6,0"
+                      IsChecked="{Binding FollowTail, Mode=TwoWay}"
+                      ToolTip.Tip="{Binding FollowTailTooltip}" />
+        <Button Grid.Column="4"
+                x:Name="RefreshButton"
+                Content="Refresh"
+                Classes="sm"
+                Margin="0,0,6,0"
+                Command="{Binding RefreshCommand}" />
+        <TextBlock Grid.Column="5"
+                   x:Name="BusyLine"
+                   Text="Reading..."
+                   Classes="t-caption"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsLoading}" />
+      </Grid>
+
+      <!-- The action band: copy, folder, save and clear. Dense, so every button is Button.sm
+           (DESIGN.md section 8; spec 14.5 reserves Classes="primary" for the one filled button in
+           the application, which is not here). -->
+      <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+        <Button x:Name="CopySelectionButton"
+                Content="Copy selection"
+                Classes="sm"
+                Command="{Binding CopySelectionCommand}"
+                ToolTip.Tip="Copies the selected entry, its exception included" />
+        <Button x:Name="CopyAllButton"
+                Content="Copy all"
+                Classes="sm"
+                Command="{Binding CopyAllCommand}"
+                ToolTip.Tip="{Binding CopyAllTooltip}" />
+        <Button x:Name="OpenLogFolderButton"
+                Content="Open log folder"
+                Classes="sm"
+                Command="{Binding OpenLogFolderCommand}"
+                ToolTip.Tip="Opens the log folder with the newest file selected" />
+        <Button x:Name="SaveLogAsButton"
+                Content="Save log as"
+                Classes="sm"
+                Command="{Binding SaveLogAsCommand}"
+                ToolTip.Tip="Saves the lines currently loaded above, oldest first" />
+        <Button x:Name="ClearLogButton"
+                Content="Clear log"
+                Classes="sm"
+                Command="{Binding ClearLogCommand}"
+                ToolTip.Tip="Deletes the rolled log files. The file being written now is never touched." />
+      </StackPanel>
+
+      <!-- PAR-016's named statement, before the click does anything (spec-writer question 5: no
+           typed confirmation). Updated on every load. -->
+      <TextBlock Grid.Row="3"
+                 x:Name="ClearLogNoticeText"
+                 Text="{Binding ClearLogNotice}"
+                 Classes="t-caption"
+                 Margin="0,0,0,8"
+                 IsVisible="{Binding ClearLogNotice, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+      <!-- The list, and the empty state that replaces it. Both live in row 4 and never render at
+           once: IsEmpty is set only by a completed load. -->
+      <TextBlock Grid.Row="4"
+                 x:Name="EmptyState"
+                 Text="{Binding EmptyMessage}"
+                 Classes="t-caption"
+                 VerticalAlignment="Top"
+                 IsVisible="{Binding IsEmpty}" />
+
+      <ListBox Grid.Row="4"
+               x:Name="LogRows"
+               MaxHeight="{StaticResource LogRowsViewportHeight}"
+               IsVisible="{Binding !IsEmpty}"
+               Background="Transparent"
+               BorderThickness="0"
+               ItemsSource="{Binding Lines}"
+               SelectedItem="{Binding Selected, Mode=TwoWay}"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto"
+               ScrollViewer.VerticalScrollBarVisibility="Auto">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="diagnostics:LogLineViewModel">
+            <StackPanel>
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding Timestamp}" Classes="t-caption" />
+                <!-- The level reads as a token-coloured word rather than a brush on the
+                     view-model, so the colours resolve on the UI thread (TRACKING item 24). The
+                     two classes are bound to the row's own predicates, so Warning, Error and
+                     Fatal are distinguishable at a glance and everything else reads in the
+                     secondary token (review finding M2). -->
+                <TextBlock Text="{Binding Level}"
+                           Classes="level"
+                           Classes.warn="{Binding IsWarning}"
+                           Classes.error="{Binding IsError}"
+                           Width="88" />
+                <TextBlock Text="{Binding SourceContext}" Classes="t-caption" />
+              </StackPanel>
+              <TextBlock Text="{Binding Message}"
+                         Classes="mono"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource ColorTextPrimary}" />
+              <TextBlock Text="{Binding Exception}"
+                         Classes="mono"
+                         TextWrapping="Wrap"
+                         Margin="12,2,0,0"
+                         IsVisible="{Binding HasException}"
+                         Foreground="{DynamicResource ColorError}" />
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+        <ListBox.Styles>
+          <!-- Every level colour is a theme token resolved here on the UI thread and never a brush
+               built on a background thread (TRACKING item 24). -->
+          <Style Selector="TextBlock.level">
+            <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+          </Style>
+          <Style Selector="TextBlock.level.warn">
+            <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+          </Style>
+          <Style Selector="TextBlock.level.error">
+            <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
+          </Style>
+        </ListBox.Styles>
+      </ListBox>
+
+      <!-- Load more, shown only while there is an older page, exactly as the Activity page shows
+           "Load older" only while next_cursor is not null. The viewer-cap message takes its
+           place when paging stopped for PAR-012's reason instead: there is more, but the cap
+           says stop, so the reader is never told the log ran out when it did not. -->
+      <StackPanel Grid.Row="5" Orientation="Horizontal" Spacing="8" Margin="0,8,0,0">
+        <Button x:Name="LoadMoreButton"
+                Content="Load more"
+                Classes="sm"
+                HorizontalAlignment="Left"
+                IsVisible="{Binding CanLoadMore}"
+                Command="{Binding LoadMoreCommand}" />
+        <TextBlock x:Name="ViewerCapLine"
+                   Text="{x:Static diagnostics:LogViewerViewModel.ViewerCapReachedMessage}"
+                   Classes="t-caption"
+                   VerticalAlignment="Center"
+                   IsVisible="{Binding IsAtViewerCap}" />
+      </StackPanel>
+
+      <!-- The capture band, deliberately apart from the view controls above. This is
+           general.log_level (spec 5.8.1), which spec 12.7 says appears nowhere else in the
+           application: it changes what Serilog records from now on and takes effect with no
+           restart (spec 16.1). It is not the "Show" picker in row 1 and must never be merged
+           with it. The three retention editors (PAR-012, spec 12.7) sit beside it, the same
+           capture band, each a NumericUpDown (never a ComboBox:
+           LogViewerViewTests.View_HasTwoSeparateLevelPickers counts exactly two). -->
+      <StackPanel Grid.Row="6" Margin="0,12,0,0" Spacing="4">
+        <Separator Background="{DynamicResource ColorBorderDefault}" />
+        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+          <TextBlock Text="Capture"
+                     Classes="t-label section"
+                     VerticalAlignment="Center" />
+          <controls:HelpButton Topic="logviewer.capture" />
+          <ComboBox x:Name="CaptureLevelPicker"
+                    MinWidth="130"
+                    ItemsSource="{Binding Levels}"
+                    SelectedItem="{Binding CaptureLevel, Mode=TwoWay}"
+                    ToolTip.Tip="Changes what is written to the log from now on. Takes effect immediately." />
+          <TextBlock Text="Changes what is recorded from now on, not what is shown above."
+                     Classes="t-caption"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+
+        <!-- Phase 14B fixer, fixer list item 45 (task7-review P3). None of the three boxes
+             carries Minimum or Maximum: the control would clamp before the binding reached the
+             view-model, so spec 12.7's "reverts to the stored value when it refuses" was
+             unreachable from the user interface. The three On...Changed handlers in
+             LogViewerViewModel are the one range gate for these keys. -->
+        <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,10,0,0">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Activity retention (days)" Classes="t-caption" VerticalAlignment="Center" />
+            <NumericUpDown x:Name="ActivityRetentionBox"
+                            Width="110"
+                            ShowButtonSpinner="False"
+                            FormatString="0"
+                            Value="{Binding RetentionDays, Mode=TwoWay}" />
+            <TextBlock Text="{x:Static diagnostics:LogViewerViewModel.AppliesImmediatelyText}"
+                       Classes="t-caption"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Log file retention (days)" Classes="t-caption" VerticalAlignment="Center" />
+            <NumericUpDown x:Name="AppLogRetentionBox"
+                            Width="110"
+                            ShowButtonSpinner="False"
+                            FormatString="0"
+                            Value="{Binding AppLogRetentionDays, Mode=TwoWay}" />
+            <TextBlock Text="{x:Static diagnostics:LogViewerViewModel.AppliesAtNextStartText}"
+                       Classes="t-caption"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Viewer row cap" Classes="t-caption" VerticalAlignment="Center" />
+            <NumericUpDown x:Name="AppLogMaxRowsBox"
+                            Width="130"
+                            ShowButtonSpinner="False"
+                            FormatString="0"
+                            Increment="1000"
+                            Value="{Binding MaxRows, Mode=TwoWay}" />
+            <TextBlock Text="{x:Static diagnostics:LogViewerViewModel.AppliesImmediatelyText}"
+                       Classes="t-caption"
+                       VerticalAlignment="Center" />
+          </StackPanel>
+        </StackPanel>
+      </StackPanel>
+  </Grid>
+</UserControl>

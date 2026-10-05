@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightMetricsPart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel">
+  <!-- The chart view is marked "fills" so its plot fills the zone rather than holding the 260
+       floor the page's Trend band needs; its help glyph ends the pill row and reads the guiding
+       topic while the Guiding pill is on (Phase 24 R3). -->
+  <ContentControl x:Name="SessionChartRegion" Content="{Binding Chart}">
+    <ContentControl.ContentTemplate>
+      <DataTemplate DataType="detail:SessionChartViewModel">
+        <controls:MetricChartView Classes="fills">
+          <controls:MetricChartView.PillRowEnd>
+            <controls:HelpButton x:Name="MetricsHelp" Topic="{Binding HelpTopicId}" />
+          </controls:MetricChartView.PillRowEnd>
+        </controls:MetricChartView>
+      </DataTemplate>
+    </ContentControl.ContentTemplate>
+  </ContentControl>
+</UserControl>

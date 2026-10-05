@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             x:Class="GalactiLog.App.Views.Dashboard.DashboardEmptyStateView"
+             x:DataType="vm:DashboardViewModel">
+  <!-- design-spec 12.10's two dashboard empty states, plus the first-scan block: NoFramesYet
+       while a scan runs shows that scan's progress. Which one shows is decided by the view-model's
+       single DashboardContentState enum and the scan's IsRunning, never by a combination of flags
+       here, so no two can render at once. Every colour is a theme token (spec 14). -->
+  <StackPanel HorizontalAlignment="Center"
+              VerticalAlignment="Center"
+              Spacing="10"
+              Margin="24">
+    <StackPanel Spacing="10" IsVisible="{Binding ShowNoFramesYet}">
+      <TextBlock Text="No frames catalogued yet"
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+      <TextBlock Text="Add a library folder in Settings, then run a scan."
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+      <Button x:Name="RunScanButton"
+              Content="Run Scan"
+              HorizontalAlignment="Center"
+              Padding="12,4"
+              Command="{Binding RunScanCommand}" />
+    </StackPanel>
+
+    <StackPanel Spacing="10" IsVisible="{Binding ShowFirstScan}" Width="320">
+      <TextBlock Text="Scanning your library"
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+      <TextBlock Text="{Binding ScanStatus.Message}"
+                 HorizontalAlignment="Center"
+                 TextTrimming="CharacterEllipsis"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+      <!-- The status bar's own bar, at the page's width: same bindings, so the two never disagree. -->
+      <ProgressBar Height="4"
+                   Minimum="0" Maximum="100"
+                   Value="{Binding ScanStatus.Percent}"
+                   IsIndeterminate="{Binding ScanStatus.IsIndeterminate}"
+                   Foreground="{DynamicResource ColorAccent}"
+                   Background="{DynamicResource ColorBgElevated}" />
+    </StackPanel>
+
+    <StackPanel Spacing="10" IsVisible="{Binding ShowNoMatches}">
+      <TextBlock Text="No targets match these filters"
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+      <!-- The panel's own Reset command, not a second implementation of it. -->
+      <Button x:Name="ResetFiltersButton"
+              Content="Reset Filters"
+              HorizontalAlignment="Center"
+              Padding="12,4"
+              Command="{Binding Filters.ResetCommand}" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

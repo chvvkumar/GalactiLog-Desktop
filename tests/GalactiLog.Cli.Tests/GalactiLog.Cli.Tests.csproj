@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\GalactiLog.Cli\GalactiLog.Cli.csproj" />
+    <ProjectReference Include="..\..\src\GalactiLog.App\GalactiLog.App.csproj" />
+    <ProjectReference Include="..\..\src\GalactiLog.Data\GalactiLog.Data.csproj" />
+    <ProjectReference Include="..\GalactiLog.Core.Tests\GalactiLog.Core.Tests.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Catalogs\**\*" LinkBase="Catalogs" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+  </ItemGroup>
+</Project>

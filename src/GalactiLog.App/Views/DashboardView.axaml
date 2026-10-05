@@ -1,0 +1,267 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             xmlns:dashViews="using:GalactiLog.App.Views.Dashboard"
+             x:Class="GalactiLog.App.Views.DashboardView"
+             x:DataType="vm:DashboardViewModel">
+  <!-- design-spec 12.2: a collapsible left filter panel and a target list.
+
+       Phase 14C gives the panel its two states (UI layout ruling 4). The panel column is always
+       present and always visible; what changes is its width, bound to the one member
+       FilterPanelColumnWidth, which is 48 while the panel is the collapsed strip and the committed
+       width otherwise. The old build hid the whole column instead, which took the scan filter
+       notice with it, and left a "Filters" button in the right column's toolbar as the only way
+       back; both are gone. The notice now sits at the top of the target list column, where its own
+       condition is the only thing that governs whether it shows (fixer-list item 34). -->
+  <Grid x:Name="DashboardRoot" Margin="16">
+    <Grid.ColumnDefinitions>
+      <!-- 220 to 480 expanded, 48 collapsed, clamped on both read and write (ruling E1), and
+           bounded again by what the target list needs at the page's current width (fixer-list
+           item 6; the arithmetic is in this file's code-behind). The GridSplitter beside it
+           resizes this column, and the view-model reads the committed figure back out of it. The
+           bound is layout only: it never writes display.dashboard, so widening the window gives
+           the stored width and the stored state back. -->
+      <ColumnDefinition Width="{Binding FilterPanelColumnWidth}" />
+      <ColumnDefinition Width="Auto" />
+      <ColumnDefinition Width="*" />
+    </Grid.ColumnDefinitions>
+
+    <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
+      <!-- The panel's own collapse chevron, and the heading that carries the one dashboard.filters
+           help glyph. Both belong to the expanded state: at 48 pixels neither fits, and the strip
+           carries its own chevron instead. -->
+      <Grid Grid.Row="0"
+            x:Name="FilterPanelHeading"
+            ColumnDefinitions="*,Auto"
+            Margin="4,0,0,4"
+            IsVisible="{Binding !IsFilterPanelShowingStrip}">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="Filters"
+                     FontWeight="SemiBold"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <controls:HelpButton Topic="dashboard.filters" />
+        </StackPanel>
+        <!-- A drawn Path, never a Unicode guillemet: DESIGN.md section 8 refuses a glyph standing
+             in for an icon, and the pair now lives once in Theme/Controls.axaml (ruling E2).
+
+             The name is the control's only text: a drawn Path leaves nothing for a screen reader
+             to announce and nothing outside the process to find the button by, and the tooltip is
+             a hover affordance that no automation client reads as a name (fixer-list item 21). -->
+        <Button Grid.Column="1"
+                x:Name="FilterPanelCollapse"
+                Classes="chevron"
+                Command="{Binding ToggleFilterPanelCommand}"
+                AutomationProperties.Name="Collapse filters"
+                ToolTip.Tip="Hide the filter panel">
+          <Path Data="{StaticResource IconChevronLeft}"
+                Classes="icon-glyph"
+                Width="16"
+                Height="16" />
+        </Button>
+      </Grid>
+
+      <!-- Summary strip, above the filter sections (spec 12.2). Every figure describes the whole
+           filtered set, not the current page.
+
+           Phase 20, DESIGN.md section 4's carried amendment (fixer-list item 27): a flat region
+           closed by one hairline rule, not a radiused card. Border.rule from Theme/Controls.axaml
+           carries the edge and the token; the padding and the margin are unchanged, which is what
+           keeps every DashboardViewTests width pin where it is. -->
+      <Border Grid.Row="1"
+              x:Name="FilterPanelSummary"
+              Classes="rule"
+              Padding="12,8"
+              Margin="0,0,0,8"
+              IsVisible="{Binding !IsFilterPanelShowingStrip}">
+        <StackPanel Spacing="4">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Integration" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding TotalIntegrationHours, StringFormat={}{0:0.0} h}"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="{Binding GroupsLabel}" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="1" Text="{Binding TotalGroups}" Foreground="{DynamicResource ColorTextPrimary}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0" Text="Frames" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="1" Text="{Binding TotalFrames}" Foreground="{DynamicResource ColorTextPrimary}" />
+          </Grid>
+          <!-- The shipped badge shape, Border.tag, which already carries ColorBadgeBg, the 1 px
+               outline, the 6,1 padding and the tertiary ink for its text. -->
+          <Border Classes="tag"
+                  IsVisible="{Binding IsFiltered}"
+                  HorizontalAlignment="Left">
+            <TextBlock Text="filtered" />
+          </Border>
+        </StackPanel>
+      </Border>
+
+      <!-- One FilterPanelView in both states. Its own root switches between the expanded body and
+           the 48 pixel strip, so the page never realizes a second panel.
+
+           Phase 20: a flat region opened by one hairline rule at its top edge rather than a
+           radiused card. The thickness is written here rather than taken from Border.rule because
+           this region's rule is its TOP edge, separating it from the summary strip above; every
+           other figure is unchanged. -->
+      <Border Grid.Row="2"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="0,1,0,0">
+        <dashViews:FilterPanelView DataContext="{Binding Filters}" />
+      </Border>
+    </Grid>
+
+    <!-- Ruling E1's splitter, in a 4 pixel column of its own: one with no column overlays its
+         neighbour and makes the committed width ambiguous. ShowsPreview drags a preview adorner
+         and applies the width on release, so the target list's shared-size spine is not
+         re-measured on every drag tick. Hidden while the panel is the strip, which has no width to
+         drag. -->
+    <GridSplitter Grid.Column="1"
+                  x:Name="FilterPanelSplitter"
+                  Width="4"
+                  ResizeDirection="Columns"
+                  ShowsPreview="True"
+                  Background="Transparent"
+                  IsVisible="{Binding !IsFilterPanelShowingStrip}" />
+
+    <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*" Margin="8,0,0,0">
+      <!-- Spec 12.2's scan filter notice (PAR-014), at the top of the target list column, above
+           the toolbar row, while the stored scan filters are still only the five the setup wizard
+           seeded. The condition is ScanFilterConfig.IsOnlyTheSeededRules, the one computation the
+           Settings Library tab's copy reads too, so the two surfaces cannot disagree. It informs
+           and never blocks: no command here is disabled by it and a scan runs with it showing.
+           Exactly one action, Review. The web's second button, which re-seeded the defaults, has
+           no counterpart here, because the port's wizard has already written them by the time this
+           can show.
+
+           It lives here rather than inside the filter panel's column (Phase 14C, fixer-list item
+           34): this column renders in both panel states, so the notice's own condition is the only
+           thing that governs whether it shows.
+
+           Shared vocabulary only (questions.md Q2): Border.callout from Theme/Controls.axaml, with
+           no style declared here. -->
+      <Border Grid.Row="0"
+              x:Name="ScanFilterNoticeBanner"
+              Classes="callout"
+              Margin="0,0,0,8"
+              Background="{DynamicResource ColorBgElevated}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              IsVisible="{Binding ShowScanFilterNotice}">
+        <StackPanel Spacing="4">
+          <TextBlock x:Name="ScanFilterNoticeText"
+                     TextWrapping="Wrap"
+                     Text="GalactiLog is scanning everything under the configured roots except the five folder patterns the setup wizard added." />
+          <Button x:Name="ScanFilterNoticeReviewButton"
+                  Content="Review"
+                  Padding="10,3"
+                  HorizontalAlignment="Left"
+                  Command="{Binding ReviewScanFiltersCommand}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Row 1 is spec 12.12's toolbar row, which carries page.dashboard's help glyph. It held an
+           expand chevron beside it until Phase 14C; that button was the workaround for a panel
+           that vanished when it collapsed, and the strip's own chevron is the way back now. -->
+      <StackPanel Grid.Row="1"
+                  x:Name="DashboardToolbar"
+                  Orientation="Horizontal"
+                  Spacing="6"
+                  HorizontalAlignment="Left"
+                  Margin="0,0,0,8">
+        <controls:HelpButton Topic="page.dashboard" />
+      </StackPanel>
+
+      <!-- Banners, above the list region and never in place of it: spec 12.10 says an unreachable
+           root renders as a warning banner "not as a silent empty list", so whatever rows the
+           database still holds keep rendering underneath. -->
+      <StackPanel Grid.Row="2" Spacing="8" Margin="0,0,0,8">
+        <!-- Phase 20: the Border.callout composite DESIGN.md section 4 names for exactly this
+             pair, the same one the scan filter notice above and the session pane's status lines
+             already use. The warning tokens stay where they are and the padding is unchanged; the
+             radius and the local thickness come from the class. -->
+        <Border x:Name="UnreachableRootBanner"
+                Classes="callout"
+                IsVisible="{Binding HasUnreachableRoots}"
+                Padding="12,8"
+                Background="{DynamicResource ColorWarningCalloutFill}"
+                BorderBrush="{DynamicResource ColorWarningCalloutBorder}">
+          <StackPanel Spacing="4">
+            <TextBlock Text="Library folder not reachable"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorWarning}" />
+            <ItemsControl ItemsSource="{Binding UnreachableRoots}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="sys:String">
+                  <TextBlock Text="{Binding}"
+                             TextWrapping="Wrap"
+                             FontFamily="Consolas,Menlo,monospace"
+                             Foreground="{DynamicResource ColorTextSecondary}" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <Button x:Name="UnreachableRootDismissButton"
+                    Content="Dismiss"
+                    Padding="10,3"
+                    HorizontalAlignment="Left"
+                    Command="{Binding DismissUnreachableRootsCommand}" />
+          </StackPanel>
+        </Border>
+
+        <Border x:Name="QueryFailureBanner"
+                Classes="callout"
+                IsVisible="{Binding HasFailure}"
+                Padding="12,8"
+                Background="{DynamicResource ColorErrorCalloutFill}"
+                BorderBrush="{DynamicResource ColorErrorCalloutBorder}">
+          <StackPanel Spacing="4">
+            <TextBlock Text="{Binding FailureText}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+            <Button x:Name="FailureDismissButton"
+                    Content="Dismiss"
+                    Padding="10,3"
+                    HorizontalAlignment="Left"
+                    Command="{Binding DismissFailureCommand}" />
+          </StackPanel>
+        </Border>
+      </StackPanel>
+
+      <!-- The target list (Task 7) and, in its place, spec 12.10's empty states (Task 8).
+
+           Phase 20: the rows inside moved to the Ledger vocabulary at Phase 14C and the shell
+           around them follows now. The card fill and the radius are gone, so nothing here draws a
+           card any more.
+
+           The 16 padding and the 1 pixel edge on ALL FOUR sides stay, and deliberately.
+           DashboardView.axaml.cs's ListRegionChrome is the literal (2 * 16) + (2 * 1), the figure
+           the panel's layout bound is computed from, and this file's own markup is what that
+           constant reads. A top-only rule was tried as one edit with that constant and was
+           reverted: with the border costing the list nothing across, the constant drops to 32, the
+           panel's bound grows by 2, and three DashboardViewTests pins go red by exactly those two
+           pixels (the forced-open panel reads 626 against 624, the re-applied bound 306 against 304,
+           the collapsed strip 50 against 48). Those pins are not this phase's to move, so the
+           four-sided hairline stays. DESIGN.md section 4's rule is about the radius and the card,
+           not about a 1 px outline, and TargetListView.axaml and TargetDetailView.axaml already
+           carry plain edges. -->
+      <Border Grid.Row="3"
+              x:Name="TargetListRegion"
+              Padding="16"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1">
+        <Panel>
+          <!-- The visibility binding sits on the wrapper, not on TargetListView: that control's
+               DataContext is Targets, and a compiled binding there would be typed against
+               TargetListViewModel rather than this page. -->
+          <Panel IsVisible="{Binding ShowRows}">
+            <dashViews:TargetListView DataContext="{Binding Targets}" />
+          </Panel>
+          <dashViews:DashboardEmptyStateView IsVisible="{Binding ShowEmptyState}" />
+        </Panel>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

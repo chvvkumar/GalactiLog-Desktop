@@ -1,0 +1,96 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="GalactiLog.App.Views.Analysis.TimeSeriesTabView"
+             x:DataType="analysis:TimeSeriesTabViewModel">
+  <!-- Spec 12.14's Time Series tab body: the metric picker, the smoothing segment and the nightly
+       trend chart.
+
+       NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all seven heading rows and all
+       seven placements are in Views/AnalysisView.axaml, and no other markup file carries them.
+       The mixed plate scale callout, the state sentence and the Retry are the base's and
+       are drawn once by that file's shared tab section template, above this body, so this file
+       draws none of the five.
+
+       Nothing here sets a FontSize: Scales.axaml's FontSize* keys are ratios rather than point
+       sizes (FontSizeTokenTest). Only Theme/Controls.axaml classes and theme tokens, and no local
+       Button, Border.tag or Border.callout style, which ControlStyleScanTest fails the build on. -->
+  <StackPanel Spacing="8">
+    <!-- OUTSIDE the result region, and live in every state including Empty, TooFew, Failed and
+         Loading: a reader who filtered the chart into emptiness has to be able to filter back out
+         of it. A WrapPanel rather than one row, for the reason the filter bar's own controls wrap
+         at the 1024 by 700 minimum: a clipped control hides an affordance the reader cannot then
+         find. -->
+    <WrapPanel x:Name="TimeSeriesControls">
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Metric" Classes="t-caption" />
+        <ComboBox x:Name="MetricPicker"
+                  Width="230"
+                  ItemsSource="{Binding MetricChoices}"
+                  SelectedItem="{Binding SelectedMetricChoice, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="analysis:AnalysisMetricChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <!-- The smoothing segment. Three Button.sm with page, and current on the chosen one, which
+           is the shipped pair the filter bar's granularity segment and the tab strip both take
+           (DESIGN.md section 4). No new class and no local style. -->
+      <StackPanel Spacing="2" Margin="0,0,12,8">
+        <TextBlock Text="Smoothing" Classes="t-caption" />
+        <StackPanel Orientation="Horizontal" Spacing="4">
+          <Button x:Name="RawButton"
+                  Classes="sm page"
+                  Classes.current="{Binding IsRaw}"
+                  Content="Raw"
+                  Command="{Binding SelectSmoothingCommand}"
+                  CommandParameter="{x:Static analysis:TimeSeriesSmoothing.Raw}" />
+          <Button x:Name="Ma7Button"
+                  Classes="sm page"
+                  Classes.current="{Binding IsMa7}"
+                  Content="7-Night MA"
+                  Command="{Binding SelectSmoothingCommand}"
+                  CommandParameter="{x:Static analysis:TimeSeriesSmoothing.Ma7}" />
+          <Button x:Name="Ma30Button"
+                  Classes="sm page"
+                  Classes.current="{Binding IsMa30}"
+                  Content="30-Night MA"
+                  Command="{Binding SelectSmoothingCommand}"
+                  CommandParameter="{x:Static analysis:TimeSeriesSmoothing.Ma30}" />
+        </StackPanel>
+      </StackPanel>
+    </WrapPanel>
+
+    <!-- The tab's ONE result region. Spec 12.14's States
+         table draws no chart in "Loading, first result", "No row matches the filters", the too-few
+         rows or a failure, and keeps the last result drawn through "Loading, refresh", which is
+         exactly what AnalysisTabViewModel.ShowsResult answers. The chart goes INSIDE this element;
+         the picker and the segment above stay OUTSIDE it. Exactly one ResultRegion per tab view,
+         which AnalysisResultRegionCensusTest enforces by file name. -->
+    <StackPanel x:Name="ResultRegion" Spacing="8" IsVisible="{Binding ShowsResult}">
+      <!-- Background is ColorBgElevated and NOT Transparent, which is the second
+           and last exception to spec 13's "chart background transparent so the page gradient
+           shows through": the band's lower half is an opaque mask painted in this same token, so
+           the two must name one token and the mask would otherwise sit on the gradient as a flat
+           slab. TimeSeriesChartViewModel.MaskKey is the other half of the pair.
+
+           A fixed Height rather than a * row, the reason MetricChartView.axaml gives: a chart with
+           an unbounded height measures to zero or to infinity depending on the panel.
+
+           LegendPosition is Hidden, as every other chart in this application sets it; the four
+           tooltip and legend paints are the one style block in Theme/Controls.axaml and are
+           never set here (ChartPaintCensusTests case A). -->
+      <lvc:CartesianChart x:Name="TimeSeriesChart"
+                          LegendPosition="Hidden"
+                          Series="{Binding Chart.Series}"
+                          XAxes="{Binding Chart.XAxes}"
+                          YAxes="{Binding Chart.YAxes}"
+                          Background="{DynamicResource ColorBgElevated}"
+                          Height="320" />
+    </StackPanel>
+  </StackPanel>
+</UserControl>

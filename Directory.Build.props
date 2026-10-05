@@ -1,0 +1,17 @@
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <Deterministic>true</Deterministic>
+    <!-- Phase 5 Task 6, carry-forward rule: Task 4 opted three views into compiled bindings with
+         a per-file x:CompileBindings="True", Task 5 a fourth, and this task adds a fifth. Past
+         four copies of the same attribute it is a repository default, not an opt-in. Views keep
+         their x:DataType; a binding-path typo stays a build error rather than a silent runtime
+         failure. Ignored by the non-Avalonia projects. FIXER LIST F5 removed the four redundant
+         per-file attributes, so this property is the only place it is set. -->
+    <AvaloniaUseCompiledBindingsByDefault>true</AvaloniaUseCompiledBindingsByDefault>
+  </PropertyGroup>
+</Project>

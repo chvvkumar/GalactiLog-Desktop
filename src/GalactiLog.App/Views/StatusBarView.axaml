@@ -1,0 +1,148 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             xmlns:svc="using:GalactiLog.App.Services"
+             x:Class="GalactiLog.App.Views.StatusBarView"
+             x:DataType="vm:StatusBarViewModel">
+  <!-- design-spec 12: scan state, message, percent, a cancel button while a scan runs, and the
+       update indicator (Phase 10 Task 4, at the end of this file). -->
+  <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="8,0">
+    <TextBlock Grid.Column="0"
+               Text="{Binding StateText}"
+               IsVisible="{Binding Status.IsRunning}"
+               VerticalAlignment="Center"
+               Margin="0,0,8,0"
+               Foreground="{DynamicResource ColorTextSecondary}" />
+    <TextBlock Grid.Column="1"
+               Text="{Binding Status.Message}"
+               TextTrimming="CharacterEllipsis"
+               VerticalAlignment="Center"
+               Foreground="{DynamicResource ColorTextSecondary}" />
+    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+      <!-- Spec 12's job monitor (PAR-015, ruling D1): the number of running jobs, and a flyout
+           listing them above the recently finished ones. Hidden entirely when nothing is running.
+           A bare Button: spec 14.5 allows exactly one filled control in the application and
+           RunScanButton below is it. -->
+      <Button x:Name="JobMonitorButton"
+              IsVisible="{Binding HasJobsToShow}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="Jobs" VerticalAlignment="Center" />
+          <!-- The count alone hides at zero; the button stays, because it is the only way to
+               reach the recent list. -->
+          <TextBlock x:Name="RunningJobsCount"
+                     Text="{Binding RunningJobsText}"
+                     IsVisible="{Binding HasRunningJobs}"
+                     VerticalAlignment="Center" />
+        </StackPanel>
+        <Button.Flyout>
+          <Flyout>
+            <StackPanel MinWidth="320" MaxWidth="420" Spacing="8">
+              <!-- Phase 14B fixer, fixer list item 18: each heading goes with its own list, so the
+                   first flyout of a session no longer shows a section label with nothing under
+                   it. -->
+              <TextBlock Classes="t-label" Text="Running" IsVisible="{Binding HasRunningJobs}" />
+              <ItemsControl x:Name="RunningJobList" ItemsSource="{Binding Jobs.Running}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="svc:JobViewModel">
+                    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
+                      <StackPanel Grid.Column="0" Spacing="2">
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="{DynamicResource ColorTextPrimary}" />
+                        <TextBlock Text="{Binding Message}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <ProgressBar Height="4"
+                                     Minimum="0" Maximum="100"
+                                     Value="{Binding PercentOrZero}"
+                                     IsVisible="{Binding HasPercent}"
+                                     Foreground="{DynamicResource ColorAccent}"
+                                     Background="{DynamicResource ColorBgElevated}" />
+                      </StackPanel>
+                      <!-- Only for a job that registered a cancel delegate. -->
+                      <Button Grid.Column="1"
+                              Classes="sm"
+                              Content="Cancel"
+                              Margin="8,0,0,0"
+                              VerticalAlignment="Top"
+                              Command="{Binding CancelCommand}"
+                              IsVisible="{Binding CanCancel}" />
+                    </Grid>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <!-- Spec 12: the outcomes are kept after completion, newest first, capped at ten,
+                   and nothing clears them on a timer. -->
+              <TextBlock Classes="t-label" Text="Recent" IsVisible="{Binding HasRecentJobs}" />
+              <ItemsControl x:Name="RecentJobList" ItemsSource="{Binding Jobs.Recent}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="svc:JobViewModel">
+                    <StackPanel Spacing="2" Margin="0,0,0,8">
+                      <TextBlock Text="{Binding Title}"
+                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                      <TextBlock Text="{Binding ResultText}"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+                      <TextBlock Text="{Binding Summary}"
+                                 TextWrapping="Wrap"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+                      <!-- Phase 14B fixer, fixer list item 17: the last progress line the job
+                           reported, which is what keeping Message past the finish is for. -->
+                      <TextBlock x:Name="RecentJobMessage"
+                                 Text="{Binding Message}"
+                                 TextTrimming="CharacterEllipsis"
+                                 IsVisible="{Binding HasMessage}"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </Flyout>
+        </Button.Flyout>
+      </Button>
+      <!-- Spec 12.10's Run Scan, on the one surface that is always on screen (Phase 7 FIXER item
+           19). The dashboard's button belongs to its empty state and is gone as soon as the
+           library has frames, so this is the manual rescan affordance for a populated library. -->
+      <!-- P12 R7's single filled control in the whole application (ruling Q4). Every other button
+           is a 1 px outline over a transparent fill; Theme/Controls.axaml owns both forms. -->
+      <Button x:Name="RunScanButton"
+              Classes="primary"
+              Content="Run scan"
+              Command="{Binding RunScanCommand}"
+              IsVisible="{Binding !Status.IsRunning}" />
+      <ProgressBar Width="120"
+                   VerticalAlignment="Center"
+                   Minimum="0" Maximum="100"
+                   Value="{Binding Status.Percent}"
+                   IsIndeterminate="{Binding Status.IsIndeterminate}"
+                   IsVisible="{Binding Status.IsRunning}"
+                   Foreground="{DynamicResource ColorAccent}"
+                   Background="{DynamicResource ColorBgElevated}" />
+      <Button x:Name="CancelButton"
+              Content="Cancel"
+              Command="{Binding CancelCommand}"
+              IsVisible="{Binding Status.IsRunning}" />
+    </StackPanel>
+    <!-- Spec 12's update indicator (Phase 10 Task 4). Hidden until a check finds something, and
+         hidden again once it is applied. Its progress bar is its own: a download and a scan are
+         two different operations and one bar showing either is unreadable. -->
+    <StackPanel Grid.Column="3"
+                x:Name="UpdateIndicator"
+                Orientation="Horizontal"
+                Spacing="8"
+                Margin="8,0,0,0"
+                VerticalAlignment="Center"
+                IsVisible="{Binding UpdateAvailable}">
+      <ProgressBar x:Name="UpdateProgress"
+                   Width="80"
+                   VerticalAlignment="Center"
+                   Minimum="0" Maximum="100"
+                   Value="{Binding UpdateDownloadPercent}"
+                   IsVisible="{Binding IsDownloadingUpdate}"
+                   Foreground="{DynamicResource ColorAccent}"
+                   Background="{DynamicResource ColorBgElevated}" />
+      <Button x:Name="UpdateButton"
+              Content="{Binding UpdateText}"
+              Command="{Binding ShowUpdatePromptCommand}" />
+    </StackPanel>
+  </Grid>
+</UserControl>

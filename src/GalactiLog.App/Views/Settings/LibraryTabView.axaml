@@ -1,0 +1,613 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:sys="using:System"
+             x:Class="GalactiLog.App.Views.Settings.LibraryTabView"
+             x:Name="Root"
+             x:DataType="settings:LibraryTabViewModel">
+  <!-- design-spec 12.7's Library tab, in the order the spec's table lists its contents: scan
+       roots, include and exclude paths, name rules with the test-a-path box, calibration,
+       auto-scan, watcher, manual scan. Every colour is a theme token (spec 14) and nothing here
+       sets FontSize, because Scales.axaml's FontSize* keys are ratios, not point sizes.
+
+       Folder pickers are Avalonia storage-provider calls in this view's code-behind, handed to
+       the view-model as plain strings, so the view-model stays constructible with no window
+       (HANDOFF.md section 5). -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <!-- A read that threw. One neutral line in place of the controls, not above them: every
+           section below binds IsReady (spec 12.10, review finding I1). -->
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The library settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Classes="t-caption" />
+
+      <!-- The first read, in flight. Without this the tab renders four empty lists and a slow
+           read looks like an empty configuration (review finding M8). -->
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the library settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Classes="t-caption" />
+
+      <!-- The stored document and the on-screen edit differ (review finding I3, and FIXER LIST
+           F13 for the first-read case). The edit is not overwritten and not discarded; Revert
+           takes the stored values, and the notice says which of the two happened. -->
+      <Border x:Name="StoredValuesNoticeBanner"
+              Classes="callout warn"
+              IsVisible="{Binding StoredValuesNotShown}">
+        <StackPanel Spacing="4">
+          <TextBlock Text="{Binding StoredValuesNotice}"
+                     TextWrapping="Wrap" />
+          <Button x:Name="StoredValuesDismissButton"
+                  Content="Dismiss"
+                  Padding="10,3"
+                  HorizontalAlignment="Left"
+                  Command="{Binding DismissStoredValuesNoticeCommand}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Scan roots (spec 10.1). Port-only: the web has one environment-supplied root. -->
+      <Border x:Name="ScanRootsSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Library folders" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.scan-roots" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="The folders GalactiLog walks. Each root is its own boundary; roots may not be nested inside one another."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <TextBlock x:Name="NoScanRootsText"
+                     Text="None"
+                     IsVisible="{Binding !HasScanRoots}"
+                     Classes="t-caption" />
+
+          <ItemsControl x:Name="ScanRootList" ItemsSource="{Binding ScanRoots}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:ScanRootRowViewModel">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Row="0" Grid.Column="0"
+                             Text="{Binding Path}"
+                             Classes="mono"
+                             TextWrapping="Wrap"
+                             VerticalAlignment="Center" />
+                  <Button Grid.Row="0" Grid.Column="1"
+                          Content="Remove"
+                          Padding="10,3"
+                          Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveScanRootCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                             Text="{Binding ErrorText}"
+                             IsVisible="{Binding HasError}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorError}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="NewScanRootBox"
+                     Watermark="C:\Astro\Captures"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding NewScanRootPath, Mode=TwoWay}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddScanRootFromBoxCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1"
+                    x:Name="BrowseScanRootButton"
+                    Content="Browse"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Click="OnBrowseScanRoot" />
+            <Button Grid.Column="2"
+                    x:Name="AddScanRootButton"
+                    Content="Add"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Command="{Binding AddScanRootFromBoxCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Include and exclude paths (spec 10.2). Same shape, the web's copy verbatim. -->
+      <Border x:Name="IncludePathsSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Include paths" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.include-paths" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="When empty, scans the entire configured data path. When set, scans only these folders (each must resolve inside a library folder)."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <TextBlock x:Name="NoIncludePathsText"
+                     Text="None"
+                     IsVisible="{Binding !HasIncludePaths}"
+                     Classes="t-caption" />
+
+          <ItemsControl x:Name="IncludePathList" ItemsSource="{Binding IncludePaths}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:FilterPathRowViewModel">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Row="0" Grid.Column="0"
+                             Text="{Binding Path}"
+                             Classes="mono"
+                             TextWrapping="Wrap"
+                             VerticalAlignment="Center" />
+                  <Button Grid.Row="0" Grid.Column="1"
+                          Content="Remove"
+                          Padding="10,3"
+                          Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveFilterPathCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                             Text="{Binding ErrorText}"
+                             IsVisible="{Binding HasError}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorError}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="NewIncludePathBox"
+                     Watermark="A folder inside a library folder"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding NewIncludePath, Mode=TwoWay}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddIncludePathFromBoxCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1"
+                    x:Name="BrowseIncludePathButton"
+                    Content="Browse"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Click="OnBrowseIncludePath" />
+            <Button Grid.Column="2"
+                    x:Name="AddIncludePathButton"
+                    Content="Add"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Command="{Binding AddIncludePathFromBoxCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="ExcludePathsSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Exclude paths" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.exclude-paths" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="Subtrees to skip entirely. Exclude always wins over include."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <TextBlock x:Name="NoExcludePathsText"
+                     Text="None"
+                     IsVisible="{Binding !HasExcludePaths}"
+                     Classes="t-caption" />
+
+          <ItemsControl x:Name="ExcludePathList" ItemsSource="{Binding ExcludePaths}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:FilterPathRowViewModel">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Row="0" Grid.Column="0"
+                             Text="{Binding Path}"
+                             Classes="mono"
+                             TextWrapping="Wrap"
+                             VerticalAlignment="Center" />
+                  <Button Grid.Row="0" Grid.Column="1"
+                          Content="Remove"
+                          Padding="10,3"
+                          Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveFilterPathCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                             Text="{Binding ErrorText}"
+                             IsVisible="{Binding HasError}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorError}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="NewExcludePathBox"
+                     Watermark="A subtree to skip"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding NewExcludePath, Mode=TwoWay}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddExcludePathFromBoxCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="1"
+                    x:Name="BrowseExcludePathButton"
+                    Content="Browse"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Click="OnBrowseExcludePath" />
+            <Button Grid.Column="2"
+                    x:Name="AddExcludePathButton"
+                    Content="Add"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Command="{Binding AddExcludePathFromBoxCommand}" />
+          </Grid>
+        </StackPanel>
+      </Border>
+
+      <!-- Spec 12.2's scan filter notice (PAR-014), above the rule editor, from the one computed
+           condition the Dashboard's copy reads too. It informs and never blocks: nothing here is
+           disabled by it and a scan runs with it showing. Review scrolls to the rule editor rather
+           than navigating (spec 12.7), which is the code-behind's BringIntoView. -->
+      <Border x:Name="ScanFilterNoticeBanner"
+              Classes="callout"
+              Background="{DynamicResource ColorBgElevated}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              IsVisible="{Binding ShowScanFilterNotice}">
+        <Grid ColumnDefinitions="*,Auto">
+          <TextBlock Grid.Column="0"
+                     x:Name="ScanFilterNoticeText"
+                     TextWrapping="Wrap"
+                     VerticalAlignment="Center"
+                     Text="GalactiLog is scanning everything under the configured roots except the five folder patterns the setup wizard added." />
+          <Button Grid.Column="1"
+                  x:Name="ScanFilterNoticeReviewButton"
+                  Content="Review"
+                  Margin="8,0,0,0"
+                  Padding="10,3"
+                  Click="OnReviewScanFilters" />
+        </Grid>
+      </Border>
+
+      <!-- Name rules (spec 10.2), the web's six-column editor. -->
+      <Border x:Name="NameRulesSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Name rules" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.name-rules" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="Rules match a file name or a folder name. Exclude rules are applied first; include rules then narrow what is left, per target type."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <StackPanel Spacing="2" Margin="0,2">
+              <TextBlock Text="Worked example"
+                         Foreground="{DynamicResource ColorTextSecondary}" />
+              <TextBlock Text="include path   &lt;root&gt;\2025" Classes="t-caption mono" />
+              <TextBlock Text="exclude path   &lt;root&gt;\2025\rejected" Classes="t-caption mono" />
+              <TextBlock Text="exclude rule   *_bad.fits      (wildcard, file)" Classes="t-caption mono" />
+              <TextBlock Text="include rule   ^M\d+$          (regex, folder)" Classes="t-caption mono" />
+          </StackPanel>
+
+          <TextBlock x:Name="NoNameRulesText"
+                     Text="None"
+                     IsVisible="{Binding !HasNameRules}"
+                     Classes="t-caption" />
+
+          <ItemsControl x:Name="NameRuleList" ItemsSource="{Binding NameRules}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:NameRuleRowViewModel">
+                <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto"
+                      RowDefinitions="Auto,Auto"
+                      Margin="0,0,0,6">
+                  <CheckBox Grid.Row="0" Grid.Column="0"
+                            Content="On"
+                            IsChecked="{Binding Enabled, Mode=TwoWay}"
+                            Margin="0,0,8,0" />
+                  <ComboBox Grid.Row="0" Grid.Column="1"
+                            Width="110"
+                            Margin="0,0,8,0"
+                            ItemsSource="{Binding Actions}"
+                            SelectedItem="{Binding Action, Mode=TwoWay}" />
+                  <ComboBox Grid.Row="0" Grid.Column="2"
+                            Width="120"
+                            Margin="0,0,8,0"
+                            SelectedIndex="{Binding TypeIndex, Mode=TwoWay}">
+                    <ComboBoxItem Content="wildcard" />
+                    <ComboBoxItem Content="substring" />
+                    <ComboBoxItem Content="regex" />
+                  </ComboBox>
+                  <ComboBox Grid.Row="0" Grid.Column="3"
+                            Width="110"
+                            Margin="0,0,8,0"
+                            ItemsSource="{Binding Targets}"
+                            SelectedItem="{Binding Target, Mode=TwoWay}" />
+                  <TextBox Grid.Row="0" Grid.Column="4"
+                           FontFamily="Consolas, monospace"
+                           Watermark="{Binding PatternPlaceholder}"
+                           Background="{DynamicResource ColorBgInput}"
+                           Foreground="{DynamicResource ColorTextPrimary}"
+                           Text="{Binding Pattern, Mode=TwoWay}" />
+                  <Button Grid.Row="0" Grid.Column="5"
+                          Content="Remove"
+                          Margin="8,0,0,0"
+                          Padding="10,3"
+                          Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveNameRuleCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="6"
+                             Text="{Binding ErrorText}"
+                             IsVisible="{Binding HasError}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorError}" />
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="AddNameRuleButton"
+                    Content="Add rule"
+                    Padding="10,3"
+                    Command="{Binding AddNameRuleCommand}" />
+            <Button x:Name="SaveFiltersButton"
+                    Content="Save rules"
+                    Padding="10,3"
+                    ToolTip.Tip="{Binding SaveRefusalReason}"
+                    Command="{Binding SaveCommand}" />
+            <Button x:Name="RevertFiltersButton"
+                    Content="Revert"
+                    Padding="10,3"
+                    Command="{Binding RevertCommand}" />
+          </StackPanel>
+
+          <TextBlock x:Name="FilterErrorText"
+                     Text="{Binding ErrorMessage}"
+                     IsVisible="{Binding HasErrorMessage}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+          <TextBlock x:Name="FilterStatusText"
+                     Text="{Binding StatusMessage}"
+                     IsVisible="{Binding HasStatusMessage}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorSuccess}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Test a path (spec 10.2's tool). Runs against the saved configuration; the copy says so. -->
+      <!-- This Border switches DataContext to the test-a-path box, so its own IsVisible is
+           evaluated against that box. IsReady belongs to the tab, so it is reached through the
+           root element, the same way the row templates reach the tab's commands. -->
+      <Border x:Name="TestPathSection"
+              IsVisible="{Binding #Root.((settings:LibraryTabViewModel)DataContext).IsReady}"
+              DataContext="{Binding TestPath}">
+        <StackPanel Spacing="10" x:DataType="settings:TestPathViewModel">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Test a path" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.test-path" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="Paste a file or folder path to see how the current rules would treat it. The path does not need to exist on disk. Unsaved changes are not used; save first to test them."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <Grid ColumnDefinitions="*,Auto,Auto">
+            <TextBox Grid.Column="0"
+                     x:Name="TestPathBox"
+                     FontFamily="Consolas, monospace"
+                     Watermark="A file or folder path"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding Path, Mode=TwoWay}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding TestCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <ComboBox Grid.Column="1"
+                      x:Name="TestKindBox"
+                      Width="110"
+                      Margin="6,0,0,0"
+                      ToolTip.Tip="Treat the path as a file, a folder, or auto-detect"
+                      SelectedIndex="{Binding KindIndex, Mode=TwoWay}">
+              <ComboBoxItem Content="auto" />
+              <ComboBoxItem Content="file" />
+              <ComboBoxItem Content="folder" />
+            </ComboBox>
+            <Button Grid.Column="2"
+                    x:Name="TestPathButton"
+                    Content="Test"
+                    Margin="6,0,0,0"
+                    Padding="10,3"
+                    Command="{Binding TestCommand}" />
+          </Grid>
+
+          <StackPanel Spacing="4" IsVisible="{Binding HasVerdict}">
+            <TextBlock x:Name="VerdictLabelText"
+                       Classes="section"
+                       Text="{Binding VerdictLabel}"
+                       IsVisible="{Binding IsIncluded}"
+                       Foreground="{DynamicResource ColorSuccess}" />
+            <TextBlock x:Name="VerdictLabelErrorText"
+                       Classes="section"
+                       Text="{Binding VerdictLabel}"
+                       IsVisible="{Binding !IsIncluded}"
+                       Foreground="{DynamicResource ColorError}" />
+            <TextBlock x:Name="VerdictHintText"
+                       Text="{Binding VerdictHint}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <ItemsControl x:Name="MatchedRuleList" ItemsSource="{Binding MatchedRuleDescriptions}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="sys:String">
+                  <TextBlock Text="{Binding}"
+                             Classes="t-caption mono" />
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock x:Name="VerdictExtraNoteText"
+                       Text="{Binding ExtraNote}"
+                       IsVisible="{Binding ExtraNote, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       TextWrapping="Wrap"
+                       Classes="t-caption" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Calibration, auto-scan and the watcher. Each saves immediately (spec 12.7's table). -->
+      <Border x:Name="ScanOptionsSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Scanning" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.scanning" />
+            </StackPanel>
+          </Border>
+
+          <CheckBox x:Name="IncludeCalibrationCheckBox"
+                    Content="Include calibration frames"
+                    IsChecked="{Binding IncludeCalibration, Mode=TwoWay}" />
+          <TextBlock Text="When off, only LIGHT frames are catalogued."
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <CheckBox x:Name="AutoScanEnabledCheckBox"
+                    Content="Enable automatic scanning"
+                    IsChecked="{Binding AutoScanEnabled, Mode=TwoWay}" />
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding AutoScanEnabled}">
+            <TextBlock Text="Scan interval"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="AutoScanIntervalBox"
+                      Width="160"
+                      ItemsSource="{Binding IntervalOptions}"
+                      SelectedItem="{Binding SelectedInterval, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="settings:IntervalOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <CheckBox x:Name="WatcherEnabledCheckBox"
+                    Content="Watch library folders for new files"
+                    IsChecked="{Binding WatcherEnabled, Mode=TwoWay}" />
+
+          <!-- Phase 15A Task 6, spec 12.7: below the calibration checkbox, under this section's
+               existing settings.library.scanning glyph. No new HelpButton (LibraryTabViewTests
+               pins the file's HelpButton count at 8). -->
+          <CheckBox x:Name="Phd2ScanEnabledCheckBox"
+                    Content="Read PHD2 guide logs"
+                    IsChecked="{Binding Phd2ScanEnabled, Mode=TwoWay}" />
+          <TextBlock x:Name="Phd2ScanEnabledHelpText"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     Text="Guide logs named PHD2_GuideLog_*.txt found under your library folders are read for guiding measurements. Turning this off stops future scans reading them and deletes nothing. While it is off, a frame whose file changes loses the guiding figure its guide log gave it the next time that frame is scanned, and turning this back on restores the figure at the following scan." />
+        </StackPanel>
+      </Border>
+
+      <!-- Manual scan with progress and cancel (spec 10.4, 10.5, 12.7). -->
+      <Border x:Name="ManualScanSection"
+              IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Manual scan" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.manual-scan" />
+            </StackPanel>
+          </Border>
+          <!-- Spec 12.7 and 10.3 (PAR-013): this run's scope. It STARTS from the stored
+               general.include_calibration and never writes it back; IncludeCalibrationCheckBox in
+               the Scanning section above stays that key's editor. -->
+          <StackPanel Spacing="4">
+            <RadioButton x:Name="ScanScopeAllFramesRadio"
+                         GroupName="ScanScope"
+                         Content="All frames"
+                         IsChecked="{Binding ScanScopeAllFrames, Mode=TwoWay}" />
+            <RadioButton x:Name="ScanScopeLightOnlyRadio"
+                         GroupName="ScanScope"
+                         Content="Light frames only"
+                         IsChecked="{Binding ScanScopeLightOnly, Mode=TwoWay}" />
+          </StackPanel>
+
+          <!-- Ruling D2's wording, exactly. Cleared on every visit to the tab and at the end of
+               every run: it is a decision about one run. Rows only, never disk (spec 2.1). -->
+          <StackPanel Spacing="4">
+            <CheckBox x:Name="ForceOrphanCleanupCheckBox"
+                      Content="Remove catalogue rows for missing files past the safety limit"
+                      IsChecked="{Binding ForceOrphanCleanup, Mode=TwoWay}" />
+            <TextBlock x:Name="ForceOrphanCleanupHelpText"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       Text="GalactiLog deletes database rows only. No file, folder or image on your disk is ever moved, renamed or deleted." />
+            <TextBlock x:Name="ForceOrphanCleanupLimitText"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       Text="Without this box, a scan that finds half or more of a root's catalogued files missing skips that root's cleanup and records it in the Activity feed, on the assumption that a drive or share is unreachable rather than that the frames are gone." />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button x:Name="RunScanButton"
+                    Content="Scan library"
+                    Padding="10,3"
+                    Command="{Binding RunScanCommand}" />
+            <Button x:Name="CancelScanButton"
+                    Content="Stop"
+                    Padding="10,3"
+                    Command="{Binding CancelScanCommand}" />
+          </StackPanel>
+          <ProgressBar x:Name="ScanProgressBar"
+                       Minimum="0" Maximum="100"
+                       Value="{Binding ScanPercent, Mode=OneWay}"
+                       IsIndeterminate="{Binding IsScanIndeterminate}"
+                       IsVisible="{Binding IsScanRunning}"
+                       Foreground="{DynamicResource ColorAccent}"
+                       Background="{DynamicResource ColorBgElevated}" />
+          <TextBlock x:Name="ScanMessageText"
+                     Text="{Binding ScanMessage}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- design-spec 12.1's last sentence: "The wizard is also reachable from Settings as
+           'Run setup again'." One link, opening the one SetupWizardService the first-run branch
+           uses (Phase 9 Task 9). Hidden when no wizard was supplied. -->
+      <Border x:Name="SetupSection"
+              IsVisible="{Binding CanRunSetupAgain}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Setup" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.library.setup" />
+            </StackPanel>
+          </Border>
+          <TextBlock Text="Walks through the scan folders, the thumbnail cache, the observer location and the scan options again. Your scan filters and name rules are left alone."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <Button x:Name="RunSetupAgainButton"
+                  Content="Run setup again"
+                  Padding="10,3"
+                  HorizontalAlignment="Left"
+                  Command="{Binding RunSetupAgainCommand}" />
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

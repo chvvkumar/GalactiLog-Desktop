@@ -1,0 +1,856 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             x:Class="GalactiLog.App.Views.TargetDetail.FrameTableView"
+             x:Name="Root"
+             x:DataType="detail:FrameTableViewModel">
+  <!-- design-spec 12.4's frame table, hosted on the session pane's one starred row since P12 R10
+       retired the session accordion card (phase review P3-7). A header row and a ListBox rather
+       than a DataGrid, for the reason ruling Q7 gave the dashboard:
+       no DataGrid package is pinned, and dynamic column visibility plus a per-row expander plus a
+       per-row action menu are more work to bend a DataGrid into than to lay out directly.
+
+       32 explicit header cells and 32 explicit row cells is a long file, and it is the correct
+       trade: compiled bindings check all 64 paths at build time. The alternative, a string-keyed
+       cell lookup, checks none of them and turns a typo into a blank column at runtime.
+
+       A header cell's IsVisible sits on its ContentControl, not on the button inside it (Phase 5
+       review item 2): on the button, a hidden column leaves the container's width behind as a gap
+       and every column to its right sits one cell out of line with the rows. Header and row cells
+       bind one width per column (P24 R5), so the two collapse and resize in step.
+
+       Cells bind ColumnViewModel.IsShown, which is the persisted visible list AND the
+       metric-group gate (spec 5.8.2: the group toggle wins). The picker binds IsVisible, the
+       persisted list, and disables a gated column rather than hiding it, so the user can see that
+       the column exists and why it is not rendering.
+
+       Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios, not point sizes, and
+       FontSizeTokenTest fails the build on binding one to FontSize. Every colour is a theme token:
+       the frame table renders no user-data colour, so there is no legitimate literal in this file.
+
+       The header band and the rows pan together, because 32 columns will not fit: the ListBox
+       scrolls both ways itself and the code-behind keeps the two horizontal offsets equal.
+
+       The rows no longer carry a MaxHeight of their own (P12 Task 6). FrameRowsViewportHeight was
+       a fixed 420 px bound that existed only because the table's host, the session accordion card,
+       sat inside the detail page's vertical ScrollViewer and measured the rows against infinite
+       height, so every row realised: the verification agent measured a 605 ms median UI-thread
+       stall expanding a 200 frame session that way (FIXER LIST F12). The host is Task 5's session
+       pane now and it gives the table a starred grid row, so the pane's own height is the viewport
+       and VirtualizingStackPanel has something finite to virtualise against without this file
+       guessing a number. Do not re-add a MaxHeight here: the bound belongs to whatever hosts the
+       table, and FrameTableView_HasNoFixedViewportHeight is what fails if it comes back.
+
+       The toolbar sits above that ScrollViewer rather than inside it, so the shown count and the
+       three buttons stay put while the columns pan. The column picker moved into it for the same
+       reason: at the end of the header row it sat at the far right of a 2600 px band. -->
+  <UserControl.Resources>
+    <!-- P24 R5: every keyed column's width is its ColumnViewModel.Width, which the header cell
+         and the row cell both bind, so the two can never disagree. The view-model seeds it, the
+         code-behind measures the auto-fit, and the divider at the right edge of each header cell
+         drags it. The one fixed width left is the Rig column's, which has no key to store under. -->
+    <sys:Double x:Key="FrameColTextWidth">90</sys:Double>
+
+    <!-- R23: a watch or reject row is tinted in its band colour at an alpha every ink stays
+         readable over in both themes (reject is the guide graph's failed-settle alpha); hover is
+         one step stronger. The Colors are read live so a theme switch retints the rows. -->
+    <SolidColorBrush x:Key="FrameTintWatch" Color="{DynamicResource ColorWarningValue}" Opacity="0.12" />
+    <SolidColorBrush x:Key="FrameTintWatchHover" Color="{DynamicResource ColorWarningValue}" Opacity="0.2" />
+    <SolidColorBrush x:Key="FrameTintReject" Color="{DynamicResource ColorErrorValue}" Opacity="0.15" />
+    <SolidColorBrush x:Key="FrameTintRejectHover" Color="{DynamicResource ColorErrorValue}" Opacity="0.24" />
+
+    <!-- One header cell: a button that sorts, showing the direction glyph on the active key. Every
+         one of the 32 columns is sortable (spec 12.4), so unlike the dashboard's header there is
+         no column here whose button the command ignores.
+
+         The alignment is a class on the button rather than 32 attributes on the 32 header cells:
+         the template's DataType is ColumnViewModel, so Classes.numeric binds IsNumeric directly
+         and the two style selectors below do the rest. Avalonia has no bool-to-alignment converter
+         in this codebase and this needs none.
+
+         The title and its sort mark sit in a Grid with the title in the star column (fixer-list
+         item 20, phase 14C), the shape Views/Dashboard/TargetListView.axaml's TargetHeaderCell
+         already uses, rather than the horizontal StackPanel this used to be. A StackPanel's
+         MeasureOverride offers each child infinite width along the stacking axis regardless of
+         the panel's own available width, so TextTrimming never engaged however narrow a cell was;
+         at the Time column's 78 px width a long zone name painted straight over the File name
+         header beside it (pre-existing since Phase 6). The Grid's star column instead measures
+         the title against the cell's own real width, which is what lets the ellipsis run. The
+         Button still carries Classes.numeric and the two Button.header-cell(.numeric) alignment
+         setters below are untouched: the fix is what the title measures against, not which edge
+         the Button aligns its content to. -->
+    <DataTemplate x:Key="FrameHeaderCell" DataType="dash:ColumnViewModel">
+      <Grid>
+        <Button Classes="header-cell"
+                Classes.numeric="{Binding IsNumeric}"
+                HorizontalAlignment="Stretch"
+                Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).SortByCommand}"
+                CommandParameter="{Binding Key}"
+                Background="Transparent"
+                BorderThickness="0"
+                Padding="0,2,4,2">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Classes="header-title" Classes.numeric="{Binding IsNumeric}"
+                       Text="{Binding Title}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="1"
+                       Text="{Binding SortGlyph}"
+                       Margin="2,0,0,0"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorAccent}" />
+          </Grid>
+        </Button>
+        <!-- P24 R5's divider, over the button's right edge: a drag sets the column's width live
+             and stores it on release; a double-click clears the stored width and refits. The
+             code-behind owns the gesture, the way the lanes handle owns its own. -->
+        <Border Classes="column-divider"
+                Width="8"
+                HorizontalAlignment="Right"
+                Background="Transparent"
+                Cursor="SizeWestEast"
+                PointerPressed="OnDividerPressed"
+                PointerMoved="OnDividerMoved"
+                PointerReleased="OnDividerReleased"
+                PointerCaptureLost="OnDividerCaptureLost">
+          <Border Width="1"
+                  Margin="0,4"
+                  HorizontalAlignment="Right"
+                  Background="{DynamicResource ColorBorderDefault}" />
+        </Border>
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- A text header cell reads from its left edge; a numeric one reads over its figures
+         (spec 14.4). Before this, the template hardcoded Left for all 32 while the rows
+         right-aligned 26 of them, so a header sat at the far end of its own column
+         (panel-density.md section 2, item 5). The two alignment setters are
+         Theme/Controls.axaml's Button.header-cell and Button.header-cell.numeric: they carry no
+         chrome, but a Button style declared in a view is what ControlStyleScanTest's choke-point
+         rule fails on, and an exemption nobody has to remember is worth two lines in the shared
+         vocabulary (P12 Task 5).
+
+         One definition each for the two cell roles (spec 14.4's role rules). -->
+    <Style Selector="TextBlock.header-title.numeric">
+      <Setter Property="TextAlignment" Value="Right" />
+    </Style>
+    <Style Selector="TextBlock.cell">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    </Style>
+    <!-- The row cells' right edge. Task 6 review P3-2: this used to re-declare TextAlignment and
+         the tabular-figure feature that Theme/Controls.axaml's TextBlock.num already carries, and
+         because a control level style beats an application level one it also handed the toolbar's
+         ShownCount, which wears .num for its figures alone, the row cells' right alignment and
+         their 6 px padding. Scoped to .cell and reduced to the one setter that is new. -->
+    <Style Selector="TextBlock.cell.num">
+      <Setter Property="Padding" Value="0,0,6,0" />
+    </Style>
+
+    <!-- The four ink overrides, and they have to live here rather than be left to
+         Theme/Controls.axaml: a control-level style beats an application-level one whatever the
+         selectors say, so TextBlock.cell's secondary ink would win over the app's TextBlock.mono
+         and TextBlock.worse. Within this file the later block wins, which is why worse is last:
+         an outlier's HFR cell matches the quality rule and the outlier-row rule as well. -->
+
+    <!-- The four quality-group cells (HFR, Ecc, FWHM, Stars) carry the primary ink and every
+         other numeric cell the secondary one, which is the inputs' type table. -->
+    <Style Selector="TextBlock.cell.q">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
+    <!-- A file name is what the user copies and reads, so it takes the primary ink; the mono
+         family itself comes from Theme/Controls.axaml's TextBlock.mono. -->
+    <Style Selector="TextBlock.cell.mono">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
+    <!-- A row with a finding lifts its whole line to the primary ink, which is the comp's
+         .tbl.fr .row.out .c rule: the row a user is hunting for comes forward by weight of ink,
+         not by a fill and not by a colour. Driven by FrameRowViewModel.IsOutlier (review ruling
+         (a)). -->
+    <Style Selector="Border.frame-row.outlier TextBlock.cell">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
+    <!-- Spec 12.4's three grading band inks, on a cell of this table. Theme/Controls.axaml carries
+         the same three rules for every other surface (the grading tally, and Task 7's preview
+         badges), and those are where the band classes are defined; they cannot reach a cell here,
+         because a control-level style beats an application-level one whatever the selectors say
+         and TextBlock.cell, TextBlock.cell.q and the outlier-row rule above would all win over
+         them. This block is that same ink, re-declared in this host so it can win over the three,
+         and it binds the same brushes. It sits after the row and role inks and before worse.
+
+         The *Value keys spec 12.4's band table names are Color resources; ColorSuccess,
+         ColorWarning and ColorError are the SolidColorBrush resources built from exactly those
+         colours, and a Foreground binds a brush (questions.md Q14). -->
+    <Style Selector="TextBlock.cell.band-better">
+      <Setter Property="Foreground" Value="{DynamicResource ColorSuccess}" />
+    </Style>
+    <Style Selector="TextBlock.cell.band-watch">
+      <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+    </Style>
+    <Style Selector="TextBlock.cell.band-reject">
+      <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
+    </Style>
+
+    <!-- The one "worse" ink, on the offending cell and never on the whole row: no fill, no icon,
+         no bold (panel-density.md section 5). Last of the ink blocks on purpose, because within
+         one style host the later block wins and an outlier's HFR cell matches all four of the
+         rules above, the band included: spec 12.4 keeps both marks and the flag is the one that
+         gets the ink, because it is the verdict the outlier filter, the findings' counts and the
+         night strip's tall ticks all agree on. -->
+    <Style Selector="TextBlock.cell.worse">
+      <Setter Property="Foreground" Value="{DynamicResource ColorMetricWorst}" />
+    </Style>
+
+    <!-- The row's base fill and its hover fill (spec 14.5) are both setters. The base one used
+         to be a local Background attribute on the Border, and a local value outranks a style
+         trigger in Avalonia's value precedence, so the hover fill never rendered at all (review
+         finding 2). Anything transparent-by-default in a template that also has a :pointerover
+         rule has to be declared this way round. -->
+    <Style Selector="Border.frame-row">
+      <Setter Property="Background" Value="Transparent" />
+      <!-- The 2 px the selected row's lit edge is drawn in. The edge is an overlay rather than a
+           column of the row (the ledger's is a column; unifying the two was ruled out as not
+           cheap), so without this reserve it lands on top of the Time cell's first characters,
+           which is the phase's own lit idiom rendering wrong in one of its two views (Task 6
+           review P3-3). The header row carries the same 2 px as a left margin, so the cells and
+           their column headers stay on one line. -->
+      <Setter Property="Padding" Value="2,0,0,0" />
+    </Style>
+    <Style Selector="Border.frame-row:pointerover">
+      <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    </Style>
+
+    <!-- R9: the night strip's hover, rendered as the row's own hover fill. Not a new token and
+         not an accent: spec 14.5 spends light on state and colour on data, and the strip's tick
+         is already the data. After the pointerover rule on purpose, because within one style host
+         the later block wins and a hovered row may also be the highlighted one. -->
+    <Style Selector="Border.frame-row.highlighted">
+      <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    </Style>
+
+    <!-- R23's grade tint, after the hover and highlight rules so a tinted row keeps its colour
+         under the pointer rather than falling back to the neutral hover. Selection wins: a
+         selected tinted row drops its fill so the container's lit field shows. -->
+    <Style Selector="Border.frame-row.tint-watch">
+      <Setter Property="Background" Value="{DynamicResource FrameTintWatch}" />
+    </Style>
+    <Style Selector="Border.frame-row.tint-reject">
+      <Setter Property="Background" Value="{DynamicResource FrameTintReject}" />
+    </Style>
+    <Style Selector="Border.frame-row.tint-watch:pointerover, Border.frame-row.tint-watch.highlighted">
+      <Setter Property="Background" Value="{DynamicResource FrameTintWatchHover}" />
+    </Style>
+    <Style Selector="Border.frame-row.tint-reject:pointerover, Border.frame-row.tint-reject.highlighted">
+      <Setter Property="Background" Value="{DynamicResource FrameTintRejectHover}" />
+    </Style>
+    <Style Selector="ListBox#FrameRows ListBoxItem:selected Border.frame-row.tint-watch, ListBox#FrameRows ListBoxItem:selected Border.frame-row.tint-reject">
+      <Setter Property="Background" Value="Transparent" />
+    </Style>
+    <Style Selector="ListBox#FrameRows ListBoxItem:selected Border.frame-row:pointerover">
+      <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    </Style>
+
+    <!-- The item container, the comp's lit row, declared here because it is this page's own
+         idiom rather than an application-wide control style. Selection is light, not colour
+         (P12 direction): a lighter field plus the 2 px lit edge the row template draws. No
+         accent hue carries state anywhere on this page, so the metric inks and the filter inks
+         are never read as a selection. -->
+    <Style Selector="ListBox#FrameRows ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="28" />
+    </Style>
+    <Style Selector="ListBox#FrameRows ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    </Style>
+  </UserControl.Styles>
+
+  <!-- Ruling Q11: the frame table answers Ctrl+C and Escape, and nothing else. Ctrl+D, F2 and
+       Alt+Left belong to the page shell above it, and Ctrl+A is the ListBox's own.
+
+       Both commands carry a CanExecute, and that is what decides whether the table owns the key
+       or lets it go: a KeyBinding whose command reports it cannot execute leaves the event
+       unhandled, so an Escape with no filter and no selection bubbles to TargetDetailView's own
+       handler and closes the drawer or navigates back (review P2-1, ruling (b)). -->
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Ctrl+C" Command="{Binding CopySelectedPathsCommand}" />
+    <KeyBinding Gesture="Escape" Command="{Binding ClearFilterOrSelectionCommand}" />
+  </UserControl.KeyBindings>
+
+  <Grid RowDefinitions="Auto,Auto,*">
+    <!-- The toolbar: the section label, the comp's count line, and the three actions. Outside the
+         horizontal ScrollViewer on purpose, so it does not pan away with the columns. -->
+    <Grid Grid.Row="0"
+          x:Name="FrameTableToolbar"
+          ColumnDefinitions="*,Auto,Auto,Auto"
+          ColumnSpacing="12"
+          MinHeight="30"
+          Margin="0,0,0,6">
+      <!-- The slot's content goes to a second line when the first cannot hold it. -->
+      <WrapPanel Grid.Column="0"
+                 Orientation="Horizontal"
+                 ItemSpacing="12"
+                 VerticalAlignment="Center">
+        <TextBlock Classes="section"
+                   VerticalAlignment="Center"
+                   Text="Frames" />
+        <TextBlock x:Name="ShownCount"
+                   Classes="t-caption num"
+                   VerticalAlignment="Center"
+                   Text="{Binding ShownCountText}" />
+        <ContentControl x:Name="ToolbarSlot"
+                        VerticalAlignment="Center" />
+      </WrapPanel>
+      <Button Grid.Column="1"
+              x:Name="CopySelectedPathsButton"
+              Classes="sm"
+              Content="{Binding CopySelectedPathsText}"
+              Command="{Binding CopySelectedPathsCommand}" />
+      <Button Grid.Column="2"
+              x:Name="RevealSelectedButton"
+              Classes="sm"
+              Content="Reveal"
+              Command="{Binding RevealSelectedCommand}" />
+
+      <!-- The column picker. Each checkbox raises ToggleColumn rather than writing IsVisible
+           itself, so the persisted list and the checkboxes cannot disagree. A column whose
+           metric group is off is disabled rather than absent: turning it on would change
+           nothing visible, and the hint says where the group goes back on. -->
+      <Button Grid.Column="3" x:Name="FrameColumnPicker" Classes="sm" Content="Columns">
+        <Button.Flyout>
+          <Flyout>
+            <StackPanel MaxHeight="520">
+              <TextBlock Text="A greyed column belongs to a metric group turned off in Settings."
+                         MaxWidth="280"
+                         TextWrapping="Wrap"
+                         Margin="0,0,0,6"
+                         Foreground="{DynamicResource ColorTextTertiary}" />
+              <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Columns}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="dash:ColumnViewModel">
+                      <CheckBox Content="{Binding Title}"
+                                IsChecked="{Binding IsVisible, Mode=OneWay}"
+                                IsEnabled="{Binding IsGroupEnabled}"
+                                Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).ToggleColumnCommand}"
+                                CommandParameter="{Binding}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </StackPanel>
+          </Flyout>
+        </Button.Flyout>
+      </Button>
+    </Grid>
+
+    <!-- Spec 12.4's legend, the two marked bands only (P24 R23), under the toolbar line and above
+         the column header, with the rows it explains. The sentence is not optional chrome: this
+         application writes no user file (spec 2.1) and a page that colours frames red owes the
+         reader that statement where the colour is. -->
+    <WrapPanel Grid.Row="1" x:Name="GradingLegend" Orientation="Horizontal" Margin="0,0,0,6">
+      <Ellipse Width="8" Height="8" Fill="{DynamicResource ColorWarning}" VerticalAlignment="Center" Margin="0,0,4,0" />
+      <TextBlock Classes="t-label muted" Text="watch" VerticalAlignment="Center" Margin="0,0,14,0" />
+      <Ellipse Width="8" Height="8" Fill="{DynamicResource ColorError}" VerticalAlignment="Center" Margin="0,0,4,0" />
+      <TextBlock Classes="t-label muted" Text="reject" VerticalAlignment="Center" Margin="0,0,14,0" />
+      <TextBlock Classes="t-label muted"
+                 x:Name="GradingAdvisory"
+                 Text="Grading is advisory. No frame is deleted or hidden."
+                 VerticalAlignment="Center" />
+    </WrapPanel>
+
+    <Grid Grid.Row="2" RowDefinitions="Auto,*">
+      <ScrollViewer Grid.Row="0" x:Name="FrameHeaderScroller"
+                    HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Disabled">
+      <!-- Header row. One cell per column, in FrameColumns.All's order, which is what the
+           view-model builds Columns in. -->
+      <StackPanel x:Name="FrameTableHeader" Orientation="Horizontal" Margin="2,0,0,2">
+        <ContentControl Width="{Binding Columns[0].Width}"
+                        IsVisible="{Binding Columns[0].IsShown}"
+                        Content="{Binding Columns[0]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+
+        <!-- Spec 12.4's Rig column (PAR-004), placed after Time and drawn only on a multi-rig
+             night. It is not a FrameColumns entry and it adds no display.columns.frames key
+             (task1-report departure 1): it is never hideable and never in the picker, because
+             offering a control that does nothing on the single-rig nights that are most of a
+             library teaches the wrong model of why a column is missing.
+
+             A plain header rather than the sortable FrameHeaderCell template, whose command keys
+             on a column key this column does not have. It takes the existing text column width
+             rather than declaring a figure of its own.
+
+             The horizontal inset is Padding and never Margin (review P2-2). Every other header
+             cell is a ContentControl of exactly its column's width whose inset lives inside the
+             template, so a horizontal Margin here would make this cell occupy 102 pixels against
+             the row cell's 90 and shift every header after Rig 12 pixels out of its own column. -->
+        <TextBlock x:Name="RigColumnHeader"
+                   Classes="cell"
+                   Width="{StaticResource FrameColTextWidth}"
+                   Margin="0,2"
+                   Padding="0"
+                   FontWeight="SemiBold"
+                   Text="Rig"
+                   IsVisible="{Binding IsMultiRig}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+
+        <ContentControl Width="{Binding Columns[1].Width}"
+                        IsVisible="{Binding Columns[1].IsShown}"
+                        Content="{Binding Columns[1]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[2].Width}"
+                        IsVisible="{Binding Columns[2].IsShown}"
+                        Content="{Binding Columns[2]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[3].Width}"
+                        IsVisible="{Binding Columns[3].IsShown}"
+                        Content="{Binding Columns[3]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[4].Width}"
+                        IsVisible="{Binding Columns[4].IsShown}"
+                        Content="{Binding Columns[4]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[5].Width}"
+                        IsVisible="{Binding Columns[5].IsShown}"
+                        Content="{Binding Columns[5]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[6].Width}"
+                        IsVisible="{Binding Columns[6].IsShown}"
+                        Content="{Binding Columns[6]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[7].Width}"
+                        IsVisible="{Binding Columns[7].IsShown}"
+                        Content="{Binding Columns[7]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[8].Width}"
+                        IsVisible="{Binding Columns[8].IsShown}"
+                        Content="{Binding Columns[8]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[9].Width}"
+                        IsVisible="{Binding Columns[9].IsShown}"
+                        Content="{Binding Columns[9]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[10].Width}"
+                        IsVisible="{Binding Columns[10].IsShown}"
+                        Content="{Binding Columns[10]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[11].Width}"
+                        IsVisible="{Binding Columns[11].IsShown}"
+                        Content="{Binding Columns[11]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[12].Width}"
+                        IsVisible="{Binding Columns[12].IsShown}"
+                        Content="{Binding Columns[12]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[13].Width}"
+                        IsVisible="{Binding Columns[13].IsShown}"
+                        Content="{Binding Columns[13]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[14].Width}"
+                        IsVisible="{Binding Columns[14].IsShown}"
+                        Content="{Binding Columns[14]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[15].Width}"
+                        IsVisible="{Binding Columns[15].IsShown}"
+                        Content="{Binding Columns[15]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[16].Width}"
+                        IsVisible="{Binding Columns[16].IsShown}"
+                        Content="{Binding Columns[16]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[17].Width}"
+                        IsVisible="{Binding Columns[17].IsShown}"
+                        Content="{Binding Columns[17]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[18].Width}"
+                        IsVisible="{Binding Columns[18].IsShown}"
+                        Content="{Binding Columns[18]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[19].Width}"
+                        IsVisible="{Binding Columns[19].IsShown}"
+                        Content="{Binding Columns[19]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[20].Width}"
+                        IsVisible="{Binding Columns[20].IsShown}"
+                        Content="{Binding Columns[20]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[21].Width}"
+                        IsVisible="{Binding Columns[21].IsShown}"
+                        Content="{Binding Columns[21]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[22].Width}"
+                        IsVisible="{Binding Columns[22].IsShown}"
+                        Content="{Binding Columns[22]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[23].Width}"
+                        IsVisible="{Binding Columns[23].IsShown}"
+                        Content="{Binding Columns[23]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[24].Width}"
+                        IsVisible="{Binding Columns[24].IsShown}"
+                        Content="{Binding Columns[24]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[25].Width}"
+                        IsVisible="{Binding Columns[25].IsShown}"
+                        Content="{Binding Columns[25]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[26].Width}"
+                        IsVisible="{Binding Columns[26].IsShown}"
+                        Content="{Binding Columns[26]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[27].Width}"
+                        IsVisible="{Binding Columns[27].IsShown}"
+                        Content="{Binding Columns[27]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[28].Width}"
+                        IsVisible="{Binding Columns[28].IsShown}"
+                        Content="{Binding Columns[28]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[29].Width}"
+                        IsVisible="{Binding Columns[29].IsShown}"
+                        Content="{Binding Columns[29]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[30].Width}"
+                        IsVisible="{Binding Columns[30].IsShown}"
+                        Content="{Binding Columns[30]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <ContentControl Width="{Binding Columns[31].Width}"
+                        IsVisible="{Binding Columns[31].IsShown}"
+                        Content="{Binding Columns[31]}"
+                        ContentTemplate="{StaticResource FrameHeaderCell}" />
+      </StackPanel>
+      </ScrollViewer>
+
+      <!-- FIXER LIST F12. The rows are virtualised, so a 200 frame session realises the two dozen
+           rows in the viewport rather than 200 rows of 32 cells each. The VirtualizingStackPanel
+           is a ListBox's default and is declared anyway, because it is what keeps that case green.
+
+           A ListBox rather than the ItemsControl this was: spec 12.4's multi-row copy needs a
+           selection model, and SelectionMode="Multiple" brings click, Ctrl-click, Shift-click,
+           Ctrl+A, and keyboard navigation that would otherwise all be hand-built. SelectedItems is
+           not a styled property and cannot be bound in XAML, so FrameTableView.axaml.cs hands the
+           view-model's SelectedRows to it once, and from then on the control and the view-model
+           share one collection.
+
+           The rows scroll horizontally in the ListBox itself, so its vertical bar sits at the
+           viewport's right edge; FrameTableView.axaml.cs keeps the header band's offset equal to
+           the rows' offset. -->
+      <ListBox Grid.Row="1"
+               x:Name="FrameRows"
+               ItemsSource="{Binding Rows}"
+               SelectionMode="Multiple"
+               Background="Transparent"
+               BorderThickness="0"
+               Padding="0"
+               ScrollViewer.HorizontalScrollBarVisibility="Auto">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
+          <DataTemplate DataType="detail:FrameRowViewModel">
+            <StackPanel>
+              <!-- The 2 px lit edge of the comp's selected row, drawn over the row rather than
+                   inside its layout: a BorderThickness here would shift every cell two pixels out
+                   of line with the header the moment a row was selected. -->
+              <Grid>
+              <Border Classes="frame-row"
+                      Classes.outlier="{Binding IsOutlier}"
+                      Classes.highlighted="{Binding IsHighlighted}"
+                      Classes.tint-watch="{Binding IsScoreWatch}"
+                      Classes.tint-reject="{Binding IsScoreReject}"
+                      PointerPressed="OnRowPointerPressed"
+                      PointerReleased="OnRowPointerReleased"
+                      MinHeight="28">
+                <StackPanel Orientation="Horizontal">
+                  <TextBlock Classes="cell"
+                             Width="{Binding Columns[0].Width}"
+                             IsVisible="{Binding Columns[0].IsShown}"
+                             Text="{Binding TimeText}" />
+                  <!-- The Rig cell, drawn only on a multi-rig night. Its visibility comes from the
+                       table rather than from the row, because the rig list is the night's, and it
+                       is reached through the same #Root the row's five commands use. -->
+                  <TextBlock x:Name="RigCell"
+                             Classes="cell"
+                             Width="{StaticResource FrameColTextWidth}"
+                             IsVisible="{Binding #Root.((detail:FrameTableViewModel)DataContext).IsMultiRig}"
+                             ToolTip.Tip="{Binding RigText}"
+                             Text="{Binding RigText}" />
+                  <!-- The file name is the cell a user reads and copies, so it is the one text
+                       cell in the mono family and in the primary ink.
+
+                       R6: it never trims, and the full path is on the tip (ruling Q8).
+                       TextTrimming is set inline rather than by a narrower style selector,
+                       because a local value outranks TextBlock.cell's setter and that is exactly
+                       what is wanted for this one cell. -->
+                  <TextBlock Classes="cell mono"
+                             Width="{Binding Columns[1].Width}"
+                             TextTrimming="None"
+                             ToolTip.Tip="{Binding FilePath}"
+                             IsVisible="{Binding Columns[1].IsShown}"
+                             Text="{Binding FileName}" />
+                  <TextBlock Classes="cell"
+                             Width="{Binding Columns[2].Width}"
+                             IsVisible="{Binding Columns[2].IsShown}"
+                             Text="{Binding FilterText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[3].Width}"
+                             IsVisible="{Binding Columns[3].IsShown}"
+                             Text="{Binding ExposureText}" />
+                  <!-- The four quality-group cells take the primary ink (the q class), and the
+                       two with a finding take the worse ink on the offending cell alone.
+
+                       Spec 12.4's grading bands are the second mark on the same cells: the flag
+                       answers "this night's rules flagged this frame" and the band answers "how
+                       far from the baseline this value sits". Both stay. Where a cell carries
+                       both, the flag's worse ink wins, because it is the verdict the outlier
+                       filter, the findings' counts and the night strip's tall ticks all agree on.
+                       What makes it win is this view's own style host, where TextBlock.cell.worse
+                       is declared after TextBlock.cell.band-better, .band-watch and .band-reject:
+                       within one host the later block wins at equal specificity. It is not
+                       Theme/Controls.axaml, whose order is the opposite on purpose (the band wins
+                       on the preview badges, which have no control-level host of their own), so an
+                       editor who reordered that file to change this cell would change the badges
+                       instead and leave this cell where it was. -->
+                  <TextBlock Classes="cell num q"
+                             Classes.band-better="{Binding HfrCell.IsBetter}"
+                             Classes.band-watch="{Binding HfrCell.IsWatch}"
+                             Classes.band-reject="{Binding HfrCell.IsReject}"
+                             Classes.worse="{Binding IsHfrOutlier}"
+                             Width="{Binding Columns[4].Width}"
+                             IsVisible="{Binding Columns[4].IsShown}"
+                             ToolTip.Tip="{Binding HfrCell.Tooltip}"
+                             Text="{Binding HfrCell.Text}" />
+                  <TextBlock Classes="cell num q"
+                             Classes.band-better="{Binding EccentricityCell.IsBetter}"
+                             Classes.band-watch="{Binding EccentricityCell.IsWatch}"
+                             Classes.band-reject="{Binding EccentricityCell.IsReject}"
+                             Classes.worse="{Binding IsEccentricityOutlier}"
+                             Width="{Binding Columns[5].Width}"
+                             IsVisible="{Binding Columns[5].IsShown}"
+                             ToolTip.Tip="{Binding EccentricityCell.Tooltip}"
+                             Text="{Binding EccentricityCell.Text}" />
+                  <TextBlock Classes="cell num q"
+                             Classes.band-better="{Binding FwhmCell.IsBetter}"
+                             Classes.band-watch="{Binding FwhmCell.IsWatch}"
+                             Classes.band-reject="{Binding FwhmCell.IsReject}"
+                             Width="{Binding Columns[6].Width}"
+                             IsVisible="{Binding Columns[6].IsShown}"
+                             ToolTip.Tip="{Binding FwhmCell.Tooltip}"
+                             Text="{Binding FwhmCell.Text}" />
+                  <TextBlock Classes="cell num q"
+                             Classes.band-better="{Binding DetectedStarsCell.IsBetter}"
+                             Classes.band-watch="{Binding DetectedStarsCell.IsWatch}"
+                             Classes.band-reject="{Binding DetectedStarsCell.IsReject}"
+                             Width="{Binding Columns[7].Width}"
+                             IsVisible="{Binding Columns[7].IsShown}"
+                             ToolTip.Tip="{Binding DetectedStarsCell.Tooltip}"
+                             Text="{Binding DetectedStarsCell.Text}" />
+                  <!-- Spec 12.4 (Phase 15A): the guiding RMS cell carries a dagger only when
+                       guiding_rms_source is phd2, never for csv, because the CSV sidecar is the
+                       frame's own file and needs no disclosure. The dagger is decorative to a
+                       screen reader (AutomationProperties.AccessibilityView="Raw", the codebase's
+                       only user of that property so far); the value cell's AutomationProperties.Name
+                       carries the figure and the source sentence together (review P2-3: the name
+                       must not replace the figure), and is the figure alone when the source is not
+                       phd2. -->
+                  <Grid ColumnDefinitions="*,14"
+                        Width="{Binding Columns[8].Width}"
+                        IsVisible="{Binding Columns[8].IsShown}">
+                    <!-- The RMS cell keeps its source mark and its provenance tooltip beside it,
+                         and gains a band and a deviation tooltip of its own. The spec grades this
+                         column against the night's own baseline; the web application does not
+                         grade it at all (questions.md Q7). Padding="0" (review P2-1) overrides this
+                         view's own TextBlock.cell.num style, whose 6 px trailing padding put a
+                         visible gap between the digits and the dagger. The value takes the star
+                         column and the mark a fixed 14 px one, present whether or not the mark
+                         shows, so every row's digits end on one edge whatever the column's width. -->
+                    <TextBlock x:Name="GuidingRmsValueCell"
+                               Grid.Column="0"
+                               Classes="cell num"
+                               Classes.band-better="{Binding GuidingRmsCell.IsBetter}"
+                               Classes.band-watch="{Binding GuidingRmsCell.IsWatch}"
+                               Classes.band-reject="{Binding GuidingRmsCell.IsReject}"
+                               Padding="0"
+                               ToolTip.Tip="{Binding GuidingRmsCell.Tooltip}"
+                               AutomationProperties.Name="{Binding GuidingRmsAccessibleName}"
+                               Text="{Binding GuidingRmsCell.Text}" />
+                    <TextBlock x:Name="GuidingRmsMarkCell"
+                               Grid.Column="1"
+                               Classes="cell t-label"
+                               Text="{Binding GuidingRmsSourceGlyph}"
+                               IsVisible="{Binding HasGuidingRmsSource}"
+                               ToolTip.Tip="{Binding GuidingRmsSourceTooltip}"
+                               AutomationProperties.AccessibilityView="Raw" />
+                  </Grid>
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[9].Width}"
+                             IsVisible="{Binding Columns[9].IsShown}"
+                             Text="{Binding GuidingRmsRaText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[10].Width}"
+                             IsVisible="{Binding Columns[10].IsShown}"
+                             Text="{Binding GuidingRmsDecText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[11].Width}"
+                             IsVisible="{Binding Columns[11].IsShown}"
+                             Text="{Binding AduMeanText}" />
+                  <TextBlock Classes="cell num"
+                             Classes.band-better="{Binding AduMedianCell.IsBetter}"
+                             Classes.band-watch="{Binding AduMedianCell.IsWatch}"
+                             Classes.band-reject="{Binding AduMedianCell.IsReject}"
+                             Width="{Binding Columns[12].Width}"
+                             IsVisible="{Binding Columns[12].IsShown}"
+                             ToolTip.Tip="{Binding AduMedianCell.Tooltip}"
+                             Text="{Binding AduMedianCell.Text}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[13].Width}"
+                             IsVisible="{Binding Columns[13].IsShown}"
+                             Text="{Binding AduStdevText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[14].Width}"
+                             IsVisible="{Binding Columns[14].IsShown}"
+                             Text="{Binding AduMinText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[15].Width}"
+                             IsVisible="{Binding Columns[15].IsShown}"
+                             Text="{Binding AduMaxText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[16].Width}"
+                             IsVisible="{Binding Columns[16].IsShown}"
+                             Text="{Binding FocuserPositionText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[17].Width}"
+                             IsVisible="{Binding Columns[17].IsShown}"
+                             Text="{Binding FocuserTempText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[18].Width}"
+                             IsVisible="{Binding Columns[18].IsShown}"
+                             Text="{Binding AmbientTempText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[19].Width}"
+                             IsVisible="{Binding Columns[19].IsShown}"
+                             Text="{Binding DewPointText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[20].Width}"
+                             IsVisible="{Binding Columns[20].IsShown}"
+                             Text="{Binding HumidityText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[21].Width}"
+                             IsVisible="{Binding Columns[21].IsShown}"
+                             Text="{Binding PressureText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[22].Width}"
+                             IsVisible="{Binding Columns[22].IsShown}"
+                             Text="{Binding WindSpeedText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[23].Width}"
+                             IsVisible="{Binding Columns[23].IsShown}"
+                             Text="{Binding WindDirectionText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[24].Width}"
+                             IsVisible="{Binding Columns[24].IsShown}"
+                             Text="{Binding WindGustText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[25].Width}"
+                             IsVisible="{Binding Columns[25].IsShown}"
+                             Text="{Binding CloudCoverText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[26].Width}"
+                             IsVisible="{Binding Columns[26].IsShown}"
+                             Text="{Binding SkyQualityText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[27].Width}"
+                             IsVisible="{Binding Columns[27].IsShown}"
+                             Text="{Binding AirmassText}" />
+                  <TextBlock Classes="cell"
+                             Width="{Binding Columns[28].Width}"
+                             IsVisible="{Binding Columns[28].IsShown}"
+                             Text="{Binding PierSideText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[29].Width}"
+                             IsVisible="{Binding Columns[29].IsShown}"
+                             Text="{Binding RotatorPositionText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[30].Width}"
+                             IsVisible="{Binding Columns[30].IsShown}"
+                             Text="{Binding SensorTempText}" />
+                  <TextBlock Classes="cell num"
+                             Width="{Binding Columns[31].Width}"
+                             IsVisible="{Binding Columns[31].IsShown}"
+                             Text="{Binding CameraGainText}" />
+
+                  <!-- Spec 12.4's five per-frame actions, behind one row-end button so the row
+                       stays readable. Open preview is spec 11.5's modal and stays disabled until
+                       Phase 8 binds the delegate. -->
+                  <Button Content="..." Padding="6,0" Margin="8,0,0,0">
+                    <Button.Flyout>
+                      <Flyout>
+                        <StackPanel Spacing="2">
+                          <Button Content="Open preview"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).OpenPreviewCommand}"
+                                  CommandParameter="{Binding}" />
+                          <Button Content="Reveal in Explorer"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).RevealFrameCommand}"
+                                  CommandParameter="{Binding}" />
+                          <Button Content="Open with default application"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).OpenFrameWithDefaultApplicationCommand}"
+                                  CommandParameter="{Binding}" />
+                          <Button Content="Copy path"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).CopyFramePathCommand}"
+                                  CommandParameter="{Binding}" />
+                          <Button Content="Show raw headers"
+                                  HorizontalAlignment="Stretch"
+                                  HorizontalContentAlignment="Left"
+                                  Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).ToggleRawHeadersCommand}"
+                                  CommandParameter="{Binding}" />
+                        </StackPanel>
+                      </Flyout>
+                    </Button.Flyout>
+                  </Button>
+                </StackPanel>
+              </Border>
+              <Rectangle Width="2"
+                         HorizontalAlignment="Left"
+                         Fill="{DynamicResource ColorAccent}"
+                         IsVisible="{Binding $parent[ListBoxItem].IsSelected}" />
+              </Grid>
+
+              <!-- Task 6's raw header panel, behind the row's own flag. RawHeaders is null until
+                   ToggleRawHeadersCommand builds it on this row's first expansion, so a session of
+                   400 frames never holds 400 header queries; content stays bound to the panel
+                   view-model even after the row collapses, so re-expanding does not rebuild it. -->
+              <ContentControl x:Name="RawHeaderRegion"
+                              Margin="0,4,0,4"
+                              IsVisible="{Binding AreRawHeadersExpanded}"
+                              Content="{Binding RawHeaders}">
+                <ContentControl.ContentTemplate>
+                  <DataTemplate DataType="detail:RawHeaderPanelViewModel">
+                    <controls:RawHeaderPanel />
+                  </DataTemplate>
+                </ContentControl.ContentTemplate>
+              </ContentControl>
+            </StackPanel>
+          </DataTemplate>
+        </ListBox.ItemTemplate>
+      </ListBox>
+    </Grid>
+  </Grid>
+</UserControl>

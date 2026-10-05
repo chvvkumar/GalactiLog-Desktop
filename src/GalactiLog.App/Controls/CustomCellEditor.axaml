@@ -1,0 +1,54 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+             x:Class="GalactiLog.App.Controls.CustomCellEditor"
+             x:DataType="cc:CustomValueViewModel"
+             PointerPressed="OnEditorPointerPressed"
+             KeyDown="OnEditorKeyDown">
+  <!-- Spec 12.15's one custom column cell editor, on all four surfaces: the dashboard target row,
+       the dashboard night expander, the Nights ledger row and the session pane's rig rows.
+
+       Three controls in one Panel, each with IsVisible bound to its own kind flag, rather than a
+       template selector: three bindings are cheaper to read than a selector, and a cell's kind
+       comes from the column's type and never changes for the cell's life.
+
+       No Mode=OneTime anywhere (TRACKING section 5, the Phase 16 flyout trap): a cell realized
+       inside a flyout or a recycled row has to follow its view-model.
+
+       This control declares no style element of any kind (ControlStyleScanTest), which its own case
+       asserts as a plain text scan over this file. The one style it needs is the refused-cell ink
+       in Theme/Controls.axaml, which the scan skips outright. -->
+  <Panel>
+    <CheckBox x:Name="CheckEditor"
+              IsVisible="{Binding IsCheckBox}"
+              IsChecked="{Binding IsChecked, Mode=TwoWay}"
+              Classes.refused="{Binding IsRefused}"
+              AutomationProperties.Name="{Binding AutomationName}"
+              AutomationProperties.HelpText="{Binding Refusal}"
+              ToolTip.Tip="{Binding Refusal}"
+              VerticalAlignment="Center" />
+
+    <!-- The watermark is the column's name, and it is assigned from the code behind rather than bound
+         here: whether it is drawn at all is the surface's choice (ShowWatermark), which is a property
+         of this control and not of the cell this template's DataContext is. -->
+    <TextBox x:Name="TextEditor"
+             IsVisible="{Binding IsTextBox}"
+             Text="{Binding Text.Text, Mode=TwoWay}"
+             Classes.refused="{Binding IsRefused}"
+             AutomationProperties.Name="{Binding AutomationName}"
+             AutomationProperties.HelpText="{Binding Refusal}"
+             ToolTip.Tip="{Binding Refusal}"
+             LostFocus="OnTextEditorLostFocus"
+             VerticalAlignment="Center" />
+
+    <ComboBox x:Name="ChoiceEditor"
+              IsVisible="{Binding IsComboBox}"
+              ItemsSource="{Binding Choices}"
+              SelectedItem="{Binding Selected, Mode=TwoWay}"
+              Classes.refused="{Binding IsRefused}"
+              AutomationProperties.Name="{Binding AutomationName}"
+              AutomationProperties.HelpText="{Binding Refusal}"
+              ToolTip.Tip="{Binding Refusal}"
+              VerticalAlignment="Center" />
+  </Panel>
+</UserControl>

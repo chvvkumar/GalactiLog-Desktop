@@ -1,0 +1,166 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             x:Class="GalactiLog.App.Views.Analysis.MatrixTabView"
+             x:DataType="analysis:MatrixTabViewModel">
+  <!-- Spec 12.14's Matrix tab body: the caption, the ten by ten heat grid and the legend.
+
+       NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all seven heading rows and all
+       seven placements are in Views/AnalysisView.axaml, and no other markup file carries them.
+       The mixed plate scale callout, the state sentence and the Retry are the base's and
+       are drawn once by that file's shared tab section template, above this body.
+
+       Theme/Controls.axaml classes and theme tokens only. No local Button, Border.tag or
+       Border.callout style, which ControlStyleScanTest fails the build on, and no FontSize. -->
+  <StackPanel Spacing="8">
+    <!-- OUTSIDE the result region, so both stand in every state. The tab has no control of its
+         own, so the caption and the legend are the whole of what a reader keeps when the filters
+         empty the grid: the caption is what tells them why a cell is blank. -->
+    <TextBlock x:Name="MatrixCaption"
+               Text="{x:Static analysis:MatrixTabViewModel.CaptionText}"
+               Classes="t-caption"
+               TextWrapping="Wrap" />
+
+    <!-- The legend is markup beside the grid because a heat series draws no colour bar of its
+         own (spec 13). Two swatches for the two ends and a third entry for the blank cell, which
+         has no swatch because nothing is drawn there. Both swatches take their ink from the same
+         tokens the ramp's two ends read, through a DynamicResource and never a literal. -->
+    <WrapPanel x:Name="MatrixLegend">
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,16,0">
+        <Border x:Name="NegativeSwatch"
+                Width="12"
+                Height="12"
+                VerticalAlignment="Center"
+                Background="{DynamicResource ColorInfo}" />
+        <TextBlock Text="{x:Static analysis:MatrixTabViewModel.NegativeLegendText}"
+                   Classes="t-caption"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,16,0">
+        <Border x:Name="PositiveSwatch"
+                Width="12"
+                Height="12"
+                VerticalAlignment="Center"
+                Background="{DynamicResource ColorMetricWorst}" />
+        <TextBlock Text="{x:Static analysis:MatrixTabViewModel.PositiveLegendText}"
+                   Classes="t-caption"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+      <TextBlock Text="{x:Static analysis:MatrixTabViewModel.BlankLegendText}"
+                 Classes="t-caption"
+                 VerticalAlignment="Center" />
+    </WrapPanel>
+
+    <!-- The tab's ONE result region. Spec 12.14's States
+         table draws no grid in "Loading, first result", in "No row matches the filters" or after
+         a failure, and keeps the last result drawn through "Loading, refresh", which is exactly
+         what AnalysisTabViewModel.ShowsResult answers. The grid goes INSIDE this element and the
+         caption and the legend stay OUTSIDE it. Exactly one ResultRegion per tab view, which
+         AnalysisResultRegionCensusTest enforces by file name. -->
+    <Grid x:Name="ResultRegion" IsVisible="{Binding ShowsResult}">
+      <!-- Background="Transparent" is spec 13's global rule. It is load bearing here rather than
+           cosmetic: a pair with no r is omitted from the series, so the blank cell is the page
+           showing through, and an opaque chart would paint a colour over it.
+
+           A fixed Height rather than a * row: a chart with an unbounded height measures to zero
+           or to infinity depending on the panel. 460 fits a hundred labelled cells and one edit
+           changes it.
+
+           LegendPosition is Hidden, which is also rc5.4's own default; the legend above is the
+           markup one spec 13 asks for. None of the four tooltip or legend paints is set here:
+           Theme/Controls.axaml's lvc|CartesianChart block owns all four and
+           ChartPaintCensusTests fails the build on a local one.
+
+           Sections carries the focused cell's box and is empty while no cell holds focus. It is
+           drawn IN the chart rather than on the layer below, so it
+           lands on the drawn cell by construction: a section is in the series' own coordinate
+           space, while the layer is a different rectangle at a different origin and pitch. -->
+      <lvc:CartesianChart x:Name="MatrixChart"
+                          LegendPosition="Hidden"
+                          Series="{Binding Chart.Series}"
+                          XAxes="{Binding Chart.XAxes}"
+                          YAxes="{Binding Chart.YAxes}"
+                          Sections="{Binding Chart.Sections}"
+                          DataPointerDownCommand="{Binding Chart.CellPressedCommand}"
+                          Background="Transparent"
+                          Height="460" />
+
+      <!-- The keyboard's cells. A heat series is a picture with no focusable element in it, so a
+           reader who never touches the pointer would have no route to the Correlation tab at all.
+           This layer puts one chrome-free button over every position, carrying an
+           AutomationProperties.Name that names both metrics and the figure and a command that
+           ends at the same page route the pointer's own press does.
+
+           A position with no r is FOCUSABLE AND INERT rather than disabled: the arrows visit it so
+           a screen reader announces its "no data" name, and Enter or Space on it opens nothing,
+           which is spec 12.14's "a cell with no r is not clickable". The gate is in the command's
+           body, not in a CanExecute, because a Button binds IsEnabled from CanExecute and a
+           disabled button is out of the walk.
+
+           IsHitTestVisible="False" is what keeps the two routes from fighting: the hit test prunes
+           this subtree, so a pointer press falls through to the chart underneath and reaches
+           DataPointerDownCommand, while keyboard navigation, which consults Focusable and
+           effective visibility rather than hit testing, still reaches every button.
+
+           TabNavigation="Once" plus the arrow handler in the code behind is the shape
+           Controls/AltitudeArc.cs already ships for a drawn control with many addressable parts:
+           one Tab stop for the whole grid instead of a hundred, and the arrows
+           move within it. The focus box itself is the chart's Sections above, which is why nothing
+           here draws a ring and why every cell button replaces the platform's own focus adorner
+           with one that draws nothing: that adorner is a plain white rectangle in all three
+           themes, so a focused cell drew two boxes, one of them the brightest thing on the
+           night-vision page.
+
+           The three handlers are on the container, not on the item: GotFocus and LostFocus are
+           bubbling routed events, so one pair here covers a hundred buttons and no item template
+           wires anything.
+
+           The hundred cells are laid out over the chart's DRAW MARGIN and not over the whole
+           control. The painted grid reserves a gutter for the row labels and another for the
+           column labels, so a layer spread over the control sits about a hundred pixels left of
+           the painting at 1280 by 800 and every cell reports the wrong screen rectangle to a
+           screen reader or a magnifier. The code behind reads the margin's location and size off
+           the chart after each of its measures and writes them into this element's Padding, which
+           is what insets the UniformGrid inside it; the element itself still covers the chart, so
+           a grid that has not measured yet falls back to the whole control rather than to
+           nothing. -->
+      <ItemsControl x:Name="MatrixCellKeys"
+                    ItemsSource="{Binding Chart.Cells}"
+                    IsHitTestVisible="False"
+                    KeyboardNavigation.TabNavigation="Once"
+                    GotFocus="OnCellGotFocus"
+                    LostFocus="OnCellLostFocus"
+                    KeyDown="OnCellKeyDown">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <UniformGrid Columns="10" Rows="10" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="analysis:MatrixCellViewModel">
+            <Button Classes="quiet"
+                    Padding="0"
+                    MinHeight="0"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    Background="Transparent"
+                    Command="{Binding ActivateCommand}"
+                    AutomationProperties.Name="{Binding AccessibleName}">
+              <!-- An adorner that draws nothing, and NOT {x:Null}: a null falls back to the
+                   platform's own default, which is the white Border the launched look saw over
+                   every focused cell. The chart's RectangularSection is this grid's one focus
+                   affordance, so a second box would contradict it wherever the two disagreed and
+                   is the brightest thing on the page under red-light. -->
+              <Button.FocusAdorner>
+                <FocusAdornerTemplate>
+                  <Panel />
+                </FocusAdornerTemplate>
+              </Button.FocusAdorner>
+            </Button>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </Grid>
+  </StackPanel>
+</UserControl>

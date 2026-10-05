@@ -1,0 +1,437 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             x:Class="GalactiLog.App.Views.Dashboard.FilterPanelView"
+             x:DataType="dash:FilterPanelViewModel">
+  <!-- design-spec 12.2: the collapsible left filter panel. Seven collapsible sections, each with
+       an active marker, a Reset Filters button, and nothing else: this control never queries.
+       Every colour is a theme token (spec 14) except a Filters pill's tint, which is the
+       configured filter colour and therefore user data, not a token.
+
+       Spec 12.15 adds an eighth, Custom, which renders only while the library holds a column the
+       user defined (user choice 19). Its Expander is realized from CustomSectionSlot, which
+       holds zero items or one rather than one hidden behind IsVisible, and the collapsed strip
+       takes the same Sections collection, so the two states cannot disagree. -->
+  <UserControl.Resources>
+    <!-- One header definition for every section: title plus the active dot. The eighth section
+         adds its own help glyph beside it. -->
+    <DataTemplate x:Key="SectionHeader" DataType="dash:FilterSectionViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <Ellipse Width="6" Height="6"
+                 VerticalAlignment="Center"
+                 Fill="{DynamicResource ColorAccent}"
+                 IsVisible="{Binding IsActive}" />
+        <TextBlock Text="{Binding Title}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="ObjectTypePill" DataType="dash:ToggleOptionViewModel">
+      <ToggleButton Content="{Binding Label}"
+                    IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                    Margin="0,0,4,4"
+                    Padding="8,3"
+                    CornerRadius="{DynamicResource RadiusSm}" />
+    </DataTemplate>
+
+    <!-- Spec 12.2: "each tinted with its configured colour". The tint is carried on the border so
+         the pill's own surface stays on tokens in both the checked and unchecked states. -->
+    <DataTemplate x:Key="FilterPill" DataType="dash:ToggleOptionViewModel">
+      <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                    BorderBrush="{Binding Tint}"
+                    BorderThickness="2"
+                    Margin="0,0,4,4"
+                    Padding="8,3"
+                    CornerRadius="{DynamicResource RadiusSm}">
+        <StackPanel Orientation="Horizontal" Spacing="6">
+          <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding FrameCount}"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </ToggleButton>
+    </DataTemplate>
+
+    <DataTemplate x:Key="DatePreset" DataType="dash:DatePresetViewModel">
+      <Button Content="{Binding Label}"
+              Command="{Binding ApplyCommand}"
+              Margin="0,0,4,4"
+              Padding="8,3"
+              CornerRadius="{DynamicResource RadiusSm}" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="MetricGroup" DataType="dash:MetricGroupViewModel">
+      <StackPanel Spacing="4" Margin="0,0,0,8">
+        <TextBlock Text="{Binding Title}"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <ItemsControl ItemsSource="{Binding Metrics}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="dash:MetricRangeViewModel">
+              <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                <TextBlock Grid.Column="0"
+                           Text="{Binding Label}"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+                <NumericUpDown Grid.Column="1"
+                               Width="104"
+                               Margin="4,0"
+                               Watermark="min"
+                               ShowButtonSpinner="False"
+                               Increment="{Binding Step}"
+                               FormatString="{Binding FormatString}"
+                               Value="{Binding Min, Mode=TwoWay}" />
+                <NumericUpDown Grid.Column="2"
+                               Width="104"
+                               Watermark="max"
+                               ShowButtonSpinner="False"
+                               Increment="{Binding Step}"
+                               FormatString="{Binding FormatString}"
+                               Value="{Binding Max, Mode=TwoWay}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Spec 12.15's one row per custom column. The column's type chooses the control and nothing
+         else does: three Button.pill in one segment for a checkbox column (the shipped pill
+         vocabulary, with the selected state compared against the one bound property through
+         Avalonia's own ObjectConverters.Equal so a press costs exactly one PropertyChanged), a
+         Contains box for a text column, and a combo box led by "Any" for a list column. The text
+         box is deliberately NOT an AutosaveField: it is a filter value, not a stored one, and the
+         panel's own debounce is what the seven existing sections use. -->
+    <DataTemplate x:Key="CustomColumnFilterRow" DataType="dash:CustomColumnFilterViewModel">
+      <StackPanel Spacing="2" Margin="0,0,0,6">
+        <TextBlock Text="{Binding Label}"
+                   TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <StackPanel Orientation="Horizontal" IsVisible="{Binding IsBoolean}">
+          <Button Classes="pill"
+                  Content="Any"
+                  Classes.selected="{Binding BooleanChoice, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Any}"
+                  Command="{Binding SetBooleanChoiceCommand}"
+                  CommandParameter="Any" />
+          <Button Classes="pill"
+                  Content="Yes"
+                  Classes.selected="{Binding BooleanChoice, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=Yes}"
+                  Command="{Binding SetBooleanChoiceCommand}"
+                  CommandParameter="Yes" />
+          <Button Classes="pill"
+                  Content="No"
+                  Classes.selected="{Binding BooleanChoice, Converter={x:Static ObjectConverters.Equal}, ConverterParameter=No}"
+                  Command="{Binding SetBooleanChoiceCommand}"
+                  CommandParameter="No" />
+        </StackPanel>
+        <TextBox IsVisible="{Binding IsText}"
+                 Text="{Binding Text, Mode=TwoWay}"
+                 Watermark="Contains" />
+        <ComboBox IsVisible="{Binding IsDropdown}"
+                  ItemsSource="{Binding Choices}"
+                  SelectedItem="{Binding Selected, Mode=TwoWay}"
+                  HorizontalAlignment="Stretch" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- One group per scope, in the fixed order Target, Night, Rig. A scope with no column
+         produces no group at all, so no empty heading is ever drawn. -->
+    <DataTemplate x:Key="CustomColumnFilterGroup" DataType="dash:CustomFilterGroupViewModel">
+      <StackPanel Spacing="4" Margin="0,0,0,8">
+        <TextBlock Classes="t-caption"
+                   Text="{Binding Title}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <ItemsControl ItemsSource="{Binding Filters}" ItemTemplate="{StaticResource CustomColumnFilterRow}" />
+      </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="HeaderConditionRow" DataType="dash:HeaderConditionViewModel">
+      <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding Display}"
+                   VerticalAlignment="Center"
+                   TextTrimming="CharacterEllipsis"
+                   FontFamily="Consolas,Menlo,monospace"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <Button Grid.Column="1"
+                Content="Remove"
+                Padding="6,2"
+                Command="{Binding RemoveCommand}" />
+      </Grid>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <!-- Phase 14C, spec 12.2: the panel has two states and exactly one of them is realized. Both
+       IsVisible bindings read IsPanelCollapsed, a pass-through the owning DashboardViewModel sets,
+       so the panel drives both states off its own DataContext rather than reaching up the visual
+       tree with a $parent binding that resolves to nothing whenever this control is hosted alone.
+       One instance in both states: the page holds a single FilterPanelView and the subtree inside
+       it swaps. -->
+  <Panel>
+  <ScrollViewer x:Name="FilterPanelBody"
+                IsVisible="{Binding !IsPanelCollapsed}"
+                HorizontalScrollBarVisibility="Disabled"
+                VerticalScrollBarVisibility="Auto">
+    <StackPanel Spacing="4" Margin="8">
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding SearchSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding SearchSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <StackPanel Spacing="6">
+          <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="Target or OBJECT name">
+            <!-- Escape dismisses the results dropdown without pinning anything (review E1). -->
+            <TextBox.KeyBindings>
+              <KeyBinding Gesture="Escape" Command="{Binding CloseSearchDropdownCommand}" />
+            </TextBox.KeyBindings>
+          </TextBox>
+
+          <!-- Spec 12.2's results dropdown: primary name, object type, and the matched alias.
+               An unresolved OBJECT row shows its frame count instead of a type. Rendered inline
+               under the box rather than in a popup, so the panel's own scroll viewer keeps it on
+               screen and no flyout has to be dismissed by hand. -->
+          <Border x:Name="SearchResultsDropdown"
+                  IsVisible="{Binding IsSearchDropdownOpen}"
+                  Background="{DynamicResource ColorBgElevated}"
+                  BorderBrush="{DynamicResource ColorBorderDefault}"
+                  BorderThickness="1"
+                  CornerRadius="{DynamicResource RadiusSm}">
+            <ItemsControl ItemsSource="{Binding SearchResults}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate DataType="dash:SearchResultViewModel">
+                  <Button Command="{Binding $parent[ItemsControl].((dash:FilterPanelViewModel)DataContext).SelectSearchResultCommand}"
+                          CommandParameter="{Binding}"
+                          HorizontalAlignment="Stretch"
+                          HorizontalContentAlignment="Left"
+                          Background="Transparent"
+                          BorderThickness="0"
+                          Padding="8,4">
+                    <StackPanel Spacing="1">
+                      <TextBlock Text="{Binding DisplayName}"
+                                 TextTrimming="CharacterEllipsis"
+                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding CategoryText}"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <TextBlock Text="{Binding FrameCountText}"
+                                   IsVisible="{Binding HasFrameCount}"
+                                   Foreground="{DynamicResource ColorTextTertiary}" />
+                        <TextBlock Text="{Binding MatchedText}"
+                                   IsVisible="{Binding HasMatchedText}"
+                                   TextTrimming="CharacterEllipsis"
+                                   Foreground="{DynamicResource ColorTextTertiary}" />
+                      </StackPanel>
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </Border>
+
+          <!-- The pinned selection chip. Task 8 fills PinnedLabel from the results dropdown. -->
+          <Border IsVisible="{Binding PinnedLabel, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  Background="{DynamicResource ColorBadgeBg}"
+                  CornerRadius="{DynamicResource RadiusSm}"
+                  Padding="6,2">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="{Binding PinnedLabel}"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource ColorBadgeText}" />
+              <Button Content="x" Padding="4,0" Command="{Binding ClearPinCommand}" />
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding ObjectTypeSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding ObjectTypeSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <ItemsControl ItemsSource="{Binding ObjectTypes}" ItemTemplate="{StaticResource ObjectTypePill}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding DateRangeSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding DateRangeSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <StackPanel Spacing="6">
+          <!-- A DatePicker has no clear gesture of its own, so each bound date carries one. -->
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+            <DatePicker Grid.Column="0" SelectedDate="{Binding DateFrom, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+            <Button Grid.Column="1" Content="x" Padding="6,0" Command="{Binding ClearDateFromCommand}" />
+          </Grid>
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="4">
+            <DatePicker Grid.Column="0" SelectedDate="{Binding DateTo, Mode=TwoWay}" HorizontalAlignment="Stretch" />
+            <Button Grid.Column="1" Content="x" Padding="6,0" Command="{Binding ClearDateToCommand}" />
+          </Grid>
+          <ItemsControl ItemsSource="{Binding DatePresets}" ItemTemplate="{StaticResource DatePreset}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+          </ItemsControl>
+        </StackPanel>
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding FiltersSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding FiltersSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <ItemsControl ItemsSource="{Binding Filters}" ItemTemplate="{StaticResource FilterPill}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+        </ItemsControl>
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding EquipmentSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding EquipmentSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <StackPanel Spacing="6">
+          <ComboBox ItemsSource="{Binding Cameras}"
+                    SelectedItem="{Binding SelectedCamera, Mode=TwoWay}"
+                    PlaceholderText="Camera"
+                    HorizontalAlignment="Stretch" />
+          <ComboBox ItemsSource="{Binding Telescopes}"
+                    SelectedItem="{Binding SelectedTelescope, Mode=TwoWay}"
+                    PlaceholderText="Telescope"
+                    HorizontalAlignment="Stretch" />
+        </StackPanel>
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding MetricsSection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding MetricsSection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <ItemsControl ItemsSource="{Binding MetricGroups}" ItemTemplate="{StaticResource MetricGroup}" />
+      </Expander>
+
+      <Expander HorizontalAlignment="Stretch"
+                IsExpanded="{Binding HeaderQuerySection.IsExpanded, Mode=TwoWay}">
+        <Expander.Header>
+          <ContentControl Content="{Binding HeaderQuerySection}" ContentTemplate="{StaticResource SectionHeader}" />
+        </Expander.Header>
+        <StackPanel Spacing="6">
+          <ComboBox ItemsSource="{Binding HeaderKeys}"
+                    SelectedItem="{Binding DraftHeaderKey, Mode=TwoWay}"
+                    PlaceholderText="Header key"
+                    HorizontalAlignment="Stretch" />
+          <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="4">
+            <ComboBox Grid.Column="0"
+                      ItemsSource="{Binding HeaderOperators}"
+                      SelectedItem="{Binding DraftHeaderOperator, Mode=TwoWay}" />
+            <TextBox Grid.Column="1" Text="{Binding DraftHeaderValue, Mode=TwoWay}" Watermark="value">
+              <!-- Spec 12.2: "Enter in the value box adds the row." -->
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding AddHeaderConditionCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Grid.Column="2" Content="Add" Command="{Binding AddHeaderConditionCommand}" />
+          </Grid>
+          <ItemsControl ItemsSource="{Binding HeaderConditions}" ItemTemplate="{StaticResource HeaderConditionRow}" />
+        </StackPanel>
+      </Expander>
+
+      <!-- Spec 12.15's eighth section, ABSENT while no custom column exists rather than hidden.
+           CustomSectionSlot holds zero items or one, so a panel with no custom column realizes
+           exactly the seven Expanders FilterPanelViewTests counts; an IsVisible binding would
+           leave an eighth in the visual tree and move that figure for a page the user sees
+           unchanged (user choice 19).
+
+           Its header reuses the shared SectionHeader template through the same ContentControl
+           idiom the other seven use, with the help glyph beside it: the one section that carries
+           a glyph of its own (dashboard.custom) needs no second copy of the dot and the title. -->
+      <ItemsControl x:Name="CustomFilterSectionSlot" ItemsSource="{Binding CustomSectionSlot}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="dash:FilterSectionViewModel">
+            <Expander HorizontalAlignment="Stretch"
+                      IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
+              <Expander.Header>
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SectionHeader}" />
+                  <controls:HelpButton Topic="dashboard.custom" />
+                </StackPanel>
+              </Expander.Header>
+              <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((dash:FilterPanelViewModel)DataContext).CustomFilterGroups}"
+                            ItemTemplate="{StaticResource CustomColumnFilterGroup}" />
+            </Expander>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <Button Content="Reset Filters"
+              Command="{Binding ResetCommand}"
+              HorizontalAlignment="Stretch"
+              HorizontalContentAlignment="Center"
+              Margin="0,8,0,0" />
+    </StackPanel>
+  </ScrollViewer>
+
+  <!-- The collapsed 48 pixel strip (DESIGN.md section 6, "The collapsed vertical strip", third
+       use). Same shape as the Nights ledger's own strip: a chevron at the top that reopens, then
+       one short label per item with the item's full label on its tooltip, the active ones in the
+       accent ink. The item template is the shared StripItemTemplate and is not written again here.
+
+       An ItemsControl of buttons rather than a ListBox, which is the one place this strip departs
+       from the ledger's: the ledger's strip is a selection with exactly one night lit, and this
+       one is a request to expand the panel on a section, where any number of sections can be
+       active at once and none of them is "selected".
+
+       No help glyph. HelpPlacementCensusTest counts placements in markup text rather than at
+       runtime, so dashboard.filters appearing in both states would read as a doubled id; the
+       expanded panel's heading keeps the one glyph, in one place. -->
+  <Grid x:Name="FilterStrip"
+        RowDefinitions="Auto,*"
+        IsVisible="{Binding IsPanelCollapsed}">
+    <!-- The name, like the collapse chevron's in DashboardView.axaml, is this control's only text
+         (fixer-list item 21): the strip's one way back to the panel was unreachable from outside
+         the process and announced as a bare "button". -->
+    <Button Grid.Row="0"
+            x:Name="FilterStripToggle"
+            Classes="chevron"
+            HorizontalAlignment="Center"
+            Margin="0,4,0,4"
+            Command="{Binding TogglePanelCommand}"
+            AutomationProperties.Name="Expand filters"
+            ToolTip.Tip="Show the filter panel">
+      <Path Data="{StaticResource IconChevronRight}"
+            Classes="icon-glyph"
+            Width="16"
+            Height="16" />
+    </Button>
+
+    <ItemsControl Grid.Row="1" x:Name="FilterStripSections" ItemsSource="{Binding Sections}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="dash:FilterSectionViewModel">
+          <Button Classes="quiet sm strip-item"
+                  Classes.active="{Binding IsActive}"
+                  HorizontalAlignment="Stretch"
+                  HorizontalContentAlignment="Center"
+                  Command="{Binding $parent[ItemsControl].((dash:FilterPanelViewModel)DataContext).ExpandPanelOnCommand}"
+                  CommandParameter="{Binding Key}">
+            <ContentControl Content="{Binding}" ContentTemplate="{StaticResource StripItemTemplate}" />
+          </Button>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Grid>
+  </Panel>
+</UserControl>

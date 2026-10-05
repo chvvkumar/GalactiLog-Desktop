@@ -1,0 +1,278 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:queries="using:GalactiLog.Data.Queries"
+             x:Class="GalactiLog.App.Views.AnalysisView"
+             x:Name="Root"
+             x:DataType="analysis:AnalysisViewModel">
+  <!-- design-spec 12.14's four parts, top to bottom: the page heading, the shared filters card,
+       the tab strip and the current tab's body.
+
+       Ledger vocabulary from the start: Theme/Controls.axaml classes only, theme
+       tokens only, x:DataType on every template, no Border.card, no non-zero CornerRadius, and no
+       local Button, Border.tag or Border.callout style anywhere in this file, which
+       ControlStyleScanTest fails the build on. Nothing here sets a FontSize: Scales.axaml's
+       FontSize* keys are ratios rather than point sizes (FontSizeTokenTest).
+
+       ALL SEVEN help placements live in this one file (spec 12.14 Help topics): the
+       page heading, the Shared filters heading and the five tab headings. A tab body view carries
+       no heading row and no glyph, so all seven glyphs live here and touch no tab body file. -->
+  <UserControl.Styles>
+    <!-- Spec 12.14's "marks both in the error ink". One shared token and one ink setter on a
+         TextBlock, which is the shape StatisticsView.axaml's own two local styles already take;
+         no Button, Border.tag or Border.callout style is declared here, which is what
+         ControlStyleScanTest fails the build on. The two DatePickers themselves keep the shipped
+         control theme: restyling one would mean a control theme in a view, which is the breach
+         this rule exists to stop, so it is their labels that carry the ink. -->
+    <Style Selector="TextBlock.range-error">
+      <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
+    </Style>
+  </UserControl.Styles>
+
+  <UserControl.Resources>
+    <!-- Everything a tab section shows that is the BASE's and not the tab's own: the mixed plate
+         scale callout, the shared state sentence and its Retry. Written once
+         rather than five times, which is the duplication design lesson 1 names; the inner
+         ContentControl resolves the tab's own view through the App.axaml DataTemplate registered
+         against its concrete type, which is the half each tab's own view fills.
+
+         That ContentControl is drawn in EVERY state on purpose: the tab's view holds its pickers
+         and its segments as well as its chart, so hiding it beside the state sentence would leave
+         a reader who filtered the chart into emptiness with no control to filter back out of, and
+         would make Compare, which starts unqueryable, unreachable. The chart half is gated inside
+         the tab's own view by its one ResultRegion, bound to the base's ShowsResult. -->
+    <DataTemplate x:Key="TabSectionTemplate" DataType="analysis:AnalysisTabViewModel">
+      <StackPanel Spacing="8">
+        <!-- Spec 12.14's mixed plate scale warning: the warning callout composite of the control
+             vocabulary, above the chart and inside the tab body. Not a caption and not tertiary
+             ink. The sentence is the base's one constant and is never respelled here. -->
+        <Border Classes="callout warn" IsVisible="{Binding PlateScaleWarningVisible}">
+          <TextBlock Text="{x:Static analysis:AnalysisTabViewModel.PlateScaleWarningText}"
+                     TextWrapping="Wrap" />
+        </Border>
+        <StackPanel Orientation="Horizontal"
+                    Spacing="8"
+                    IsVisible="{Binding StatusLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+          <TextBlock Text="{Binding StatusLine}"
+                     Classes="t-caption"
+                     TextWrapping="Wrap"
+                     VerticalAlignment="Center" />
+          <!-- Spec 12.14's States table: a failure is per tab, never per page, and the Retry is
+               offered only in that state. -->
+          <Button Classes="sm"
+                  Content="Retry"
+                  Command="{Binding RetryCommand}"
+                  IsVisible="{Binding State,
+                                      Converter={x:Static ObjectConverters.Equal},
+                                      ConverterParameter={x:Static analysis:AnalysisTabState.Failed}}" />
+        </StackPanel>
+        <ContentControl Content="{Binding}" />
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Margin="0,0,0,8">
+      <TextBlock Text="{Binding Title}" VerticalAlignment="Center" Classes="t-label section" />
+      <controls:HelpButton Topic="page.analysis" />
+    </StackPanel>
+
+    <!-- One ScrollViewer for the whole page, as Statistics has. The platform scrollbar is
+         restyled, overlays and takes no layout space (spec 12), and horizontal scrolling is the
+         ScrollViewer's own default of Disabled, which is what keeps ExtentWidth from passing
+         ViewportWidth at either window size. WheelPassthrough: the tab views under it hold
+         LiveCharts charts, which swallow a plain wheel; the scroller scrolls anyway, and Ctrl
+         with the wheel is left to the chart. -->
+    <ScrollViewer Grid.Row="1" controls:WheelPassthrough.IsEnabled="True">
+      <StackPanel Spacing="16">
+
+        <!-- Shared filters. Its own heading carries the analysis.filters glyph. -->
+        <StackPanel x:Name="SharedFilters" Spacing="8">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Shared filters" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.filters" />
+            </StackPanel>
+          </Border>
+
+          <!-- A WrapPanel and never one non-wrapping row: at the 1024 by 700 minimum the content
+               region is about 824 wide and the five controls do not fit across it, and a clipped
+               control hides an affordance the reader cannot then find. -->
+          <WrapPanel x:Name="FilterControls">
+            <StackPanel Spacing="2" Margin="0,0,12,8">
+              <TextBlock Text="Equipment combination" Classes="t-caption" />
+              <ComboBox x:Name="EquipmentPicker"
+                        Width="230"
+                        ItemsSource="{Binding SharedFilter.EquipmentChoices}"
+                        SelectedItem="{Binding SharedFilter.SelectedEquipment, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate x:DataType="analysis:EquipmentChoice">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
+                      <!-- The grouped marker, spec 12.5's own: the literal the Statistics
+                           equipment rows draw in tertiary ink, and the tooltip declared once on
+                           EquipmentComboRowViewModel and aliased by SharedFilterViewModel. -->
+                      <TextBlock Text="{x:Static analysis:SharedFilterViewModel.GroupedMarker}"
+                                 VerticalAlignment="Center"
+                                 IsVisible="{Binding Grouped}"
+                                 Foreground="{DynamicResource ColorTextTertiary}"
+                                 ToolTip.Tip="{x:Static analysis:SharedFilterViewModel.GroupedTooltip}" />
+                    </StackPanel>
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Spacing="2" Margin="0,0,12,8">
+              <TextBlock Text="Filter" Classes="t-caption" />
+              <ComboBox x:Name="FilterPicker"
+                        Width="160"
+                        ItemsSource="{Binding SharedFilter.FilterChoices}"
+                        SelectedItem="{Binding SharedFilter.SelectedFilter, Mode=TwoWay}" />
+            </StackPanel>
+
+            <!-- The granularity segment. Two Button.sm with page, and current on the chosen one,
+                 which is the same shipped pair the tab strip below takes and the one the
+                 Distributions tab's three segments take. No new class and no local style. -->
+            <StackPanel Spacing="2" Margin="0,0,12,8">
+              <TextBlock Text="Granularity" Classes="t-caption" />
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <Button x:Name="PerFrameButton"
+                        Classes="sm page"
+                        Classes.current="{Binding SharedFilter.IsPerFrame}"
+                        Content="Per Frame"
+                        Command="{Binding SharedFilter.SelectGranularityCommand}"
+                        CommandParameter="{x:Static queries:AnalysisGranularity.Frame}" />
+                <Button x:Name="PerSessionButton"
+                        Classes="sm page"
+                        Classes.current="{Binding SharedFilter.IsPerSession}"
+                        Content="Per Session"
+                        Command="{Binding SharedFilter.SelectGranularityCommand}"
+                        CommandParameter="{x:Static queries:AnalysisGranularity.Session}" />
+              </StackPanel>
+            </StackPanel>
+
+            <!-- A DatePicker has no clear gesture of its own, so each bound date carries one, the
+                 same pair the dashboard's date range already ships. -->
+            <StackPanel Spacing="2" Margin="0,0,12,8">
+              <TextBlock Text="Date from"
+                         Classes="t-caption"
+                         Classes.range-error="{Binding SharedFilter.HasError}" />
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <DatePicker x:Name="DateFromPicker"
+                            SelectedDate="{Binding SharedFilter.DateFrom, Mode=TwoWay}" />
+                <Button Classes="sm"
+                        Content="x"
+                        Command="{Binding SharedFilter.ClearDateFromCommand}"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Clear date from" />
+              </StackPanel>
+            </StackPanel>
+
+            <StackPanel Spacing="2" Margin="0,0,12,8">
+              <TextBlock Text="Date to"
+                         Classes="t-caption"
+                         Classes.range-error="{Binding SharedFilter.HasError}" />
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <DatePicker x:Name="DateToPicker"
+                            SelectedDate="{Binding SharedFilter.DateTo, Mode=TwoWay}" />
+                <Button Classes="sm"
+                        Content="x"
+                        Command="{Binding SharedFilter.ClearDateToCommand}"
+                        VerticalAlignment="Center"
+                        AutomationProperties.Name="Clear date to" />
+              </StackPanel>
+            </StackPanel>
+          </WrapPanel>
+
+          <!-- Spec 12.14's reversed range: the sentence UNDER the two fields, both fields in the
+               error ink, and no query on any tab. The refusal to query is SharedFilterViewModel's
+               own rule and not this markup's; this is only the half the reader sees. -->
+          <Border x:Name="DateRangeError"
+                  Classes="callout error"
+                  IsVisible="{Binding SharedFilter.HasError}">
+            <TextBlock Text="{x:Static analysis:SharedFilterViewModel.RangeErrorText}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </Border>
+        </StackPanel>
+
+        <!-- The tab strip, its own part below the filter card. Five plain Button.sm, and the
+             current one takes the Button.page.current form over it (spec 12.14, DESIGN.md section
+             4). The marker follows the base's own IsCurrent, which answers IsVisible under the
+             strip's word and is raised with it, so the strip binds a name that says what it draws;
+             AnalysisViewTests pins the marker moving with the selection through the real view. -->
+        <ItemsControl x:Name="TabStrip" ItemsSource="{Binding Tabs}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="analysis:AnalysisTabViewModel">
+              <Button Classes="sm page"
+                      Classes.current="{Binding IsCurrent}"
+                      Margin="0,0,6,0"
+                      Content="{Binding Title}"
+                      Command="{Binding #Root.((analysis:AnalysisViewModel)DataContext).SelectTabCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- The five tab sections. Each carries its own heading row, which is where its glyph
+             goes, and its body below; only the selected tab's section is in the tree. -->
+        <StackPanel x:Name="CorrelationSection" Spacing="8" IsVisible="{Binding Tabs[0].IsVisible}">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Correlation" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.correlation" />
+            </StackPanel>
+          </Border>
+          <ContentControl Content="{Binding Tabs[0]}" ContentTemplate="{StaticResource TabSectionTemplate}" />
+        </StackPanel>
+
+        <StackPanel x:Name="DistributionsSection" Spacing="8" IsVisible="{Binding Tabs[1].IsVisible}">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Distributions" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.distributions" />
+            </StackPanel>
+          </Border>
+          <ContentControl Content="{Binding Tabs[1]}" ContentTemplate="{StaticResource TabSectionTemplate}" />
+        </StackPanel>
+
+        <StackPanel x:Name="TimeSeriesSection" Spacing="8" IsVisible="{Binding Tabs[2].IsVisible}">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Time Series" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.timeseries" />
+            </StackPanel>
+          </Border>
+          <ContentControl Content="{Binding Tabs[2]}" ContentTemplate="{StaticResource TabSectionTemplate}" />
+        </StackPanel>
+
+        <StackPanel x:Name="MatrixSection" Spacing="8" IsVisible="{Binding Tabs[3].IsVisible}">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Matrix" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.matrix" />
+            </StackPanel>
+          </Border>
+          <ContentControl Content="{Binding Tabs[3]}" ContentTemplate="{StaticResource TabSectionTemplate}" />
+        </StackPanel>
+
+        <StackPanel x:Name="CompareSection" Spacing="8" IsVisible="{Binding Tabs[4].IsVisible}">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Text="Compare" Classes="t-label section" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="analysis.compare" />
+            </StackPanel>
+          </Border>
+          <ContentControl Content="{Binding Tabs[4]}" ContentTemplate="{StaticResource TabSectionTemplate}" />
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

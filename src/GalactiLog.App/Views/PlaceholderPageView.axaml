@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             x:Class="GalactiLog.App.Views.PlaceholderPageView"
+             x:DataType="vm:PlaceholderPageViewModel">
+  <Border Margin="16"
+          Padding="24"
+          Background="{DynamicResource ColorBgSurface}"
+          BorderBrush="{DynamicResource ColorBorderDefault}"
+          BorderThickness="1"
+          CornerRadius="{DynamicResource RadiusLg}">
+    <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+      <TextBlock Text="{Binding Title}"
+                 FontWeight="SemiBold"
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+      <TextBlock Text="{Binding Message}"
+                 TextWrapping="Wrap"
+                 HorizontalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+    </StackPanel>
+  </Border>
+</UserControl>

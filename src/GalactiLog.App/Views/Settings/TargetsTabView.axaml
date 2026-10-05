@@ -1,0 +1,272 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.TargetsTabView"
+             x:Name="Root"
+             x:DataType="settings:TargetsTabViewModel">
+  <!-- design-spec 12.7's Targets tab: the candidate list (12.9), the create target form (9.7,
+       PAR-001) and the three regions Tasks 5 and 6 fill.
+
+       Phase 14B Task 3 moved this file into the Observing Ledger vocabulary (DESIGN.md section 8):
+       no card chrome, no radius of its own, a hairline Border.rule under each section heading, the type
+       tiers on headings and captions, Border.tag for the badge, and the shared button classes.
+       Every colour is a theme token (spec 14) and nothing here sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios, not point sizes. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <!-- Duplicate suggestions (spec 12.9's candidate list). -->
+      <StackPanel x:Name="CandidateSection" Spacing="10">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section"
+                       Text="Duplicate suggestions"
+                       VerticalAlignment="Center" />
+            <controls:HelpButton Topic="settings.targets.duplicates" />
+          </StackPanel>
+        </Border>
+
+        <!-- spec 12.10, verbatim including the full stop. Hidden while the first load is in
+             flight, so it does not flash before the rows arrive. -->
+        <TextBlock x:Name="NoCandidatesText"
+                   Classes="t-caption"
+                   Text="No duplicate suggestions."
+                   IsVisible="{Binding ShowNoCandidates}" />
+
+        <!-- Spec 12.9's "Confirm ... reports the counts" (Phase 7 FIXER item 17). The dialog
+             sets the sentence and closes on the next statement, so it is reported here, on the
+             surface the merge was accepted from. -->
+        <TextBlock x:Name="MergeSummaryText"
+                   Classes="t-caption"
+                   Text="{Binding MergeSummary}"
+                   IsVisible="{Binding MergeSummary, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   TextWrapping="Wrap" />
+
+        <!-- A query that threw, so the section is not a bare header. No exception text on
+             screen; the log carries that. -->
+        <TextBlock x:Name="LoadFailedText"
+                   Classes="t-caption"
+                   Text="Duplicate suggestions could not be loaded."
+                   IsVisible="{Binding LoadFailed}" />
+
+        <ItemsControl x:Name="CandidateList" ItemsSource="{Binding Candidates}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:MergeCandidateRowViewModel">
+              <Border Classes="rule" Padding="12,10">
+                <Grid ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto">
+                  <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Classes="section" Text="{Binding SourceName}" />
+                      <TextBlock Classes="t-caption num" Text="{Binding FrameCountText}" />
+                      <TextBlock Classes="t-caption" Text="to" />
+                      <TextBlock Text="{Binding SuggestedText}"
+                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                      <Border Classes="tag">
+                        <TextBlock Text="{Binding Method}" />
+                      </Border>
+                      <TextBlock Classes="num"
+                                 Text="{Binding ScoreText}"
+                                 Foreground="{DynamicResource ColorAccent}" />
+                    </StackPanel>
+                    <TextBlock Classes="t-caption"
+                               Text="{Binding ReasonText}"
+                               IsVisible="{Binding HasReason}"
+                               TextWrapping="Wrap" />
+                  </StackPanel>
+
+                  <StackPanel Grid.Row="0" Grid.Column="1"
+                              Orientation="Horizontal"
+                              Spacing="6"
+                              VerticalAlignment="Top">
+                    <Button Classes="sm"
+                            Content="Accept"
+                            Command="{Binding #Root.((settings:TargetsTabViewModel)DataContext).AcceptCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Classes="sm"
+                            Content="Dismiss"
+                            Command="{Binding #Root.((settings:TargetsTabViewModel)DataContext).DismissCommand}"
+                            CommandParameter="{Binding}" />
+                    <Button Classes="sm"
+                            Content="Edit target"
+                            Command="{Binding #Root.((settings:TargetsTabViewModel)DataContext).BeginRetargetCommand}"
+                            CommandParameter="{Binding}" />
+                  </StackPanel>
+                </Grid>
+              </Border>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- Create target (spec 9.7's PAR-001, spec 12.7). A region of this tab, not a modal
+           window and not a UserControl of its own: spec 12.7 says "opens a form on this tab", and
+           a Window would be auto-enrolled by WindowBackgroundsTest and need its own dialog
+           service for a form with seven fields. -->
+      <StackPanel x:Name="CreateTargetSection"
+                  Spacing="10"
+                  IsVisible="{Binding #Root.((settings:TargetsTabViewModel)DataContext).CreateTarget, Converter={x:Static ObjectConverters.IsNotNull}}"
+                  DataContext="{Binding CreateTarget}"
+                  x:DataType="settings:CreateTargetViewModel">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Classes="t-label section"
+                       Text="Create target"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    x:Name="CreateTargetButton"
+                    Classes="sm"
+                    Content="New target"
+                    Command="{Binding OpenCommand}" />
+          </Grid>
+        </Border>
+
+        <!-- Outside the form, so the sentence a successful create reports survives the form
+             closing (spec 12.7: "Both entry points report what they did"). -->
+        <TextBlock x:Name="CreateTargetMessageText"
+                   Classes="t-caption"
+                   Text="{Binding Message}"
+                   IsVisible="{Binding HasMessage}"
+                   TextWrapping="Wrap" />
+
+        <StackPanel x:Name="CreateTargetForm" Spacing="8" IsVisible="{Binding IsOpen}">
+          <TextBox x:Name="CreateTargetNameBox"
+                   Watermark="Primary name"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding PrimaryName, Mode=TwoWay}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <ComboBox x:Name="CreateTargetTypeBox"
+                      MinWidth="180"
+                      VerticalAlignment="Center"
+                      PlaceholderText="Object type"
+                      ItemsSource="{Binding ObjectTypeChoices}"
+                      SelectedItem="{Binding SelectedObjectType, Mode=TwoWay}" />
+            <TextBox x:Name="CreateTargetOtherBox"
+                     MinWidth="180"
+                     Watermark="Object type"
+                     IsVisible="{Binding ShowOtherBox}"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding OtherObjectType, Mode=TwoWay}" />
+          </StackPanel>
+
+          <!-- Degrees. A solar system category clears both and disables them, because a fixed
+               position is meaningless for a moving object (spec 12.7). -->
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <TextBox x:Name="CreateTargetRaBox"
+                     MinWidth="140"
+                     Watermark="RA (degrees)"
+                     IsEnabled="{Binding CoordinatesEnabled}"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding Ra, Mode=TwoWay}" />
+            <TextBox x:Name="CreateTargetDecBox"
+                     MinWidth="140"
+                     Watermark="Dec (degrees)"
+                     IsEnabled="{Binding CoordinatesEnabled}"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding Dec, Mode=TwoWay}" />
+          </StackPanel>
+
+          <TextBox x:Name="CreateTargetCatalogIdBox"
+                   Watermark="Catalog ID"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding CatalogId, Mode=TwoWay}" />
+
+          <TextBox x:Name="CreateTargetAliasBox"
+                   Watermark="Aliases, separated by commas"
+                   Background="{DynamicResource ColorBgInput}"
+                   Foreground="{DynamicResource ColorTextPrimary}"
+                   Text="{Binding AliasText, Mode=TwoWay}" />
+
+          <CheckBox x:Name="CreateTargetUserDefinedCheckBox"
+                    Content="User defined"
+                    IsChecked="{Binding UserDefined, Mode=TwoWay}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <Button x:Name="CreateTargetSubmitButton"
+                    Classes="sm"
+                    Content="Create"
+                    IsEnabled="{Binding !IsSubmitting}"
+                    Command="{Binding SubmitCommand}" />
+            <Button x:Name="CreateTargetCancelButton"
+                    Classes="sm"
+                    Content="Cancel"
+                    Command="{Binding CancelCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </StackPanel>
+
+      <!-- The edit-target dropdown, shared by every row because one row is re-targeted at a
+           time. The same fuzzy search the dashboard uses, rendered with the dashboard's own
+           SearchResultViewModel: one ranking, one threshold (spec 12.9). -->
+      <StackPanel x:Name="RetargetPanel"
+                  Spacing="10"
+                  IsVisible="{Binding RetargetingRow, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Grid.Column="0"
+                       Classes="t-label section"
+                       Text="Choose a different target"
+                       VerticalAlignment="Center" />
+            <Button Grid.Column="1"
+                    x:Name="CancelRetargetButton"
+                    Classes="sm"
+                    Content="Cancel"
+                    Command="{Binding CancelRetargetCommand}" />
+          </Grid>
+        </Border>
+        <TextBox x:Name="RetargetSearchBox"
+                 Watermark="Search targets"
+                 Background="{DynamicResource ColorBgInput}"
+                 Foreground="{DynamicResource ColorTextPrimary}"
+                 Text="{Binding RetargetSearchText, Mode=TwoWay}" />
+        <ItemsControl x:Name="RetargetResultList" ItemsSource="{Binding RetargetResults}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="dash:SearchResultViewModel">
+              <!-- An unresolved OBJECT result has no target id to point at, so the command's
+                   CanExecute disables it here rather than a second rule in this file. -->
+              <Button Classes="quiet"
+                      HorizontalAlignment="Stretch"
+                      HorizontalContentAlignment="Left"
+                      Command="{Binding #Root.((settings:TargetsTabViewModel)DataContext).ChooseRetargetCommand}"
+                      CommandParameter="{Binding}">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding DisplayName}"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+                  <TextBlock Classes="t-caption" Text="{Binding CategoryText}" />
+                  <TextBlock Classes="t-caption"
+                             Text="{Binding MatchedText}"
+                             IsVisible="{Binding HasMatchedText}" />
+                  <TextBlock Classes="t-caption num"
+                             Text="{Binding FrameCountText}"
+                             IsVisible="{Binding HasFrameCount}" />
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- Merge history: Phase 7 Task 5. Filled. Resolved through App.axaml's DataTemplate for
+           MergeHistoryViewModel, the same one Target detail's region uses, because spec 12.9's
+           list renders on both surfaces from one view-model. -->
+      <ContentControl x:Name="MergeHistoryRegion" Content="{Binding MergeHistory}" />
+
+      <!-- Unresolved names: Phase 7 Task 6. Filled. Resolved through App.axaml's DataTemplate for
+           UnresolvedNamesViewModel, the same one Phase 10's Diagnostics page will use for spec
+           12.8's Unresolved group. -->
+      <ContentControl x:Name="UnresolvedNamesRegion" Content="{Binding UnresolvedNames}" />
+
+      <!-- Rename history: Phase 7 Task 6. Filled, through App.axaml's DataTemplate for
+           RenameHistoryViewModel. -->
+      <ContentControl x:Name="RenameHistoryRegion" Content="{Binding RenameHistory}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             x:Class="GalactiLog.App.Controls.RawHeaderPanel"
+             x:DataType="detail:RawHeaderPanelViewModel">
+  <!-- design-spec 12.4's raw header panel (spec 4.3 puts it in Controls). Built by a frame row the
+       first time it is expanded, keyed on that frame's image id alone; Phase 8's preview modal
+       reuses this control unchanged, keyed on the previewed frame's id.
+
+       Every raw_headers key, sorted, with a filter box that matches on the key and on every line.
+       COMMENT and HISTORY render as multi-line blocks because they are stored as arrays (spec
+       6.1.2); the switch between a single-line TextBlock and the multi-line ItemsControl is two
+       IsVisible-bound presenters keyed on IsMultiLine, not a converter.
+
+       The Derived metrics section pairs each stored metric with its provenance string (spec 7.3),
+       and the two FWHM rows at its end are spec 7.1.1's rule made visible: distinct labels, a
+       separating border, and an explanation that the header value's unit is undeclared and not
+       comparable with the arcsecond value above.
+
+       Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios, not point sizes, and
+       FontSizeTokenTest fails the build on binding one to FontSize. Every colour is a theme token;
+       this panel renders no user-data colour. Header keys and values render in Cascadia Code with
+       a Consolas, monospace fallback (spec 14.4). -->
+  <UserControl.Styles>
+    <!-- Spec 14.4: section headers are label size, medium weight, uppercase, letter-spaced,
+         ColorTextTertiary. The "uppercase" half is the literal text below rather than a text
+         transform.
+
+         P12 contradiction 10 was ruled in this panel's favour: spec 14.4's section-header rule
+         stays application wide and this panel keeps its uppercase tracked form. The Target detail
+         page's own section labels (Nights, Frames) are sentence case at weight 600 by the comp,
+         which is Theme/Controls.axaml's TextBlock.section and a different role. -->
+    <Style Selector="TextBlock.section-header">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+      <Setter Property="FontWeight" Value="Medium" />
+      <Setter Property="LetterSpacing" Value="1" />
+    </Style>
+    <!-- P12 R8's mono face, through the one application resource rather than a second family list
+         in this file: the fallbacks live with the family in App.axaml and a panel that named its
+         own list would drift from them. -->
+    <Style Selector="TextBlock.mono">
+      <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
+      <Setter Property="TextWrapping" Value="NoWrap" />
+    </Style>
+    <Style Selector="TextBlock.disclosure">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.failure">
+      <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+  </UserControl.Styles>
+
+  <!-- P12 R6: the panel stays inline under its frame row and loses its outer bordered Border. A
+       panel indented under the row it belongs to needs no card around it, and the direction
+       refuses both the card and a coloured left edge in its place. The Padding became a Margin so
+       the indentation survives the Border's removal. -->
+  <StackPanel HorizontalAlignment="Left"
+              MaxWidth="720"
+              Margin="10">
+    <StackPanel Spacing="8">
+      <TextBox x:Name="FilterBox"
+               Text="{Binding Filter, Mode=TwoWay}"
+               Watermark="Filter headers"
+               Background="{DynamicResource ColorBgInput}" />
+
+      <!-- Review finding 2: a failed read, a pruned frame and a read still in flight each get
+           their own line, so none of the three renders as the generic "no headers" sentence. -->
+      <TextBlock x:Name="LoadingIndicator"
+                 Classes="disclosure"
+                 Text="Loading headers..."
+                 IsVisible="{Binding IsLoading}" />
+      <TextBlock x:Name="FailureLine"
+                 Classes="failure"
+                 Text="This frame's headers could not be loaded. See the log for details."
+                 IsVisible="{Binding LastFailure, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <TextBlock x:Name="MissingLine"
+                 Classes="disclosure"
+                 Text="This frame is no longer in the library. It may have been removed by a rescan."
+                 IsVisible="{Binding IsMissing}" />
+
+      <TextBlock x:Name="EmptyState"
+                 Classes="disclosure"
+                 Text="{Binding EmptyStateText}"
+                 IsVisible="{Binding HasEmptyState}" />
+
+      <ItemsControl x:Name="HeaderList" ItemsSource="{Binding FilteredHeaders}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="detail:HeaderEntryViewModel">
+            <Grid ColumnDefinitions="200,*" Margin="0,0,0,3">
+              <TextBlock Grid.Column="0"
+                         Classes="mono"
+                         Text="{Binding Key}"
+                         TextTrimming="CharacterEllipsis"
+                         Foreground="{DynamicResource ColorTextSecondary}"
+                         VerticalAlignment="Top" />
+
+              <TextBlock Grid.Column="1"
+                         Classes="mono"
+                         Text="{Binding SingleLine}"
+                         Foreground="{DynamicResource ColorTextPrimary}"
+                         IsVisible="{Binding !IsMultiLine}" />
+
+              <ScrollViewer Grid.Column="1"
+                            IsVisible="{Binding IsMultiLine}"
+                            HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Disabled">
+                <ItemsControl ItemsSource="{Binding Lines}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="sys:String">
+                      <TextBlock Classes="mono"
+                                 Text="{Binding}"
+                                 Foreground="{DynamicResource ColorTextPrimary}" />
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </ScrollViewer>
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <TextBlock Classes="section-header"
+                 Text="DERIVED METRICS"
+                 Margin="0,6,0,0"
+                 IsVisible="{Binding HasDerivedMetrics}" />
+      <ItemsControl x:Name="DerivedMetricsList" ItemsSource="{Binding DerivedMetrics}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="detail:DerivedMetricViewModel">
+            <StackPanel Margin="0,0,0,4">
+              <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{Binding Label}" Foreground="{DynamicResource ColorTextSecondary}" />
+                <TextBlock Text="{Binding ValueText}"
+                           Foreground="{DynamicResource ColorTextPrimary}"
+                           FontFeatures="tnum=1" />
+              </StackPanel>
+              <TextBlock Classes="disclosure" Text="{Binding Provenance}" IsVisible="{Binding HasProvenance}" />
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <!-- Spec 7.1.1's two FWHM rows: distinct labels, a separating border, and the disclosure
+           that the header value's unit is undeclared. A shared row or a shared label is the
+           defect this control exists to avoid. -->
+      <Border BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="0,1,0,0"
+              Padding="0,6,0,0"
+              Margin="0,4,0,0"
+              IsVisible="{Binding HasFwhmSection}">
+        <StackPanel Spacing="4">
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasHeaderFwhm}">
+            <TextBlock Text="{Binding HeaderFwhmLabel}" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Text="{Binding HeaderFwhmText}"
+                       Foreground="{DynamicResource ColorTextPrimary}"
+                       FontFeatures="tnum=1" />
+          </StackPanel>
+          <TextBlock Classes="disclosure"
+                     IsVisible="{Binding HasHeaderFwhm}"
+                     Text="From the file header. Unit is not declared by the FITS standard and is not comparable with the arcsecond value above." />
+          <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasFwhmArcsec}">
+            <TextBlock Text="{Binding FwhmArcsecLabel}" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Text="{Binding FwhmArcsecText}"
+                       Foreground="{DynamicResource ColorTextPrimary}"
+                       FontFeatures="tnum=1" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

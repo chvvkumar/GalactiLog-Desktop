@@ -1,0 +1,35 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.idea/
+*.db
+*.db-wal
+*.db-shm
+TestResults/
+artifacts/
+Releases/
+/publish/
+*.log
+
+# Only application files belong in this repository. Process notes, agent memory,
+# AI tooling state and repository packs live in the GalactiLog-Windows repository.
+docs/superpowers/
+docs/reference/
+.claude/
+.claude.json
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+MEMORY.md
+memory/
+.superpowers/
+.planning/
+.specstory/
+.cursor/
+.aider*
+repomix-output.*
+repomix.config.json
+.repomixignore
+*.repomix.xml

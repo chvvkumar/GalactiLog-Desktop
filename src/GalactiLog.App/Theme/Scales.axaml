@@ -1,0 +1,17 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Theme-independent scales (spec 14.4). Not per-theme; must not be redeclared per theme. -->
+  <CornerRadius x:Key="RadiusSm">6</CornerRadius>
+  <CornerRadius x:Key="RadiusMd">8</CornerRadius>
+  <CornerRadius x:Key="RadiusLg">12</CornerRadius>
+
+  <BoxShadows x:Key="ShadowSm">0 1 2 #4D000000</BoxShadows>
+  <BoxShadows x:Key="ShadowMd">0 4 12 #66000000</BoxShadows>
+  <BoxShadows x:Key="ShadowLg">0 8 24 #80000000</BoxShadows>
+
+  <!-- Ratios to root font size (spec 14.4), not pixel values. -->
+  <x:Double x:Key="FontSizeMicro">0.500</x:Double>
+  <x:Double x:Key="FontSizeTiny">0.643</x:Double>
+  <x:Double x:Key="FontSizeCaption">0.714</x:Double>
+  <x:Double x:Key="FontSizeLabel">0.786</x:Double>
+</ResourceDictionary>

@@ -1,0 +1,360 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:activity="using:GalactiLog.App.ViewModels.Activity"
+             x:Class="GalactiLog.App.Views.ActivityView"
+             x:Name="Root"
+             x:DataType="activity:ActivityViewModel">
+  <!-- design-spec 12.6's Activity page: a reverse-chronological, keyset-paged list of top-level
+       activity_events with severity, category and free-text filters, refresh and prune now.
+
+       Every colour is a DynamicResource theme token and nothing sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios rather than point sizes (spec 14.4,
+       FontSizeTokenTest).
+
+       The rows virtualise. A 90 day retention window on an active library is tens of thousands of
+       events and a page holds 50 at a time, but "Load older" appends without bound, so the list
+       grows for as long as the user keeps pressing it. A VirtualizingStackPanel inside the bounded
+       ScrollViewer below is the same shape Phase 6's frame table settled on (TRACKING section 6
+       item 12): the same virtualising panel a ListBox would use, keeping the row template and the
+       two expanders exactly as they are and adding no selection model the list does not want. The
+       panel has to be the ScrollViewer's own content for logical scrolling to reach it, which is
+       why that scroller wraps the ItemsControl directly.
+
+       The frame table's horizontal-scrollbar ceiling does not apply here: this list has one row of
+       fixed columns rather than 32 toggleable ones, so its vertical scrollbar is never pushed off
+       screen. The sub-event rail carries a ceiling of its own; see the comment on that rail below
+       and HANDOFF section 7. -->
+  <UserControl.Resources>
+    <!-- The row chrome, in one place. A sub-event renders through this same template inside its
+         parent's rail, so a child row and a top-level row cannot drift apart (design-lessons
+         rule 1). Only the top-level template adds the sub-task rail around it. -->
+    <DataTemplate x:Key="ActivityRowBody" DataType="activity:ActivityRowViewModel">
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="0,3">
+        <!-- Spec 12.6, PAR-017: the seen marker's "new" badge sits inside this cell rather than in
+             a column of its own, so no Grid.Column index below shifts (section 7.3). -->
+        <Panel Grid.Column="0" Width="92">
+          <TextBlock Text="{Binding DateText}" Classes="t-caption" />
+          <Border Classes="tag"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Top"
+                  IsVisible="{Binding IsUnseen}">
+            <TextBlock Text="new" />
+          </Border>
+        </Panel>
+        <TextBlock Grid.Column="1"
+                   Text="{Binding TimeText}"
+                   Width="68"
+                   Classes="t-caption" />
+        <TextBlock Grid.Column="2"
+                   Text="{Binding SeverityGlyph}"
+                   ToolTip.Tip="{Binding SeverityTitle}"
+                   Width="18"
+                   TextAlignment="Center"
+                   Foreground="{Binding SeverityBrush}" />
+        <TextBlock Grid.Column="3"
+                   Text="{Binding CategoryLabel}"
+                   Width="60"
+                   Classes="t-caption" />
+        <TextBlock Grid.Column="4"
+                   Text="{Binding Message}"
+                   Margin="4,0"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <TextBlock Grid.Column="5"
+                   Text="{Binding DurationText}"
+                   Width="68"
+                   TextAlignment="Right"
+                   Classes="t-caption num" />
+        <!-- The details chevron, shown only when the web's hasDetails() gate says the payload adds
+             something the message does not already carry. -->
+        <Button Grid.Column="6"
+                Classes="chevron"
+                IsVisible="{Binding IsExpandable}"
+                Command="{Binding ToggleDetailsCommand}"
+                ToolTip.Tip="Details">
+          <TextBlock Text="{Binding DetailsToggleGlyph}" />
+        </Button>
+      </Grid>
+    </DataTemplate>
+
+    <!-- Spec 12.6: "Details render as a key-value table, falling back to formatted JSON." -->
+    <DataTemplate x:Key="ActivityDetailsBody" DataType="activity:ActivityDetailsViewModel">
+      <StackPanel>
+        <ItemsControl ItemsSource="{Binding Rows}" IsVisible="{Binding ShowTable}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="activity:ActivityDetailRow">
+              <Grid ColumnDefinitions="200,*" Margin="0,1">
+                <TextBlock Grid.Column="0" Text="{Binding Key}" Classes="t-caption" />
+                <TextBlock Grid.Column="1"
+                           Text="{Binding Value}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ScrollViewer MaxHeight="220"
+                      IsVisible="{Binding ShowJson}"
+                      HorizontalScrollBarVisibility="Auto"
+                      VerticalScrollBarVisibility="Auto">
+          <TextBlock Text="{Binding Json}"
+                     FontFamily="Consolas,Cascadia Mono,Courier New,monospace"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </ScrollViewer>
+      </StackPanel>
+    </DataTemplate>
+  </UserControl.Resources>
+
+  <!-- Task 7's Observing Ledger vocabulary move: .meta, .note, .section-label and .numeric are
+       folded into the shared t-caption, t-label section and num classes from Theme/Controls.axaml
+       (DESIGN.md section 8); this file keeps no local copy of the type scale. The one thing .note
+       set that t-caption does not is TextWrapping, which the five wrapping runs below now set
+       themselves (Phase 14B fixer, fixer list item 51).
+
+       Button.chevron and Button.pill both live in Theme/Controls.axaml, shared with the shell,
+       the dashboard and the two Settings tabs. This file declared the pill shape first and the
+       two Settings tabs re-declared half of it; P12 Task 5 lifted the one definition out of all
+       three (design lesson 1) and ControlStyleScanTest now fails the build on a view that
+       declares its own button or badge style.
+
+       Phase 14B fixer, fixer list item 14: the empty UserControl.Styles element this comment used
+       to sit inside is gone. An empty style host beside that rule is scaffolding a later editor
+       fills. -->
+
+  <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+      <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <TextBlock Text="Activity" Classes="t-label section" VerticalAlignment="Center" />
+        <controls:HelpButton Topic="page.activity" />
+        <TextBlock x:Name="TotalLine"
+                   Text="{Binding TotalText}"
+                   Classes="t-caption num"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+      <!-- Spec 12.6's two actions. There is no poll and no "clear all": the only automatic refresh
+           is ScanStatusService.ScanFinished (questions.md Q19), and clearing the whole log would
+           delete the record of the scan that is running. -->
+      <Button x:Name="RefreshButton"
+              Grid.Column="1"
+              Content="Refresh"
+              Padding="8,3"
+              Margin="0,0,6,0"
+              Command="{Binding RefreshCommand}" />
+      <Button x:Name="PruneNowButton"
+              Grid.Column="2"
+              Content="Prune now"
+              Padding="8,3"
+              Command="{Binding PruneNowCommand}"
+              ToolTip.Tip="Applies the activity retention window immediately" />
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
+      <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="4">
+        <ItemsControl x:Name="SeverityPills" ItemsSource="{Binding SeverityOptions}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="activity:ActivityFilterOptionViewModel">
+              <Button Classes="pill"
+                      Classes.selected="{Binding IsSelected}"
+                      Content="{Binding Label}"
+                      Command="{Binding #Root.((activity:ActivityViewModel)DataContext).SelectSeverityCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+        <ItemsControl x:Name="CategoryPills" ItemsSource="{Binding CategoryOptions}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="activity:ActivityFilterOptionViewModel">
+              <Button Classes="pill"
+                      Classes.selected="{Binding IsSelected}"
+                      Content="{Binding Label}"
+                      Command="{Binding #Root.((activity:ActivityViewModel)DataContext).SelectCategoryCommand}"
+                      CommandParameter="{Binding}" />
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+      <TextBox x:Name="SearchBox"
+               Grid.Column="1"
+               Margin="12,0,0,0"
+               VerticalAlignment="Top"
+               Watermark="Search messages"
+               Text="{Binding SearchText, Mode=TwoWay}" />
+    </Grid>
+
+    <TextBlock x:Name="PruneSummaryLine"
+               Grid.Row="2"
+               Text="{Binding PruneSummary}"
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               Margin="0,0,0,6"
+               IsVisible="{Binding PruneSummary, Converter={x:Static ObjectConverters.IsNotNull}}" />
+
+    <!-- Three states, never two at once: the load, the failure line and the empty state are
+         separate flags and ShowList is derived from all three (spec 12.10). The loading line is
+         gated on ShowLoadingLine, not on IsLoading: every reload sets IsLoading, and gating on it
+         collapsed the whole feed on Refresh, on Load older and on every post-scan reload (review
+         finding 1). -->
+    <TextBlock x:Name="LoadingLine"
+               Grid.Row="3"
+               Text="Loading activity..."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               VerticalAlignment="Top"
+               IsVisible="{Binding ShowLoadingLine}" />
+    <TextBlock x:Name="FailureLine"
+               Grid.Row="3"
+               Text="The activity log could not be loaded."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               VerticalAlignment="Top"
+               IsVisible="{Binding LoadFailed}" />
+    <TextBlock x:Name="EmptyState"
+               Grid.Row="3"
+               Text="No activity recorded."
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               VerticalAlignment="Top"
+               IsVisible="{Binding IsEmpty}" />
+
+    <ScrollViewer x:Name="ActivityRowsScroller"
+                  Grid.Row="3"
+                  IsVisible="{Binding ShowList}"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Auto">
+      <ItemsControl x:Name="ActivityRows" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="activity:ActivityRowViewModel">
+            <StackPanel>
+              <Border BorderBrush="{DynamicResource ColorBorderDefault}"
+                      BorderThickness="0,0,0,1">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                  <ContentControl Grid.Column="0"
+                                  Content="{Binding}"
+                                  ContentTemplate="{StaticResource ActivityRowBody}" />
+                  <!-- FIXER item 4 and review finding 11. A scan's terminal event carries
+                       parent_id, so a failed or cancelled run is a child of its scan_started row
+                       and so is the only duration_ms this application writes. The worst child
+                       severity and the run's duration are surfaced here, so both are visible
+                       without expanding the scan. -->
+                  <TextBlock Grid.Column="1"
+                             Text="{Binding ChildDurationText}"
+                             IsVisible="{Binding HasChildDuration}"
+                             ToolTip.Tip="How long the run took"
+                             VerticalAlignment="Center"
+                             Margin="2,0"
+                             Classes="t-caption num" />
+                  <TextBlock Grid.Column="2"
+                             Text="{Binding ChildAlertGlyph}"
+                             ToolTip.Tip="{Binding ChildAlertTitle}"
+                             IsVisible="{Binding HasChildAlert}"
+                             VerticalAlignment="Center"
+                             Margin="2,0"
+                             Foreground="{Binding ChildAlertBrush}" />
+                  <Button Grid.Column="3"
+                          Classes="chevron"
+                          IsVisible="{Binding HasChildren}"
+                          Command="{Binding ToggleChildrenCommand}"
+                          ToolTip.Tip="{Binding SubTaskToggleTitle}"
+                          VerticalAlignment="Center">
+                    <TextBlock Text="{Binding SubTaskLabel}" />
+                  </Button>
+                </Grid>
+              </Border>
+
+              <!-- Details is null until the row is first expanded, so a realized row parses no
+                   JSON at all until somebody asks. A binding evaluates its source whatever
+                   IsVisible says, which is why laziness lives in the view-model and not here
+                   (review finding 8). -->
+              <ContentControl Content="{Binding Details}"
+                              ContentTemplate="{StaticResource ActivityDetailsBody}"
+                              Margin="24,4,0,8"
+                              IsVisible="{Binding IsDetailsExpanded}" />
+
+              <!-- The sub-events, in an indented rail. Collapsed by default, like the web's
+                   ParentHistoryRow, and their view-models are built on the first expand.
+
+                   Bounded and virtualized, because the child count is unbounded by construction:
+                   ScanWriter parents one file_rejected per rejected file and one target_created per
+                   new target to the run's scan_started row, so a first scan of a large library puts
+                   thousands of rows behind one toggle. The VirtualizingStackPanel needs a viewport
+                   to virtualize against, which is what the bounded ScrollViewer gives it, the same
+                   shape FrameTableView uses.
+
+                   ponytail: the batched child read still returns every child of every row on the
+                   page, so the rows exist in memory even when no view-model is built for them.
+                   Ceiling accepted and recorded in HANDOFF section 7; the upgrade path is a
+                   separate paged child read keyed on parent_id, which is the same keyset contract
+                   the page already uses. -->
+              <Border Margin="24,0,0,6"
+                      Padding="8,0,0,0"
+                      BorderBrush="{DynamicResource ColorBorderDefault}"
+                      BorderThickness="1,0,0,0"
+                      IsVisible="{Binding AreChildrenExpanded}">
+                <ScrollViewer MaxHeight="320"
+                              HorizontalScrollBarVisibility="Disabled"
+                              VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="ChildRows" ItemsSource="{Binding Children}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="activity:ActivityRowViewModel">
+                      <StackPanel>
+                        <ContentControl Content="{Binding}"
+                                        ContentTemplate="{StaticResource ActivityRowBody}" />
+                        <ContentControl Content="{Binding Details}"
+                                        ContentTemplate="{StaticResource ActivityDetailsBody}"
+                                        Margin="24,2,0,6"
+                                        IsVisible="{Binding IsDetailsExpanded}" />
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                </ScrollViewer>
+              </Border>
+            </StackPanel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
+
+    <!-- Shown only while the query reported a next cursor, which is the web's rule for its "Load
+         older" button. A failed append is reported here rather than in place of the list, so the
+         page the reader already has stays on screen (review finding 1). -->
+    <StackPanel Grid.Row="4"
+                Margin="0,8,0,0"
+                Orientation="Horizontal"
+                HorizontalAlignment="Center"
+                Spacing="8">
+      <Button x:Name="LoadOlderButton"
+              Padding="10,3"
+              Content="Load older"
+              IsVisible="{Binding CanLoadOlder}"
+              Command="{Binding LoadOlderCommand}" />
+      <TextBlock x:Name="AppendFailureLine"
+                 Text="Older activity could not be loaded."
+                 Classes="t-caption"
+                 TextWrapping="Wrap"
+                 VerticalAlignment="Center"
+                 IsVisible="{Binding AppendFailed}" />
+    </StackPanel>
+  </Grid>
+</UserControl>

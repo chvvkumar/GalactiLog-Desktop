@@ -1,0 +1,181 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.LocationTabView"
+             x:Name="Root"
+             x:DataType="settings:LocationTabViewModel">
+  <!-- design-spec 12.7's Location tab: observer latitude, longitude, name and IANA timezone, the
+       imaging night grouping checkbox, the display timezone and the 24 hour clock checkbox.
+
+       Every field saves on commit with no Save button, matching the web's observer block. Every
+       colour is a theme token (spec 14) and nothing here sets FontSize from a FontSize* key,
+       because those keys are ratios rather than point sizes. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The location settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the location settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- Observer location (spec 8.3, 8.4). -->
+      <Border x:Name="ObserverSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Observer location"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.location.observer" />
+          </StackPanel>
+          <TextBlock Text="Coordinates group frames into imaging nights and drive darkness calculations."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Name" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBox x:Name="ObserverNameBox"
+                     Watermark="Backyard"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding ObserverName, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Latitude" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBox x:Name="LatitudeBox"
+                     Watermark="-90 to 90"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding LatitudeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock x:Name="LatitudeErrorText"
+                       Text="{Binding LatitudeError}"
+                       IsVisible="{Binding HasLatitudeError}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Longitude" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBox x:Name="LongitudeBox"
+                     Watermark="-180 to 180"
+                     Background="{DynamicResource ColorBgInput}"
+                     Foreground="{DynamicResource ColorTextPrimary}"
+                     Text="{Binding LongitudeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <TextBlock x:Name="LongitudeErrorText"
+                       Text="{Binding LongitudeError}"
+                       IsVisible="{Binding HasLongitudeError}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+            <!-- Spec 12.1 step 3 and spec 8.3, stated where the field is cleared. -->
+            <TextBlock x:Name="BlankLongitudeNote"
+                       Text="{x:Static settings:LocationTabViewModel.BlankLongitudeNote}"
+                       IsVisible="{Binding LongitudeIsBlank}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorWarning}" />
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Observer timezone" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Text="Used to derive which imaging night a frame belongs to. Not the same as the display timezone below."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+            <!-- Fixed, as EquipmentTabView's TimezoneBox is: the section sizes to content, so a
+                 content-sized picker changed width with every selected label. -->
+            <ComboBox x:Name="ObserverTimezoneBox"
+                      Width="320"
+                      HorizontalAlignment="Left"
+                      ItemsSource="{Binding ObserverTimezones}"
+                      SelectedItem="{Binding SelectedObserverTimezone, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:TimezoneOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+            <TextBlock x:Name="TimezoneErrorText"
+                       Text="{Binding TimezoneError}"
+                       IsVisible="{Binding HasTimezoneError}"
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorError}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <!-- Imaging night grouping, the display timezone and the clock (spec 12.7 moves all three
+           here from the web's Display tab). -->
+      <Border x:Name="GroupingSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Grouping and clock"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.location.grouping" />
+          </StackPanel>
+
+          <CheckBox x:Name="UseImagingNightBox"
+                    Content="Group frames by imaging night"
+                    IsChecked="{Binding UseImagingNight, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <!-- The web's toast claims sessions are recomputed. Spec 8.2 writes session_date at
+               ingest, so the port says what actually happens. -->
+          <TextBlock x:Name="ImagingNightNote"
+                     Text="{x:Static settings:LocationTabViewModel.ImagingNightNote}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Display timezone" Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Text="Formatting only. It never changes which session a frame belongs to."
+                       TextWrapping="Wrap"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+            <ComboBox x:Name="DisplayTimezoneBox"
+                      Width="320"
+                      HorizontalAlignment="Left"
+                      ItemsSource="{Binding DisplayTimezones}"
+                      SelectedItem="{Binding SelectedDisplayTimezone, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="settings:TimezoneOption">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <CheckBox x:Name="Use24HTimeBox"
+                    Content="Use a 24 hour clock"
+                    IsChecked="{Binding Use24HTime, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorMessage}"
+                 IsVisible="{Binding HasErrorMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+      <TextBlock x:Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorSuccess}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

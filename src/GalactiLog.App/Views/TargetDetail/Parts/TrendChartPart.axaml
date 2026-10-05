@@ -1,0 +1,24 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.TrendChartPart"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+  <Grid RowDefinitions="Auto,*">
+    <controls:HelpButton x:Name="TrendHelp" Topic="target.trend" HorizontalAlignment="Right" />
+    <!-- The chart view is marked "fills" so its plot takes what the region has; the region clips
+         so a short host cuts the chart rather than overflowing. -->
+    <ContentControl x:Name="TargetChartRegion"
+                    Grid.Row="1"
+                    Content="{Binding TargetChart}"
+                    ClipToBounds="True">
+      <ContentControl.ContentTemplate>
+        <DataTemplate DataType="detail:TargetChartViewModel">
+          <controls:MetricChartView Classes="fills" IsLaned="{Binding $parent[parts:TrendChartPart].IsLaned}" />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+  </Grid>
+</UserControl>

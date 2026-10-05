@@ -1,0 +1,201 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.ExternalToolsTabView"
+             x:Name="Root"
+             x:DataType="settings:ExternalToolsTabViewModel">
+  <!-- Spec amendment 4c's External Tools settings tab: four blocks, CustomColumnsTabView.axaml's
+       shape. This file composes no sentence of its own (design lesson 2). -->
+  <ScrollViewer>
+    <StackPanel Spacing="16" Margin="16">
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The external tools settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the external tools settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- AstroBin filter ids (ruling B2, B11). -->
+      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section" Text="AstroBin filter ids" VerticalAlignment="Center" />
+            <controls:HelpButton Topic="settings.external-tools.astrobin-filters" />
+          </StackPanel>
+        </Border>
+
+        <ItemsControl x:Name="FilterIdList" ItemsSource="{Binding FilterIdRows}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:FilterIdRowViewModel">
+              <Grid ColumnDefinitions="200,140" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                <TextBlock Grid.Row="0" Grid.Column="0"
+                           Text="{Binding FilterName}"
+                           VerticalAlignment="Center"
+                           TextTrimming="CharacterEllipsis" />
+                <TextBox Grid.Row="0" Grid.Column="1"
+                         Watermark="AstroBin id"
+                         KeyDown="OnCommitFieldKeyDown"
+                         Text="{Binding IdText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                           Text="{Binding Error}"
+                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorError}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+
+      <!-- Bortle class. -->
+      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section" Text="Bortle class" VerticalAlignment="Center" />
+            <controls:HelpButton Topic="settings.external-tools.bortle" />
+          </StackPanel>
+        </Border>
+
+        <StackPanel Spacing="4">
+          <TextBox x:Name="BortleBox"
+                   Watermark="1 to 9"
+                   MaxWidth="140"
+                   HorizontalAlignment="Left"
+                   KeyDown="OnCommitFieldKeyDown"
+                   Text="{Binding BortleText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+          <TextBlock x:Name="BortleErrorText"
+                     Text="{Binding BortleError}"
+                     IsVisible="{Binding BortleError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+        </StackPanel>
+      </StackPanel>
+
+      <!-- NINA instances. -->
+      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section" Text="NINA instances" VerticalAlignment="Center" />
+            <controls:HelpButton Topic="settings.external-tools.nina" />
+          </StackPanel>
+        </Border>
+
+        <ItemsControl x:Name="NinaInstanceList" ItemsSource="{Binding NinaInstances}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:InstanceRowViewModel">
+              <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                <TextBox Grid.Row="0" Grid.Column="0"
+                         Watermark="Name"
+                         Margin="0,0,6,0"
+                         KeyDown="OnCommitFieldKeyDown"
+                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBox Grid.Row="0" Grid.Column="1"
+                         Watermark="http://host:1888"
+                         Margin="0,0,6,0"
+                         KeyDown="OnCommitFieldKeyDown"
+                         Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <CheckBox Grid.Row="0" Grid.Column="2"
+                          Content="On"
+                          Margin="0,0,6,0"
+                          IsChecked="{Binding Enabled, Mode=TwoWay}" />
+                <Button Grid.Row="0" Grid.Column="3"
+                        Classes="quiet"
+                        Content="Remove"
+                        ToolTip.Tip="Remove this instance"
+                        Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
+                        CommandParameter="{Binding}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                           Text="Not offered on the target page until it has a name and a URL."
+                           IsVisible="{Binding ShowNotOfferedCaption}"
+                           TextWrapping="Wrap"
+                           Classes="t-caption" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                           Text="{Binding UrlError}"
+                           IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorError}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button x:Name="AddNinaInstanceButton"
+                Classes="sm"
+                Content="Add instance"
+                HorizontalAlignment="Left"
+                Command="{Binding AddNinaInstanceCommand}" />
+      </StackPanel>
+
+      <!-- Stellarium instances. -->
+      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
+        <Border Classes="rule" Padding="0,0,0,6">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Classes="t-label section" Text="Stellarium instances" VerticalAlignment="Center" />
+            <controls:HelpButton Topic="settings.external-tools.stellarium" />
+          </StackPanel>
+        </Border>
+
+        <ItemsControl x:Name="StellariumInstanceList" ItemsSource="{Binding StellariumInstances}">
+          <ItemsControl.ItemTemplate>
+            <DataTemplate DataType="settings:InstanceRowViewModel">
+              <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                <TextBox Grid.Row="0" Grid.Column="0"
+                         Watermark="Name"
+                         Margin="0,0,6,0"
+                         KeyDown="OnCommitFieldKeyDown"
+                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <TextBox Grid.Row="0" Grid.Column="1"
+                         Watermark="http://host:8090"
+                         Margin="0,0,6,0"
+                         KeyDown="OnCommitFieldKeyDown"
+                         Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                <CheckBox Grid.Row="0" Grid.Column="2"
+                          Content="On"
+                          Margin="0,0,6,0"
+                          IsChecked="{Binding Enabled, Mode=TwoWay}" />
+                <Button Grid.Row="0" Grid.Column="3"
+                        Classes="quiet"
+                        Content="Remove"
+                        ToolTip.Tip="Remove this instance"
+                        Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
+                        CommandParameter="{Binding}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                           Text="Not offered on the target page until it has a name and a URL."
+                           IsVisible="{Binding ShowNotOfferedCaption}"
+                           TextWrapping="Wrap"
+                           Classes="t-caption" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                           Text="{Binding UrlError}"
+                           IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorError}" />
+              </Grid>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <Button x:Name="AddStellariumInstanceButton"
+                Classes="sm"
+                Content="Add instance"
+                HorizontalAlignment="Left"
+                Command="{Binding AddStellariumInstanceCommand}" />
+      </StackPanel>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorMessage}"
+                 IsVisible="{Binding HasErrorMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+      <TextBlock x:Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorSuccess}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

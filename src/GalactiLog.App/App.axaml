@@ -1,0 +1,213 @@
+<Application xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:stats="using:GalactiLog.App.ViewModels.Stats"
+             xmlns:activity="using:GalactiLog.App.ViewModels.Activity"
+             xmlns:diagnostics="using:GalactiLog.App.ViewModels.Diagnostics"
+             xmlns:merge="using:GalactiLog.App.ViewModels.Merge"
+             xmlns:mergeviews="using:GalactiLog.App.Views.Merge"
+             xmlns:views="using:GalactiLog.App.Views"
+             xmlns:detailviews="using:GalactiLog.App.Views.TargetDetail"
+             xmlns:wbpp="using:GalactiLog.App.ViewModels.TargetDetail.Wbpp"
+             xmlns:wbppviews="using:GalactiLog.App.Views.TargetDetail.Wbpp"
+             xmlns:settingsviews="using:GalactiLog.App.Views.Settings"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:analysisviews="using:GalactiLog.App.Views.Analysis"
+             x:Class="GalactiLog.App.App"
+             RequestedThemeVariant="Dark">
+  <!-- Dark is the default and the only shipped variant (TRACKING hard rule 4). Pinned here so
+       FluentTheme's built-in chrome does not follow the OS into light mode against the dark
+       token dictionary. ThemeManager still owns which theme dictionary is merged, and since P12 R7
+       three themes ship and the Settings picker swaps between them at runtime; the variant stays
+       pinned here through every swap because all three dictionaries are dark. -->
+  <!-- Resources are declared before Styles, and the order is load bearing. Theme/Controls.axaml
+       resolves FontSans, FontMono and two of Scales.axaml's ratio keys through StaticResource at
+       load time, and a StyleInclude parsed before this dictionary is populated would find
+       nothing. -->
+  <Application.Resources>
+    <ResourceDictionary>
+      <!-- Spec 14.4's typefaces, per P12 R8. Atkinson Hyperlegible Next and Atkinson Hyperlegible
+           Mono, SIL Open Font License 1.1, embedded under Assets/Fonts with their licence. The
+           assembly name is GalactiLog (csproj AssemblyName), not GalactiLog.App. The fragment
+           after the # is the family name in the font's own name table, which is what Avalonia
+           matches, and the names after the comma are the system fallbacks R8 names.
+
+           Applying FontSans application-wide is Theme/Controls.axaml's Window style, not an
+           attribute on each Window, so a sixth dialog cannot forget it. -->
+      <FontFamily x:Key="FontSans">avares://GalactiLog/Assets/Fonts#Atkinson Hyperlegible Next,Segoe UI,sans-serif</FontFamily>
+      <FontFamily x:Key="FontMono">avares://GalactiLog/Assets/Fonts#Atkinson Hyperlegible Mono,Cascadia Code,Consolas,monospace</FontFamily>
+      <!-- The default theme, and the slot ThemeManager replaces. It is named here so the tokens
+           exist before the first style is parsed and so the designer has a dictionary to resolve
+           against; it is not the applied theme. App.OnFrameworkInitializationCompleted calls
+           ThemeManager.ApplyStored with the id AppHost read out of general.theme, which swaps this
+           entry for the stored theme's dictionary before any window is built (ruling Q13). -->
+      <ResourceDictionary.MergedDictionaries>
+        <ResourceInclude Source="/Theme/Scales.axaml" />
+        <ResourceInclude Source="/Theme/Themes/CivilDusk.axaml" />
+        <ResourceInclude Source="/Theme/TargetParts.axaml" />
+      </ResourceDictionary.MergedDictionaries>
+    </ResourceDictionary>
+  </Application.Resources>
+  <Application.Styles>
+    <FluentTheme />
+    <StyleInclude Source="/Theme/Controls.axaml" />
+    <!-- The colour picker's own control themes (P13 R2b, ruling Q24). Avalonia.Controls.ColorPicker
+         ships outside the main Avalonia packages and FluentTheme does not carry its templates, so
+         without this line the Filters tab's picker renders as an untemplated TemplatedControl. It
+         sits at the end of Application.Styles and never in Application.Resources: HANDOFF 5.2
+         item 10 makes that order load bearing, because Theme/Controls.axaml resolves FontSans,
+         FontMono and two ratio keys with StaticResource at style-load time. -->
+    <StyleInclude Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/Fluent.xaml" />
+  </Application.Styles>
+  <!-- Page view-model to view, one explicit line each. Deliberately not a reflection-based
+       ViewLocator: a new page adds one entry here and one NavigationItem, and a typo fails
+       at build rather than showing "Not Found" at runtime. -->
+  <Application.DataTemplates>
+    <DataTemplate DataType="vm:DashboardViewModel">
+      <views:DashboardView />
+    </DataTemplate>
+    <DataTemplate DataType="vm:PlaceholderPageViewModel">
+      <views:PlaceholderPageView />
+    </DataTemplate>
+    <!-- Target detail is not a rail destination: it is pushed over whichever destination is
+         showing, through MainWindowViewModel.Detail (Phase 6 Task 3, ruling Q9). -->
+    <DataTemplate DataType="detail:TargetDetailViewModel">
+      <detailviews:TargetDetailView />
+    </DataTemplate>
+    <!-- Spec 12.13's quality filter panel (Phase 16). The export page holds its panel in an
+         object-typed slot, so neither view-model names the other's type; this template is what
+         turns the slot's content into the view. Without it the ContentControl renders the
+         view-model's type name. -->
+    <DataTemplate DataType="wbpp:QualityPanelViewModel">
+      <wbppviews:QualityPanelView />
+    </DataTemplate>
+    <!-- Settings (spec 12.7, Phase 7 Task 3): the page shell and its one real tab. Phase 9 adds
+         one line per tab it makes real. -->
+    <DataTemplate DataType="settings:SettingsViewModel">
+      <settingsviews:SettingsView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:TargetsTabViewModel">
+      <settingsviews:TargetsTabView />
+    </DataTemplate>
+    <!-- Spec 12.9's merge history (Phase 7 Task 5). Not a page: it is a region of the Settings
+         Targets tab and of Target detail, and both reach it through this one template, which is
+         what keeps the two surfaces on one view-model. -->
+    <DataTemplate DataType="merge:MergeHistoryViewModel">
+      <mergeviews:MergeHistoryView />
+    </DataTemplate>
+    <!-- Spec 9.7's unresolved names with their retry, and spec 12.7's rename history (Phase 7
+         Task 6). Regions of the Settings Targets tab; Phase 10's Diagnostics page binds the
+         unresolved list through this same template. -->
+    <DataTemplate DataType="settings:UnresolvedNamesViewModel">
+      <settingsviews:UnresolvedNamesView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:RenameHistoryViewModel">
+      <settingsviews:RenameHistoryView />
+    </DataTemplate>
+    <!-- Spec 12.5's Statistics page (Phase 9 Task 3), which replaces the rail's statistics
+         placeholder. -->
+    <DataTemplate DataType="stats:StatisticsViewModel">
+      <views:StatisticsView />
+    </DataTemplate>
+    <!-- Spec 12.7's Library tab (Phase 9 Task 5), which replaces the Settings page's library
+         placeholder. -->
+    <DataTemplate DataType="settings:LibraryTabViewModel">
+      <settingsviews:LibraryTabView />
+    </DataTemplate>
+    <!-- Spec 12.6's Activity page (Phase 9 Task 4), which replaces the rail's activity
+         placeholder. -->
+    <DataTemplate DataType="activity:ActivityViewModel">
+      <views:ActivityView />
+    </DataTemplate>
+    <!-- Spec 12.7's Filters and Equipment tabs (Phase 9 Task 7), which replace the Settings
+         page's filters and equipment placeholders. GroupingEditorViewModel is the two-column
+         editor both tabs host, once for filters and twice for equipment (cameras, telescopes). -->
+    <DataTemplate DataType="settings:FiltersTabViewModel">
+      <settingsviews:FiltersTabView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:EquipmentTabViewModel">
+      <settingsviews:EquipmentTabView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:GroupingEditorViewModel">
+      <settingsviews:GroupingEditorView />
+    </DataTemplate>
+    <!-- Spec 12.7's Maintenance tab (Phase 9 Task 8), which replaces the Settings page's
+         maintenance placeholder. Its typed confirmation is a Window opened through ModalHost, not
+         a page, so it needs no template here. -->
+    <DataTemplate DataType="settings:MaintenanceTabViewModel">
+      <settingsviews:MaintenanceTabView />
+    </DataTemplate>
+    <!-- Spec 12.7's General tab (Phase 11 Task 2), which carries spec 12.11's five residency
+         controls and sits immediately after Library in the tab strip (ruling Q1). -->
+    <DataTemplate DataType="settings:GeneralTabViewModel">
+      <settingsviews:GeneralTabView />
+    </DataTemplate>
+    <!-- Spec 12.7's Location, Display and Storage tabs (Phase 9 Task 6), which replace the
+         Settings page's last three preference placeholders. -->
+    <DataTemplate DataType="settings:LocationTabViewModel">
+      <settingsviews:LocationTabView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:DisplayTabViewModel">
+      <settingsviews:DisplayTabView />
+    </DataTemplate>
+    <DataTemplate DataType="settings:StorageTabViewModel">
+      <settingsviews:StorageTabView />
+    </DataTemplate>
+    <!-- Spec 12.8's Diagnostics page (Phase 10 Task 1), which replaces the rail's diagnostics
+         placeholder and the Settings page's diagnostics placeholder. One line for both surfaces:
+         they share one view-model instance (coordinator ruling Q3). -->
+    <DataTemplate DataType="diagnostics:DiagnosticsViewModel">
+      <views:DiagnosticsView />
+    </DataTemplate>
+    <!-- Spec 12.8's log viewer (Phase 10 Task 2), hosted by the Diagnostics page above. -->
+    <DataTemplate DataType="diagnostics:LogViewerViewModel">
+      <views:LogViewerView />
+    </DataTemplate>
+    <!-- Spec 12.7's About tab (Phase 10 Task 4), which replaces the last Settings placeholder.
+         Spec 17.1's update confirmation needs no entry here: it is a Window opened through
+         ModalHost, not a page, exactly as the Maintenance tab's typed confirmation is. -->
+    <DataTemplate DataType="settings:AboutTabViewModel">
+      <settingsviews:AboutTabView />
+    </DataTemplate>
+    <!-- Spec 12.15's Custom Columns tab (Phase 20 Task 4), between Display and Storage in the
+         strip (spec amendment 2.8, user choice 18). No new namespace prefix: settings and
+         settingsviews already cover ViewModels.Settings and Views.Settings. -->
+    <DataTemplate DataType="settings:CustomColumnsTabViewModel">
+      <settingsviews:CustomColumnsTabView />
+    </DataTemplate>
+    <!-- Spec amendment 4c's External Tools tab (Phase 21 Task 4), between Custom Columns and
+         Storage. No new namespace prefix: settings and settingsviews already cover
+         ViewModels.Settings and Views.Settings. -->
+    <DataTemplate DataType="settings:ExternalToolsTabViewModel">
+      <settingsviews:ExternalToolsTabView />
+    </DataTemplate>
+    <!-- Spec 12.14's Analysis page (Phase 17 Task 4), the sixth rail destination, plus the five
+         tab bodies it hosts and the one stats card two of those tabs draw. All seven land here at
+         once and this is the only file that carries them: Tasks 5 and 6 fill the five tab views
+         and never open App.axaml, so a tab body's view is resolved by its own concrete tab
+         view-model type and no later unit has to remember to add a line. -->
+    <DataTemplate DataType="analysis:AnalysisViewModel">
+      <views:AnalysisView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:CorrelationTabViewModel">
+      <analysisviews:CorrelationTabView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:DistributionsTabViewModel">
+      <analysisviews:DistributionsTabView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:TimeSeriesTabViewModel">
+      <analysisviews:TimeSeriesTabView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:MatrixTabViewModel">
+      <analysisviews:MatrixTabView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:CompareTabViewModel">
+      <analysisviews:CompareTabView />
+    </DataTemplate>
+    <DataTemplate DataType="analysis:StatsCardViewModel">
+      <analysisviews:StatsCardView />
+    </DataTemplate>
+  </Application.DataTemplates>
+</Application>

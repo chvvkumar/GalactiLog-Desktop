@@ -1,0 +1,153 @@
+name: Release
+
+on:
+  push:
+    branches: [snd, dev, main]
+    paths-ignore:
+      - '**/*.md'
+      - 'docs/**'
+      - 'LICENSE'
+  # A release on demand for any branch: gh workflow run release.yml --ref <branch>.
+  # derive-version.sh reads GITHUB_REF_NAME, which on dispatch is the chosen branch.
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # Hosted runners carry Git\bin on PATH; the self-hosted one carries only Git\cmd.
+      # cmd, not powershell: a fresh runner account starts with execution policy Restricted.
+      - name: Put Git Bash on the path
+        shell: cmd
+        run: echo C:\Program Files\Git\bin>>%GITHUB_PATH%
+
+      - name: Fetch tags
+        shell: bash
+        run: git fetch --tags --force
+
+      # The runner account cannot write C:\Program Files\dotnet; install under the tool cache.
+      - uses: actions/setup-dotnet@v4
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Derive version
+        id: version
+        shell: bash
+        run: git tag -l | bash tools/derive-version.sh "$GITHUB_REF_NAME" >> "$GITHUB_OUTPUT"
+
+      - name: Test
+        shell: bash
+        run: dotnet test -c Release
+
+      - name: Publish
+        shell: bash
+        run: >
+          dotnet publish src/GalactiLog.App -c Release -r win-x64 --self-contained
+          -o publish/win-x64
+          -p:Version=${{ steps.version.outputs.version }}
+          -p:SourceRevisionId=${{ github.sha }}
+
+      # tool update installs when absent and is a no-op at the pinned version, which install
+      # is not on a self-hosted runner that keeps its tool store between runs.
+      # The vpk version must equal the Velopack PackageVersion in Directory.Packages.props.
+      # An unpinned vpk can pack a package format the pinned library cannot read, and CI
+      # would only discover it at the first failed update on a user's machine.
+      # The global tool store is %USERPROFILE%\.dotnet\tools. The runner service account's
+      # profile is not on the machine PATH, so the Pack step would not find vpk without this.
+      - name: Install vpk
+        shell: bash
+        run: |
+          dotnet tool update -g vpk --version 1.2.0
+          echo "$USERPROFILE\\.dotnet\\tools" >> "$GITHUB_PATH"
+
+      # vpk pack emits a delta package only when the channel's previous full package is already
+      # in its output directory (Releases), which is what this download puts there. Without
+      # --pre the command looks at stable releases only, so prerelease channels pass it, as the
+      # upload step does. A channel's first release has nothing to download; that is not a
+      # failure, so the step continues on error and the pack is a full package only.
+      - name: Download previous release
+        shell: bash
+        continue-on-error: true
+        run: |
+          PRE_FLAG=""
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then PRE_FLAG="--pre"; fi
+          vpk download github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --channel "${{ steps.version.outputs.channel }}" $PRE_FLAG
+
+      - name: Pack
+        shell: bash
+        run: >
+          vpk pack --packId GalactiLog --packVersion ${{ steps.version.outputs.version }}
+          --packDir publish/win-x64
+          --icon src/GalactiLog.App/Assets/GalactiLog.ico
+          --mainExe GalactiLog.exe --channel ${{ steps.version.outputs.channel }}
+
+      - name: Tag release
+        shell: bash
+        run: |
+          git tag ${{ steps.version.outputs.version }}
+          git push origin ${{ steps.version.outputs.version }}
+
+      - name: Upload to GitHub Releases
+        shell: bash
+        run: |
+          PRE_FLAG=""
+          if [ "${{ steps.version.outputs.prerelease }}" = "true" ]; then PRE_FLAG="--pre"; fi
+          vpk upload github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
+            --token "${{ github.token }}" --publish \
+            --releaseName "${{ steps.version.outputs.version }}" \
+            --tag "${{ steps.version.outputs.version }}" \
+            --channel "${{ steps.version.outputs.channel }}" $PRE_FLAG
+
+      # The release exists by now (the upload step created it), so this is an edit, not a
+      # second create. gh release edit has no --generate-notes flag; the generate-notes API
+      # endpoint returns the same body that flag would, and GitHub picks the previous tag itself.
+      - name: Generate release notes
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api "repos/${{ github.repository }}/releases/generate-notes" \
+            -f tag_name="${{ steps.version.outputs.version }}" -q .body \
+            | gh release edit "${{ steps.version.outputs.version }}" \
+                --repo "${{ github.repository }}" --notes-file -
+
+      - name: Prune old prereleases
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Selects by the JSON tagName/isPrerelease fields, never by the human-readable
+          # title column: gh release list's table output has TITLE as its first column, and
+          # a title containing the version string in a different position (or containing
+          # spaces) would silently select and delete the wrong releases.
+          prune_prerelease() {
+            channel_suffix="-$1."
+            keep="$2"
+            gh release list --repo "${{ github.repository }}" --limit 200 --json tagName,isPrerelease \
+              -q ".[] | select(.isPrerelease == true and (.tagName | contains(\"$channel_suffix\"))) | .tagName" \
+              | sort -V -r \
+              | tail -n +$((keep + 1)) \
+              | xargs -r -n1 gh release delete --yes --cleanup-tag
+          }
+          prune_prerelease alpha 2
+          prune_prerelease rc 2
+
+          gh release list --repo "${{ github.repository }}" --limit 200 --json tagName,isPrerelease \
+            -q '.[] | select(.isPrerelease == false) | .tagName' \
+            | sort -V -r \
+            | tail -n +6 \
+            | xargs -r -n1 gh release delete --yes --cleanup-tag

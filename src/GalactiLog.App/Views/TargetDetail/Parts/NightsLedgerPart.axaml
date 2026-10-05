@@ -1,0 +1,555 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightsLedgerPart"
+             x:Name="Root"
+             x:DataType="detail:TargetDetailViewModel">
+  <UserControl.Resources>
+    <!-- Review P2-2, and the coordinator's follow-up on it: every drawn RMS cell in the ledger
+         (the night row, and the totals row beside it) splits into a fixed-width value box and a
+         fixed-width mark box beside it, mirroring FrameTableView.axaml's FrameColRmsValueWidth
+         shape. The mark box is reserved even where it is always empty (the totals row never
+         carries a mark this phase, review P3-7), because a cell that only sometimes reserves the
+         mark's width is exactly what put the totals row's digits 9 px right of the night rows' in
+         the coordinator's second capture. The header row's cell is text only and needs neither
+         box: it draws no digits to align. All of this is fixed regardless of whether a night is
+         marked, which is what keeps every row's value box, and so its digits, at one right edge:
+         the LedgerRms SharedSizeGroup's own MinWidth 56 and MaxWidth 58 (below) are unmoved by
+         this pair, measured to fit inside that 56-58 px budget at the shipped root and at
+         general.text_size "x-large" (TargetDetailViewTests' ledger-fit case). -->
+    <sys:Double x:Key="LedgerRmsValueWidth">44</sys:Double>
+    <sys:Double x:Key="LedgerRmsMarkWidth">9</sys:Double>
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <!-- A compact ledger drops Frames, Filters and the custom columns to fit its narrow host; a
+         host-sized one drops Filters, which would otherwise grow it past its host. -->
+    <Style Selector="parts|NightsLedgerPart:compact :is(Control).ledger-frames, parts|NightsLedgerPart:compact :is(Control).ledger-filters, parts|NightsLedgerPart:compact :is(Control).ledger-custom, parts|NightsLedgerPart.host-sized :is(Control).ledger-filters">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <!-- A collapsed ledger keeps the box and the date only (sidebar ruling R1). -->
+    <Style Selector="parts|NightsLedgerPart:collapsed :is(Control).ledger-metric, parts|NightsLedgerPart:collapsed :is(Control).ledger-title">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+    <Style Selector="parts|NightsLedgerPart:collapsed StackPanel#LedgerTitle">
+      <Setter Property="Grid.Row" Value="1" />
+      <Setter Property="Grid.ColumnSpan" Value="2" />
+      <Setter Property="Margin" Value="0,4,0,0" />
+    </Style>
+    <!-- The actions' column and orientation are styled rather than set locally, so the collapsed
+         form's setters below can take them over. -->
+    <Style Selector="parts|NightsLedgerPart StackPanel#LedgerActions">
+      <Setter Property="Grid.Column" Value="1" />
+      <Setter Property="Orientation" Value="Horizontal" />
+    </Style>
+    <Style Selector="parts|NightsLedgerPart:collapsed StackPanel#LedgerActions">
+      <Setter Property="Grid.Column" Value="0" />
+      <Setter Property="Grid.ColumnSpan" Value="2" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Orientation" Value="Vertical" />
+    </Style>
+    <!-- The ledger. Three grids share one column set through Grid.IsSharedSizeScope, so the
+         header, the target row and every night row cannot drift apart, and the widest figure in
+         a column sets that column's width instead of a fixed guess clipping it.
+
+         The Night column is the one star among them and carries no SharedSizeGroup. That is the
+         phase review's P1-1 fix: nine Auto columns whose minimums summed to 600 cannot be drawn
+         inside a 520 px ledger, and Avalonia's Grid does not shrink an Auto column when the
+         arranged width is smaller than the sum, so the Stars and Filters cells were laid out past
+         the ledger's right edge and clipped. One star column absorbs whatever the seven numeric
+         columns and the filter column leave, so the row can never be wider than the ledger, and
+         the three grids still agree because every other column is shared and all three are drawn
+         at the ledger's own width.
+
+         The seven numeric minimums came down with it, to what the headers and the formatters
+         actually need rather than to the comp's generous figures.
+
+         The blocker fix adds the other half of that rule, because the star alone was not enough:
+         an Auto column is measured at its content's desired width and Avalonia resolves every
+         Auto column before it resolves a star, so seven Auto columns whose headers happened to be
+         wide left the star nothing and the Night column drew no date at all at the shipped
+         1280x800 window (Phase 12 verification, blocker 1). Three things now hold it open.
+
+         One, the Night column carries a MinWidth of 104 on the narrow ledger and 112 on the wide
+         one (TargetDetailViewModel.NightColumnMinWidth). That is the ISO date the column exists
+         to show, "2025-03-20", measured in this ledger's own face rather than guessed: 98.6 px in
+         Atkinson Hyperlegible Next Regular at the shipped 18 px root (general.text_size "large"),
+         plus this column's own two cell gutters, rounded up. 104 was 108 until P14A ruling C5 took
+         the cell gutter down from 4 px a side to 2 to make room for the selection column; the
+         floor followed the gutter, and the date figure it is made of did not change.
+
+         Phase 14C raised the figure again, for the wide ledger only: a row realized in a
+         different measure pass of the virtualizing ListBox could keep that pass's remainder and
+         trim one date to "2025-03-..." at the wide ledger's 640 px capture, with 104 leaving only
+         a pixel or two of headroom over the date's own 98.6 to 102.6 px (phase-review carried
+         observation, fixer-list item 2). The wide ledger has the slack to give the
+         raise; the narrow ledger does not,
+         per the "P14A ruling C5's selection column" arithmetic below (HANDOFF 5.1 item 7b: the
+         narrow ledger's own slack at 104 measured exactly 2 px, with three numeric columns
+         already at their caps), so NightColumnMinWidth answers 112 while
+         TargetDetailViewModel.IsWide is true and 104 while it is false, and the three ledger grids
+         bind it the same way they already bind LedgerFiltersMaxWidth.
+
+         Two, the seven numeric columns carry a MaxWidth each. They stay Auto and shared, so a wide
+         figure still widens its column and the three grids still agree; what the cap removes is an
+         Auto column's power to take the whole ledger. Each cap is above what its header and its
+         formatter need at the shipped type size and at the extra-large one, with the HFR cap left
+         generous because that column carries the page's headline figure.
+
+         Three, the cell gutters came down from 8 px a side to 4, and from 4 to 2 in P14A. Eight
+         columns at 16 px a column spent 128 px of a 520 px ledger on whitespace, which is the
+         space the date needed; the figures are right-aligned, so the gutter that reads is the
+         slack inside each column rather than the margin between them.
+
+         P14A ruling C5's selection column is what took the gutter to 2, and this is the only
+         width the phase took from the ledger. The narrow ledger had 2 px of slack: at the page's
+         own allotment the nine columns measured 2 + 108 + 408 = 518 inside 520, with the starred
+         Night column already pinned at its floor and three numeric columns already at their
+         caps. Two pixels a side across the eight drawn cells returns 16, the Night floor follows
+         its own two gutters from 108 to 104, and the last drawn cell ends inside the ledger with
+         the date still drawn whole. C5 sized the leading column at 18, which clipped the box:
+         an empty Fluent CheckBox measures 20, its template's box column, so polish wave 2 ruling
+         3 widened the column to 20 and took the two pixels off the Hours column's floor, 48 down
+         to 46, with the ledger widths and the Night floors unchanged. The change is not scoped to the
+         narrow ledger, deliberately: an Avalonia shared size group only ever grows, so a wide
+         ledger measured at the old gutter would hand its remembered widths back to the narrow one
+         and put the last cell outside the ledger again. The seven numeric columns keep their
+         declared minimums and maximums untouched and none of them is dropped. -->
+    <Style Selector="Grid.ledger-row &gt; TextBlock">
+      <Setter Property="Margin" Value="2,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+    </Style>
+    <!-- Spec 12.4's night selection column (ruling C5). The ledger's leading column is 20 px wide,
+         which is what an empty Fluent CheckBox measures: no column joins the ledger's declared
+         set, none of the seven numeric columns is dropped, and the 520 px narrow ledger and the
+         640 px wide one are unchanged. The pixels came out of the cell gutter (4 px a side down
+         to 2, with the Night floor following from 108 to 104) and, for the last two, out of the
+         Hours column's floor; the arithmetic is above this block, at "P14A ruling C5's selection
+         column".
+
+         The box is stripped of Fluent's content padding and minimum width, or an empty CheckBox
+         would reserve the width of a label it does not have and push the gutter past the space
+         the Night column can spare. -->
+    <Style Selector="CheckBox.ledger-check">
+      <Setter Property="MinWidth" Value="0" />
+      <Setter Property="MinHeight" Value="0" />
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="HorizontalAlignment" Value="Center" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+    </Style>
+    <Style Selector="TextBlock.ledger-head">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    </Style>
+    <Style Selector="ListBox#NightsLedger ListBoxItem">
+      <Setter Property="Padding" Value="0" />
+      <Setter Property="Background" Value="Transparent" />
+      <Setter Property="MinHeight" Value="34" />
+    </Style>
+    <Style Selector="ListBox#NightsLedger ListBoxItem:pointerover /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    </Style>
+    <!-- Selection is light, not colour (P12 direction): a lighter field and the lit ink, nothing
+         else; a lit edge beside the check box reads as a rail (polish wave 2 ruling 3).
+         ColorAccent is that lit ink and is a near-white in this theme, which is
+         why the comp names it "lit" rather than an accent hue; it carries state and nothing else,
+         so the five metric inks and the filter inks are never read as a selection. -->
+    <Style Selector="ListBox#NightsLedger ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccent}" />
+    </Style>
+
+    <!-- Ruling Q12: below the 1600 px page width the ledger drops its filters column, which is
+         what the comp does and what the narrow layout needs. The rule is a style on the ledger's
+         own wide class rather than three IsVisible bindings, so the header cell, the target row's
+         swatches and every night row's swatches cannot disagree, and a fourth filter cell added
+         later is covered by wearing the class.
+
+         This style hides the cells. It cannot collapse the column, and that is the second half of
+         blocker 1: a SharedSizeGroup in Avalonia only ever grows. Once the wide ledger has been
+         drawn, the group holds the widest filters cell it ever measured and keeps reserving it
+         after the cells go invisible, so the narrow ledger spent about 110 px on a column that
+         drew nothing and the star Night column was left with about 16. The three column
+         definitions therefore bind their MaxWidth to TargetDetailViewModel.LedgerFiltersMaxWidth,
+         which is 0 below the breakpoint: a user maximum clamps the shared minimum, so the column
+         reserves nothing at all while narrow, whatever the group remembers. -->
+    <Style Selector="Grid#Ledger:not(.wide) :is(Control).ledger-filters">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <!-- Spec 12.15: the narrow ledger drops every custom column BEFORE it drops
+         the Filters column, so the built-in columns and their declared minimums and
+         maximums are unchanged whatever is switched on and a ledger with no custom column measures
+         exactly as it did before Phase 20.
+
+         The drop itself happens in one place, TargetDetailViewModel.RecomputeLedgerCustomColumns:
+         below the breakpoint the drawn set is empty, so no strip has an item and no card holds a
+         cell. This style is the belt on top of that, for the instant between a resize and the
+         republish, and it is why a control that is somehow still realized is not drawn in a narrow
+         row.
+
+         The column definitions bind their SharedSizeGroup to
+         TargetDetailViewModel.LedgerCustomSizeGroup, which is null while nothing is drawn, so the
+         column LEAVES the group rather than merely capping itself: a shared size group in Avalonia
+         only ever grows, and the narrow ledger's own slack at the Night column's 104 px floor is
+         2 px, with three numeric columns already at their caps. A wide ledger that had measured one
+         strip of cells would otherwise hand that width back to the narrow one and take the date off
+         the Night column.
+
+         The wide ledger is not in the same trap. It has 3 px of slack at 640 with the Night column
+         already at its 112 px floor, so the strip cannot come out of it: the LEDGER grows by the
+         strip's width plus TargetDetailViewModel.WideLedgerCustomGutter instead, up to
+         WideLedgerCustomWidthCap extra. LedgerCustomMaxWidth is the
+         same strip figure, so no built-in column pays for a custom one. -->
+    <Style Selector="Grid#Ledger:not(.wide) :is(Control).ledger-custom">
+      <Setter Property="IsVisible" Value="False" />
+    </Style>
+
+    <!-- The three per-kind cell widths, so the header strip's labels and every night strip's
+         editors line up inside one shared-size column. The figures live on the view model, which
+         is their one home; the class is bound from the cell's own kind flag. The editor declares
+         no width of its own (Task 3), which is what lets each surface cap it its own way. -->
+    <Style Selector="controls|CustomCellEditor.cell-check">
+      <Setter Property="Width" Value="{x:Static detail:TargetDetailViewModel.CustomCellCheckWidth}" />
+    </Style>
+    <Style Selector="controls|CustomCellEditor.cell-choice">
+      <Setter Property="Width" Value="{x:Static detail:TargetDetailViewModel.CustomCellChoiceWidth}" />
+    </Style>
+    <Style Selector="controls|CustomCellEditor.cell-text">
+      <Setter Property="Width" Value="{x:Static detail:TargetDetailViewModel.CustomCellTextWidth}" />
+    </Style>
+  </UserControl.Styles>
+
+          <!-- The body's four rows share one size scope, the ledger grid's. -->
+          <Grid x:Name="Ledger"
+                Classes.wide="{Binding IsWide}"
+                Grid.IsSharedSizeScope="True">
+            <Grid x:Name="LedgerExpandedBody"
+                  RowDefinitions="Auto,Auto,Auto,*">
+            <!-- Collapsed (sidebar ruling R1): the title and its glyph hide, the chevron, Export and the
+                 sort note stack one per line, so no line is wider than a date row. -->
+            <Grid Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+              <StackPanel x:Name="LedgerTitle" Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <TextBlock x:Name="LedgerTitleText" Classes="t-label section ledger-title" Text="Nights" VerticalAlignment="Center" />
+                <controls:HelpButton Classes="ledger-title" Topic="target.nights" />
+                <TextBlock x:Name="LedgerSortNote" Classes="t-caption" Text="newest first" VerticalAlignment="Center" />
+              </StackPanel>
+              <StackPanel x:Name="LedgerActions" Spacing="6" VerticalAlignment="Center">
+              <Button x:Name="CollapseChevron"
+                      Classes="quiet sm"
+                      ToolTip.Tip="Collapse or expand the nights sidebar">
+                <Panel>
+                  <Path Data="{StaticResource IconChevronLeft}"
+                        Stroke="{DynamicResource ColorTextTertiary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16"
+                        IsVisible="{Binding !#Root.IsCollapsed}" />
+                  <Path Data="{StaticResource IconChevronRight}"
+                        Stroke="{DynamicResource ColorTextTertiary}"
+                        StrokeThickness="1.6"
+                        StrokeLineCap="Round"
+                        StrokeJoin="Round"
+                        Width="16"
+                        Height="16"
+                        IsVisible="{Binding #Root.IsCollapsed}" />
+                </Panel>
+              </Button>
+              <!-- Spec 12.4's Export flyout, moved from the identity line by polish wave 9 ruling 1. Declared
+                   on the button, never in a Setter, because a Setter's value is one shared instance. Spec
+                   12.13 disables the entries via CanExecute; each header is bound to append the count. -->
+              <Button x:Name="ExportButton"
+                      Content="{Binding ExportLabel}"
+                      VerticalAlignment="Center"
+                      Margin="0,0,6,0">
+                <Button.Flyout>
+                  <MenuFlyout>
+                    <MenuItem x:Name="CopyFrameListMenuItem"
+                              Header="{Binding CopyFrameListLabel}"
+                              Command="{Binding CopyFrameListCommand}"
+                              ToolTip.Tip="{Binding NoNightCheckedHint}" />
+                    <MenuItem x:Name="ExportForStackingMenuItem"
+                              Header="{Binding ExportForStackingLabel}"
+                              Command="{Binding ExportForStackingCommand}"
+                              ToolTip.Tip="{Binding NoNightCheckedHint}" />
+                    <!-- Spec 12.16, from Phase 21: the Export flyout's third entry, on the same
+                         rule as the two above it. -->
+                    <MenuItem x:Name="AstroBinCsvMenuItem"
+                              Header="{Binding AstroBinCsvLabel}"
+                              Command="{Binding AstroBinCsvCommand}"
+                              ToolTip.Tip="{Binding NoNightCheckedHint}" />
+                  </MenuFlyout>
+                </Button.Flyout>
+              </Button>
+              </StackPanel>
+            </Grid>
+
+            <Grid Grid.Row="1" x:Name="LedgerHeaderRow" Classes="ledger-row" MinHeight="28">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="20" />
+                <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="54" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerEcc}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFwhm}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=56}" MaxWidth="58" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerRms}" />
+                <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="64" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerStars}" />
+                <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersSizeGroup}" />
+                <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+              </Grid.ColumnDefinitions>
+              <Border Grid.Column="0" Grid.ColumnSpan="11"
+                      BorderBrush="{DynamicResource ColorBorderEmphasis}"
+                      BorderThickness="0,0,0,1" />
+              <!-- Spec 12.4: a tri-state box that selects all nights when it is clear and clears
+                   them when any are checked. The state is read one way off the page, so the box
+                   cannot hold a value the ledger does not have; the click runs the command, and
+                   the command is what decides which of the two branches applies. -->
+              <CheckBox Grid.Column="0"
+                        x:Name="LedgerSelectAllBox"
+                        Classes="ledger-check"
+                        IsThreeState="True"
+                        IsChecked="{Binding AreAllNightsSelected, Mode=OneWay}"
+                        Command="{Binding ToggleAllNightsCommand}"
+                        ToolTip.Tip="Select every night, or clear the selection" />
+              <TextBlock Grid.Column="1" Classes="t-label ledger-head" Text="Night" />
+              <TextBlock Grid.Column="2" Classes="t-label ledger-head num ledger-metric" Text="h" />
+              <TextBlock Grid.Column="3" Classes="t-label ledger-head num ledger-frames ledger-metric" Text="Frames" />
+              <!-- R4: every comparison this page draws between a night and the target is
+                   labelled, because a night median against a target mean is not like for like. -->
+              <TextBlock Grid.Column="4" Classes="t-label ledger-head num ledger-metric" Text="HFR px"
+                         ToolTip.Tip="Night medians against target means" />
+              <TextBlock Grid.Column="5" Classes="t-label ledger-head num ledger-metric" Text="Ecc"
+                         ToolTip.Tip="Night medians against target means" />
+              <TextBlock Grid.Column="6" Classes="t-label ledger-head num ledger-metric" Text="FWHM &quot;"
+                         ToolTip.Tip="Night medians against target means" />
+              <TextBlock Grid.Column="7" Classes="t-label ledger-head num ledger-metric" Text="RMS &quot;"
+                         ToolTip.Tip="Night medians against target means" />
+              <TextBlock Grid.Column="8" Classes="t-label ledger-head num ledger-metric" Text="Stars"
+                         ToolTip.Tip="Night medians against target means" />
+              <TextBlock Grid.Column="9" x:Name="LedgerFiltersHead" Classes="t-label ledger-head ledger-filters" Text="Filters" />
+              <!-- Spec 12.15: one label per switched-on session-scope column, at the width its
+                   cells take on every night row, so the two strips line up. No margin: an
+                   ItemsControl with a margin would reserve it in the shared-size column even while
+                   it holds nothing, and a ledger with no custom column has to measure exactly as it
+                   did before Phase 20. A custom cell's own gutter is inside its declared width. -->
+              <ItemsControl Grid.Column="10"
+                            x:Name="LedgerCustomHead"
+                            Classes="ledger-custom"
+                            ItemsSource="{Binding LedgerCustomHeadings}"
+                            VerticalAlignment="Center">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <StackPanel Orientation="Horizontal"
+                                Spacing="{x:Static detail:TargetDetailViewModel.CustomCellSpacing}" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="detail:LedgerCustomHeadingViewModel">
+                    <TextBlock Classes="t-label ledger-head"
+                               Text="{Binding Name}"
+                               Width="{Binding Width}"
+                               TextTrimming="CharacterEllipsis"
+                               ToolTip.Tip="{Binding Name}"
+                               AutomationProperties.Name="{Binding Name}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Grid>
+
+            <!-- The comp's .ref row: the target's own averages under the same nine headers, so
+                 the comparison below is made by alignment. Not selectable and not a list item. -->
+            <Border Grid.Row="2"
+                    x:Name="TotalsRow"
+                    BorderBrush="{DynamicResource ColorBorderEmphasis}"
+                    BorderThickness="0,0,0,1"
+                    IsVisible="{Binding Totals, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <Grid Classes="ledger-row" MinHeight="36" TextElement.Foreground="{DynamicResource ColorTextSecondary}">
+                <Grid.ColumnDefinitions>
+                  <ColumnDefinition Width="20" />
+                  <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="54" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerEcc}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFwhm}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=56}" MaxWidth="58" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerRms}" />
+                  <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="64" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerStars}" />
+                  <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersSizeGroup}" />
+                  <!-- Spec 12.15 amendment 2.5: the column is declared so this row stays the same
+                       shape as the header and the night rows, and it carries NO cell. The totals
+                       row is the target's own averages, not a night, and a session-scope value has
+                       no slot on it. -->
+                  <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="1" Classes="figure" x:Name="TotalsRowLabel" Text="{Binding Totals.LedgerRowLabelText}" />
+                <TextBlock Grid.Column="2" Classes="num ledger-metric" Text="{Binding Totals.LedgerIntegrationText}" />
+                <TextBlock Grid.Column="3" Classes="num ledger-frames ledger-metric" Text="{Binding Totals.FrameCountText}" />
+                <TextBlock Grid.Column="4" Classes="num ledger-metric" Text="{Binding Totals.LedgerAvgHfrText}" />
+                <TextBlock Grid.Column="5" Classes="num ledger-metric" Text="{Binding Totals.LedgerAvgEccentricityText}" />
+                <TextBlock Grid.Column="6" Classes="num ledger-metric" Text="{Binding Totals.LedgerAvgFwhmText}" />
+                <!-- Coordinator follow-up on review P2-2: this cell was still the old bare
+                     TextBlock, so it right-aligned into the column's full value-plus-mark width
+                     while every night row right-aligns into the value box alone, landing the
+                     totals row's digits LedgerRmsMarkWidth to the right of theirs. The mark box is
+                     present and always empty: the totals row carries no mark this phase (review
+                     P3-7, deferred to the user), but its width still has to be reserved so the
+                     value box lands in the same place as every night row's. -->
+                <StackPanel Grid.Column="7" Classes="ledger-metric" Orientation="Horizontal">
+                  <TextBlock x:Name="TotalsRmsValueCell"
+                             Classes="num"
+                             Width="{StaticResource LedgerRmsValueWidth}"
+                             Margin="2,0,0,0"
+                             VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis"
+                             Text="{Binding Totals.LedgerAvgGuidingRmsText}" />
+                  <TextBlock x:Name="TotalsRmsMarkCell"
+                             Classes="t-label"
+                             Width="{StaticResource LedgerRmsMarkWidth}"
+                             Margin="0,0,2,0"
+                             VerticalAlignment="Center" />
+                </StackPanel>
+                <TextBlock Grid.Column="8" Classes="num ledger-metric" Text="{Binding Totals.LedgerAvgDetectedStarsText}" />
+                <ItemsControl Grid.Column="9" x:Name="TotalsRowFilters" Classes="ledger-filters" ItemsSource="{Binding Totals.FilterSwatches}" Margin="8,0" VerticalAlignment="Center" ItemTemplate="{StaticResource FilterSwatchTemplate}">
+                  <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                      <WrapPanel Orientation="Horizontal" />
+                    </ItemsPanelTemplate>
+                  </ItemsControl.ItemsPanel>
+                </ItemsControl>
+              </Grid>
+            </Border>
+
+            <!-- One item per night, newest first. A ListBox brings the virtualizing panel, Up,
+                 Down, Home and End, and the selected state, all of which would otherwise be
+                 hand-built. The code-behind makes it always-selected once the page has arrived,
+                 which is what keeps a night open at all times. -->
+            <ListBox Grid.Row="3"
+                     x:Name="NightsLedger"
+                     ItemsSource="{Binding Sessions}"
+                     SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
+                     Background="Transparent"
+                     BorderThickness="0"
+                     Padding="0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox.ItemTemplate>
+                <DataTemplate x:DataType="detail:SessionCardViewModel">
+                 <StackPanel>
+                  <Grid Classes="ledger-row" MinHeight="34">
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="20" />
+                      <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="54" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerEcc}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFwhm}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=56}" MaxWidth="58" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerRms}" />
+                      <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="64" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerStars}" />
+                      <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersSizeGroup}" />
+                      <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+                    </Grid.ColumnDefinitions>
+                    <Border Grid.Column="0" Grid.ColumnSpan="11" Classes="rule" />
+                    <!-- Spec 12.4: checking a night does not select it. The lit row names the
+                         night the pane is showing and the check names a night an action will act
+                         on, so the box swallows its own pointer press rather than letting the
+                         ListBoxItem beneath it take the click as a selection. -->
+                    <CheckBox Grid.Column="0"
+                              Classes="ledger-check"
+                              IsChecked="{Binding IsChecked, Mode=TwoWay}"
+                              PointerPressed="OnNightCheckBoxPointerPressed"
+                              ToolTip.Tip="Include this night in the Export actions" />
+                    <TextBlock Grid.Column="1" Text="{Binding SessionDateText}" />
+                    <TextBlock Grid.Column="2" Classes="num ledger-metric" Text="{Binding LedgerIntegrationText}" />
+                    <TextBlock Grid.Column="3" Classes="num ledger-frames ledger-metric" Text="{Binding FrameCountText}" />
+                    <TextBlock Grid.Column="4" Classes="num ledger-metric" Classes.worse="{Binding IsWorseHfr}" Text="{Binding LedgerHfrText}" />
+                    <TextBlock Grid.Column="5" Classes="num ledger-metric" Classes.worse="{Binding IsWorseEccentricity}" Text="{Binding LedgerEccentricityText}" />
+                    <TextBlock Grid.Column="6" Classes="num ledger-metric" Classes.worse="{Binding IsWorseFwhm}" Text="{Binding LedgerFwhmText}" />
+                    <!-- Review P2-2: value and mark are two fixed-width cells rather than one
+                         concatenated string, so a marked night's value box is the same width as an
+                         unmarked night's and the column's digits share one right edge. The mark
+                         cell is never IsVisible="False": an invisible child leaves Avalonia's
+                         layout entirely, which would move the value's edge right back by the
+                         mark's width on every unmarked row.
+
+                         Margin is set here rather than inherited from Grid.ledger-row > TextBlock
+                         (below): that selector is a direct-child combinator and these two
+                         TextBlocks are now inside a StackPanel, one column-gutter cell rather than
+                         a direct child of the row grid. 2,0,0,0 and 0,0,2,0 keep the column's usual
+                         2 px outer gutters and put no space between the value and the dagger.
+
+                         Phase review P3-10: the tooltip is bound rather than literal, because the
+                         cell keeps its width on an unmarked night and a literal tip offered
+                         "from a PHD2 guide log" over an empty box. The binding is null on every
+                         unmarked row, which is how a tooltip is absent rather than empty. -->
+                    <StackPanel Grid.Column="7" Classes="ledger-metric" Orientation="Horizontal">
+                      <TextBlock x:Name="LedgerRmsValueCell"
+                                 Classes="num"
+                                 Classes.worse="{Binding IsWorseGuidingRms}"
+                                 Width="{StaticResource LedgerRmsValueWidth}"
+                                 Margin="2,0,0,0"
+                                 VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis"
+                                 Text="{Binding LedgerGuidingRmsText}" />
+                      <TextBlock x:Name="LedgerRmsMarkCell"
+                                 Classes="t-label"
+                                 Width="{StaticResource LedgerRmsMarkWidth}"
+                                 Margin="0,0,2,0"
+                                 VerticalAlignment="Center"
+                                 Text="{Binding LedgerGuidingRmsMark}"
+                                 ToolTip.Tip="{Binding LedgerGuidingRmsMarkTip}"
+                                 AutomationProperties.AccessibilityView="Raw" />
+                    </StackPanel>
+                    <TextBlock Grid.Column="8" Classes="num ledger-metric" Classes.worse="{Binding IsWorseStars}" Text="{Binding LedgerStarsText}" />
+                    <ItemsControl Grid.Column="9" Classes="ledger-filters" ItemsSource="{Binding FilterSwatches}" Margin="8,0" VerticalAlignment="Center" ItemTemplate="{StaticResource FilterSwatchTemplate}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <WrapPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <!-- Spec 12.15's session-scope cells for this night. One editor per switched-on
+                         column, each at its kind's declared width, in a StackPanel and never a
+                         WrapPanel: this column is capped and a second line would change the row's
+                         height. The editor swallows its own pointer press, so clicking a cell edits
+                         the value rather than opening the night (Task 3, spec 12.15). -->
+                    <ItemsControl Grid.Column="10"
+                                  Classes="ledger-custom"
+                                  ItemsSource="{Binding LedgerCells}"
+                                  VerticalAlignment="Center">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal"
+                                      Spacing="{x:Static detail:TargetDetailViewModel.CustomCellSpacing}" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="cc:CustomValueViewModel">
+                          <!-- No watermark on this surface: the column's name is printed once in the
+                               header strip directly above, so a text cell repeating it on every night
+                               row says nothing the reader cannot already see. The automation name is
+                               untouched and still names the column and the night. -->
+                          <controls:CustomCellEditor ShowWatermark="False"
+                                                     Classes.cell-check="{Binding IsCheckBox}"
+                                                     Classes.cell-choice="{Binding IsComboBox}"
+                                                     Classes.cell-text="{Binding IsTextBox}" />
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </Grid>
+                  <!-- The code-behind puts LitRowContent here on the lit row only. -->
+                  <ContentControl Classes="lit-slot"
+                                  IsVisible="{Binding $self.Content, Converter={x:Static ObjectConverters.IsNotNull}}" />
+                 </StackPanel>
+                </DataTemplate>
+              </ListBox.ItemTemplate>
+            </ListBox>
+            </Grid>
+          </Grid>
+</UserControl>

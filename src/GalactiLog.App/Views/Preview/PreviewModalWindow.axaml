@@ -1,0 +1,257 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:preview="using:GalactiLog.App.ViewModels.Preview"
+        x:Class="GalactiLog.App.Views.Preview.PreviewModalWindow"
+        x:Name="Root"
+        x:DataType="preview:PreviewModalViewModel"
+        Title="{Binding Title}"
+        Width="1280"
+        Height="900"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 11.5's preview modal. A modal Window, not a page: MainWindowViewModel.Detail is
+       the shell's only non-rail overlay (ruling Q9). Every colour is a theme token (spec 14) and
+       nothing here sets FontSize, because Scales.axaml's FontSize* keys are ratios, not point
+       sizes.
+
+       The preview is always autostretched and there are no manual stretch controls in v1
+       (spec 11.5). Stretch="Uniform" is the fit; the zoom and pan transform sits on top of it.
+
+       Key bindings: Escape, Left, Right and the three Ctrl-modified verbs are plain KeyBindings.
+       Four bare-key shortcuts are NOT here: spec 11.5's H and 0, and P13 R10's Up and Down
+       aliases. The header panel carries a filter TextBox and a window-level KeyBinding on a bare
+       key fires while the user types in it (ruling Q19, extended to Up and Down by P13 ruling
+       Q22). They are handled in OnKeyDown behind a focus check instead. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding CloseCommand}" />
+    <KeyBinding Gesture="Right" Command="{Binding NextCommand}" />
+    <KeyBinding Gesture="Left" Command="{Binding PreviousCommand}" />
+    <KeyBinding Gesture="Ctrl+E" Command="{Binding RevealInExplorerCommand}" />
+    <KeyBinding Gesture="Ctrl+O" Command="{Binding OpenWithDefaultApplicationCommand}" />
+    <KeyBinding Gesture="Ctrl+Shift+C" Command="{Binding CopyPathCommand}" />
+  </Window.KeyBindings>
+
+  <Grid RowDefinitions="Auto,*,Auto">
+
+    <!-- The caption row: which frame, where it sits in the originating list, and the three
+         spec 12.4 per-frame verbs that spec 11.5 repeats as shortcuts, over spec 11.5's metadata
+         strip and its render-on-navigation checkbox. -->
+    <Border Grid.Row="0"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <StackPanel Spacing="8">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+            <TextBlock x:Name="FrameNameText"
+                       Text="{Binding Title}"
+                       FontWeight="SemiBold"
+                       TextTrimming="CharacterEllipsis"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="page.preview" />
+            <TextBlock x:Name="PositionText"
+                       Text="{Binding PositionText}"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+            <Button x:Name="HeaderPanelButton"
+                    Content="Headers (H)"
+                    Padding="10,3"
+                    Command="{Binding ToggleHeaderPanelCommand}" />
+            <Button x:Name="RevealButton"
+                    Content="Reveal (Ctrl+E)"
+                    Padding="10,3"
+                    Command="{Binding RevealInExplorerCommand}" />
+            <Button x:Name="OpenWithButton"
+                    Content="Open (Ctrl+O)"
+                    Padding="10,3"
+                    Command="{Binding OpenWithDefaultApplicationCommand}" />
+            <Button x:Name="CopyPathButton"
+                    Content="Copy path (Ctrl+Shift+C)"
+                    Padding="10,3"
+                    Command="{Binding CopyPathCommand}" />
+          </StackPanel>
+        </Grid>
+
+        <!-- Spec 11.5's metadata strip (PAR-011): one wrapping row of Border.tag badges under the
+             frame's identity line, rebuilt on every navigation step because it describes the frame
+             on screen and not the frame the modal opened at. It follows Current's own notification
+             and is not mirrored onto the modal.
+
+             Border.tag is the shared badge vocabulary and is declared in Theme/Controls.axaml,
+             which is the only legal home for it (ControlStyleScanTest). No style is declared here.
+
+             The band classes and the worse class sit on the value run only, so the mark lands on
+             the number and the label keeps the badge's own tertiary ink. A badge the grading left
+             ungraded carries none of the four and no tooltip, which is spec 11.5's "shows the
+             value with no band and no tooltip rather than a neutral claim".
+
+             The checkbox is beside the strip (spec 11.5's interaction table) and is shown always,
+             including for a single-frame list: the web hides it below two frames, and a control
+             that appears and disappears is worse than one that is inert. -->
+        <Grid ColumnDefinitions="*,Auto">
+          <ItemsControl x:Name="MetadataStrip"
+                        Grid.Column="0"
+                        VerticalAlignment="Center"
+                        ItemsSource="{Binding Current.Badges}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <WrapPanel Orientation="Horizontal" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="preview:PreviewBadge">
+                <Border Classes="tag" Margin="0,0,4,4">
+                  <StackPanel Orientation="Horizontal" Spacing="5">
+                    <TextBlock Text="{Binding Label}" />
+                    <!-- The four classes the frame table's own cells stack, in the same order, so
+                         one badge and the row it came from cannot disagree about a frame.
+
+                         Classes.worse carries the semantic and never the ink here, and that is
+                         deliberate rather than an oversight (Task 7 review P3, confirmed by
+                         measuring the realised Foreground on the window). IsWorst is true only
+                         when a band class is also set, and Theme/Controls.axaml declares the band
+                         rules after TextBlock.worse, so at equal specificity the band wins every
+                         time. The band is the right answer: it is the finer statement of the two.
+                         The binding stays for parity with the table's cells and because IsWorst is
+                         what a future mark that is not an ink would read. -->
+                    <TextBlock Text="{Binding Value}"
+                               Classes.band-better="{Binding IsBetter}"
+                               Classes.band-watch="{Binding IsWatch}"
+                               Classes.band-reject="{Binding IsReject}"
+                               Classes.worse="{Binding IsWorst}"
+                               ToolTip.Tip="{Binding Tooltip}" />
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+
+          <CheckBox x:Name="RenderOnNavigateCheckBox"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Content="Render full preview on navigation"
+                    IsChecked="{Binding RenderOnNavigate, Mode=TwoWay}" />
+        </Grid>
+      </StackPanel>
+    </Border>
+
+    <!-- The viewport, with the header panel docked beside it so both are visible at once: the
+         panel is what makes an unrenderable frame still worth opening (spec 6.2.6). -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto">
+      <Border x:Name="Viewport"
+              Grid.Column="0"
+              Focusable="True"
+              IsTabStop="False"
+              ClipToBounds="True"
+              Background="{DynamicResource ColorBgBase}">
+        <Panel>
+          <Image x:Name="PreviewImage"
+                 Source="{Binding DisplayImage}"
+                 Stretch="Uniform"
+                 RenderTransformOrigin="50%,50%">
+            <Image.RenderTransform>
+              <TransformGroup>
+                <ScaleTransform ScaleX="{Binding Scale}" ScaleY="{Binding Scale}" />
+                <TranslateTransform X="{Binding OffsetX}" Y="{Binding OffsetY}" />
+              </TransformGroup>
+            </Image.RenderTransform>
+          </Image>
+
+          <TextBlock x:Name="PreviewPlaceholder"
+                     Text="[ no preview available ]"
+                     HorizontalAlignment="Center"
+                     VerticalAlignment="Center"
+                     IsVisible="{Binding ShowsPlaceholder}"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <StackPanel x:Name="RenderingIndicator"
+                      Spacing="8"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Bottom"
+                      Margin="0,0,0,24"
+                      IsVisible="{Binding IsRendering}">
+            <ProgressBar IsIndeterminate="True" Width="120" HorizontalAlignment="Center" />
+            <TextBlock Text="Rendering preview..."
+                       HorizontalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+          </StackPanel>
+
+          <!-- A failed render leaves a message and a Retry, the port of preview.py's 500. -->
+          <Border x:Name="ErrorPanel"
+                  IsVisible="{Binding HasError}"
+                  HorizontalAlignment="Center"
+                  VerticalAlignment="Center"
+                  Background="{DynamicResource ColorErrorCalloutFill}"
+                  BorderBrush="{DynamicResource ColorErrorCalloutBorder}"
+                  BorderThickness="1"
+                  CornerRadius="{StaticResource RadiusMd}"
+                  Padding="16">
+            <StackPanel Spacing="8">
+              <TextBlock x:Name="ErrorText"
+                         Text="{Binding ErrorText}"
+                         TextWrapping="Wrap"
+                         Foreground="{DynamicResource ColorError}" />
+              <Button x:Name="RetryButton"
+                      Content="Retry"
+                      HorizontalAlignment="Center"
+                      Padding="14,4"
+                      Command="{Binding RetryCommand}" />
+            </StackPanel>
+          </Border>
+        </Panel>
+      </Border>
+
+      <Border x:Name="HeaderPanelHost"
+              Grid.Column="1"
+              Width="420"
+              IsVisible="{Binding IsHeaderPanelVisible}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1,0,0,0"
+              Padding="12">
+        <ScrollViewer>
+          <!-- Phase 6's control, dropped in unchanged and keyed on the previewed frame's id
+               (spec 12.4's raw header panel). No second header renderer. -->
+          <controls:RawHeaderPanel DataContext="{Binding Headers}" />
+        </ScrollViewer>
+      </Border>
+    </Grid>
+
+    <!-- Navigation, bounded by the originating list: at either end the button greys (ruling
+         Q17), and the command body refuses as well. -->
+    <Border Grid.Row="2"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,1,0,0"
+            Padding="16,10">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+          <Button x:Name="PreviousButton"
+                  Content="Previous"
+                  Padding="14,4"
+                  Command="{Binding PreviousCommand}" />
+          <Button x:Name="NextButton"
+                  Content="Next"
+                  Padding="14,4"
+                  Command="{Binding NextCommand}" />
+        </StackPanel>
+        <TextBlock Grid.Column="1"
+                   x:Name="ZoomHintText"
+                   Text="Wheel to zoom, drag to pan, double-click or 0 to fit"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <Button Grid.Column="2"
+                x:Name="CloseButton"
+                Content="Close (Esc)"
+                Padding="14,4"
+                Command="{Binding CloseCommand}" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

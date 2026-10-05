@@ -1,0 +1,53 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GalactiLog.App.Controls.DisclosureBand"
+             x:Name="BandRoot">
+  <!-- The header row only, never the section body, so a host keeps its body wherever its own layout needs it. -->
+  <!-- No help glyph is declared here: HelpSlot takes the host's HelpButton, so each placement stays one markup site for the once-each census. -->
+  <!-- The look is Classes="chevron" and Classes="t-label section" from Theme/Controls.axaml, with no style or colour literal of its own. -->
+  <UserControl.Resources>
+    <!-- The two arms the chevron draws. -->
+    <StreamGeometry x:Key="IconChevronRight">M6,3 L11,8 L6,13</StreamGeometry>
+    <StreamGeometry x:Key="IconChevronDown">M3,6 L8,11 L13,6</StreamGeometry>
+  </UserControl.Resources>
+
+  <Grid ColumnDefinitions="Auto,Auto,*,Auto">
+    <Button Grid.Column="0"
+            x:Name="Toggle"
+            Classes="chevron"
+            HorizontalAlignment="Left"
+            Command="{Binding #BandRoot.ToggleCommand}">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <Path Data="{StaticResource IconChevronRight}"
+              Stroke="{DynamicResource ColorTextTertiary}"
+              StrokeThickness="1.6"
+              StrokeLineCap="Round"
+              StrokeJoin="Round"
+              Width="16"
+              Height="16"
+              IsVisible="{Binding !#BandRoot.IsExpanded}" />
+        <Path Data="{StaticResource IconChevronDown}"
+              Stroke="{DynamicResource ColorTextTertiary}"
+              StrokeThickness="1.6"
+              StrokeLineCap="Round"
+              StrokeJoin="Round"
+              Width="16"
+              Height="16"
+              IsVisible="{Binding #BandRoot.IsExpanded}" />
+        <TextBlock Classes="t-label section"
+                   Text="{Binding #BandRoot.Title}"
+                   VerticalAlignment="Center" />
+      </StackPanel>
+    </Button>
+
+    <ContentPresenter Grid.Column="1"
+                      x:Name="HelpSlotHost"
+                      Content="{Binding #BandRoot.HelpSlot}"
+                      VerticalAlignment="Center" />
+
+    <ContentPresenter Grid.Column="3"
+                      x:Name="TrailingHost"
+                      Content="{Binding #BandRoot.TrailingContent}"
+                      VerticalAlignment="Center" />
+  </Grid>
+</UserControl>

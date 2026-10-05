@@ -1,0 +1,32 @@
+name: Branch merge policy
+
+on:
+  pull_request:
+    branches: [main, dev]
+
+permissions: {}
+
+jobs:
+  check-source-branch:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      # Hosted runners carry Git\bin on PATH; the self-hosted one carries only Git\cmd.
+      # cmd, not powershell: a fresh runner account starts with execution policy Restricted.
+      - name: Put Git Bash on the path
+        shell: cmd
+        run: echo C:\Program Files\Git\bin>>%GITHUB_PATH%
+
+      - name: Verify source branch
+        shell: bash
+        env:
+          BASE: ${{ github.base_ref }}
+          HEAD: ${{ github.head_ref }}
+        run: |
+          if [ "$BASE" = "main" ] && [ "$HEAD" != "dev" ]; then
+            echo "Pull requests into main must come from dev (got $HEAD)."
+            exit 1
+          fi
+          if [ "$BASE" = "dev" ] && [ "$HEAD" != "snd" ]; then
+            echo "Pull requests into dev must come from snd (got $HEAD)."
+            exit 1
+          fi

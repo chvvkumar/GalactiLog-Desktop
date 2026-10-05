@@ -1,0 +1,177 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.GeneralTabView"
+             x:DataType="settings:GeneralTabViewModel">
+  <!-- design-spec 12.7's General tab and design-spec 12.11's five residency controls: close to
+       tray, minimize to tray, start with Windows, start minimized and the scan completion notice.
+
+       Every control saves on change with no Save button, matching the other preference tabs.
+       Every colour is a theme token (spec 14) and nothing here sets FontSize from a FontSize*
+       key, because those keys are ratios rather than point sizes. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The general settings could not be read."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadingText"
+                 Text="Reading the general settings..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- Window behaviour (spec 12.11 behaviours 5 and 6). -->
+      <Border x:Name="WindowBehaviourSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Window behaviour"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.general.window" />
+          </StackPanel>
+          <TextBlock Text="GalactiLog can stay in the Windows notification area instead of exiting."
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <CheckBox x:Name="CloseToTrayBox"
+                    Content="Close to the notification area"
+                    IsChecked="{Binding CloseToTray, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <!-- Ruling Q2: this sentence is how a user learns what the shipped default does, since
+               there is no one-time dialog and no key to remember one was shown. -->
+          <TextBlock x:Name="CloseToTrayNote"
+                     Text="{x:Static settings:GeneralTabViewModel.CloseToTrayDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <CheckBox x:Name="MinimizeToTrayBox"
+                    Content="Minimize to the notification area"
+                    IsChecked="{Binding MinimizeToTray, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="MinimizeToTrayNote"
+                     Text="{x:Static settings:GeneralTabViewModel.MinimizeToTrayDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Startup (spec 12.11 behaviours 8 and 9). -->
+      <Border x:Name="StartupSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Startup"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.general.startup" />
+          </StackPanel>
+
+          <CheckBox x:Name="StartWithWindowsBox"
+                    Content="Start GalactiLog when I sign in"
+                    IsEnabled="{Binding CanSetStartWithWindows}"
+                    IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <!-- Spec 12.10: a disabled control says why, rather than greying silently. -->
+          <TextBlock x:Name="StartWithWindowsUnavailableText"
+                     Text="{Binding StartWithWindowsUnavailableReason}"
+                     IsVisible="{Binding HasStartWithWindowsUnavailableReason}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorWarning}" />
+
+          <CheckBox x:Name="StartMinimizedBox"
+                    Content="Start in the notification area"
+                    IsChecked="{Binding StartMinimized, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="StartMinimizedNote"
+                     Text="{x:Static settings:GeneralTabViewModel.StartMinimizedDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Notifications (spec 12.11 behaviour 10). -->
+      <Border x:Name="NotificationsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Notifications"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.general.notifications" />
+          </StackPanel>
+
+          <CheckBox x:Name="NotifyOnScanCompleteBox"
+                    Content="Report a finished scan while the window is hidden"
+                    IsChecked="{Binding NotifyOnScanComplete, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <!-- Ruling Q6: the shipped mechanism is the tray tooltip, so the control says so. -->
+          <TextBlock x:Name="NotifyOnScanCompleteNote"
+                     Text="{x:Static settings:GeneralTabViewModel.NotifyOnScanCompleteDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Survey downloads (spec 12.7): the Sky view window's network switch. -->
+      <Border x:Name="SurveyDownloadsSection"
+              IsVisible="{Binding IsReady}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Survey downloads"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.general.survey-downloads" />
+          </StackPanel>
+
+          <CheckBox x:Name="SurveyDownloadsBox"
+                    Content="Fetch survey images for Sky view"
+                    IsChecked="{Binding SurveyDownloadsEnabled, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="SurveyDownloadsNote"
+                     Text="{x:Static settings:GeneralTabViewModel.SurveyDownloadsDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+          <TextBlock x:Name="SurveyDownloadsHostNote"
+                     Text="{x:Static settings:GeneralTabViewModel.SurveyDownloadsHostDescription}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="ErrorText"
+                 Text="{Binding ErrorMessage}"
+                 IsVisible="{Binding HasErrorMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+      <TextBlock x:Name="StatusText"
+                 Text="{Binding StatusMessage}"
+                 IsVisible="{Binding HasStatusMessage}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorSuccess}" />
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

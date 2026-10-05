@@ -1,0 +1,82 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.SharpestFramePart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel"
+             IsVisible="{Binding HasRigs}">
+
+  <!-- Spec 12.4's per-night reference thumbnails (PAR-008), one box per rig, which on
+       the ordinary single-rig night is one box. The user's B1 decision of 2026-09-18
+       (option 3) puts them here, as this section's first row, rather than in the pane's
+       fixed rows: a collapsed subtree is not laid out at all, so on a fresh profile the
+       strip costs the scroller nothing and the "Night detail" and "Frames" bands are
+       both on screen at rest, and the thumbnails appear when the reader opens the
+       section. Nothing else about the strip changed.
+
+       The box keeps the frame's aspect and is never cropped: MaxHeight and MaxWidth
+       bound it at 120 by 240 and Stretch="Uniform" fits the image inside that bound. No
+       Width, no Height and never UniformToFill, which crops. A 3:2 landscape therefore
+       renders 180 by 120, a 4:3 renders 160 by 120, a 3:2 portrait renders 80 by 120,
+       and a frame wider than 2:1 is bounded by the width instead.
+
+       The boxes sit left aligned in rig order with an 8 pixel gap, wrapping when the
+       row cannot hold them, which is the WrapPanel's own behaviour rather than a
+       measured branch. The gap is a trailing margin per box cancelled by this strip's
+       own negative margin, so two boxes at the 240 pixel cap are 488 pixels rather than
+       496 and still sit side by side on the shipped 490 pixel pane. The negative margin
+       is unchanged by the move: it cancels the box margins, never the parent's spacing.
+
+       Nothing is scaled down to force a fit (spec 12.4): a thumbnail shrunk to fit
+       answers the question less well than a thumbnail on the next line. -->
+  <ItemsControl x:Name="ThumbnailStrip"
+                Margin="0,0,-8,-8"
+                ItemsSource="{Binding Rigs}"
+                IsVisible="{Binding HasRigs}">
+    <ItemsControl.ItemsPanel>
+      <ItemsPanelTemplate>
+        <WrapPanel Orientation="Horizontal" />
+      </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
+    <ItemsControl.ItemTemplate>
+      <DataTemplate x:DataType="detail:RigViewModel">
+        <!-- A click opens the preview modal at this frame, inside the night's frame
+             list, so the arrow keys step through the night from there. It routes
+             through the card, which routes through the frame table's own
+             select-and-preview seam: the same one a night strip tick and a plain row
+             click already use, not a second entry point. -->
+        <Button x:Name="ThumbnailButton"
+                Classes="quiet"
+                Padding="0"
+                Margin="0,0,8,8"
+                Command="{Binding OpenPreviewCommand}"
+                ToolTip.Tip="{Binding Label}">
+          <Panel>
+            <Border x:Name="ThumbnailBox"
+                    MaxHeight="120"
+                    MaxWidth="240"
+                    IsVisible="{Binding HasThumbnail}">
+              <Image Source="{Binding Thumbnail.Image}" Stretch="Uniform" />
+            </Border>
+
+            <!-- Spec 12.4's placeholder: the same box at a 3:2 default, 180 by 120,
+                 outlined, with the words in the tertiary ink. It is not a failure
+                 message and it carries no retry. -->
+            <Border x:Name="ThumbnailPlaceholder"
+                    Width="180"
+                    Height="120"
+                    BorderThickness="1"
+                    BorderBrush="{DynamicResource ColorTextTertiary}"
+                    IsVisible="{Binding ShowsPlaceholder}">
+              <TextBlock Classes="t-label"
+                         Text="No thumbnail"
+                         HorizontalAlignment="Center"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource ColorTextTertiary}" />
+            </Border>
+          </Panel>
+        </Button>
+      </DataTemplate>
+    </ItemsControl.ItemTemplate>
+  </ItemsControl>
+</UserControl>

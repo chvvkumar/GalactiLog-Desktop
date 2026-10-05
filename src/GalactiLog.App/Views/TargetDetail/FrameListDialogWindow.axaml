@@ -1,0 +1,110 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+        x:Class="GalactiLog.App.Views.TargetDetail.FrameListDialogWindow"
+        x:DataType="detail:FrameListDialogViewModel"
+        Title="Copy frame list"
+        Width="560"
+        MinHeight="260"
+        MaxHeight="720"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.4's Copy Frame List dialog (PAR-006, rulings C5 and C6). A ModalPageWindow
+       like the merge preview, opened on the one ModalHost.
+
+       It writes the clipboard and nothing else: no file is created, moved, renamed or deleted,
+       and no move script is offered (spec 2.1 and 19.2).
+
+       Every colour is a theme token (spec 14) and nothing here sets a type size at all, because
+       Scales.axaml's type-size keys are ratios and not point sizes. No ToggleButton, Button,
+       Border.tag or Border.callout style is declared here: Theme/Controls.axaml is the whole
+       shared control vocabulary and ControlStyleScanTest fails the build on a view that declares
+       its own. -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <!-- Ruling C1's help glyph beside the page heading. Spec 12.12 places page.frame-list here
+           and nowhere else, so Task 2's census counts this one site. -->
+      <StackPanel x:Name="HeadingRow" Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="TitleText"
+                   Text="Copy frame list"
+                   VerticalAlignment="Center"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <controls:HelpButton Topic="page.frame-list" />
+      </StackPanel>
+
+      <!-- Spec 12.4's mode segment. Two ToggleButtons in the shared style, the second bound to the
+           negation of the first, which is the shape the Statistics timeline segment already uses:
+           one source of truth and no way for both to read checked. -->
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Mode"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <ToggleButton x:Name="GoodModeToggle"
+                      Content="Good"
+                      IsChecked="{Binding IsGoodMode, Mode=TwoWay}"
+                      ToolTip.Tip="The frames the grading did not reject" />
+        <ToggleButton x:Name="BadModeToggle"
+                      Content="Bad"
+                      IsChecked="{Binding !IsGoodMode, Mode=TwoWay}"
+                      ToolTip.Tip="The frames the grading rejected" />
+      </StackPanel>
+
+      <!-- Offered in Good mode only and ignored in Bad mode: an unmeasured frame is never bad, so
+           a box that stayed on screen there would appear to govern something it does not. -->
+      <CheckBox x:Name="IncludeUnmeasuredBox"
+                Content="Include unmeasured frames"
+                IsVisible="{Binding IsIncludeUnmeasuredOffered}"
+                IsChecked="{Binding IncludeUnmeasured, Mode=TwoWay}"
+                Foreground="{DynamicResource ColorTextSecondary}"
+                ToolTip.Tip="Frames the grading produced no score for: a group of fewer than 8 frames, a uniform group, or no value on any graded axis" />
+
+      <!-- Spec 12.4's tally, live. Its counts are the frame table's own verdicts over the same
+           FrameGrading values, so the dialog and the table cannot disagree. -->
+      <TextBlock x:Name="TallyText"
+                 Text="{Binding TallyText}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <!-- Spec 12.4's partial-load warning. Border.callout warn is the shared vocabulary's, and
+           its warn arm carries the warning ink for its text too. -->
+      <Border x:Name="PartialLoadWarning"
+              Classes="callout warn"
+              IsVisible="{Binding HasPartialLoad}">
+        <TextBlock x:Name="PartialLoadText"
+                   Text="{Binding PartialLoadText}"
+                   TextWrapping="Wrap" />
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Format"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <ComboBox x:Name="FormatSelector"
+                  ItemsSource="{Binding Formats}"
+                  SelectedItem="{Binding SelectedFormat, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="detail:FrameListFormatOption">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton"
+                Content="Cancel"
+                Padding="14,4"
+                Command="{Binding CancelCommand}" />
+        <Button x:Name="CopyButton"
+                Content="Copy"
+                Padding="14,4"
+                Command="{Binding CopyCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

@@ -1,0 +1,192 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:analysisviews="using:GalactiLog.App.Views.Analysis"
+             xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:converters="using:GalactiLog.App.Converters"
+             x:Class="GalactiLog.App.Views.Analysis.CorrelationTabView"
+             x:DataType="analysis:CorrelationTabViewModel">
+  <UserControl.Resources>
+    <!-- One instance in this view's own resources rather than in App.axaml, which is what
+         MultiplyConverter's remark asks for: the converter is stateless and the application
+         dictionary stays the theme's. -->
+    <converters:ChartHeightConverter x:Key="ChartHeight" />
+  </UserControl.Resources>
+  <!-- Spec 12.14's Correlation tab body.
+
+       NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all five tab heading rows and all
+       seven placements are in Views/AnalysisView.axaml, and no other markup file carries them.
+       The mixed plate scale callout, the state sentence and the Retry are the base's and
+       are drawn once by that file's shared tab section template, above this body. -->
+  <StackPanel Spacing="8">
+
+    <!-- The six presets. OUTSIDE the result region: a reader who filtered the chart into
+         emptiness has to be able to pick another pair. Button.pill with the shipped selected
+         form over it, which is the vocabulary DESIGN.md section 4 already carries. -->
+    <ItemsControl x:Name="Presets" ItemsSource="{Binding Presets}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <WrapPanel />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="analysis:CorrelationPreset">
+          <Button Classes="sm pill"
+                  Classes.selected="{Binding IsSelected}"
+                  Margin="0,0,6,6"
+                  Content="{Binding Label}"
+                  Command="{Binding Command}" />
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+
+    <!-- The two pickers and the toggle, in spec 12.14's order. A WrapPanel and never one
+         non-wrapping row: at the 1024 by 700 minimum the content region is about 824 wide and a
+         clipped control hides an affordance the reader cannot then find. -->
+    <WrapPanel x:Name="MetricControls">
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
+        <TextBlock Text="X Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <!-- Avalonia has no optgroup, so the "Guiding (PHD2)" group is one flat list with a header
+             entry in it. The container's IsEnabled follows the entry's own IsSelectable, and the
+             view-model's setter refuses the header as well, so neither half alone can let an
+             unparseable key reach a query. -->
+        <ComboBox x:Name="XPicker"
+                  Width="230"
+                  ItemsSource="{Binding XOptions}"
+                  SelectedItem="{Binding SelectedXOption, Mode=TwoWay}">
+          <ComboBox.Styles>
+            <Style Selector="ComboBoxItem">
+              <Setter Property="IsEnabled" Value="{Binding IsSelectable, x:DataType=analysis:AnalysisMetricChoice}" />
+            </Style>
+          </ComboBox.Styles>
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="analysis:AnalysisMetricChoice">
+              <Panel>
+                <TextBlock Text="{Binding Label}" Classes="t-caption" IsVisible="{Binding IsHeader}" />
+                <TextBlock Text="{Binding Label}" IsVisible="{Binding IsSelectable}" />
+              </Panel>
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
+        <TextBlock Text="Y Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <ComboBox x:Name="YPicker"
+                  Width="230"
+                  ItemsSource="{Binding YOptions}"
+                  SelectedItem="{Binding SelectedYOption, Mode=TwoWay}">
+          <ComboBox.ItemTemplate>
+            <DataTemplate x:DataType="analysis:AnalysisMetricChoice">
+              <TextBlock Text="{Binding Label}" />
+            </DataTemplate>
+          </ComboBox.ItemTemplate>
+        </ComboBox>
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
+        <!-- The label states the action the button will perform, which is the web's wording. -->
+        <Button x:Name="OutlierToggle"
+                Classes="sm"
+                Content="{Binding OutliersToggleLabel}"
+                Command="{Binding ToggleOutliersCommand}" />
+      </StackPanel>
+    </WrapPanel>
+
+    <!-- Spec 12.14's PHD2 join note. A caption in secondary ink, not a callout: it states how the
+         join works rather than warning about anything, and it can be on screen at the same time as
+         the base's mixed plate scale callout above this body. -->
+    <TextBlock x:Name="Phd2Note"
+               Text="{x:Static analysis:CorrelationTabViewModel.Phd2NoteText}"
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               IsVisible="{Binding Phd2NoteVisible}" />
+
+    <!-- The sampling sentence, above the chart, shown when the query downsampled the drawn set. -->
+    <TextBlock x:Name="SamplingNote"
+               Text="{Binding SamplingSentence}"
+               Classes="t-caption"
+               TextWrapping="Wrap"
+               IsVisible="{Binding SamplingSentence,
+                                   Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+
+    <!-- The tab's ONE result region. Spec 12.14's States
+         table draws no chart in "Loading, first result", "No row matches the filters", the too-few
+         rows or a failure, and keeps the last result drawn through "Loading, refresh", which is
+         exactly what AnalysisTabViewModel.ShowsResult answers. The chart, the verdict and the
+         stats cards go INSIDE this element; the presets, the pickers, the toggle and the two notes
+         go OUTSIDE it and stay live in every state. Exactly one ResultRegion per tab view, which
+         AnalysisResultRegionCensusTest enforces by file name. -->
+    <StackPanel x:Name="ResultRegion" Spacing="6" IsVisible="{Binding ShowsResult}">
+      <!-- This chart's background is bg-elevated rather than transparent, because the
+           confidence band's lower bound is masked with an opaque area and the mask must be painted
+           in exactly the colour behind it. The token is named here and in
+           CorrelationChartViewModel.MaskTokenKey and the two must agree.
+
+           The height is the page viewport less everything else on the page, floored at 280, the
+           smallest of this page's other charts. A literal froze the scatter at the smallest figure
+           that fits the smallest standard window and then never let it grow, and a scatter is the
+           one chart kind on this page whose readability is a function of plotted AREA. A star row
+           is not available: the tab body hangs off AnalysisView.axaml's one ScrollViewer over a
+           StackPanel, which measures its content with unbounded height. The subtracted figure is
+           CorrelationTabViewModel.ChartFixedSpend, whose own summary says what it sums, and the
+           layout cases measure the result at three window sizes.
+
+           FindingStrategy is declared rather than left Automatic. Automatic resolves to
+           CompareOnlyXTakeClosest only when EVERY series prefers the X strategy, and a scatter
+           series prefers XY, so this chart resolved to CompareAllTakeClosest, whose hit test is
+           the scatter's own hover area: the 4 pixel geometry box, in both axes at once. No reader
+           could hold a pointer that still, so the tab shipped with no hover tooltip at all. The X
+           strategy asks the same question of one axis, which makes a point findable anywhere above
+           or below it. The band, the mask and the trend are not hoverable, so only the two point
+           series answer.
+
+           LegendPosition is Hidden, which is also rc5.4's own default; setting it explicitly keeps
+           the decision visible in the file that made it, as MetricChartView.axaml already does. -->
+      <lvc:CartesianChart x:Name="Chart"
+                          LegendPosition="Hidden"
+                          FindingStrategy="CompareOnlyXTakeClosest"
+                          Series="{Binding Chart.Series}"
+                          XAxes="{Binding Chart.XAxes}"
+                          YAxes="{Binding Chart.YAxes}"
+                          Background="{DynamicResource ColorBgElevated}"
+                          Height="{Binding $parent[ScrollViewer].Viewport.Height,
+                                           Converter={StaticResource ChartHeight},
+                                           ConverterParameter={x:Static analysis:CorrelationTabViewModel.ChartFixedSpend}}" />
+
+      <!-- The verdict, then its point count in the tertiary ink, which is spec 12.14 line 7679 and
+           the pinned CorrelationChart.tsx's own opacity-60 span. Two runs in one block rather than
+           two blocks: the web draws the count on the verdict's own line, and a second line would
+           cost the chart its height at 1280 by 800.
+
+           The block names ColorTextPrimary. This application declares no ink for a bare TextBlock:
+           every other sentence on the page carries one of Controls.axaml's text classes, and a
+           block that carries neither a class nor a Foreground inherits FluentTheme's Dark Window
+           default, pure white, which is not in any GalactiLog palette. On red-light that made this
+           sentence the brightest thing on a night-vision page. -->
+      <TextBlock x:Name="Verdict"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorTextPrimary}">
+        <Run Text="{Binding Verdict}" />
+        <Run x:Name="PointCount"
+             Text="{Binding PointCount}"
+             Foreground="{DynamicResource ColorTextTertiary}" />
+      </TextBlock>
+
+      <TextBlock x:Name="Disclaimer"
+                 Text="{x:Static analysis:CorrelationVerdict.Disclaimer}"
+                 Classes="t-caption"
+                 TextWrapping="Wrap" />
+
+      <!-- The two cards hide together, not independently. The card type's own
+           null-hides-the-card rule stays; this is the pair gate the web has at line 192. -->
+      <Grid x:Name="StatsCards"
+            ColumnDefinitions="*,*"
+            ColumnSpacing="12"
+            IsVisible="{Binding StatsVisible}">
+        <analysisviews:StatsCardView Grid.Column="0" DataContext="{Binding XCard}" />
+        <analysisviews:StatsCardView Grid.Column="1" DataContext="{Binding YCard}" />
+      </Grid>
+    </StackPanel>
+  </StackPanel>
+</UserControl>

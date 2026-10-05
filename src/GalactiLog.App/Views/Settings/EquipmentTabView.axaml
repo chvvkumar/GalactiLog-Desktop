@@ -1,0 +1,312 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.EquipmentTabView"
+             x:Name="Root"
+             x:DataType="settings:EquipmentTabViewModel">
+  <!-- Design-spec 12.7's Equipment tab: "the same shape for cameras and telescopes", so this is
+       FiltersTabView's layout minus the colour swatch and the add row: suggestions banner, a
+       Cameras card and a Telescopes card each hosting a GroupingEditorView with ShowColorPicker
+       false, and Save. Every colour is a theme token and nothing here sets FontSize. -->
+  <!-- The suggestion pill is Theme/Controls.axaml's Button.pill, which P12 Task 5 lifted out of
+       this file, FiltersTabView.axaml and ActivityView.axaml. The rule the local copy existed for
+       still holds and now holds in one place: the base background is a style setter and never an
+       inline attribute, because an inline value is a LocalValue and always outranks a setter,
+       which is what made the selected pill never highlight before that fix. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+      <TextBlock x:Name="LoadFailedText"
+                 Text="{Binding LoadFailedMessage}"
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- Spec 12.10: while the first load is in flight (review minor 8). -->
+      <TextBlock x:Name="LoadingText"
+                 Text="Loading..."
+                 IsVisible="{Binding IsLoading}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <Border x:Name="SuggestionsBanner"
+              IsVisible="{Binding HasSuggestions}"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorWarning}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <TextBlock x:Name="SuggestionsHeadingText"
+                     Text="{Binding SuggestionsHeading}"
+                     Foreground="{DynamicResource ColorWarning}" />
+          <ItemsControl x:Name="SuggestionList" ItemsSource="{Binding Suggestions}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:SuggestionViewModel">
+                <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+                  <ItemsControl ItemsSource="{Binding Pills}">
+                    <ItemsControl.ItemsPanel>
+                      <ItemsPanelTemplate>
+                        <StackPanel Orientation="Horizontal" Spacing="4" />
+                      </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate DataType="settings:SuggestionPillViewModel">
+                        <Button Classes="pill"
+                                Classes.selected="{Binding IsSelected}"
+                                Content="{Binding Label}"
+                                Command="{Binding $parent[ItemsControl].((settings:SuggestionViewModel)DataContext).SelectCommand}"
+                                CommandParameter="{Binding Name}" />
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                  <Button x:Name="AcceptButton"
+                          Content="Merge"
+                          Padding="8,3"
+                          Command="{Binding #Root.((settings:EquipmentTabViewModel)DataContext).AcceptSuggestionCommand}"
+                          CommandParameter="{Binding}" />
+                  <Button x:Name="DismissButton"
+                          Content="Dismiss"
+                          Padding="8,3"
+                          Command="{Binding #Root.((settings:EquipmentTabViewModel)DataContext).DismissSuggestionCommand}"
+                          CommandParameter="{Binding}" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="CamerasCard"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Cameras"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.equipment.cameras" />
+          </StackPanel>
+          <ContentControl x:Name="CamerasRegion" Content="{Binding CamerasEditor}" />
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="TelescopesCard"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <StackPanel Orientation="Horizontal" Spacing="6">
+            <TextBlock Text="Telescopes"
+                       FontWeight="SemiBold"
+                       Foreground="{DynamicResource ColorTextPrimary}" />
+            <controls:HelpButton Topic="settings.equipment.telescopes" />
+          </StackPanel>
+          <ContentControl x:Name="TelescopesRegion" Content="{Binding TelescopesEditor}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Spec 12.7's PHD2 profiles panel (Phase 15A Task 6), below the two grouping editors.
+           Hidden entirely while Phd2Profiles is null: Task 6a ships the panel unwired (AppHost.cs
+           is Task 6b's file), so "no panel constructed yet" and "constructed but the corpus has
+           read no guide log" are two different states, and this is the first one. No CornerRadius
+           and no card chrome (coordinator ruling): a hairline under the heading, the shape
+           LibraryTabView's newer sections use, not a bordered card.
+
+           Every editor below carries a visible label and an AutomationProperties.Name, and every
+           read-only fact carries a caption: a watermark is gone the moment the field holds a value,
+           which is the state of every field a user has configured, and a bare "1.23" is a pixel
+           scale only to a reader who already knows spec 12.7's column order (review P2-3). -->
+      <Border x:Name="Phd2ProfilesSection"
+              IsVisible="{Binding #Root.((settings:EquipmentTabViewModel)DataContext).Phd2Profiles, Converter={x:Static ObjectConverters.IsNotNull}}"
+              DataContext="{Binding Phd2Profiles}">
+        <StackPanel Spacing="10" x:DataType="settings:Phd2ProfilesViewModel">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="PHD2 profiles" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.equipment.phd2-profiles" />
+            </StackPanel>
+          </Border>
+
+          <TextBlock x:Name="Phd2ProfilesLoadFailedText"
+                     Text="The PHD2 profiles could not be read."
+                     IsVisible="{Binding LoadFailed}"
+                     Classes="t-caption" />
+
+          <!-- A refused write reverts the user's box; without this line it reverted with no
+               explanation at all (review P2-4). -->
+          <TextBlock x:Name="Phd2ProfilesErrorText"
+                     Text="{Binding ErrorMessage}"
+                     IsVisible="{Binding HasErrorMessage}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}"
+                     Classes="t-caption" />
+
+          <!-- Spec 12.7: the panel says a re-run has been queued rather than blocking on it. -->
+          <TextBlock x:Name="Phd2ProfilesStatusText"
+                     Text="{Binding StatusMessage}"
+                     IsVisible="{Binding HasStatusMessage}"
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <!-- Spec 12.7: and says a re-run is still owed rather than reporting the work done.
+               HasPendingMessage is false while the queued sentence above is up, so the two never
+               share the panel (the precedence is stated on that property). -->
+          <TextBlock x:Name="Phd2ProfilesPendingText"
+                     Text="{Binding PendingMessage}"
+                     IsVisible="{Binding HasPendingMessage}"
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <TextBlock x:Name="Phd2ProfilesEmptyText"
+                     Text="{x:Static settings:Phd2ProfilesViewModel.EmptyStateMessage}"
+                     IsVisible="{Binding IsEmpty}"
+                     TextWrapping="Wrap"
+                     Classes="t-caption" />
+
+          <ItemsControl x:Name="Phd2ProfilesList" ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:Phd2ProfileRowViewModel">
+                <StackPanel Spacing="6" Margin="0,0,0,14">
+                  <TextBlock Text="{Binding ProfileDisplay}"
+                             FontWeight="SemiBold"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+
+                  <WrapPanel>
+                    <TextBlock Classes="t-caption" Margin="0,0,16,4">
+                      <Run Text="Guide camera" /><Run Text=" " /><Run Text="{Binding GuideCameraText}" />
+                    </TextBlock>
+                    <TextBlock Classes="t-caption" Margin="0,0,16,4">
+                      <Run Text="Focal length" /><Run Text=" " /><Run Text="{Binding FocalLengthText}" />
+                    </TextBlock>
+                    <TextBlock Classes="t-caption" Margin="0,0,16,4">
+                      <Run Text="Pixel scale" /><Run Text=" " /><Run Text="{Binding PixelScaleText}" />
+                    </TextBlock>
+                    <TextBlock Classes="t-caption" Margin="0,0,16,4">
+                      <Run Text="Sessions" /><Run Text=" " /><Run Text="{Binding SessionCountText}" />
+                    </TextBlock>
+                    <TextBlock Classes="t-caption" Margin="0,0,16,4">
+                      <Run Text="First seen" /><Run Text=" " /><Run Text="{Binding FirstSeenText}" />
+                    </TextBlock>
+                    <TextBlock Classes="t-caption">
+                      <Run Text="Last seen" /><Run Text=" " /><Run Text="{Binding LastSeenText}" />
+                    </TextBlock>
+                  </WrapPanel>
+
+                  <WrapPanel>
+                    <StackPanel Spacing="2" Margin="0,0,8,6">
+                      <TextBlock x:Name="TelescopeLabel" Classes="t-label" Text="Telescope" />
+                      <ComboBox x:Name="TelescopeBox"
+                                Width="170"
+                                AutomationProperties.Name="Telescope"
+                                ItemsSource="{Binding TelescopeOptions}"
+                                SelectedItem="{Binding SelectedTelescope, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate DataType="settings:Phd2TelescopeOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </StackPanel>
+                    <StackPanel Spacing="2" Margin="0,0,8,6">
+                      <TextBlock x:Name="TimezoneLabel" Classes="t-label" Text="Timezone" />
+                      <!-- Wide enough for a typical offset-first zone label ("GMT-07:00 La Paz,
+                           Mazatlan") at the Extra Large text size, because the picker was clipping
+                           its own selected value in the shipped capture. The row is a WrapPanel, so
+                           the extra width wraps the coordinate boxes to a second line at a narrow
+                           allotment rather than pushing anything past the pane. -->
+                      <ComboBox x:Name="TimezoneBox"
+                                Width="320"
+                                AutomationProperties.Name="Timezone"
+                                ItemsSource="{Binding TimezoneOptions}"
+                                SelectedItem="{Binding SelectedTimezone, Mode=TwoWay}">
+                        <ComboBox.ItemTemplate>
+                          <DataTemplate DataType="settings:TimezoneOption">
+                            <TextBlock Text="{Binding Label}" />
+                          </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                      </ComboBox>
+                    </StackPanel>
+                    <StackPanel Spacing="2" Margin="0,0,8,6">
+                      <TextBlock x:Name="LatitudeLabel" Classes="t-label" Text="Latitude" />
+                      <!-- UpdateSourceTrigger=LostFocus, as LocationTabView binds the same two
+                           fields validated by the same two validators: the property-changed
+                           default commits a write per keystroke, so typing 45.5 stores 4, then 45,
+                           then 45.5 (review P1-2). -->
+                      <!-- 128, not 90: the stated range is the whole point of the watermark and
+                           both boxes were cutting theirs off mid-number. Sized for the longer of
+                           the two ("-180 to 180") so the pair stays one width. -->
+                      <TextBox x:Name="LatitudeBox"
+                               Width="128"
+                               Watermark="-90 to 90"
+                               AutomationProperties.Name="Latitude"
+                               Background="{DynamicResource ColorBgInput}"
+                               Foreground="{DynamicResource ColorTextPrimary}"
+                               Text="{Binding LatitudeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    </StackPanel>
+                    <StackPanel Spacing="2" Margin="0,0,0,6">
+                      <TextBlock x:Name="LongitudeLabel" Classes="t-label" Text="Longitude" />
+                      <TextBox x:Name="LongitudeBox"
+                               Width="128"
+                               Watermark="-180 to 180"
+                               AutomationProperties.Name="Longitude"
+                               Background="{DynamicResource ColorBgInput}"
+                               Foreground="{DynamicResource ColorTextPrimary}"
+                               Text="{Binding LongitudeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                    </StackPanel>
+                  </WrapPanel>
+                  <TextBlock x:Name="LatitudeErrorText"
+                             Text="{Binding LatitudeError}"
+                             IsVisible="{Binding HasLatitudeError}"
+                             Foreground="{DynamicResource ColorError}"
+                             Classes="t-caption" />
+                  <TextBlock x:Name="LongitudeErrorText"
+                             Text="{Binding LongitudeError}"
+                             IsVisible="{Binding HasLongitudeError}"
+                             Foreground="{DynamicResource ColorError}"
+                             Classes="t-caption" />
+
+                  <TextBlock x:Name="ZoneResolutionOkText"
+                             Text="{Binding ZoneResolutionText}"
+                             IsVisible="{Binding !ZoneIsUnset}"
+                             TextWrapping="Wrap"
+                             Classes="t-caption" />
+                  <TextBlock x:Name="ZoneResolutionWarningText"
+                             Text="{Binding ZoneResolutionText}"
+                             IsVisible="{Binding ZoneIsUnset}"
+                             TextWrapping="Wrap"
+                             Foreground="{DynamicResource ColorWarning}"
+                             Classes="t-caption" />
+                  <TextBlock x:Name="SiteResolutionText"
+                             Text="{Binding SiteResolutionText}"
+                             TextWrapping="Wrap"
+                             Classes="t-caption" />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <StackPanel Orientation="Horizontal" Spacing="12">
+        <Button x:Name="SaveButton"
+                Content="Save"
+                Padding="10,3"
+                Command="{Binding SaveCommand}" />
+        <TextBlock x:Name="EquipmentErrorText"
+                   Text="{Binding ErrorMessage}"
+                   IsVisible="{Binding HasErrorMessage}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorError}" />
+        <TextBlock x:Name="EquipmentStatusText"
+                   Text="{Binding StatusMessage}"
+                   IsVisible="{Binding HasStatusMessage}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorSuccess}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

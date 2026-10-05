@@ -1,0 +1,118 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.AboutTabView"
+             x:Name="Root"
+             x:DataType="settings:AboutTabViewModel">
+  <!-- design-spec 12.7's About tab: version, git SHA, release channel, an update check button,
+       release notes and a log folder link. Six fields, no more; the line under the button is the
+       button's own feedback and is labelled as such.
+
+       Every value is selectable so a support request can copy the SHA verbatim. Every colour is a
+       theme token (spec 14) and nothing here sets FontSize, because Scales.axaml's FontSize* keys
+       are ratios, not point sizes. -->
+  <ScrollViewer>
+    <StackPanel Spacing="16">
+
+      <!-- The three build fields. -->
+      <Border x:Name="BuildSection"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <!-- The trailing Auto column carries spec 12.12's settings.about glyph. The tab has no
+             section heading, so the topic sits on the tab's first row, which is the version row
+             (task1-report departure 12). It is a third column rather than a wrapper beside the
+             Version label, because a glyph is never placed on a field label. -->
+        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="8">
+          <TextBlock Grid.Row="0" Grid.Column="0"
+                     x:Name="VersionLabel"
+                     Text="{x:Static settings:AboutTabViewModel.VersionLabel}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <SelectableTextBlock Grid.Row="0" Grid.Column="1"
+                               x:Name="VersionValue"
+                               Text="{Binding Version}"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+          <controls:HelpButton Grid.Row="0" Grid.Column="2" Topic="settings.about" />
+
+          <TextBlock Grid.Row="1" Grid.Column="0"
+                     x:Name="GitShaLabel"
+                     Text="{x:Static settings:AboutTabViewModel.GitShaLabel}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <SelectableTextBlock Grid.Row="1" Grid.Column="1"
+                               x:Name="GitShaValue"
+                               Text="{Binding GitSha}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+
+          <TextBlock Grid.Row="2" Grid.Column="0"
+                     x:Name="ChannelLabel"
+                     Text="{x:Static settings:AboutTabViewModel.ChannelLabel}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <SelectableTextBlock Grid.Row="2" Grid.Column="1"
+                               x:Name="ChannelValue"
+                               Text="{Binding Channel}"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+        </Grid>
+      </Border>
+
+      <!-- The update check button and its own feedback line. -->
+      <Border x:Name="UpdateSection"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <Button x:Name="CheckForUpdatesButton"
+                  Content="{x:Static settings:AboutTabViewModel.CheckForUpdatesLabel}"
+                  Padding="14,4"
+                  HorizontalAlignment="Left"
+                  Command="{Binding CheckForUpdatesCommand}" />
+          <SelectableTextBlock x:Name="UpdateStatusText"
+                               Text="{Binding UpdateStatus}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Release notes (ruling Q19), rendered as text. Spec 19.2: no embedded browser. -->
+      <Border x:Name="ReleaseNotesSection"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="16">
+        <StackPanel Spacing="10">
+          <TextBlock x:Name="ReleaseNotesLabel"
+                     Text="{x:Static settings:AboutTabViewModel.ReleaseNotesLabel}"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <SelectableTextBlock x:Name="ReleaseNotesText"
+                               Text="{Binding ReleaseNotes}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+          <Button x:Name="ViewReleasesButton"
+                  Content="{x:Static settings:AboutTabViewModel.ReleasesLabel}"
+                  Padding="14,4"
+                  HorizontalAlignment="Left"
+                  Command="{Binding OpenReleasesCommand}" />
+        </StackPanel>
+      </Border>
+
+      <!-- The log folder link (ruling Q28): the newest log file is revealed, or the directory is
+           opened when there is no file yet. -->
+      <Button x:Name="OpenLogFolderButton"
+              Content="{x:Static settings:AboutTabViewModel.LogFolderLabel}"
+              Padding="14,4"
+              HorizontalAlignment="Left"
+              Command="{Binding OpenLogFolderCommand}" />
+
+    </StackPanel>
+  </ScrollViewer>
+</UserControl>

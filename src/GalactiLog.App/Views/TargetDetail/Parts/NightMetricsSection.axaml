@@ -1,0 +1,25 @@
+<Expander xmlns="https://github.com/avaloniaui"
+          xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+          xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+          xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
+          x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightMetricsSection"
+          x:Name="Root"
+          x:DataType="detail:SessionCardViewModel"
+          HorizontalAlignment="Stretch"
+          IsExpanded="True">
+  <Expander.Header>
+    <TextBlock Classes="t-label section" Text="Night metrics" />
+  </Expander.Header>
+  <!-- Spec 12.4's night tables and the thumbnail, side by side and wrapping when the region is
+       narrow. The comparison sentence is capped at the row's width so it wraps inside its line
+       rather than running past the region. -->
+  <WrapPanel x:Name="MetricsRow" Orientation="Horizontal">
+    <parts:PerFilterTablePart x:Name="PerFilterTablePart" Margin="0,0,24,12" />
+    <parts:RangesTablePart x:Name="RangesTablePart" Margin="0,0,24,12" />
+    <parts:ComparisonLine x:Name="ComparisonLine"
+                          Margin="0,0,24,12"
+                          VerticalAlignment="Center"
+                          MaxWidth="{Binding #MetricsRow.Bounds.Width}" />
+    <parts:SharpestFramePart x:Name="SharpestFramePart" Margin="0,0,0,12" />
+  </WrapPanel>
+</Expander>

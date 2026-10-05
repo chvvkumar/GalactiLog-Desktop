@@ -1,0 +1,91 @@
+namespace GalactiLog.Core.Targets;
+
+// Port of simbad.COMMON_NAME_MAP (design-spec 9.4.2), copied literally: 72 entries covering
+// abbreviations Stellarium does not carry, entries where Stellarium maps to a less-preferred
+// designation, entries where Stellarium maps to the wrong object, and Caldwell 1 through 50
+// (full Caldwell 1-109 coverage comes from the bundled caldwell.csv, consulted first in the
+// offline catalog lookup order, section 9.3). Do not add or invent entries beyond this list.
+//
+// Keys are already lowercase, plain Dictionary<string,string> (StringComparer.Ordinal, the
+// default) -- callers lowercase and panel-strip the lookup key themselves (design-spec 9.4.2,
+// "lookup key is the lowercased, panel-stripped name"). Deliberately NOT
+// StringComparer.OrdinalIgnoreCase: a caller that forgot to lowercase its key should miss,
+// not silently match.
+public static class CommonNameOverrides
+{
+    public static readonly IReadOnlyDictionary<string, string> Map = new Dictionary<string, string>
+    {
+        ["rho oph"] = "rho Oph",
+        ["wizard nebula"] = "NGC 7380",
+        ["elephant's trunk neb"] = "IC 1396A",
+        ["gam cas nebula"] = "IC 63",
+        ["moon"] = "Moon",
+        ["hickson 44"] = "HCG 44",
+        ["ou 4"] = "PN Ou 4",
+        ["squid nebula"] = "PN Ou 4",
+        ["pinwheel galaxy"] = "M 101",
+        ["beehive cluster"] = "M 44",
+        ["bode's galaxy"] = "M 81",
+        ["sombrero galaxy"] = "M 104",
+        ["andromeda galaxy"] = "M 31",
+        ["triangulum pinwheel"] = "M 33",
+        ["elephant's trunk nebula"] = "IC 1396A",
+        ["spaghetti nebula"] = "Simeis 147",
+        ["seagull nebula"] = "IC 2177",
+        ["seagull's wings"] = "IC 2177",
+        ["casper the friendly ghost nebula"] = "Sh2-136",
+        ["horsehead nebula"] = "Barnard 33",
+        ["markarian's chain"] = "NAME Markarian Chain",
+        ["leo triplet"] = "NAME Leo Triplet",
+        ["caldwell 1"] = "NGC 188",
+        ["caldwell 2"] = "NGC 40",
+        ["caldwell 3"] = "NGC 4236",
+        ["caldwell 4"] = "NGC 7023",
+        ["caldwell 5"] = "IC 342",
+        ["caldwell 6"] = "NGC 6543",
+        ["caldwell 7"] = "NGC 2403",
+        ["caldwell 8"] = "NGC 559",
+        ["caldwell 9"] = "Sh2-155",
+        ["caldwell 10"] = "NGC 663",
+        ["caldwell 11"] = "NGC 7635",
+        ["caldwell 12"] = "NGC 6946",
+        ["caldwell 13"] = "NGC 457",
+        ["caldwell 14"] = "NGC 869",
+        ["caldwell 15"] = "NGC 6826",
+        ["caldwell 16"] = "NGC 7243",
+        ["caldwell 17"] = "NGC 147",
+        ["caldwell 18"] = "NGC 185",
+        ["caldwell 19"] = "IC 5146",
+        ["caldwell 20"] = "NGC 7000",
+        ["caldwell 21"] = "NGC 4449",
+        ["caldwell 22"] = "NGC 7662",
+        ["caldwell 23"] = "NGC 891",
+        ["caldwell 24"] = "NGC 1275",
+        ["caldwell 25"] = "NGC 2419",
+        ["caldwell 26"] = "NGC 4244",
+        ["caldwell 27"] = "NGC 6888",
+        ["caldwell 28"] = "NGC 752",
+        ["caldwell 29"] = "NGC 5005",
+        ["caldwell 30"] = "NGC 7331",
+        ["caldwell 31"] = "IC 405",
+        ["caldwell 32"] = "NGC 4631",
+        ["caldwell 33"] = "NGC 6992",
+        ["caldwell 34"] = "NGC 6960",
+        ["caldwell 35"] = "NGC 4889",
+        ["caldwell 36"] = "NGC 4559",
+        ["caldwell 37"] = "NGC 6885",
+        ["caldwell 38"] = "NGC 4565",
+        ["caldwell 39"] = "NGC 2392",
+        ["caldwell 40"] = "NGC 3626",
+        ["caldwell 41"] = "Melotte 25",
+        ["caldwell 42"] = "NGC 7006",
+        ["caldwell 43"] = "NGC 7814",
+        ["caldwell 44"] = "NGC 7479",
+        ["caldwell 45"] = "NGC 5248",
+        ["caldwell 46"] = "NGC 2261",
+        ["caldwell 47"] = "NGC 6934",
+        ["caldwell 48"] = "NGC 2775",
+        ["caldwell 49"] = "NGC 2237",
+        ["caldwell 50"] = "NGC 2244",
+    };
+}

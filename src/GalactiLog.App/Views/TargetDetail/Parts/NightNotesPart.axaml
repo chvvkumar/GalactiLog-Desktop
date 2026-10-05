@@ -1,0 +1,60 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightNotesPart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel"
+             IsVisible="{Binding HasNotesBox}">
+
+  <!-- Spec 12.4's session notes, the Session notes box of the Details drawer. An obj: group has no
+       target id to key a note on, so it has no box. On a merged card (P25 G5) the body is one box
+       per member night, each bound to that night's own field, so autosave and its callout stay the
+       night's own. -->
+  <Panel>
+    <Panel IsVisible="{Binding !IsMerged}">
+      <StackPanel
+                  x:Name="SessionNotesBox"
+                  Spacing="6"
+                  IsVisible="{Binding HasNotesBox}">
+        <TextBox x:Name="SessionNotesTextBox"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 MinHeight="70"
+                 Text="{Binding Notes.Text, Mode=TwoWay}" />
+        <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
+        <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+          <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
+                     TextWrapping="Wrap" />
+        </Border>
+      </StackPanel>
+    </Panel>
+
+    <ItemsControl x:Name="MemberNotesBoxes"
+                  ItemsSource="{Binding NoteNights}"
+                  IsVisible="{Binding IsMerged}">
+      <ItemsControl.ItemsPanel>
+        <ItemsPanelTemplate>
+          <StackPanel Spacing="12" />
+        </ItemsPanelTemplate>
+      </ItemsControl.ItemsPanel>
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="detail:SessionCardViewModel">
+          <StackPanel Spacing="6"
+                      IsVisible="{Binding Notes, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock Classes="t-label section" Text="{Binding SessionDateText}" />
+            <TextBox x:Name="MemberNotesTextBox"
+                     AcceptsReturn="True"
+                     TextWrapping="Wrap"
+                     MinHeight="70"
+                     Text="{Binding Notes.Text, Mode=TwoWay}" />
+            <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
+            <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+              <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
+                         TextWrapping="Wrap" />
+            </Border>
+          </StackPanel>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Panel>
+</UserControl>

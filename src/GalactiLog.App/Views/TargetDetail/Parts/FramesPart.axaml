@@ -1,0 +1,141 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:detailviews="using:GalactiLog.App.Views.TargetDetail"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:local="using:GalactiLog.App.Views.TargetDetail.Parts"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.FramesPart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel">
+  <UserControl.Styles>
+    <!-- The muted ink the tally and the legend use. -->
+    <StyleInclude Source="/Views/TargetDetail/Parts/PartStyles.axaml" />
+  </UserControl.Styles>
+
+  <!-- One chrome line, the compact form's filter line (P24 R13), then the table with its toolbar
+       line. The table is not inside the StackPanel FramesChrome, which would give it infinite
+       height; the starred row bounds it. -->
+  <Grid x:Name="FramesSection"
+        RowDefinitions="Auto,Auto,*"
+        MinHeight="0">
+    <StackPanel Grid.Row="0" x:Name="FramesChrome" Margin="0,0,0,4">
+      <!-- The tally, then the Filter segment in the compact form; each line wraps when short. The
+           code-behind places the moving controls. The legend is the table's own, under its toolbar. -->
+      <Grid ColumnDefinitions="*,Auto,Auto">
+        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <!-- Spec 12.4's tally: four runs rather than one string, so each count carries its own ink. -->
+          <WrapPanel x:Name="GradingTally"
+                     Orientation="Horizontal"
+                     Margin="0,0,10,0"
+                     IsVisible="{Binding FrameTable.HasTally, FallbackValue=False}">
+            <TextBlock Classes="t-label muted" Text="Good" Margin="0,0,4,0" VerticalAlignment="Center" />
+            <TextBlock Classes="t-label band-better"
+                       x:Name="TallyGoodCount"
+                       Text="{Binding FrameTable.GoodCount, FallbackValue=''}"
+                       Margin="0,0,14,0"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="t-label muted" Text="Watch" Margin="0,0,4,0" VerticalAlignment="Center" />
+            <TextBlock Classes="t-label band-watch"
+                       x:Name="TallyWatchCount"
+                       Text="{Binding FrameTable.WatchCount, FallbackValue=''}"
+                       Margin="0,0,14,0"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="t-label muted" Text="Reject" Margin="0,0,4,0" VerticalAlignment="Center" />
+            <TextBlock Classes="t-label band-reject"
+                       x:Name="TallyRejectCount"
+                       Text="{Binding FrameTable.RejectCount, FallbackValue=''}"
+                       Margin="0,0,14,0"
+                       VerticalAlignment="Center" />
+            <TextBlock Classes="t-label muted"
+                       Text="Mean score"
+                       Margin="0,0,4,0"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding FrameTable.HasMeanScore, FallbackValue=False}" />
+            <TextBlock Classes="t-label"
+                       x:Name="TallyMeanScore"
+                       Text="{Binding FrameTable.MeanScoreText, FallbackValue=''}"
+                       Margin="0,0,14,0"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding FrameTable.HasMeanScore, FallbackValue=False}" />
+            <TextBlock Classes="t-label muted"
+                       x:Name="TallyUngraded"
+                       Text="{Binding FrameTable.UngradedCount, StringFormat='{}{0} ungraded', FallbackValue=''}"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding FrameTable.HasUngraded, FallbackValue=False}" />
+          </WrapPanel>
+
+          <!-- P24 R6's Filter segment: the outlier pills, one per metric the night has values for
+               (P24 R22), spec 12.4 item 3's rig pills (absent on a single-rig night; unchecking
+               the last one empties the table, questions.md Q11), then Clear. Declared here, drawn
+               on the table's toolbar line in the wide form and on its own line under the tally in
+               the compact form (P24 R13), so its context is pinned to the card by the code-behind,
+               as Compare to's is.
+               An outlier pill's checked state is two way with its IsActive, as a rig pill's is
+               with IsSelected; the card watches it and runs the one filter path, so the table's
+               own clear (Escape) unchecks it. No label: the pills name themselves, and the compact
+               line has no width to spare. -->
+          <ContentControl x:Name="PillHost" VerticalAlignment="Center">
+            <WrapPanel x:Name="FilterSegment" Orientation="Horizontal" ItemSpacing="4" LineSpacing="4" VerticalAlignment="Center" IsVisible="{Binding HasFilterPills}">
+              <ItemsControl x:Name="OutlierPillRow" ItemsSource="{Binding OutlierPills}">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="detail:OutlierPillViewModel">
+                    <ToggleButton IsChecked="{Binding IsActive, Mode=TwoWay}"
+                                  IsEnabled="{Binding IsEnabled}"
+                                  Content="{Binding Label}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <ItemsControl x:Name="RigPillRow" IsVisible="False">
+                <ItemsControl.ItemsPanel>
+                  <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal" ItemSpacing="4" />
+                  </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="dash:ToggleOptionViewModel">
+                    <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
+                                  Content="{Binding Label}" />
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+              <Button x:Name="ClearFiltersButton"
+                      Classes="quiet sm"
+                      Content="Clear filters"
+                      Command="{Binding ClearFiltersCommand}"
+                      IsEnabled="{Binding HasActiveFilters}"
+                      IsVisible="{Binding HasFilterPills}" />
+            </WrapPanel>
+          </ContentControl>
+        </WrapPanel>
+        <ContentControl x:Name="CompareHost" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center">
+          <local:CompareToSegment x:Name="CompareToSegment" />
+        </ContentControl>
+        <controls:HelpButton x:Name="FramesHelp" Grid.Column="2" Margin="10,0,0,0" Topic="target.frames" VerticalAlignment="Center" />
+      </Grid>
+    </StackPanel>
+
+    <!-- The compact form's own full-width line for the Filter segment, so it never shares the
+         toolbar's slot beside the shown count (P24 R13). Empty and hidden in the wide form. -->
+    <ContentControl Grid.Row="1"
+                    x:Name="FilterLineHost"
+                    Margin="0,0,0,4"
+                    IsVisible="False" />
+
+    <ContentControl Grid.Row="2"
+                    x:Name="FrameTableRegion"
+                    Content="{Binding Frames}"
+                    MinHeight="0">
+      <ContentControl.ContentTemplate>
+        <DataTemplate DataType="detail:FrameTableViewModel">
+          <detailviews:FrameTableView ToolbarContent="{Binding #Root.ToolbarItem}" />
+        </DataTemplate>
+      </ContentControl.ContentTemplate>
+    </ContentControl>
+  </Grid>
+</UserControl>

@@ -1,0 +1,75 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             x:Class="GalactiLog.App.Views.Settings.RenameHistoryView"
+             x:Name="Root"
+             x:DataType="settings:RenameHistoryViewModel">
+  <!-- design-spec 12.7's rename history, read from the target_renamed activity events
+       TargetWriteRepository.Rename writes (questions.md Q11). Bounded by the activity retention
+       window (spec 5.12), which is recorded on the query, not worked around here.
+
+       Every colour is a theme token (spec 14) and nothing here sets FontSize. -->
+  <Border x:Name="RenameHistorySection"
+          Background="{DynamicResource ColorBgSurface}"
+          BorderBrush="{DynamicResource ColorBorderDefault}"
+          BorderThickness="1"
+          CornerRadius="{StaticResource RadiusMd}"
+          Padding="16">
+    <StackPanel Spacing="10">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Rename history"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <controls:HelpButton Topic="settings.targets.rename-history" />
+      </StackPanel>
+
+      <TextBlock x:Name="NoRenamesText"
+                 Text="No renames recorded."
+                 IsVisible="{Binding ShowEmptyState}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The rename history could not be loaded."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <ItemsControl x:Name="RenameHistoryList" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="settings:RenameHistoryRowViewModel">
+            <Border Background="{DynamicResource ColorBgElevated}"
+                    BorderBrush="{DynamicResource ColorBorderDefault}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Padding="12,10"
+                    Margin="0,0,0,8">
+              <StackPanel Spacing="4">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding PreviousName}"
+                             TextTrimming="CharacterEllipsis"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+                  <TextBlock Text="to" Foreground="{DynamicResource ColorTextTertiary}" />
+                  <TextBlock Text="{Binding NewName}"
+                             FontWeight="SemiBold"
+                             TextTrimming="CharacterEllipsis"
+                             Foreground="{DynamicResource ColorTextPrimary}" />
+                </StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <TextBlock Text="{Binding RenamedAtText}"
+                             FontFeatures="tnum=1"
+                             Foreground="{DynamicResource ColorTextTertiary}" />
+                  <!-- A later rename, or a deleted target, is the only way the target's current
+                       name differs from the one this row recorded. -->
+                  <TextBlock Text="{Binding CurrentNameText}"
+                             IsVisible="{Binding HasCurrentName}"
+                             TextTrimming="CharacterEllipsis"
+                             Foreground="{DynamicResource ColorTextTertiary}" />
+                </StackPanel>
+              </StackPanel>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </Border>
+</UserControl>

@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+             xmlns:conv="using:GalactiLog.App.Converters"
+             x:Class="GalactiLog.App.Views.TargetDetail.Parts.RangesTablePart"
+             x:Name="Root"
+             x:DataType="detail:SessionCardViewModel">
+  <UserControl.Resources>
+    <!-- The ranges bar positions its tick with this, over a fixed track, which is why the pane
+         needs no new converter and no GridLength binding. -->
+    <conv:MultiplyConverter x:Key="Multiply" />
+  </UserControl.Resources>
+
+  <UserControl.Styles>
+    <StyleInclude Source="/Views/TargetDetail/Parts/PartStyles.axaml" />
+  </UserControl.Styles>
+
+  <!-- Spec 12.4's session ranges. Median sits between Min and Max, which is where it sits on
+       the number line, and the bar at the end shows the skew: a median near the minimum with a
+       long tail to the maximum is the signature of a night with a few bad frames. -->
+  <Grid x:Name="RangesTable"
+        RowDefinitions="Auto,Auto"
+        Grid.IsSharedSizeScope="True">
+    <Grid Grid.Row="0" x:Name="RangesTableHeader" Classes="tab-row">
+      <Grid.ColumnDefinitions>
+        <ColumnDefinition Width="Auto" MinWidth="96" SharedSizeGroup="RangeLabel" />
+        <ColumnDefinition Width="Auto" MinWidth="62" SharedSizeGroup="RangeMin" />
+        <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="RangeMedian" />
+        <ColumnDefinition Width="Auto" MinWidth="62" SharedSizeGroup="RangeMax" />
+        <ColumnDefinition Width="*" MinWidth="80" />
+      </Grid.ColumnDefinitions>
+      <Border Grid.Column="0" Grid.ColumnSpan="5" Classes="rule" />
+      <TextBlock Grid.Column="0" Classes="t-label" Text="Range" />
+      <TextBlock Grid.Column="1" Classes="t-label num" Text="Min" />
+      <TextBlock Grid.Column="2" Classes="t-label num" Text="Median" />
+      <TextBlock Grid.Column="3" Classes="t-label num" Text="Max" />
+    </Grid>
+
+    <ItemsControl Grid.Row="1" x:Name="RangeRowsList" ItemsSource="{Binding Ranges}">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate x:DataType="detail:RangeCellViewModel">
+          <Grid Classes="tab-row">
+            <Grid.ColumnDefinitions>
+              <ColumnDefinition Width="Auto" MinWidth="96" SharedSizeGroup="RangeLabel" />
+              <ColumnDefinition Width="Auto" MinWidth="62" SharedSizeGroup="RangeMin" />
+              <ColumnDefinition Width="Auto" MinWidth="70" SharedSizeGroup="RangeMedian" />
+              <ColumnDefinition Width="Auto" MinWidth="62" SharedSizeGroup="RangeMax" />
+              <ColumnDefinition Width="*" MinWidth="80" />
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0"
+                       Text="{Binding Label}"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="1" Classes="num" Text="{Binding MinText}" />
+            <TextBlock Grid.Column="2" Classes="num" Text="{Binding MedianText}" />
+            <TextBlock Grid.Column="3" Classes="num" Text="{Binding MaxText}" />
+            <Canvas Grid.Column="4"
+                    Width="72"
+                    Height="12"
+                    Margin="6,0"
+                    HorizontalAlignment="Left"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding HasPosition}">
+              <Rectangle Canvas.Top="5"
+                         Width="72"
+                         Height="2"
+                         Fill="{DynamicResource ColorBorderEmphasis}" />
+              <Rectangle Canvas.Top="0"
+                         Canvas.Left="{Binding MedianPosition, Converter={StaticResource Multiply}, ConverterParameter=70}"
+                         Width="2"
+                         Height="12"
+                         Fill="{DynamicResource ColorTextPrimary}" />
+            </Canvas>
+
+            <!-- The same label row, in the ranges table, on the same rule: spec 12.4
+                 item 2 names both tables. Five columns here rather than nine, which
+                 is this table's own full width, and the same shared
+                 RigLabelRowTemplate for the runs inside it. -->
+            <ContentControl Grid.Column="0"
+                            Grid.ColumnSpan="5"
+                            x:Name="RangeRigLabelRow"
+                            Content="{Binding LabelRow}"
+                            ContentTemplate="{StaticResource RigLabelRowTemplate}"
+                            IsVisible="{Binding IsRigLabel}" />
+          </Grid>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </Grid>
+</UserControl>

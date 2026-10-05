@@ -1,0 +1,110 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="using:System"
+        xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+        x:Class="GalactiLog.App.Views.Settings.ResetConfirmWindow"
+        x:Name="Root"
+        x:DataType="settings:ResetConfirmViewModel"
+        Title="Reset database"
+        Width="640"
+        MinHeight="360"
+        MaxHeight="900"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- design-spec 12.7's typed confirmation. A modal Window opened through ModalHost, the one
+       modal host in this application. Every colour is a theme token (spec 14) and nothing here
+       sets FontSize, because Scales.axaml's FontSize* keys are ratios, not point sizes. -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <TextBlock x:Name="TitleText"
+                 Text="Reset database"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+
+      <Border x:Name="ClearedPanel"
+              Background="{DynamicResource ColorWarningCalloutFill}"
+              BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="This deletes, permanently:"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorWarning}" />
+          <ItemsControl x:Name="ClearedList" ItemsSource="{Binding ClearedItems}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
+
+      <Border x:Name="KeptPanel"
+              Background="{DynamicResource ColorBgSurface}"
+              BorderBrush="{DynamicResource ColorBorderDefault}"
+              BorderThickness="1"
+              CornerRadius="{StaticResource RadiusMd}"
+              Padding="12">
+        <StackPanel Spacing="6">
+          <TextBlock Text="This keeps:"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorSuccess}" />
+          <ItemsControl x:Name="KeptList" ItemsSource="{Binding KeptItems}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="sys:String">
+                <TextBlock Text="{Binding}"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource ColorTextPrimary}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock x:Name="FilesUntouchedText"
+                     Text="{Binding FilesUntouchedText}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </StackPanel>
+      </Border>
+
+      <TextBlock x:Name="PromptText"
+                 Text="{Binding PromptText}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <TextBox x:Name="PhraseBox"
+               Watermark="Confirmation phrase"
+               IsEnabled="{Binding !IsResetting}"
+               Background="{DynamicResource ColorBgInput}"
+               Foreground="{DynamicResource ColorTextPrimary}"
+               Text="{Binding Typed, Mode=TwoWay}" />
+
+      <TextBlock x:Name="RunningText"
+                 Text="Resetting the database..."
+                 IsVisible="{Binding IsResetting}"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <TextBlock x:Name="SummaryText"
+                 Text="{Binding Summary}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding Summary, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="CancelButton"
+                Content="Cancel"
+                Padding="14,4"
+                Command="{Binding CancelCommand}" />
+        <Button x:Name="ResetButton"
+                Content="Reset database"
+                Padding="14,4"
+                Command="{Binding ConfirmCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>

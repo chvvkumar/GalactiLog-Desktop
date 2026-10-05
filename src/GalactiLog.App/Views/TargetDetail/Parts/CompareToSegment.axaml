@@ -1,0 +1,22 @@
+<StackPanel xmlns="https://github.com/avaloniaui"
+            xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+            xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+            x:Class="GalactiLog.App.Views.TargetDetail.Parts.CompareToSegment"
+            x:DataType="detail:SessionCardViewModel"
+            Orientation="Vertical">
+  <!-- Spec 12.4's "Compare to" in the shared ToggleButton style (none is declared here), on a
+       line that wraps because the vertical panel around it bounds its width. -->
+  <WrapPanel Orientation="Horizontal" ItemSpacing="4" LineSpacing="4">
+    <TextBlock Classes="t-label"
+               Text="Compare to"
+               VerticalAlignment="Center"
+               Foreground="{DynamicResource ColorTextTertiary}" />
+    <!-- Two way over one property, so both buttons can never read unchecked. -->
+    <ToggleButton x:Name="CompareToSession"
+                  Content="This session"
+                  IsChecked="{Binding IsSessionBaseline, Mode=TwoWay}" />
+    <ToggleButton x:Name="CompareToRig"
+                  Content="This rig"
+                  IsChecked="{Binding !IsSessionBaseline, Mode=TwoWay}" />
+  </WrapPanel>
+</StackPanel>

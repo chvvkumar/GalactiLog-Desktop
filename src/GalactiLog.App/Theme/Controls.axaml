@@ -1,0 +1,835 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="using:GalactiLog.App.Converters"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+        xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
+        xmlns:vm="using:GalactiLog.App.ViewModels"
+        xmlns:help="using:GalactiLog.Core.Help"
+        xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia">
+  <!-- Control styles shared by more than one view. Included once from App.axaml, after
+       FluentTheme, so a view that needs one of these classes uses it and defines nothing locally.
+       The chevron began life in ActivityView.axaml; the moment the shell, the dashboard and the
+       target list each needed the same flat glyph button it moved here rather than being pasted
+       three more times.
+
+       Phase 12 turns that habit into the rule. This file is the whole control vocabulary: the
+       flat button default, the one filled button, the quiet and small buttons, the tag, the
+       hairline rule, the four type tiers and the data-ink classes. A view that declares its own
+       Button or Border.badge style is what ControlStyleScanTest fails on, because a convention
+       spread across N views is forgotten at view N+1 (design lesson 2). -->
+  <Styles.Resources>
+    <!-- Scales.axaml's FontSize* keys are ratios to the root size, never point sizes, so a type
+         tier reaches its size through this converter over the owning Window's FontSize. The
+         setter form resolves (P12 R5's probe, FontSizeSetterProbeTest), which is why the four
+         tiers below carry FontSize themselves and no call site repeats the attribute.
+
+         The two above-root ratios are string literals because Scales.axaml holds no key above
+         1.0 and MultiplyConverter parses a string; the two sub-root ones are the existing ratio
+         keys, which still never touch a FontSize property directly. -->
+    <conv:MultiplyConverter x:Key="Multiply" />
+
+    <!-- Spec 12.12's help glyph: the ring and the mark the findings part once drew locally (that
+         part went with Phase 24 R22), kept here where every view reaches them. -->
+    <StreamGeometry x:Key="IconHelpRing">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0</StreamGeometry>
+    <StreamGeometry x:Key="IconHelpMark">M8,14 v-5 M8,5.5 v-0.5</StreamGeometry>
+
+    <!-- The help flyout's body, over one HelpTopic. It is a keyed template rather than a Setter on
+         the Flyout property because a Setter's Template builds a Control and a Flyout is not one,
+         and because a Flyout instance written straight into a Setter would be one object shared by
+         every glyph in the application. HelpButton looks this key up and builds its own flyout
+         from it, so the markup, the width and every token stay here.
+
+         MaxWidth 420 is the readable measure at the shipped root size: the default text size is
+         medium, which resolves to 16 px, whose average advance in the interface face is about
+         8 px, so 420 px is roughly 52 characters per line, inside the 45 to 75 character band a
+         five sentence paragraph needs. -->
+    <DataTemplate x:Key="HelpTopicFlyoutTemplate" x:DataType="help:HelpTopic">
+      <!-- Focusable, so spec 12.12's "the open flyout takes focus" is true rather than aspirational
+           (Task 2A review P3). The body is two TextBlocks, neither of which can take focus, so with
+           nothing focusable inside it FlyoutShowMode.Standard had nothing to move the keyboard to
+           and it stayed on the glyph. IsTabStop stays off: this is a reading surface the flyout
+           hands focus to on open, not a stop in the page's tab order. -->
+      <StackPanel MaxWidth="420"
+                  Spacing="6"
+                  Focusable="True"
+                  IsTabStop="False">
+        <TextBlock Classes="t-label section" Text="{Binding Title}" TextWrapping="Wrap" />
+        <TextBlock Classes="help-paragraph" Text="{Binding Paragraph}" TextWrapping="Wrap" />
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Spec 12.4 item 2 and ruling C4's rig label row, once. The session pane's filter table and
+         its ranges table both draw it and both carried their own copy of these two runs, identical
+         but for the column span the placing ContentControl now carries (phase review P3-3). The
+         row model is one type as well, so the label and the "22 frames" sentence have one home.
+
+         It is a keyed template rather than an implicit DataType template because the two tables
+         place it inside their own row grids, where an implicit template would have to compete with
+         the row templates already declared there. -->
+    <DataTemplate x:Key="RigLabelRowTemplate" x:DataType="detail:RigLabelRowViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="8">
+        <TextBlock Classes="t-label section" Text="{Binding Label}" />
+        <TextBlock Classes="t-label muted" Text="{Binding FrameCountText}" />
+        <!-- Phase 20 Task 3: spec 12.15's rig-scope cells, as a trailing strip on the one rig label
+             row both session pane tables draw. Every existing construction site builds an empty
+             CellList, so a night that carries no rig-scope column draws exactly what it drew
+             before this phase. IsVisible is bound rather than left to an empty ItemsControl: a
+             visible zero-width strip still takes the StackPanel's own 8 pixel spacing, which is
+             enough to move the pane's layout pins.
+
+             Ruling C23 (fix pass 1): a rig line carries no header row, so a bare editor has no
+             visible name. Each cell is preceded by its own column-name caption, Classes="t-label"
+             alone (the secondary ink, not muted) at the same FontSizeLabel size FrameCountText
+             already carries. -->
+        <ItemsControl ItemsSource="{Binding CellList}" IsVisible="{Binding HasCells}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <StackPanel Orientation="Horizontal" Spacing="8" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="cc:CustomValueViewModel">
+              <StackPanel Orientation="Horizontal" Spacing="4">
+                <!-- The caption is decoration for a screen reader: the editor's own automation name
+                     already begins with the column's name, so without this a reader hears the name
+                     twice. The same AccessibilityView the LedgerRmsMarkCell dagger takes. -->
+                <TextBlock Classes="t-label"
+                           Text="{Binding Label}"
+                           VerticalAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw" />
+                <controls:CustomCellEditor />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </DataTemplate>
+
+    <!-- Phase 14B Task 6 appends this, and nothing above it changed. Spec 12.2's column gear
+         (ruling D4, questions.md Q10): a ring with six radiating teeth, the same drawn-Path idiom
+         IconHelpRing/IconHelpMark already use, rather than a Unicode character standing in for an
+         icon (DESIGN.md section 8, spec 14.5). One StreamGeometry, kept inside this Resources
+         block (the only place Avalonia accepts a bare resource in this file) because
+         ControlStyleScanTest exempts only this file and a geometry is not a style; the beginning
+         of the application-wide icon dictionary carried fixer item 26 asks for, and nothing
+         else.
+
+         Phase 14B fixer, fixer list item 42: the shape is RECORDED AS ACCEPTED rather than
+         redrawn. The task6 review is right that six detached radial strokes around a ring read as
+         brightness rather than as a gear at 16 px, and ToolTip.Tip="Columns" is what disambiguates
+         it, which needs a hover. Redrawing it is an icon decision, not a fix pass decision, and
+         14C's icon dictionary (carried item 26) is where the whole set is drawn to one hand. The
+         note is here so that dictionary does not inherit this shape unexamined. -->
+    <StreamGeometry x:Key="IconGear">
+      M4,8 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0
+      M12.3,8 L14.6,8 M10.2,11.7 L11.3,13.7 M5.8,11.7 L4.7,13.7
+      M3.7,8 L1.4,8 M5.8,4.3 L4.7,2.3 M10.2,4.3 L11.3,2.3
+    </StreamGeometry>
+
+    <!-- Phase 14C Task 2 appends this, and nothing above it changed. Ruling E2: the collapsed
+         vertical strip's item template, lifted out of Views/TargetDetail/TargetDetailView.axaml so
+         the Dashboard filter panel's collapsed strip is the pattern's third use rather than its
+         third hand copy (DESIGN.md section 6, design lesson 1).
+
+         The template carries no ink. Each host supplies its own state colour through its own
+         container selectors.
+
+         x:DataType is the interface, which is legal for compiled bindings and is what lets one
+         template serve SessionCardViewModel and FilterSectionViewModel at once. IsMonospace is
+         bound rather than fixed because the ledger's dates are tabular ("09-08") and a filter
+         section's short label ("Type") is not; one bound class is the whole difference. -->
+    <DataTemplate x:Key="StripItemTemplate" x:DataType="vm:IStripItem">
+      <!-- The Panel stretches with a transparent background so the whole cell, not the glyph
+           strokes, is the tooltip's hit area. -->
+      <Panel Background="Transparent" ToolTip.Tip="{Binding FullLabel}">
+        <TextBlock Classes="t-label"
+                   Classes.mono="{Binding IsMonospace}"
+                   Text="{Binding ShortLabel}"
+                   HorizontalAlignment="Center"
+                   IsVisible="{Binding IconKey, Converter={x:Static ObjectConverters.IsNull}}" />
+        <Path Classes="icon-glyph"
+              Width="16"
+              Height="16"
+              HorizontalAlignment="Center"
+              Data="{Binding IconKey, Converter={x:Static conv:IconConverters.KeyToGeometry}}"
+              IsVisible="{Binding IconKey, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </Panel>
+    </DataTemplate>
+
+    <!-- The chevron pair, moved here from TargetDetailView.axaml in the same window. The dashboard
+         needs a drawn chevron for both of its collapse affordances, DESIGN.md section 8 refuses a
+         Unicode glyph standing in for an icon, and a fourth copy of the pair is exactly the copy
+         design lesson 1 forbids at the pattern's third use. -->
+    <StreamGeometry x:Key="IconChevronLeft">M10,3 L5,8 L10,13</StreamGeometry>
+    <StreamGeometry x:Key="IconChevronRight">M6,3 L11,8 L6,13</StreamGeometry>
+
+    <!-- Polish wave 1 ruling 6: the two collapsed 48 px strips draw these instead of text. Rail
+         first, then the dashboard filter sections; Settings reuses IconGear. -->
+    <StreamGeometry x:Key="IconDashboard">M2,2 h5 v5 h-5 z M9,2 h5 v5 h-5 z M2,9 h5 v5 h-5 z M9,9 h5 v5 h-5 z</StreamGeometry>
+    <StreamGeometry x:Key="IconStatistics">M2,9 h3 v5 h-3 z M6.5,2 h3 v12 h-3 z M11,5.5 h3 v8.5 h-3 z</StreamGeometry>
+    <StreamGeometry x:Key="IconAnalysis">M2,2 V14 H14 M4.5,11 C6.5,11 7,5 9.5,6 S12.5,3.5 14,3</StreamGeometry>
+    <StreamGeometry x:Key="IconActivity">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 M8,4.5 V8 L10.5,9.5</StreamGeometry>
+    <StreamGeometry x:Key="IconDiagnostics">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 M3.5,8 H6 L7.5,5.5 L9,10.5 L10.5,8 H12.5</StreamGeometry>
+    <StreamGeometry x:Key="IconSearch">M2,7 a5,5 0 1,0 10,0 a5,5 0 1,0 -10,0 M10.5,10.5 L14.5,14.5</StreamGeometry>
+    <StreamGeometry x:Key="IconObjectType">M8,2 L9.76,6.07 L14.18,6.49 L10.85,9.43 L11.82,13.76 L8,11.5 L4.18,13.76 L5.15,9.43 L1.82,6.49 L6.24,6.07 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconDateRange">M2,4 h12 v10 h-12 z M2,7.5 h12 M5,2 v3 M11,2 v3</StreamGeometry>
+    <StreamGeometry x:Key="IconFilters">M2,3 H14 L9.5,8.5 V13.5 L6.5,12 V8.5 Z</StreamGeometry>
+    <StreamGeometry x:Key="IconEquipment">M1.5,5.5 h3 l1.5,-2 h4 l1.5,2 h3 v8 h-13 z M5.5,9 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0</StreamGeometry>
+    <StreamGeometry x:Key="IconMetrics">M1.5,12 A6.5,6.5 0 0 1 14.5,12 M8,12 L11.5,7.5</StreamGeometry>
+    <StreamGeometry x:Key="IconHeaderQuery">M3,1.5 h7 l3,3 v10 h-10 z M10,1.5 v3 h3 M5.5,8 h5 M5.5,11 h5</StreamGeometry>
+    <StreamGeometry x:Key="IconCustom">M2,4 H14 M2,8 H14 M2,12 H14 M3.5,4 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0 M9.5,8 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0 M5.5,12 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0</StreamGeometry>
+
+    <!-- Spec 14's thin scrollbar. Ruling E3 is REVERSED (phase-review P1 and P2, fixer-list item
+         1): the hand-written ScrollBar control theme this file carried is withdrawn and the
+         platform Fluent theme is kept, restyled through the resource keys it already reads.
+
+         The hand-written template cost an inverted axis and a lost state in one phase. Its Track
+         declared IsDirectionReversed="False" for both orientations, and Avalonia's Track, like
+         WPF's, maps an increase in y to a decrease in value, so every vertical bar in the
+         application rendered upside down: thumb at the bottom at offset zero, dragging down
+         scrolled up. It also replaced Fluent's collapsed and expanded states, so a full strength
+         thumb was drawn permanently over the trailing content of every scroller. Neither was
+         visible to the suite. Restyling the platform theme keeps the direction, the paging, the
+         line buttons and the two states by construction; only the sizes and the inks are ours.
+
+         The keys are the ones Avalonia 11.3.21's src/Avalonia.Themes.Fluent/Controls/ScrollBar.xaml
+         reads, with their defaults in Accents/FluentControlResources.xaml. ScrollBarSize is the
+         bar's width in either orientation (16 by default, 8 here). The six brushes are aliased
+         beside the tokens themselves, in each of the three theme dictionaries under Theme/Themes:
+         a resource declared here cannot follow a theme swap, because a ResourceDictionary entry is
+         a constructed object and StaticResource in this file would freeze on whichever dictionary
+         App.axaml merged at parse time. The dictionaries carry the alias the same way they already
+         carry the eight callout composites, as a StaticResource to the token beside it, so the
+         swap moves the whole set at once and the three tokens stay the one place a colour is
+         written.
+
+         What ships, and what spec 14 and DESIGN.md section 6 now say: at rest the bar is Fluent's
+         hairline panning thumb in ColorScrollbarThumb over a transparent track; with the pointer
+         over it the bar expands to the full 8 pixels with its two line buttons, the thumb taking
+         ColorScrollbarThumbHover under the pointer and while dragging. There is no third colour:
+         the pressed fill is aliased to the hover token, which is the "no separate pressed state"
+         rule 14 took from the web, kept through a theme that does declare a pressed rule. The bar
+         still overlays its scroller and takes no layout space, which is the Fluent ScrollViewer
+         theme's own AllowAutoHide behaviour and was never this block's doing. -->
+    <x:Double x:Key="ScrollBarSize">8</x:Double>
+
+    <!-- Spec 12.16, ruling B5: the target page's two send submenus bind ItemsSource to
+         TargetDetailViewModel.NinaSendItems / StellariumSendItems, and this theme is what puts
+         Header, Command, IsEnabled and the tooltip on each generated MenuItem, which an
+         ItemTemplate cannot reach. It lives here rather than in the view because a control theme
+         is shared vocabulary, which ControlStyleScanTest now enforces (ruling B30). -->
+    <ControlTheme x:Key="IntegrationSendItemTheme"
+                  TargetType="MenuItem"
+                  BasedOn="{StaticResource {x:Type MenuItem}}"
+                  x:DataType="detail:IntegrationSendItemViewModel">
+      <Setter Property="Header" Value="{Binding Name}" />
+      <Setter Property="Command" Value="{Binding SendCommand}" />
+      <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
+      <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
+    </ControlTheme>
+  </Styles.Resources>
+
+  <!-- Spec 13's four tooltip and legend paints, on every chart control in the process, which
+       corrects a shipped defect.
+
+       ChartTheme.Apply writes these four paints into LiveCharts.DefaultSettings, and the Avalonia
+       chart controls resolve those four styled-property DEFAULTS once per process, from whatever
+       the settings held when the FIRST chart control in the process was built. The settings track
+       a theme swap correctly and no control ever re-read them, so a user who changed the theme in
+       Settings got re-coloured axes, series and pills and a tooltip and legend still painted in
+       the theme the application started in. Both a chart alive across the swap and a chart built
+       afterwards were wrong.
+
+       A Setter beats a styled-property default, which is the whole defect, and a DynamicResource
+       re-evaluates when the resource is written, which is the whole reassignment: ChartTheme.Apply
+       writes these four keys into Application.Current.Resources at the end of every call. So this
+       block is the choke point, and a chart control is painted by construction rather than by each
+       view remembering an attribute (design lesson 2). It covers the six charts the Statistics
+       page builds from one DataTemplate and every chart a later phase adds.
+
+       All three chart types the package ships are selected, because a pie tooltip is painted from
+       the same four properties as a cartesian one and PolarChart is here so the third type cannot
+       be the one that is forgotten. ChartPaintCensusTests holds both halves: no chart element in
+       the markup may set one of the four locally, since a local value beats this Setter, and this
+       block must declare all three types with all four paints.
+
+       ControlStyleScanTest does not see this block: its Button rule extracts only selectors
+       beginning Button or ToggleButton, and its view scan skips this file outright and carries no
+       lvc needle. No exclusion was added to it.
+
+       Three blocks rather than one comma-separated selector, and that is a compiler rule and not a
+       preference: Avalonia's XAML compiler resolves a Setter's target type from the selector, and
+       a multi-type selector resolves to the common base, which is UserControl here. The four
+       properties are declared on each chart type and not on UserControl, so the one-block form
+       fails to build with AVLN2000 on all four setters. Measured, not assumed. -->
+  <Style Selector="lvc|CartesianChart">
+    <Setter Property="TooltipBackgroundPaint" Value="{DynamicResource ChartTooltipBackgroundPaint}" />
+    <Setter Property="TooltipTextPaint" Value="{DynamicResource ChartTooltipTextPaint}" />
+    <Setter Property="LegendBackgroundPaint" Value="{DynamicResource ChartLegendBackgroundPaint}" />
+    <Setter Property="LegendTextPaint" Value="{DynamicResource ChartLegendTextPaint}" />
+  </Style>
+  <Style Selector="lvc|PieChart">
+    <Setter Property="TooltipBackgroundPaint" Value="{DynamicResource ChartTooltipBackgroundPaint}" />
+    <Setter Property="TooltipTextPaint" Value="{DynamicResource ChartTooltipTextPaint}" />
+    <Setter Property="LegendBackgroundPaint" Value="{DynamicResource ChartLegendBackgroundPaint}" />
+    <Setter Property="LegendTextPaint" Value="{DynamicResource ChartLegendTextPaint}" />
+  </Style>
+  <!-- No PolarChart ships today. The selector is here because the census asserts all three types
+       the package declares these four properties on, so the chart kind a later phase reaches for
+       is painted the day it is written rather than being the one that is forgotten. -->
+  <Style Selector="lvc|PolarChart">
+    <Setter Property="TooltipBackgroundPaint" Value="{DynamicResource ChartTooltipBackgroundPaint}" />
+    <Setter Property="TooltipTextPaint" Value="{DynamicResource ChartTooltipTextPaint}" />
+    <Setter Property="LegendBackgroundPaint" Value="{DynamicResource ChartLegendBackgroundPaint}" />
+    <Setter Property="LegendTextPaint" Value="{DynamicResource ChartLegendTextPaint}" />
+  </Style>
+
+  <!-- P12 R8's interface face and the application's default text ink, applied at the one place
+       every window inherits from, so a sixth dialog cannot forget either. FontFamily and Foreground
+       are both inherited properties, so the per-site attributes and the text classes already in the
+       views keep winning locally: inheritance is the lowest priority there is, and anything that
+       sets its own Foreground, a button's content, a badge, a callout, a caption, is untouched.
+
+       The ink is declared HERE and not as a Selector="TextBlock" rule: a rule on the type would
+       outrank the ink a control gives its own content, and the one filled button in the application
+       would draw its label in the page ink over its accent fill. Until this setter landed, nothing
+       in the application declared a default at all, so every TextBlock with neither a class that
+       sets Foreground nor an attribute of its own, 99 of them in the shipped views, inherited
+       FluentTheme's own Dark default, pure white, a colour no GalactiLog dictionary declares. On
+       red-light, the night-vision theme, the Analysis stats card figures and every other tabular
+       figure in the application were the brightest thing on the screen. DynamicResource and never
+       Static: the ink follows the Settings theme picker. InheritedInkTests is the pin. -->
+  <Style Selector="Window">
+    <Setter Property="FontFamily" Value="{StaticResource FontSans}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+
+  <!-- The flat button default. This replaces Fluent's filled ButtonBackground with a 1 px outline
+       over a transparent fill, which is the direction's whole control story and the reason
+       ControlStyleScanTest can assert that no Button style carries a gradient or a tinted fill.
+
+       CornerRadius 3 is a literal rather than RadiusSm (6) on purpose: the approved comp's
+       controls are 3 px, and spec 14.4's radius scale is theme-independent and must not be
+       redeclared per theme, so this is a control decision inside one style file rather than a new
+       token. Task 7 records it in spec 14.4. -->
+  <Style Selector="Button">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    <Setter Property="Padding" Value="12,0" />
+    <Setter Property="MinHeight" Value="30" />
+    <!-- Fluent's Button theme sets no VerticalContentAlignment and the ContentControl default is
+         Stretch, so a stretched label draws its line at the top of the 30 px box once the
+         11,5,11,6 Fluent padding above is replaced by 12,0. -->
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FontWeight" Value="Medium" />
+  </Style>
+  <Style Selector="Button /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+  <Style Selector="Button:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+  </Style>
+  <Style Selector="Button:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+  </Style>
+  <Style Selector="Button:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+
+  <!-- P12 R7's single filled control: Run scan in the status bar, and nothing else. The fill is
+       ColorAccent at full strength with the surface colour as its ink, which is the only place in
+       the application where an accent is a fill rather than a 1 px edge. Spec 14.5's "buttons
+       never use a solid accent fill" is amended by Task 7 to name this one exception. -->
+  <Style Selector="Button.primary /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorBgSurface}" />
+  </Style>
+  <Style Selector="Button.primary">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.primary:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentHover}" />
+  </Style>
+  <!-- The two state blocks the filled button needs, and why they are here rather than inherited.
+       The base Button:pressed and Button:disabled blocks are declared above the unconditional
+       Button.primary presenter setters, and both sides carry a selector activator, so the later
+       declaration wins while both are active: without these two blocks a disabled Run scan keeps
+       the full strength accent fill and renders identically to its enabled self, and a pressed one
+       shows the hover fill and no feedback at all. Declaring them after the .primary rest and
+       hover blocks makes the intended value win by declaration rather than by accident.
+       ButtonStateStyleTest asserts the resulting presenter brushes rather than this reasoning.
+
+       Disabled is the comp's flat form (comp-observing-ledger.html:258): no fill, the 1 px
+       emphasis outline (rgba(255,255,255,0.15), which is ColorBorderEmphasis #26FFFFFF) and
+       tertiary ink. The state is reachable in the shipped application: StatusBarViewModel's
+       CanRunScan is false while a name resolution holds the lease and the button stays visible.
+       Background is the literal Transparent because that is what the base Button:disabled block
+       above uses for the same "no fill" and there is no fill token for it. The setters sit on the
+       presenter because Fluent's Button template root is the presenter and template binds its
+       Background, BorderBrush and CornerRadius from the Button. -->
+  <Style Selector="Button.primary:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+  <!-- The pressed fill is a rung of its own on the accent ramp, below rest, rather than a reuse of
+       the rest value. A keyboard activation raises :pressed without :pointerover, so with a
+       two token ramp (rest and hover) a space bar press on Run scan changed nothing at all and the
+       control gave the keyboard user no feedback (Task 1 fix pass 2 escalation, coordinator
+       item 2). ColorAccentPressed is the third rung and is declared in all three dictionaries. -->
+  <Style Selector="Button.primary:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentPressed}" />
+  </Style>
+
+  <!-- The quiet text button (Back, Details, the band toggles). -->
+  <Style Selector="Button.quiet">
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    <Setter Property="Padding" Value="8,0" />
+  </Style>
+
+  <!-- The small button (the frame table toolbar, the pane's Notes toggle). -->
+  <Style Selector="Button.sm">
+    <Setter Property="MinHeight" Value="26" />
+    <Setter Property="Padding" Value="9,0" />
+  </Style>
+
+  <Style Selector="Button.chevron">
+    <Setter Property="Padding" Value="6,0" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Button.chevron:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+
+  <!-- A badge is outlined text in tertiary ink, never a filled pill: ColorBadgeBg is transparent
+       in every dictionary and this outline is what makes it legible. -->
+  <Style Selector="Border.tag">
+    <Setter Property="Background" Value="{DynamicResource ColorBadgeBg}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="6,1" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Border.tag TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+
+  <!-- The hairline rule. One bottom edge, one border token, no card. -->
+  <Style Selector="Border.rule">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+
+  <!-- The four type tiers (spec 14.4, P12 R5). Ratios to the owning Window's root size:
+       t-hero 1.5, t-stat 1.2, t-label 0.786, t-caption 0.714. -->
+  <Style Selector="TextBlock.t-hero">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter=1.5}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="TextBlock.t-stat">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter=1.2}" />
+    <Setter Property="FontWeight" Value="Bold" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="TextBlock.t-label">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter={StaticResource FontSizeLabel}}" />
+    <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="TextBlock.t-caption">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter={StaticResource FontSizeCaption}}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+
+  <!-- The log line's figures stay at root size and take weight 600 instead, which is the fifth
+       and last tier the comp uses. -->
+  <Style Selector="TextBlock.figure">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="FontFeatures" Value="tnum=1" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+
+  <!-- Three data-ink classes the direction needs everywhere. -->
+  <Style Selector="TextBlock.num">
+    <Setter Property="TextAlignment" Value="Right" />
+    <Setter Property="FontFeatures" Value="tnum=1" />
+  </Style>
+  <Style Selector="TextBlock.mono">
+    <Setter Property="FontFamily" Value="{StaticResource FontMono}" />
+  </Style>
+  <!-- The one "worse" ink. Colour is spent only on data; this is the single semantic reading on
+       the page and it is never a fill, never a left edge and never a pill (P12 direction). -->
+  <Style Selector="TextBlock.worse">
+    <Setter Property="Foreground" Value="{DynamicResource ColorMetricWorst}" />
+  </Style>
+  <!-- Section labels (Nights, Frames). Sentence case, weight 600, label tier, no tracking: the
+       inputs' type table removes letter-spacing from this page entirely. -->
+  <Style Selector="TextBlock.section">
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+
+  <!-- P12 Task 5 appends everything below, and nothing above it changed.
+
+       The toggle pill (the two chart pill strips, P12 R9). A ToggleButton is not a Button, so the
+       flat default at the top of this file does not reach it and Fluent's own filled toggle would
+       have shown through. Same flat shape: a transparent fill, a 1 px outline, and the elevated
+       field when checked, which is the direction's rule that light carries state while colour
+       carries data. The pill's own colour is the 7 px dot its template puts beside the label, and
+       that dot is user data (a filter's configured colour) or a fixed metric token. -->
+  <Style Selector="ToggleButton">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    <Setter Property="Padding" Value="8,3" />
+    <Setter Property="MinHeight" Value="26" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="ToggleButton /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="3" />
+  </Style>
+  <Style Selector="ToggleButton:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+  <Style Selector="ToggleButton:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="ToggleButton:checked">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+  </Style>
+
+  <!-- The collapsible section (P24 R18): every Expander in the application, Diagnostics, the
+       dashboard filters, the Display groups and the target page's sections. The pill block above
+       reaches the Expander's own header toggle, so without this the header wore the pill's outline
+       at rest and its elevated fill when expanded, and Fluent's own hover fill under the pointer.
+       Here the header is bare at rest and when open, the one hover tint is ColorBgHover on the
+       header's background border (the pill's presenter tint is cleared so the two never stack),
+       the content border is invisible, and the chevron and the platform focus adorner are
+       untouched. Declared after the pill block because both sides carry activators and the later
+       declaration wins. -->
+  <Style Selector="Expander">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pressed /template/ Border#ToggleButtonBackground">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+
+  <!-- The selectable pill (the activity severity and category filters, the equipment and filter
+       suggestion pills). One definition, lifted here from the three views that each carried their
+       own copy: ActivityView.axaml declared the shape and EquipmentTabView.axaml and
+       FiltersTabView.axaml each re-declared half of it, which is the pattern design lesson 1 says
+       to end at the second occurrence rather than the fourth. The shape is the direction's flat
+       one: no filled rest state, no accent fill when selected, the same lit idiom as every other
+       selected thing in the application.
+
+       The selected background sits on the presenter rather than on the Button, because Fluent's
+       template binds the presenter's Background from the Button and a :pointerover presenter rule
+       would otherwise win over a Button level setter. -->
+  <Style Selector="Button.pill">
+    <Setter Property="MinHeight" Value="26" />
+    <Setter Property="Padding" Value="9,2" />
+    <Setter Property="Margin" Value="0,0,4,0" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    <Setter Property="FontWeight" Value="Normal" />
+  </Style>
+  <Style Selector="Button.pill.selected">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="Button.pill.selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+  </Style>
+  <Style Selector="Button.pill.selected:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+
+  <!-- The frame table's header cell: a sort button that reads from its left edge over a text
+       column and over its figures on a numeric one (spec 14.4). Two alignment setters and no
+       chrome, lifted out of Views/TargetDetail/FrameTableView.axaml so the choke-point rule stays
+       literal: no view under src/ declares a Button style, with no exemptions to remember. -->
+  <Style Selector="Button.header-cell">
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+  </Style>
+  <Style Selector="Button.header-cell.numeric">
+    <Setter Property="HorizontalContentAlignment" Value="Right" />
+  </Style>
+
+  <!-- Spec 14.5's 20 and 50 percent callout composite. Lifted here from the two views that each
+       carried their own copy, which is design lesson 1's second-occurrence rule and the same
+       breach the three Button.pill copies above were. No left edge: the direction refuses a
+       coloured edge above 1 px and a callout's whole border is that 1 px.
+
+       The warn arm carries the warning ink for its text as well, because the pane's callouts
+       relied on that descendant rule while the page's set it inline on each TextBlock; an inline
+       value is a LocalValue and still wins, so both readings survive the lift. -->
+  <Style Selector="Border.callout">
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="Padding" Value="8,4" />
+  </Style>
+  <Style Selector="Border.callout.warn">
+    <Setter Property="Background" Value="{DynamicResource ColorWarningCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorWarningCalloutBorder}" />
+  </Style>
+  <Style Selector="Border.callout.warn TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+  </Style>
+  <Style Selector="Border.callout.error">
+    <Setter Property="Background" Value="{DynamicResource ColorErrorCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorErrorCalloutBorder}" />
+  </Style>
+
+  <!-- Phase 14A Task 2 appends everything below, and nothing above it changed.
+
+       Spec 12.12's help glyph, Controls/HelpButton.cs. The selector is Button.help rather than
+       controls|HelpButton because HelpButton overrides StyleKeyOverride to typeof(Button): a
+       control deriving from a templated control finds no ControlTheme under its own type, so
+       without that override the glyph would have no template and would render nothing. A type
+       selector matches on the style key, so with the override in place a controls|HelpButton
+       selector can never match and Button.help always does. The class is added by the control
+       itself, so no call site can forget it. This file is the one place ControlStyleScanTest
+       allows a Button style to be declared at all.
+
+       The shape is Button.chevron's: padding 6,0, no border, tertiary ink, primary ink on hover.
+       The control adds that class to itself alongside help rather than this style restating its
+       four setters, so the two cannot drift (Task 2A review P3); what is left below is only what a
+       help glyph adds to a chevron. MinHeight is cleared because the flat button default is 30 px
+       tall and this glyph sits inside a heading's own row in twenty five views, which it must not
+       inflate. The width is fixed so the target page's identity line, a DockPanel where every
+       child has to trim, cannot pick the glyph as the element that trims. -->
+  <Style Selector="Button.help">
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Width" Value="28" />
+    <Setter Property="Height" Value="20" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="Content">
+      <Template>
+        <Panel Width="16" Height="16">
+          <Path Classes="help-glyph" Data="{StaticResource IconHelpRing}" />
+          <Path Classes="help-glyph" Data="{StaticResource IconHelpMark}" />
+        </Panel>
+      </Template>
+    </Setter>
+  </Style>
+  <!-- Phase 14B fixer, fixer list item 41: the four stroke setters serve every drawn icon in the
+       vocabulary, not only the help glyph. The dashboard's column gear repeated all four inline
+       and got no pointer-over ink, which made it the one drawn icon that did not brighten on
+       hover. One declaration over both class names rather than a fourth copy of the setters
+       (design-lessons rule 1); icon-glyph is the name a later icon reaches for, and help-glyph
+       stays because two views and the help button template already spell it. -->
+  <Style Selector="Path.help-glyph, Path.icon-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorTextTertiary}" />
+    <Setter Property="StrokeThickness" Value="1.4" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+  </Style>
+  <Style Selector="Button.help:pointerover Path.help-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="Button:pointerover Path.icon-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="TextBlock.help-paragraph">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+
+  <!-- Spec 12.4's per-frame quality grading (PAR-003), appended by Phase 14A Task 3. The band is
+       carried by the cell's ink alone: no cell and no row takes a tinted fill (ruling C3, and
+       DESIGN.md's refusal list). There is no band-neutral class, because spec 12.4's band table
+       gives neutral ColorTextPrimary, "which is to say no mark".
+
+       The spec's band table names the colours ColorSuccessValue, ColorWarningValue and
+       ColorErrorValue. Those keys are Color resources; a Foreground and a Background bind a brush,
+       so these bind ColorSuccess, ColorWarning and ColorError, which are the SolidColorBrush
+       resources built from exactly those three colours. The spec names the colour and the markup
+       binds its brush, and they are the same token (questions.md Q14).
+
+       This block sits after TextBlock.worse (line 256) deliberately, and moving it above would
+       change what the application draws. Avalonia resolves equal-specificity selectors by
+       declaration order, so on an element carrying both worse and a band class the band wins here
+       and the worse ink wins if the order is reversed. The surface that depends on it is the
+       preview modal's metadata badges (Task 7), where both classes are set from the view model and
+       both styles are application level; the frame table's own cells stack the same two classes
+       but resolve them in that view's own style host, which is applied last. -->
+  <Style Selector="TextBlock.band-better">
+    <Setter Property="Foreground" Value="{DynamicResource ColorSuccess}" />
+  </Style>
+  <Style Selector="TextBlock.band-watch">
+    <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+  </Style>
+  <Style Selector="TextBlock.band-reject">
+    <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
+  </Style>
+
+  <!-- Phase 14C Task 2 appends these two, and nothing above them changed. One item of a collapsed
+       vertical strip: the Dashboard filter panel's strip draws them today and a later strip that
+       is a request rather than a selection draws the same pair.
+
+       Geometry only, plus DESIGN.md section 6's "the open or active item in the accent ink". No
+       fill of its own: Button.quiet already carries the transparent surface and the borderless
+       form, and the hover light comes from the base Button. The strip is 48 pixels wide, so the
+       padding is vertical alone. -->
+  <Style Selector="Button.strip-item">
+    <Setter Property="Padding" Value="0,5" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.strip-item.active TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="Button.strip-item.active Path.icon-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorAccent}" />
+  </Style>
+
+  <!-- Phase 14C Task 5 appends everything below, and nothing above it changed. -->
+
+  <!-- Q11 reversed, fix pass: a shared ScrollViewer style setting AllowAutoHide="False" stood
+       here, to reserve every scroller's gutter. It reached only the 27 markup ScrollViewers
+       (a bare ScrollViewer selector matches the logical tree, not the ScrollViewer a ListBox or a
+       ComboBox popup builds inside its own template) and, on the ones it did reach, Avalonia
+       reserves the bar's layout space only once a bar can actually be drawn, so content still
+       narrowed by 8 pixels the moment one appeared rather than never shifting, which was the
+       clause's whole point. The session pane paid for this in three places at once before it was
+       withdrawn. Every scroller now keeps Avalonia's default overlay behaviour, the same as
+       before this phase: no layout space taken, so nothing to reserve and nothing to narrow.
+
+       A control that sits at a scroller's trailing edge, outside the scroller, keeps its own 8
+       pixels clear of the overlaid bar by its own margin or padding if it needs to; nothing here
+       does that for it. -->
+
+  <!-- The ScrollBar hover state that used to sit here is withdrawn with the control theme it
+       belonged to (fixer-list item 1). It named Thumb#thumb, a part of the hand-written template,
+       and the hover ink is now the ScrollBarThumbFillPointerOver alias the Fluent thumb theme
+       already reads. No ScrollBar style ships at all; ControlStyleScanTest's two ScrollBar needles
+       stay, because what they guard is a view declaring one of its own. -->
+
+  <!-- Carried fixer-list item 32: MainWindow.axaml's navigation rail and SettingsView.axaml's tab
+       strip each declared a five-rule ListBoxItem style block, byte-identical, comment included,
+       except for one setter value (padding 16,10 against 14,8). Classes="rail" cannot go on a
+       ListBoxItem itself: its containers are generated by the ListBox and Avalonia has no Classes
+       setter, so the fold is class selectors on the two ListBoxes instead. Six selectors replace
+       ten and nothing renders differently, which is the point: a fold that also restyles a page
+       is two changes reported as one.
+
+       Foreground is set by a style rather than on the TextBlock itself, so the selected-state
+       setter below is not outranked by a local value (the comment both former copies carried,
+       kept with the moved rules because it is the reason the shape is what it is). -->
+  <Style Selector="ListBox.rail ListBoxItem">
+    <Setter Property="Padding" Value="16,10" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem:selected TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem Path.icon-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="ListBox.rail ListBoxItem:selected Path.icon-glyph">
+    <Setter Property="Stroke" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="ListBox.rail.compact ListBoxItem">
+    <Setter Property="Padding" Value="14,8" />
+  </Style>
+  <!-- The collapsed navigation rail: the item's title rides the ListBoxItem as its tip, so the whole
+       48 px entry answers a hover; the expanded rail shows the title and the tip goes with the class. -->
+  <Style Selector="ListBox.rail.collapsed ListBoxItem" x:DataType="vm:NavigationItem">
+    <Setter Property="ToolTip.Tip" Value="{Binding Title}" />
+  </Style>
+
+  <!-- Phase 14C Task 4 appends everything below, and nothing above it changed. -->
+
+  <!-- The pager's current-page button (spec 12.2). Button.sm already gives every page button its
+       row height; Button.page.current is the one class the current page carries over that, the
+       same shape Button.pill.selected above already uses: the emphasis border, primary ink and an
+       elevated presenter, so the current page reads as lit rather than growing a second button
+       style (task4.md section 6, coordinator ruling 1). -->
+  <Style Selector="Button.page.current">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="Button.page.current /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+  </Style>
+
+  <!-- The refetch dim (spec 12.2, "The refetch dim"): while a filtered query is in flight, the
+       rows already on screen stay rendered and dim, matching the web's opacity-50
+       pointer-events-none treatment of the same interval (TargetFeed.tsx). On the rows
+       ItemsControl's own class, never inside a Button or ToggleButton style block:
+       ControlStyleScanTest.NoButtonStyle_CarriesAGradientOrASemiTransparentAccentFill forbids any
+       Opacity setter inside one of those, and this selector is neither. The input-disable half is
+       TargetListView.axaml's own IsHitTestVisible binding (fix pass, task4-review.md P3: an
+       IsEnabled subtree drops keyboard focus in Avalonia and does not restore it, which the
+       refetch dim must not do), which this file has no part of. -->
+  <Style Selector="ItemsControl.refetching">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
+  <!-- Phase 20 Task 3 appends everything below, and nothing above it changed. -->
+
+  <!-- Spec 12.15's refused cell: a custom column value the repository would not write keeps the
+       stored value on screen, takes the error ink, and carries the refusal sentence on its tooltip
+       and its AutomationProperties.HelpText until the next successful write. Nothing opens a
+       dialog and nothing pushes a toast, so this ink is the whole of the refusal on a table row.
+
+       Three selectors on one style rather than a class on a wrapper, because the Foreground and the
+       BorderBrush belong on the editor itself and Controls/CustomCellEditor.axaml declares no style
+       of its own. None of ControlStyleScanTest's seven needles matches these three selectors, and
+       the walk skips this file outright, which is why the style is legal here and nowhere else. -->
+  <Style Selector="TextBox.refused, CheckBox.refused, ComboBox.refused">
+    <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorError}" />
+  </Style>
+</Styles>

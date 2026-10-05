@@ -1,0 +1,68 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:sys="using:System"
+             xmlns:wizard="using:GalactiLog.App.ViewModels.Wizard"
+             x:Class="GalactiLog.App.Controls.WizardFrame"
+             x:Name="FrameRoot"
+             x:DataType="wizard:IWizardViewModel">
+  <!-- No help glyph is declared here: HelpSlot takes the host's HelpButton, so each wizard's bound glyph stays one markup site in its own window for the once-each census. -->
+  <Grid RowDefinitions="Auto,*,Auto" Margin="20">
+
+    <StackPanel Grid.Row="0" Spacing="4" Margin="0,0,0,12">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock x:Name="StepHeaderText"
+                   Text="{Binding StepHeader}"
+                   Classes="t-label section"
+                   VerticalAlignment="Center" />
+        <ContentPresenter x:Name="HelpSlotHost"
+                          Content="{Binding #FrameRoot.HelpSlot}"
+                          VerticalAlignment="Center" />
+      </StackPanel>
+
+      <ItemsControl x:Name="ProgressRail" ItemsSource="{Binding StepRail}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel Orientation="Horizontal" Spacing="6" />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="sys:Boolean">
+            <Panel Width="8" Height="8">
+              <Ellipse Stroke="{DynamicResource ColorBorderEmphasis}" StrokeThickness="1" />
+              <Ellipse Fill="{DynamicResource ColorAccent}" IsVisible="{Binding}" />
+            </Panel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+
+      <ContentPresenter x:Name="HeaderExtraHost" Content="{Binding #FrameRoot.HeaderExtra}" />
+    </StackPanel>
+
+    <ScrollViewer Grid.Row="1">
+      <ContentControl x:Name="StepHost" Content="{Binding CurrentStep}" />
+    </ScrollViewer>
+
+    <StackPanel Grid.Row="2" Spacing="10" Margin="0,12,0,0">
+      <Border x:Name="StepErrorPanel"
+              IsVisible="{Binding HasStepError}"
+              Classes="callout warn">
+        <TextBlock x:Name="StepErrorText"
+                   Text="{Binding StepError}"
+                   TextWrapping="Wrap" />
+      </Border>
+
+      <!-- Back and Next sit in columns 2 and 3; FooterExtra adds the host's buttons to this grid. -->
+      <Grid x:Name="Footer" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">
+        <Button Grid.Column="2"
+                x:Name="BackButton"
+                Content="Back"
+                Command="{Binding BackCommand}" />
+        <Button Grid.Column="3"
+                x:Name="NextButton"
+                Content="Next"
+                IsVisible="{Binding !IsLastStep}"
+                Command="{Binding NextCommand}" />
+      </Grid>
+    </StackPanel>
+  </Grid>
+</UserControl>

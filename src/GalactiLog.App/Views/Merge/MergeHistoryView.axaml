@@ -1,0 +1,95 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:merge="using:GalactiLog.App.ViewModels.Merge"
+             x:Class="GalactiLog.App.Views.Merge.MergeHistoryView"
+             x:Name="Root"
+             x:DataType="merge:MergeHistoryViewModel">
+  <!-- design-spec 12.9's merge history: one row per merge_manifests row showing the loser name,
+       the merge time, the moved frame count, and an undo button. The same control renders in the
+       Settings Targets tab and on Target detail; only the load delegate differs (ruling Q19).
+
+       Every colour is a theme token (spec 14) and nothing here sets FontSize, because
+       Scales.axaml's FontSize* keys are ratios, not point sizes. -->
+  <Border x:Name="MergeHistorySection"
+          Background="{DynamicResource ColorBgSurface}"
+          BorderBrush="{DynamicResource ColorBorderDefault}"
+          BorderThickness="1"
+          CornerRadius="{StaticResource RadiusMd}"
+          Padding="16">
+    <StackPanel Spacing="10">
+      <StackPanel Orientation="Horizontal" Spacing="6">
+        <TextBlock Text="Merge history"
+                   FontWeight="SemiBold"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <controls:HelpButton Topic="settings.targets.merge-history" />
+      </StackPanel>
+
+      <!-- Ruling Q19, verbatim including the full stop, on both surfaces. Hidden while the first
+           load is in flight, so it does not flash before the rows arrive. -->
+      <TextBlock x:Name="NoMergesText"
+                 Text="No merges recorded."
+                 IsVisible="{Binding ShowEmptyState}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- A query that threw, so the section is not a bare header. No exception text on screen;
+           the log carries that. -->
+      <TextBlock x:Name="LoadFailedText"
+                 Text="The merge history could not be loaded."
+                 IsVisible="{Binding LoadFailed}"
+                 Foreground="{DynamicResource ColorTextTertiary}" />
+
+      <!-- The last undo's outcome, success or failure, as one line. -->
+      <TextBlock x:Name="LastOutcomeText"
+                 Text="{Binding LastOutcome}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding LastOutcome, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <ItemsControl x:Name="MergeHistoryList" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="merge:MergeHistoryRowViewModel">
+            <Border Background="{DynamicResource ColorBgElevated}"
+                    BorderBrush="{DynamicResource ColorBorderDefault}"
+                    BorderThickness="1"
+                    CornerRadius="{StaticResource RadiusSm}"
+                    Padding="12,10"
+                    Margin="0,0,0,8">
+              <Grid ColumnDefinitions="*,Auto">
+                <!-- The web source's row order: loser, arrow, winner, then the merge time and the
+                     moved frame count. -->
+                <StackPanel Grid.Column="0" Spacing="4">
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding LoserName}"
+                               FontWeight="SemiBold"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+                    <TextBlock Text="into" Foreground="{DynamicResource ColorTextTertiary}" />
+                    <TextBlock Text="{Binding WinnerName}"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource ColorTextPrimary}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="{Binding MergedAtText}"
+                               FontFeatures="tnum=1"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+                    <TextBlock Text="{Binding FrameCountText}"
+                               FontFeatures="tnum=1"
+                               Foreground="{DynamicResource ColorTextTertiary}" />
+                  </StackPanel>
+                </StackPanel>
+
+                <Button Grid.Column="1"
+                        Content="Undo"
+                        Padding="8,3"
+                        VerticalAlignment="Center"
+                        Command="{Binding #Root.((merge:MergeHistoryViewModel)DataContext).UndoCommand}"
+                        CommandParameter="{Binding}" />
+              </Grid>
+            </Border>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </StackPanel>
+  </Border>
+</UserControl>
