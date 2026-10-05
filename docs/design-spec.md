@@ -11195,11 +11195,19 @@ therefore gets a real `alpha` prerelease line here.
 
 ### 17.5 CI workflows
 
-Three files under `.github/workflows`, all on the self-hosted Windows runner
+Four files under `.github/workflows`, all on the self-hosted Windows runner
 (`runs-on: [self-hosted, Windows, X64]`); there is no macOS or Linux target. The runner
 account's PowerShell execution policy is Restricted, so run steps use `cmd` or Git Bash, never
 `powershell`. One runner serializes every job, so the suite runs once per push: every push
 runs `release.yml`, whose Test step is the gate; `build-test.yml` runs for pull requests only.
+
+Two steps call the Gemini API: the release notes step of `release.yml` and the one step of
+`pr-description.yml`. Both run as `actions/github-script@v7` steps whose script lives under
+`.github/scripts`, so the runner's bundled node makes the call; the Windows runner needs no
+python, jq or curl. `.github/scripts/gemini.js` holds the one HTTP call, the shared writing
+rules every prompt carries, and the delimiter parser. Both steps read the `GEMINI_API_KEY`
+repository secret. A missing secret or a failed call is a warning, never a failed job: the
+pull request keeps its own text, and the release carries the raw commit list.
 
 **`build-test.yml`**
 
@@ -11239,33 +11247,59 @@ runs `release.yml`, whose Test step is the gate; `build-test.yml` runs for pull 
      the `Releases` directory, which is the condition under which the next step emits a delta
      package. The step runs with `continue-on-error: true`: a channel's first release has
      nothing to download, and the pack is then a full package only.
-  8. `vpk pack --packId GalactiLog --packVersion <version> --packDir publish/win-x64 --icon src/GalactiLog.App/Assets/GalactiLog.ico --mainExe GalactiLog.exe --channel <channel>`.
+  8. Write release notes: `.github/scripts/release-notes.js` through `actions/github-script@v7`,
+     writing `<runner temp>/release-notes.md`. The previous tag is the highest tag on the same
+     channel (`alpha`, `rc` or stable) other than the version being built, falling back to the
+     highest stable tag, then to the newest 50 commits when the repository carries no tag. The
+     commit subjects and bodies in that range go to Gemini, which returns a one or two sentence
+     summary and one plain-language line per commit, each ending in the commit hash. The file
+     is the summary, a `## Changes since <previous tag>` list, and a compare link. When the
+     secret is missing or the call fails, the list is the raw commit messages instead. The step
+     sits after the tests and before the pack because the next step embeds the file.
+  9. `vpk pack --packId GalactiLog --packVersion <version> --packDir publish/win-x64 --icon src/GalactiLog.App/Assets/GalactiLog.ico --mainExe GalactiLog.exe --channel <channel> --releaseNotes <runner temp>/release-notes.md`.
      The `--icon` file reaches Setup.exe, the Start menu and desktop shortcuts, and the
      Add or Remove Programs entry. GalactiLog.exe carries its own icon from the csproj's
-     `ApplicationIcon`.
-  9. `git tag <version>` and `git push origin <version>`, only after a successful pack, which
-     is the ordering `build-deploy.yml` uses.
-  10. `vpk upload github --repoUrl <this repo> --token ${{ github.token }} --publish --releaseName <version> --tag <version> --channel <channel>`,
+     `ApplicationIcon`. `--releaseNotes` stores the file in the package and the channel
+     manifest as `VelopackAsset.NotesMarkdown`, which is what the About tab (12.7) shows for
+     an available update.
+  10. `git tag <version>` and `git push origin <version>`, only after a successful pack, which
+      is the ordering `build-deploy.yml` uses.
+  11. `vpk upload github --repoUrl <this repo> --token ${{ github.token }} --publish --releaseName <version> --tag <version> --channel <channel>`,
       with `--pre` when `prerelease` is true.
-  11. Generate release notes: `gh api repos/<this repo>/releases/generate-notes -f tag_name=<version> -q .body`
-      piped into `gh release edit <version> --notes-file -`. This edits the release step 10
-      created; it creates nothing.
-  12. Prune old prereleases: keep the newest 2 on `snd` and the newest 2 on `dev`, deleting
+  12. Generate release notes: `gh release edit <version> --notes-file <runner temp>/release-notes.md`,
+      the same file step 9 embedded, so the GitHub release body and the About tab carry
+      identical text. This edits the release step 11 created; it creates nothing.
+  13. Prune old prereleases: keep the newest 2 on `snd` and the newest 2 on `dev`, deleting
       older ones with `gh release delete <tag> --yes --cleanup-tag`. Keep the newest 5 stable
       releases. These retention numbers are the web workflow's `KEEP=2` and `KEEP_STABLE=5`.
 
-Step 10 is the only command that creates the GitHub release, and it is `vpk upload github`.
+Step 11 is the only command that creates the GitHub release, and it is `vpk upload github`.
 There is no `gh release create` anywhere in the workflow: both commands create the same tag
 and release, and running both would fail on the second. `vpk` is the one that must run,
 because it uploads the Velopack package assets and the `RELEASES` manifest the installed
 application reads to find updates; a release created by `gh` would carry no update payload.
 
-Release notes are GitHub's generated notes (the commit and pull request list since the
-previous tag, which GitHub picks itself), written by step 11 onto the release `vpk upload
-github` created; the release title is the tag name from `--releaseName`. The web repository
-calls the Gemini API to write prose; this port does not, because it would add a required
-secret for cosmetic output. `gh release edit` has no `--generate-notes` flag, so the body
-comes from the `releases/generate-notes` API endpoint, which returns the same text.
+The release title is the tag name from `--releaseName`. The release body is the file step 8
+wrote: user-facing prose with no version heading, no footer and no statement of how it was
+written. GitHub's own generated notes are not used; the fallback when Gemini is unavailable
+is the raw commit list the script assembled itself, so the body never depends on a second
+API.
+
+**`pr-description.yml`**
+
+- Trigger: `pull_request` with types `opened`, `synchronize` and `reopened`, targeting `dev`
+  and `main`. No path filter: a documentation-only pull request still gets a description.
+- Permissions: `contents: read`, `pull-requests: write`.
+- Concurrency group per pull request number, cancelling in-progress runs: only the newest
+  push's description is worth writing.
+- Steps: `actions/checkout@v4`, then one `actions/github-script@v7` step running
+  `.github/scripts/pr-description.js`. The script lists the pull request's commits (subject
+  and body, merges skipped) and changed files through the API, sends them with the shared
+  writing rules to Gemini, and replaces the pull request title and body with the result: a
+  title under 70 characters naming the single most important change, with no
+  conventional-commit prefix, then a `### Summary` of one to three sentences and a flat
+  `### Changes` list of at most eight bullets. The body carries no footer and no attribution.
+  The current title goes into the prompt as a hint only.
 
 **`branch-merge-policy.yml`**
 

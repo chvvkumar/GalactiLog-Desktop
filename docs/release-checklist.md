@@ -23,6 +23,10 @@ nothing else open. It does not restate that setup.
 - Nothing below requires the `vpk` tool on the local machine. CI packs the release. The local
   publish and pack procedure in `docs/packaging.md` is for verifying a build before or after a
   release, not for cutting one.
+- The repository secret `GEMINI_API_KEY` exists (`gh secret set GEMINI_API_KEY`). The release
+  workflow and the pull request description workflow both read it to write prose from the commit
+  messages. Without it both still succeed: the release notes are the raw commit list and a pull
+  request keeps the title and description its author wrote.
 
 ## 2. Cutting an alpha from `snd`
 
@@ -45,19 +49,27 @@ This is the ordinary case, and the only one that happens during development.
    6. Publishes a self-contained `win-x64` build to `publish/win-x64`, with
       `-p:Version=<derived version>` and `-p:SourceRevisionId=${{ github.sha }}`.
    7. Installs `vpk` version 1.2.0 as a global tool on the runner, pinned to match the `Velopack`
-      package version in `Directory.Packages.props`.
-   8. Packs the publish output:
+      package version in `Directory.Packages.props`, and downloads the channel's previous
+      release so the pack can emit a delta package.
+   8. Writes the release notes to a file on the runner (`.github/scripts/release-notes.js`).
+      The script finds the previous tag on the same channel, collects the commit messages since
+      it, and asks Gemini for a short summary and one plain-language line per commit. When
+      `GEMINI_API_KEY` is missing or the call fails, the file holds the raw commit list instead.
+      The step never fails the release.
+   9. Packs the publish output:
 
       ```
       vpk pack --packId GalactiLog --packVersion <version> --packDir publish/win-x64 \
         --icon src/GalactiLog.App/Assets/GalactiLog.ico \
-        --mainExe GalactiLog.exe --channel <channel>
+        --mainExe GalactiLog.exe --channel <channel> --releaseNotes <the file from step 8>
       ```
 
       `--icon` sets the icon on Setup.exe, the shortcuts and the Add or Remove Programs
       entry. GalactiLog.exe carries its own icon from the csproj's `ApplicationIcon`.
-   9. Tags the commit with the derived version and pushes the tag.
-   10. Uploads to GitHub Releases:
+      `--releaseNotes` puts the notes into the package, which is where the About tab reads
+      them from when it offers the update.
+   10. Tags the commit with the derived version and pushes the tag.
+   11. Uploads to GitHub Releases:
 
        ```
        vpk upload github --repoUrl <this repository's URL> --token <the workflow's GitHub token> \
@@ -65,7 +77,9 @@ This is the ordinary case, and the only one that happens during development.
        ```
 
        adding `--pre` when `prerelease` is `true`.
-   11. Prunes old prereleases and old stable releases (section 5 below).
+   12. Sets the GitHub release body to the file from step 8 with `gh release edit`, so the
+       release page and the About tab show the same notes.
+   13. Prunes old prereleases and old stable releases (section 5 below).
 4. The version to expect. Worked example, with `1.4.0` as the newest stable tag and
    `1.4.1-alpha.2` as the newest alpha tag: the push produces `1.4.1-alpha.3` on channel `alpha`.
    This repository currently carries no tags (`git tag -l` on this checkout returned nothing on
@@ -187,7 +201,7 @@ precondition at the start of section 3).
 
 ## 5. What the retention numbers keep
 
-`design-spec.md` 17.5 step 10, stated as an outcome:
+`design-spec.md` 17.5 step 13, stated as an outcome:
 
 | Channel | Kept | Deleted |
 | --- | --- | --- |
@@ -387,9 +401,10 @@ Two different situations. They are not the same procedure.
 ## 8. What this process deliberately does not do
 
 - No code signing. `design-spec.md` 17 does not require it, and it would add a required secret.
-- No generated release notes. The release name is the tag, which is what
-  `vpk upload github --releaseName` sets. `--generate-notes` belongs to `gh release create`, which
-  this process does not run (`design-spec.md` 17.5).
+- No GitHub generated notes. The release name is the tag, which is what
+  `vpk upload github --releaseName` sets. The body is the file the workflow wrote from the
+  commit messages (section 2 step 3 item 8); `--generate-notes` belongs to `gh release create`,
+  which this process does not run (`design-spec.md` 17.5).
 - No macOS or Linux build (`design-spec.md` 19.2).
 - No `gh release create` anywhere. `vpk upload github` is the only release-creating command in
   `.github/workflows/release.yml`, because it uploads the Velopack assets and the `RELEASES`

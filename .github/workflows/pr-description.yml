@@ -1,0 +1,31 @@
+name: PR description
+
+# Writes the pull request's title and description from its commit messages with Gemini, so the
+# commits stay the source of truth and nobody retypes them into the PR form. The whole job is one
+# github-script step: the runner's bundled node runs the script, so the self-hosted Windows
+# runner needs no python, jq or curl and no shell step at all.
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [dev, main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+# A new push to the PR supersedes the description run for the old head.
+concurrency:
+  group: pr-description-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-description:
+    runs-on: [self-hosted, Windows, X64]
+    steps:
+      # Default depth: the script reads commits and files through the API, not git.
+      - uses: actions/checkout@v4
+      - uses: actions/github-script@v7
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        with:
+          script: await require('./.github/scripts/pr-description.js')({ github, context, core })
