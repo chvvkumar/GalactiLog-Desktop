@@ -67,7 +67,7 @@ solution goes through it. It takes a destination path and throws
 | --- | --- | --- |
 | The app data directory, the root resolved at startup, by default `%LOCALAPPDATA%\GalactiLogData` (section 17.2) | Fixed at startup | Database, WAL, logs, temporary files |
 | The configured thumbnail cache directory | `general.thumbnail_cache_dir` | Frame, preview, and reference thumbnails, and the Sky view survey images under `survey/` (section 11.3) |
-| One export destination, valid for one operation | A path the user picked in a save dialog, handed to `AppWriter.BeginExport(path)` which returns a scoped writer that is disposed when the operation ends | Two caller classes and nothing else: **exports of this application's own records**, which are the diagnostics JSON bundle (section 16.3) and the log viewer's Save log as (section 12.8); and **generated scripts**, which is the stacking export's copy script (section 12.13). Every one of them writes one new file at the path the dialog returned; none chooses a path of its own, and none reuses the scoped writer after its own operation ends. |
+| One export destination, valid for one operation | A path the user picked in a save dialog, handed to `AppWriter.BeginExport(path)` which returns a scoped writer that is disposed when the operation ends | Two caller classes and nothing else: **exports of this application's own records**, which are the diagnostics JSON bundle (section 16.3), the log viewer's Save log as (section 12.8) and, from Phase 18, Export panels (CSV) on the mosaic detail page (section 12.17), written from `src/GalactiLog.App/ViewModels/Mosaics/MosaicDetailViewModel.cs`; and **generated scripts**, which is the stacking export's copy script (section 12.13). Every one of them writes one new file at the path the dialog returned; none chooses a path of its own, and none reuses the scoped writer after its own operation ends. |
 | One staging root, valid for one operation | A folder the user picked in the stacking export wizard and confirmed on its review step, handed to `AppWriter.BeginStagingCopy(root)` which returns a scoped writer that creates directories and new files (`FileMode.CreateNew`) under that root and nothing else | One caller class and nothing else: `WbppExportViewModel`, the stacking export's in-app copy (section 12.13). |
 
 The staging writer never overwrites, deletes, moves, renames, truncates or opens an existing file
@@ -380,7 +380,10 @@ Conventions:
 
 ### 5.2 images
 
-Mirrors `backend/app/models/image.py`. Mosaic and PHD2 columns are dropped.
+Mirrors `backend/app/models/image.py`. PHD2 columns are dropped, and so is the web's mosaic
+column `panel_id`: a frame's panel membership is a join, not a stored key (section 5.24). Phase 18
+adds `panel_label` and the three geometry columns `ra_deg`, `dec_deg` and `width_px`, which the
+web reads out of `raw_headers` at every detection run and this port stores once.
 
 | Column | Type | Null | Notes |
 | --- | --- | --- | --- |
@@ -404,6 +407,10 @@ Mirrors `backend/app/models/image.py`. Mosaic and PHD2 columns are dropped.
 | `eccentricity_source` | TEXT | yes | `header`, `ellipticity`, or `csv`. |
 | `altitude_deg` | REAL | yes | `OBJCTALT` then `CENTALT`. |
 | `arcsec_per_pixel` | REAL | yes | Materialized at ingest. |
+| `ra_deg` | REAL | yes | Phase 18. The frame's pointing right ascension in degrees, 0 to less than 360. Written by `MetadataExtractor` at ingest from `RA`, falling back to `OBJCTRA` (section 7.1), and backfilled for an older row by mosaic detection step 0 (section 7.7). Written together with `dec_deg` or not at all. |
+| `dec_deg` | REAL | yes | Phase 18. The frame's pointing declination in degrees, -90 to 90. Written by `MetadataExtractor` at ingest from `DEC`, falling back to `OBJCTDEC` (section 7.1), and backfilled by mosaic detection step 0 (section 7.7). |
+| `width_px` | INTEGER | yes | Phase 18. `NAXIS1`, the image width in pixels. Written by `MetadataExtractor` at ingest (section 7.1) and backfilled by mosaic detection step 0 (section 7.7). With `arcsec_per_pixel` it gives the field of view detection uses. |
+| `panel_label` | TEXT | yes | Phase 18. The mosaic panel label parsed from `OBJECT` by the token rule of section 7.7, for example `Panel 2`; null when `OBJECT` carries no panel token and on every frame that is not LIGHT. Written by `ScanWriter` at ingest with the keywords in force for that run, and recomputed for every LIGHT frame by mosaic detection step 0, which writes only the rows whose label changed. Smart rebuild (section 12.7) does not touch it. |
 | `hfr_stdev` | REAL | yes | CSV only. |
 | `fwhm` | REAL | yes | CSV only, already arcseconds. The only FWHM any screen, chart, filter, or aggregate uses. Never multiply by plate scale. |
 | `detected_stars` | INTEGER | yes | CSV only. |
@@ -438,7 +445,10 @@ Mirrors `backend/app/models/image.py`. Mosaic and PHD2 columns are dropped.
 Indexes: unique on `file_path`; non-unique on `capture_date`, `session_date`,
 `filter_used`, `resolved_target_id`, `image_type`, (`image_type`, `session_date`),
 `telescope`, `camera`, `median_hfr`, `fwhm`, `eccentricity`, `detected_stars`,
-`guiding_rms_arcsec`, `focuser_temp`, `ambient_temp`, `humidity`, `airmass`.
+`guiding_rms_arcsec`, `focuser_temp`, `ambient_temp`, `humidity`, `airmass`, and from Phase 18
+`panel_label` (`ix_images_panel_label`), which serves the available labels banner and the create
+mosaic prefill of section 12.17. The three geometry columns carry no index: detection reads them
+per target, through the existing `resolved_target_id` index.
 
 The web application's GIN index on `raw_headers` has no SQLite equivalent. The header query
 builder therefore scans with `json_extract`. Acceptable for a single-user library of tens
@@ -632,6 +642,9 @@ other section may introduce a key without adding it here.
 | `stellarium_instances` | array | `[]` | 12.7, 12.16. The same entry shape and the same ordering rule as `nina_instances`. |
 | `survey_downloads_enabled` | bool | `true` | 11.3, 12.4, 12.7. On by default since Phase 24 (it shipped off in Phase 22). While it is false the Sky view button is disabled, the Sky view window makes no request, and the application makes no request to `alasky.cds.unistra.fr`. |
 | `sky_view_survey` | string | `P/DSS2/color` | 12.4. The survey the Sky view window opens on, one of the five ids section 12.4 lists. A stored value that is not one of the five reads as the default, the treatment `general.theme` and `default_page_size` get, because a survey id has no ordering that would make a nearer bound mean anything. |
+| `mosaic_keywords` | string[] | `["Panel", "P"]` | 7.7, 10.3, 12.17. The words that introduce a panel number in `OBJECT`, matched case insensitively. An empty list is legal and leaves only the tile pattern of section 7.7. |
+| `mosaic_campaign_gap_days` | int, one of 0, 7, 14, 30, 90, 180, 365 | `0` | 7.7, 12.17. Nights of one suggestion further apart than this many days split into separate campaigns; `0` means no grouping. |
+| `mosaic_position_tolerance_arcmin` | double, 0 to 600 | `0`, meaning derived | 7.7, 12.17. The separation in arcminutes below which two panels count as the same position. `0` derives it from the field of view (section 7.7). |
 
 The app data root is deliberately not a settings key, because the settings document lives inside
 it. It is resolved before the database is opened, from `GALACTILOG_APPDATA`, the data location
@@ -666,6 +679,20 @@ first start's `catalogs_loaded_version` write, so a profile that has run Phase 2
 reads on. Each key is written by its own control only: the switch by the
 General tab (section 12.7) and the survey id by the Sky view window's survey combo, which stores
 the reader's last choice so the next window opens on it.
+
+**The three keys added in Phase 18** (`mosaic_keywords`, `mosaic_campaign_gap_days`,
+`mosaic_position_tolerance_arcmin`) need no migration, for the reason this section already gives.
+They live under `general` and not on a Settings tab: their one editor is the Mosaics page (section
+12.17, ruling R3), which writes each on change. A stored `mosaic_keywords` entry is trimmed on
+read, and a blank entry or a repeat of an earlier entry compared case insensitively is dropped, so
+a hand-edited list cannot make the token rule match an empty keyword. A stored
+`mosaic_campaign_gap_days` outside the seven listed values reads as `0`, the treatment
+`default_page_size` gets, because a gap has no nearer list member that would mean what the reader
+chose. A stored `mosaic_position_tolerance_arcmin` outside 0 to 600 is clamped to the nearer bound
+on read, the treatment every other bounded scalar in this table gets. A change reaches the stored
+labels and the suggestion list at the next Run Detection or the next scan, not at the moment it is
+saved, and the page says so beside the control. `ScanWriter` reads `mosaic_keywords` once at the
+start of a run, so a change made while a scan runs applies from the next run.
 
 `default_page_size` (Phase 14C) is now written by the Dashboard pager's page-size select
 (section 12.2), whose choice list is 25, 50, 100 and 250, in place of a value with no control
@@ -895,7 +922,11 @@ the flat trio is not. All five are vestigial there and would have been dead on a
   "columns": {
     "dashboard": [ "name", "designation", "palette", "integration", "equipment", "last_session" ],
     "frames":    [ "time", "file_name", "filter_used", "exposure_time", "median_hfr", "eccentricity", "fwhm", "detected_stars" ],
-    "ledger":    [ ]
+    "ledger":    [ ],
+    "mosaics":   [ "name", "panels", "integration", "frames", "date_range" ]
+  },
+  "sort": {
+    "mosaics": { "key": "name", "ascending": true }
   },
   "dashboard": {
     "filter_panel_expanded": true,
@@ -1044,6 +1075,20 @@ Notes.
   `custom_name`, never to `name`. A slug in a list whose column has been deleted is inert, is
   dropped from the list on the next write of that list, and costs nothing until then. A built-in
   key is never given the prefix.
+
+- **`columns.mosaics` and `sort.mosaics` (Phase 18)** govern the mosaics table of section 12.17.
+  The built-in keys are `name`, `panels`, `integration`, `frames` and `date_range`, in that order,
+  and all five are on by default; `name` is locked on, as the dashboard's `name` is, and the
+  picker shows its box ticked and disabled. After them the list may carry the `custom_` slug of
+  each mosaic-scope custom column the reader has switched on (section 12.15), which ships off.
+  The table id is `mosaics`, and `DisplayColumnWriter` writes it like every other `columns` list.
+  `sort` is a new object beside `columns`, a map from table id to `{key, ascending}`; `mosaics` is
+  its only member. `key` is one of the five built-in keys and `ascending` a bool, default
+  `{ "key": "name", "ascending": true }`. A stored key outside the five, a custom slug included,
+  reads as the default, because a custom column carries no ordering this table sorts by. No
+  migration: a document without `sort` takes the default. The writer is the mosaics table's
+  header click, through `DisplayColumnWriter`'s load-modify-save, so a sort change never rewrites
+  a `columns` list.
 
 - **`columns.ledger` holds custom slugs only (Phase 20).** The Nights ledger's built-in columns are
   not hideable and are not in this list (section 12.4); the list names the session-scope custom
@@ -1295,7 +1340,7 @@ its own sake.
 ### 5.14 Tables deliberately absent
 
 `users`, `api_keys`, `refresh_tokens`, `app_logs`, `data_jobs`, `custom_column_*`,
-`mosaic_*`, `filename_candidate`, `gaia_cache`, `hyperleda_cache`,
+`filename_candidate`, `gaia_cache`, `hyperleda_cache`,
 `vizier_cache`, `simbad_cache`, `sesame_cache`, `site_dark_hours`, `app_metadata`.
 
 Reasons: no auth (users, keys, tokens); Serilog files replace `app_logs`; in-process tasks
@@ -1304,6 +1349,8 @@ collapse into `catalog_cache` (section 5.7), which is the shape the web applicat
 already converged on.
 
 `phd2_*` left this list in Phase 15A. The four tables are sections 5.15 to 5.18.
+
+`mosaic_*` left this list in Phase 18. The four tables are sections 5.22 to 5.25.
 
 ### 5.15 phd2_logs
 
@@ -1531,7 +1578,7 @@ catalogue rows and not settings: they are shared by every surface, they are refe
 | `name` | TEXT | no | The label every surface shows. Trimmed on write. 1 to 60 characters, which section 12.15 states and the repository enforces; the web allows 255 and renders them in a table cell it never sizes. |
 | `slug` | TEXT | no | The persisted key, unique, built by section 12.15's slug rule and **never rewritten after creation**. Always carries the `custom_` prefix, so no custom column can shadow a built-in column key in a `display.columns` list (section 5.8.2). |
 | `column_type` | TEXT | no | `boolean`, `text` or `dropdown`. Stored as the lower-case word, as the web's enum does. Fixed at creation. |
-| `applies_to` | TEXT | no | `target`, `session` or `rig`. `mosaic` is **reserved and refused**: see "The reserved mosaic scope" in section 12.15. Fixed at creation. |
+| `applies_to` | TEXT | no | `target`, `session`, `rig` or, from Phase 18, `mosaic`: see "The mosaic scope" in section 12.15. Fixed at creation. |
 | `dropdown_options` | TEXT JSON | yes | A JSON array of strings, in the order the user entered them, for a `dropdown` column. Null for the other two types. One TEXT column rather than the web's Postgres `ARRAY(String)`; it is a bounded list that is only ever read whole, the same argument section 5.18 makes for `phd2_calibrations.steps`. |
 | `display_order` | INTEGER | no | Zero-based. Dense and distinct across the table, which the reorder of section 12.15 maintains by swapping two rows in one transaction. **No unique index**: SQLite cannot defer a constraint, so a swap would trip one mid-transaction. |
 | `created_at` | TEXT datetime | no | UTC, set once. |
@@ -1562,8 +1609,8 @@ which of them are set is decided by the owning column's `applies_to`.
 | --- | --- | --- | --- |
 | `id` | TEXT GUID | no | PK. |
 | `column_id` | TEXT GUID | no | FK `custom_columns.id`, on delete cascade. |
-| `target_id` | TEXT GUID | yes | FK `targets.id`, on delete cascade. Set for all three offered scopes. |
-| `mosaic_id` | TEXT GUID | yes | **No foreign key and no reader.** Reserved for the phase that builds mosaics, which adds the key and its cascade. Always null on every row this phase can write. |
+| `target_id` | TEXT GUID | yes | FK `targets.id`, on delete cascade. Set for the target, session and rig scopes. |
+| `mosaic_id` | TEXT GUID | yes | FK `mosaics.id`, on delete cascade, added by the Phase 18 migration (section 5.22). Set for the mosaic scope alone. |
 | `session_date` | TEXT date | yes | The imaging night (section 8.2), set for the session and rig scopes. |
 | `rig_label` | TEXT | yes | The canonical `"{telescope} / {camera}"` rig label, the one spelling `RigGroup.Label` already builds (section 12.4). Set for the rig scope alone. |
 | `value` | TEXT | no | The stored value, always a string, whatever the column's type. `true` or `false` for `boolean`; one of `dropdown_options` for `dropdown`; free text for `text`. A row whose value would be empty is deleted rather than stored (section 12.15). |
@@ -1577,7 +1624,7 @@ parts a scope leaves unset are stored as SQL null, never as an empty string or a
 | `target` | the target | null | null | null |
 | `session` | the target | null | the night | null |
 | `rig` | the target | null | the night | the rig label |
-| `mosaic` (reserved) | null | the mosaic | null | null |
+| `mosaic` | null | the mosaic | null | null |
 
 A rig value is therefore **per night and per rig**, not per rig across the library. That is the
 web's own key (`SessionAccordionCard.tsx` lines 1041 to 1053 send `session_date` and `rig_label`
@@ -1587,11 +1634,13 @@ discovered.
 **The key shape is enforced at the one write path.** `CustomColumnRepository.SetValue` checks the
 key against its column's scope before it reads or writes anything, and refuses a disagreement:
 a target-scope key carrying a night or a rig label, a session-scope key carrying a rig label, a
-rig-scope key with no night or no rig label, and any key at all carrying a mosaic id. The rig
+rig-scope key with no night or no rig label, a mosaic-scope key carrying a target, a night or a
+rig label or carrying no mosaic id, and a key of any other scope carrying a mosaic id. The rig
 label is judged set or unset and is never trimmed into shape. Six surfaces land on that one
 method, so the rule lives there and in none of them (design lesson 2). The refusal is a
 programming error rather than a user path: it carries no sentence, no surface shows it, and a
-surface that builds its key through the three `CustomValueKey` factories cannot reach it. Without
+surface that builds its key through the four `CustomValueKey` factories (the fourth,
+`ForMosaic`, added in Phase 18) cannot reach it. Without
 the guard a mis-shaped row would be invisible to both reads yet still count in the value count and
 in the option census, so it would show a number the reader cannot account for and could refuse an
 option removal they have no way to resolve.
@@ -1603,7 +1652,7 @@ Four indexes, the web's four with its coalesce sentinels retyped for SQLite:
 | `uq_custom_column_value` | `column_id`, `coalesce(target_id, '')`, `coalesce(mosaic_id, '')`, `coalesce(session_date, '')`, `coalesce(rig_label, '')`, unique | The upsert. It is the reason a scope's unset parts must be null and nothing else: two rows differing only in a null against an empty string would both be legal and the surface would show whichever the reader happened to return. Declared in raw SQL inside the migration, because a fluent index cannot carry a coalesce expression. |
 | `ix_custom_column_values_target` | `target_id` | The per-target read the dashboard page and the Target detail page both issue. |
 | `ix_custom_column_values_column` | `column_id` | The cascade and the per-column read. |
-| `ix_custom_column_values_mosaic` | `mosaic_id` | Reserved with the column above. Created now so the later phase adds a foreign key and nothing else. |
+| `ix_custom_column_values_mosaic` | `mosaic_id` | The per-mosaic read of the mosaics table and the mosaic detail header (section 12.17), and the cascade from `mosaics`. Created by Phase 20 so that Phase 18 added a foreign key and nothing else. |
 
 The web declares `ix_custom_column_values_target` twice under two names
 (`0015_v2_baseline.py` lines 495 and 496, `..._target` and `..._target_id`). The port creates it
@@ -1648,6 +1697,147 @@ change), and a frame first seen under the new setting gets a row.
 
 The migration is the seventh, `20261005022536_SkippedFiles`, after `20260921173551_CustomColumns`.
 It creates the table and nothing else.
+
+### 5.22 mosaics
+
+Phase 18. Mirrors `backend/app/models/mosaic.py` with two columns dropped. One row per mosaic
+project: a name, notes and the arranger's global rotation. A mosaic owns its panels (section 5.23),
+and through them their nights (section 5.24); it owns no frame.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | TEXT GUID | no | PK. |
+| `name` | TEXT | no | `COLLATE NOCASE`, unique. Trimmed on write and never empty. Every surface that names a mosaic shows this. |
+| `notes` | TEXT | yes | Free-form notes, written by the detail page's autosave (section 12.17). An emptied box stores null. |
+| `created_at` | TEXT datetime | no | UTC, set once. |
+| `updated_at` | TEXT datetime | no | UTC, rewritten on every write to this row, its panels or its nights. |
+| `rotation_angle` | REAL | no | Default `0`. The arranger's global rotation in degrees, -180 to 180. Shipped now and unused until the arranger phase (section 19.1). |
+
+**Two web columns are not created.** `needs_review` (ruling R11): the web only ever set it in a
+baseline migration, so the Needs Review pill, Clear All Reviews and the Session Review banner are
+dropped with it. `pixel_coords` (ruling R8): arranger positions are stored on the panel in one form
+only (section 5.23).
+
+One index, `ux_mosaics_name`, unique on `name`, which is the duplicate-name refusal of every create
+and rename path in section 12.17 and the accepted-campaign check of section 7.7. The comparison is
+case insensitive, as the web's `upper(name)` pre-check is, and the database enforces it rather than
+each caller.
+
+Deleting a mosaic cascades to its panels, through them to their nights, and to its mosaic-scope
+custom values (section 5.20). It deletes no `mosaic_suggestions` row and no `images` row, and no
+file.
+
+### 5.23 mosaic_panels
+
+Phase 18. Mirrors `backend/app/models/mosaic_panel.py` with three columns replaced. A panel is a
+label plus its arranger layout (ruling R19): it names no target, because its nights may come from
+any target (section 5.24).
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | TEXT GUID | no | PK. |
+| `mosaic_id` | TEXT GUID | no | FK `mosaics.id`, on delete cascade. |
+| `panel_label` | TEXT | no | `COLLATE NOCASE`. Trimmed on write and never empty. For a detected panel it is the `images.panel_label` that produced it, for example `Panel 2`. |
+| `sort_order` | INTEGER | no | Zero-based display order within the mosaic. A new panel takes one more than the mosaic's current maximum. The auto layout of the arranger reads it. |
+| `canvas_x` | REAL | yes | Arranger position, left edge, in canvas units (ruling R8). No snapping. Null means the panel takes its auto layout position from `sort_order`. Shipped now and unused until the arranger phase. |
+| `canvas_y` | REAL | yes | Arranger position, top edge. Null under the same rule as `canvas_x`; the two are written together. |
+| `rotation` | INTEGER | no | Default `0`. One of `0`, `90`, `180`, `270`, by a check constraint. The arranger's tile rotation. |
+| `flip_h` | INTEGER | no | Default `0`. Boolean. The arranger's horizontal flip. |
+
+**Three web columns are replaced.** `target_id` is not created: a panel's targets are the targets of
+its nights (ruling R19). `object_pattern` is not created: membership is the join of section 5.24, not
+an `ILIKE` over `OBJECT`, so the pattern and its re-parse guard (the web's AUD-008) have nothing to
+guard. `grid_row` and `grid_col` become `canvas_x` and `canvas_y` (ruling R8). The web database is
+never read (section 19.1), so no column name needs to match it.
+
+One index, `ux_mosaic_panels_mosaic_label`, unique on (`mosaic_id`, `panel_label`): a mosaic holds
+one panel per label, compared case insensitively. A create or rename that would repeat a label is
+refused with the sentence of section 12.17.
+
+### 5.24 mosaic_panel_sessions
+
+Phase 18. Mirrors `backend/app/models/mosaic_panel_session.py` with a target added. One row per
+night of one target that a panel holds, either counted or offered.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | TEXT GUID | no | PK. |
+| `panel_id` | TEXT GUID | no | FK `mosaic_panels.id`, on delete cascade. |
+| `target_id` | TEXT GUID | no | FK `targets.id`, on delete cascade. The target whose frames this night contributes (ruling R19). |
+| `session_date` | TEXT date | no | The imaging night (section 8.2). |
+| `status` | TEXT | no | `included` or `available`, by a check constraint. `included` counts in every figure; `available` makes the target a contributor of the panel without counting the night. |
+
+Two indexes:
+
+| Index | Columns | Serves |
+| --- | --- | --- |
+| `ux_mosaic_panel_sessions_panel_target_date` | `panel_id`, `target_id`, `session_date`, unique | The upsert every include and remove performs, and the one row per night of one target per panel. |
+| `ix_mosaic_panel_sessions_target_date` | `target_id`, `session_date` | The membership join below, from the frame side, and the dashboard link (section 12.2). |
+
+**The membership join.** A frame belongs to a panel when its `resolved_target_id` and its
+`session_date` match an `included` row of that panel. That is the whole of membership: there is no
+`images.panel_id` (ruling R19), nothing is stamped on a frame, and a frame changes panel only
+because a row changed. Every panel figure in section 12.17 (integration, frames, nights, filters,
+date range) counts the LIGHT frames this join reaches and no others. A frame with a null
+`session_date` or a null `resolved_target_id` belongs to no panel.
+
+**One night of one target sits in at most one panel of a mosaic.** At most one `included` row per
+(mosaic, `target_id`, `session_date`) across that mosaic's panels. The database cannot state this,
+because the mosaic is one join away, so `MosaicRepository` checks it in the same transaction as
+every write that sets `included` and refuses the duplicate with the sentence of section 12.17. The
+Available lists of section 12.17 hide such a night, so no surface offers it. `available` rows are
+not bound by the rule: the same night may be offered in two panels until one of them includes it.
+The same night may sit in panels of two different mosaics; the rule is per mosaic.
+
+**A merge moves the rows to the winner.** A merge (section 12.9) rewrites `target_id` from the
+merged-away target to the winner on every row, in the merge's own transaction, because the winner
+is where the frames now resolve and a row left on the loser would join nothing. A row that would
+collide with an existing (panel, winner, night) row is dropped, keeping the existing row; a
+collision between an `included` row and an `available` row keeps the `included` one. An unmerge
+does not move rows back: the manifest records no mosaic rows, and after an unmerge the reader
+re-includes the nights from the detail page's Available table. That is a stated limit, not a defect.
+
+### 5.25 mosaic_suggestions
+
+Phase 18. Mirrors `backend/app/models/mosaic_suggestion.py`. One row per mosaic candidate detection
+produced (section 7.7). Rows are written only by the detection pass and by accept and dismiss.
+
+| Column | Type | Null | Notes |
+| --- | --- | --- | --- |
+| `id` | TEXT GUID | no | PK. |
+| `suggested_name` | TEXT | no | The name the mosaic takes on accept: the base name, a campaign suffix when the run split campaigns, and a ` (#n)` suffix when the name was already used (section 7.7). |
+| `base_name` | TEXT | no | The panel token's base name, as the first panel's `OBJECT` spells it. |
+| `target_ids` | TEXT JSON | no | Array of target ids, one entry per suggested panel entry, parallel to `panel_labels`. A target appears once for each of its panels. |
+| `panel_labels` | TEXT JSON | no | Array of labels, parallel to `target_ids`. A label may appear twice when two targets carry the same panel number; accept combines them into one panel (section 7.7). |
+| `panel_patterns` | TEXT JSON | no | Array of the web's `OBJECT` pattern strings, parallel to `target_ids` (section 7.7). Kept as the record of which token produced each entry; no query in this port matches by it. |
+| `session_dates` | TEXT JSON | no | Array of arrays of `yyyy-MM-dd` dates, parallel to `target_ids`: the nights of this campaign for each entry. |
+| `status` | TEXT | no | `pending`, `accepted` or `rejected`. Dismiss writes `rejected`. |
+| `created_at` | TEXT datetime | no | UTC, set once. |
+| `confidence` | TEXT | no | `high` or `low` (section 7.7). |
+| `discovery_source` | TEXT | no | `name`, `position` or `both` (section 7.7). |
+| `geometry` | TEXT JSON | yes | `{panels: [{target_id, label, ra, dec}], pitches: [arcmin], fov_arcmin}`, section 7.7. Null when no entry has a position. |
+| `flags` | TEXT JSON | no | Array of review note sentences, empty for a high confidence row (section 7.7). |
+| `dedup_signature` | TEXT | no | The signature of section 7.7. |
+
+Two indexes: `ix_mosaic_suggestions_status` on `status`, which every list read filters on, and
+`ix_mosaic_suggestions_dedup_signature` on `dedup_signature`, which the dismissed-subset rule of
+section 7.7 reads. `session_dates` is an array parallel to the other three, where the web keys an
+object by label, because a label may repeat in this port's shape and an object would merge two
+targets' nights under one key.
+
+`accepted` and `rejected` rows are kept. Detection deletes `pending` rows only (section 7.7). An
+`accepted` row is read by nothing; deleting its mosaic leaves it in place.
+
+**The migration is the eighth**, `<stamp>_Mosaics`, at the next timestamp after
+`20261005022536_SkippedFiles`. It creates the four tables above with their indexes and check
+constraints; adds `images.panel_label` with `ix_images_panel_label`, and `images.ra_deg`,
+`images.dec_deg` and `images.width_px` (section 5.2); and adds the foreign key from
+`custom_column_values.mosaic_id` to `mosaics.id` with its cascade (ruling R2), and nothing else for
+custom columns: no column and no index. SQLite cannot add a foreign key to an existing table, so the
+migration rebuilds `custom_column_values`; the raw SQL index `uq_custom_column_value` is dropped
+before the rebuild and recreated after it, with the coalesce expression section 5.20 gives, and
+`Down` reverses each step in the opposite order. The new columns are null on every existing row
+until mosaic detection step 0 fills them (section 7.7).
 
 ---
 
@@ -1946,6 +2136,10 @@ skip values that fail to parse, return the first success. This is
 | `eccentricity_source` | derived, see 7.2 | derived | not itself provenance-tracked |
 | `altitude_deg` | `OBJCTALT`, `CENTALT` | none | the keyword that matched |
 | `arcsec_per_pixel` | derived from `XPIXSZ` and `FOCALLEN` | none | `XPIXSZ+FOCALLEN` |
+| `ra_deg` | `RA` (decimal degrees), else `OBJCTRA` (sexagesimal hours), by the coordinate rule below | none | the keyword that matched |
+| `dec_deg` | `DEC` (decimal degrees), else `OBJCTDEC` (sexagesimal degrees), by the coordinate rule below | none | the keyword that matched |
+| `width_px` | `NAXIS1`, parsed as a base-10 integer, kept only when greater than zero | none | `NAXIS1` |
+| `panel_label` | derived from `OBJECT` by the token rule of section 7.7, with the keywords in `general.mosaic_keywords`; LIGHT frames only | none | not itself provenance-tracked |
 | `capture_date` | `DATE-OBS`, see 7.1.2 | none | `DATE-OBS` |
 | `hfr_stdev` | none | `HFRStDev` | `csv:HFRStDev` |
 | `fwhm` | none | `FWHM` | `csv:FWHM`. The only FWHM any consumer reads, see 7.1.1. |
@@ -1994,6 +2188,21 @@ Rules the table encodes, restated because getting them wrong is silent data corr
   micrometres and `FOCALLEN` in millimetres. Null when either is missing, non-numeric, or
   not strictly positive. From `units.arcsec_per_pixel`. `XPIXSZ` is assumed to be the
   binned-effective pixel size, as N.I.N.A. writes it; no `XBINNING` correction is applied.
+- Coordinates (Phase 18), port of `coordinates._parse_ra` and `_parse_coord` as
+  `mosaic_detection._frame_coords` uses them. Each value is trimmed and parsed as a `double` with
+  invariant culture first; a value that parses is taken as degrees as it stands, for `OBJCTRA` as
+  well as `RA`. A value that does not parse is split on whitespace and must yield exactly three
+  parts, each a `double`, or it yields nothing. For right ascension the three are hours, minutes
+  and seconds and the result is `(h + m / 60 + s / 3600) * 15`. For declination the leading `+` or
+  `-` is removed before the split, the result is `d + m / 60 + s / 3600`, and it is negated when
+  the trimmed value began with `-`, which is what keeps `-00 30 00` negative. Colon-separated
+  values such as `05:35:17` are not parsed, as in the web. `RA` falls back to `OBJCTRA` and `DEC`
+  to `OBJCTDEC` independently, so a frame may take its right ascension from one keyword and its
+  declination from the other. The pair is stored only when both values exist and the declination
+  lies in -90 to 90 inclusive; otherwise both columns are null. A stored right ascension is
+  normalised into 0 to less than 360 by a floating modulo that maps a negative value upward.
+- `width_px` is `NAXIS1` only. The web falls back to `NAXIS2` when `NAXIS1` is absent; ruling R10
+  names `NAXIS1` and a frame without it carries no usable width.
 
 #### 7.1.1 The two FWHM columns
 
@@ -2725,6 +2934,267 @@ not, which is recorded in section 7.6's departures below.
 - `phd2_sidereal.py`, the timezone cross-check, is not ported at all and has no owner
   (section 19.1). `phd2_stats.py`, the statistics aggregates, is not ported in Phase 15A and is
   ported in Phase 15B as `GuidingStatsQuery` (section 12.5).
+
+### 7.7 Panel tokens and mosaic detection
+
+Phase 18. Port of `backend/app/services/panel_tokens.py`, `mosaic_detection.py` and the accept half
+of `mosaic_suggestions.py`, amended by the plan's rulings R4 to R6, R10 and R19. The token rule and
+every grouping, scoring and naming step are pure functions over records in
+`GalactiLog.Core.Mosaics.PanelTokens` and `GalactiLog.Core.Mosaics.MosaicDetection`; the pass that
+reads the catalogue and writes suggestions is `GalactiLog.Data.Ingest.MosaicDetectionPass`. Detection
+reads frame geometry from the `images` columns of section 5.2 and never from `raw_headers`; it reads
+`OBJECT` with `json_extract`, as the dashboard group key does (section 12.2).
+
+#### The token rule
+
+A panel token is a trailing panel number in `OBJECT`. Two patterns are tried in order; the first
+that matches wins, and a name neither matches carries no token, so its frame's `panel_label` is
+null and it never becomes a panel candidate.
+
+1. **The keyword pattern**, matched case insensitively and culture invariantly:
+   `^(.+?)\s*[-_\s]?\s*(K)\s*[-_\s]?\s*(\d+)\s*$`, where `K` is the alternation of
+   `general.mosaic_keywords`, each keyword regex-escaped, in the stored order. Group 1, trimmed, is
+   the **base name**; group 2 is the keyword as `OBJECT` spells it; group 3 is the **panel
+   number**, as written. The pattern is skipped when the keyword list is empty.
+2. **The tile pattern**: `^(.+?)[\s_-]+(\d+-\d+)\s*$`. Group 1, trimmed, is the base name and
+   group 2, a row and column pair, is the panel number. It carries no keyword.
+
+The **panel label** is `Panel ` followed by the panel number, whichever keyword matched, so
+`NGC 7000 P3` and `NGC 7000 Panel 3` both label `Panel 3`. The base is the name with the token
+removed; it is what panels of one mosaic share.
+
+| `OBJECT` | Keywords | Base name | Number | `panel_label` |
+| --- | --- | --- | --- | --- |
+| `M 31 Panel 2` | `Panel`, `P` | `M 31` | `2` | `Panel 2` |
+| `NGC 7000 P3` | `Panel`, `P` | `NGC 7000` | `3` | `Panel 3` |
+| `IC 1396 P1` | `Panel`, `P` | `IC 1396` | `1` | `Panel 1` |
+| `Sh2-155 Panel 1` | `Panel`, `P` | `Sh2-155` | `1` | `Panel 1` |
+| `M31 panel2` | `Panel`, `P` | `M31` | `2` | `Panel 2` |
+| `NGC 7000_Panel_4` | `Panel`, `P` | `NGC 7000` | `4` | `Panel 4` |
+| `IC1805_1-2` | `Panel`, `P` | `IC1805` | `1-2` | `Panel 1-2`, by the tile pattern |
+| `North America Nebula` | `Panel`, `P` | none | none | null: no token |
+| `M 31 Tile 2` | `Panel`, `P` | none | none | null: `Tile` is not a keyword and `2` is not a row and column pair |
+| `NGC 7000 Panel 1` | `P` | none | none | null: `Panel` is not in the list, and `P` must be followed by digits |
+
+The number is the trailing digit run, anchored to the end of the name, so `Sh2-155 Panel 1` keeps
+the digits of its base, and a base needs at least one character, so a name that begins with a keyword
+(`Pelican 2` under `P`) carries no token.
+
+**The pattern per entry.** Each suggestion entry stores the web's `OBJECT` pattern for its token in
+`mosaic_suggestions.panel_patterns`: `%<base>%<keyword>%<number>%` for a keyword match and
+`%<base>%<number>%` for a tile match, with base and keyword as the first matching `OBJECT` spells
+them. No query in this port matches by it: membership is the join of section 5.24, and a candidate's
+frames are found by re-parsing `OBJECT` with the token rule, so the web's prefix guard against `1`
+matching `Panel 12` (AUD-008) has nothing to guard.
+
+#### Step 0: relabel and backfill
+
+Every run begins with two maintenance passes, inside the detection job.
+
+1. **Relabel (ruling R6).** For each distinct `OBJECT` among LIGHT frames, the label is computed
+   with the current keywords, and every LIGHT row whose stored `panel_label` differs from it,
+   null compared as a value, is rewritten. Rows whose label is unchanged are not written. This is
+   what makes a keyword change on the Mosaics page reach the frames already catalogued. The count
+   of rewritten rows is reported as `relabelled`.
+2. **Backfill (ruling R10).** Every LIGHT row whose `ra_deg`, `dec_deg` and `width_px` are all
+   null has `RA`, `DEC`, `OBJCTRA`, `OBJCTDEC` and `NAXIS1` read from `raw_headers` and put
+   through the rules of section 7.1, and whatever they yield is written. This fills the rows a
+   scan catalogued before Phase 18. A row whose headers yield nothing stays null and is visited
+   again on the next run, one `json_extract` per such row; that is the known ceiling, and the
+   upgrade path is a marker column if it is ever measured. The count of rows written is reported
+   as `backfilled`.
+
+#### Candidates
+
+A **candidate** is one panel token of one target: the key is (target, base name compared case
+insensitively, panel number). The pass reads, for every target with no `merged_into_id`, the
+distinct `OBJECT` strings of its LIGHT frames whose `panel_label` is not null, re-parses each with
+the token rule, and makes one candidate per key, the first `OBJECT` in ordinal order giving the
+base's spelling and the keyword. A target with several tokens (two panel names that resolved to one
+target) yields one candidate per token; a target with no token yields none, which is the web's
+never-absorb rule. Candidates are ordered by target id, ordinal, and then by `OBJECT`, ordinal; every
+"first" below is in that order.
+
+A candidate's **frames** are its target's LIGHT frames whose `OBJECT` parses to its base and
+number. From them:
+
+- **The centre** is the robust centre below, over the frames with a stored position, or none when
+  no frame has one.
+- **The field of view**, in arcminutes, is `width_px * arcsec_per_pixel / 60` of the earliest frame
+  by `capture_date`, then `id`, that carries both, or none. The web takes the first frame its query
+  returned, which is not a defined order; this port fixes one.
+- **The nights** are the distinct non-null `session_date` values.
+
+**The robust centre** (`robust_median_center`). The declination is the median of the frames'
+declinations. The right ascension is unwrapped around a reference so the 0 and 360 seam does not
+collapse to 180: the reference is the median of the raw right ascensions; each frame's offset from
+it is brought into -180 to less than 180 by `((ra - ref + 180) mod 360) - 180` with a floating
+modulo that maps a negative value upward; each offset is multiplied by `cos(median declination)`,
+taken as `1e-9` when it is exactly zero; and the centre's right ascension is
+`(ref + median offset / cos) mod 360`. A median of an even count is the mean of the two middle
+values. The median, not the mean, is the outlier rule: a single frame with a corrupt header cannot
+move the centre, and the web applies no other rejection.
+
+**Separation** between two centres is the haversine great-circle distance,
+`2 * asin(sqrt(a))` with `a = sin(dDec / 2)^2 + cos(dec1) * cos(dec2) * sin(dRa / 2)^2` clamped
+to 0 to 1, in degrees, multiplied by 60 for arcminutes.
+
+**The tolerance**, one value for the whole run: `general.mosaic_position_tolerance_arcmin` when it
+is greater than zero; otherwise a quarter of the smallest field of view among all candidates, but
+not less than 1.0 arcminute; otherwise, when no candidate has a field of view, 12.0 arcminutes, the
+web's `DEFAULT_TOLERANCE_ARCMIN`. Two centres closer than the tolerance are the same position.
+
+#### Grouping
+
+Three paths run in order. A **group** is an ordered list of entries, each a candidate; its entries
+are sorted by panel number, the number split on `-` and compared as a sequence of integers, with a
+number that does not parse sorted after every one that does, and ties keeping candidate order. The
+group's base name is its first entry's base.
+
+1. **By name.** Candidates are grouped by base name compared case insensitively. A base with at
+   least two distinct panel numbers becomes a group, keeping the first candidate of each number.
+   Its positions are **distinct** when at least one pair of its entries with a centre is at least
+   the tolerance apart; then its discovery source is `both`, otherwise `name`. Every target with an
+   entry in a name group is consumed.
+2. **By position.** The candidates whose target is not consumed and that have a centre are
+   clustered by single link: two candidates join when their separation is at most the **reach**,
+   three times the median field of view of these candidates, or ten times the tolerance when none
+   has one, and joining is transitive. A cluster becomes a group when it holds at least two
+   distinct targets and at least two distinct panel numbers; its discovery source is `position`.
+   Entries are not collapsed by number: two targets carrying `Panel 1` stay two entries, and accept
+   combines them into one panel.
+3. **One panel.** Every candidate whose target is in no group from the first two paths is grouped
+   by base name compared case insensitively, and each such base becomes a one-panel group with
+   discovery source `name`. The web drops these; the plan's fixture keeps a lone `IC 1396 P1` as a
+   low confidence suggestion, so the port surfaces a first panel the reader may be starting a
+   mosaic with, and dismissing it keeps it away under the rule below.
+
+Groups are emitted name groups first, then position groups, then one-panel groups, each set ordered
+by base name, ordinal and case insensitive. The order decides which campaign takes a ` (#n)` suffix.
+
+#### Confidence and flags
+
+Each group is checked in this order, and each failing check adds one review note to `flags`, in the
+words below. A group is `high` confidence when it has no flag and its discovery source is `both`;
+every other group is `low`.
+
+| Check | Fails when | Review note |
+| --- | --- | --- |
+| Positions not distinct | Any two entries with a centre are closer than the tolerance. | "Positions not distinct: two panels share a sky centre within tolerance (possible duplicate or mislabel)." |
+| Unrelated names | A position group's entries carry more than one base name, compared case insensitively. | "Position-grouped targets have unrelated base names." |
+| No position | At least one entry has no centre. | "Some panels have no usable sky coordinates." |
+| Irregular geometry | At least three entries have a centre, at least one entry has a field of view, and the largest separation between two entries is more than 8 times the median field of view. | "Panel spread is far larger than the field of view (irregular geometry)." |
+| Mixed plate scales | At least two entries have a field of view and the largest is more than 1.5 times the smallest. | "Mixed plate scales across panels." |
+| Mixed keywords | The entries' keywords, compared case insensitively, with the tile pattern counted as one more kind, hold more than one value. | "Panels name their number with different keywords." |
+| One panel | The group has one distinct panel number. | "Only one panel found." |
+
+The first five are the web's checks with its constants. The web's first note does not name the
+check; the port's prefixes "Positions not distinct" so the reader meets the same words the list
+pill and the fixture use. Mixed keywords and one panel are the port's own, from the plan: the first
+catches `NGC 7000 Panel 1` beside an unrelated `NGC 7000 P2`, and the second keeps a one-panel
+group from ever reading as high.
+
+**Geometry** (`mosaic_suggestions.geometry`): `panels`, one object per entry in entry order with
+its `target_id`, `label`, and `ra` and `dec` rounded to 6 decimals or null; `pitches`, the
+separation in arcminutes of every pair of entries with a centre, rounded to 3 decimals, in pair
+order; and `fov_arcmin`, the median field of view of the entries that have one, rounded to 2
+decimals, or null. Rounding is half to even, Python's `round` and `Math.Round`'s default alike.
+
+#### Campaigns and names
+
+A group's nights are the union of its entries' nights. When `general.mosaic_campaign_gap_days` is
+greater than zero, the distinct nights are sorted and split into **campaigns**: a new campaign
+starts wherever two consecutive nights are more than that many days apart. When it is zero, or the
+split yields one campaign, the group is one suggestion over all its nights, named with the base name
+alone. A group with no nights at all is one suggestion with no nights.
+
+When the split yields two or more campaigns, each campaign is its own suggestion over the entries
+that have at least one night in it, each entry's nights narrowed to the campaign. A campaign whose
+entries carry fewer than two distinct panel numbers is skipped, except in a one-panel group, where
+one is enough. Its name is the base name, a space and the campaign's **date range suffix** built
+from its first and last night: `(Mar 2026)` when both fall in one month, `(Mar 2026 - May 2026)`
+otherwise, with English three-letter month abbreviations whatever the culture. Its geometry keeps
+the campaign's entries, recomputes the pitches over them alone, and carries the group's field of
+view unchanged.
+
+**Unique names.** Within one run, no two suggestions share a name and no suggestion takes the name
+of an existing mosaic: the set of used names starts as the existing mosaic names, and a name
+already in it, compared case insensitively, becomes `<name> (#2)`, then `(#3)`, and so on, the first
+free one. The web compares this set case sensitively against a case-insensitive unique mosaic name;
+the port compares it the way `mosaics.name` is unique.
+
+**The dedup signature** is `<base>|<target ids>|<labels>`: the base name as stored, then the
+entries' target ids sorted ordinally and joined with `,`, then the entries' labels sorted ordinally
+and joined with `,`, duplicates kept in both. It does not depend on order, nights, geometry, frame
+counts or the suggested name, so a re-run over the same panels yields the same signature.
+
+#### Writing suggestions
+
+Detection is idempotent (ruling R5). The write is one transaction, so a failed run leaves the
+previous list in place:
+
+1. Read every `rejected` row's signature together with the union of its nights. Several dismissed
+   rows sharing a signature pool their nights.
+2. Delete every `pending` row. `accepted` and `rejected` rows are untouched.
+3. Read the existing mosaic names and the **covered pairs**: every (target, night) held by an
+   `included` row in any mosaic.
+4. For each suggestion in emission order, skip it when its name before the unique-name step equals
+   an existing mosaic's, compared case insensitively, because that campaign was already accepted;
+   skip it when it has at least one (target, night) pair and every pair is covered, which catches
+   an accepted mosaic since renamed; skip it when its signature matches a dismissed signature and
+   its nights are a subset of that signature's dismissed nights. Otherwise give it its unique name
+   and insert it as `pending`.
+
+A dismissed suggestion therefore stays away only while nothing new is shot: a later night over the
+same panels is not a subset and the suggestion returns, and a different set of targets or labels is
+a different signature. A target already in a mosaic is still read, so a new campaign of an accepted
+base can surface; the name and covered-pair checks are what keep an accepted campaign from coming
+back.
+
+#### When it runs
+
+On the Mosaics page's Run Detection button and at the end of every scan, after duplicate detection
+(section 10.3 step 6, ruling R4). A scan that is cancelled or fails does not run it. Either way it
+registers with the job registry as kind `mosaic_detection`, titled "Mosaic detection", with no
+cancel delegate, reporting the steps "Relabelling frames", "Filling positions", "Grouping
+candidates" and "Writing suggestions", and ending with the summary "n suggestions". The button is
+disabled while a scan runs, with the tooltip "A scan is running. Detection runs when it ends.", and
+while a detection job runs. Two passes never overlap: a pass waits for the one in flight to finish
+before it starts.
+
+It writes `mosaic_detection_complete` (`scan`, info) with `{trigger, suggestions, relabelled,
+backfilled}` when it ends, and `mosaic_detection_failed` (`scan`, error) with `{trigger, reason}`
+when it throws, where `trigger` is `scan` or `manual` (section 10.9). A failure inside a scan does
+not fail the scan, and its row is parented to that scan's `scan_started`. The headless CLI scan runs
+the pass the same way.
+
+#### Accept and dismiss
+
+**Accept** takes a pending suggestion and the set of checked labels, which is every label unless the
+reader unchecked some (section 12.17). It is refused with "Select at least one panel to accept."
+when none is checked, and with "A mosaic named \"<name>\" already exists." when the suggested name
+is taken. Otherwise, in one transaction, it creates the mosaic with the suggested name; creates one
+panel per distinct checked label, in entry order, with `sort_order` from 0; writes an `included`
+row for each night of each checked entry, under the entry's target and the panel of its label; and
+writes an `available` row for each other night of that target whose LIGHT frames carry that label.
+An unchecked label creates no panel. Entries sharing a label share one panel. Where two entries
+would include the same night of the same target in two panels, the first panel in entry order takes
+it as `included` and the later one as `available`, the one-panel-per-night rule of section 5.24.
+Accept sets the suggestion `accepted`. It asks nothing (ruling R13).
+
+**Dismiss** sets the suggestion `rejected` and keeps its signature and nights, which is what the
+subset rule above reads. It deletes nothing else. Its confirm says that a dismissal is not
+permanent (section 12.17).
+
+**Departures from the web, in one place.** No `needs_review` and no review clearing (ruling R11).
+Membership is the join of section 5.24 rather than `images.panel_id` and the retro-link that stamps
+it (ruling R19), so accept claims no frame. Detection runs at scan end as well as on the button
+(ruling R4) and reads stored geometry rather than header JSON (ruling R10). Labels are recomputed by
+step 0 rather than at ingest alone (ruling R6). One-panel groups, the mixed keywords note and the
+"Positions not distinct" prefix are additions; candidate order, the field-of-view frame and the
+case of the unique-name comparison are fixed where the web left them to query order or compared
+case sensitively. Progress and outcomes go to the job registry and the Activity feed; nothing
+pushes a toast.
 
 ---
 
@@ -3740,6 +4210,10 @@ Phase 1 of a scan, and the only phase that writes image rows.
    read the header, extract metadata (section 7), apply CSV backfill, decide calibration
    (section 7.5), compute the session date (section 8), resolve the target (section 9), and
    hand a completed record to the writer. This step is `FrameReader.TryRead`, shared with the CLI.
+   The extracted metadata carries `ra_deg`, `dec_deg` and `width_px` (section 7.1), and
+   `ScanWriter` writes them with the row together with `panel_label`, computed from `OBJECT` by
+   the token rule of section 7.7 with the `general.mosaic_keywords` read once at the start of the
+   run, for a LIGHT frame, and null for any other (Phase 18, rulings R6 and R10).
    One file whose header read, metadata extraction or session-date derivation fails for any
    reason is one failed file, recorded `file_rejected` with its reason and counted in
    `scan_runs.failed`; the scan continues and ends `complete`. It writes no `images` row, so
@@ -3759,8 +4233,11 @@ Phase 1 of a scan, and the only phase that writes image rows.
    limit guard follows the `images` prune, and `removed` does not count them.
 5. **Guide logs.** The PHD2 pass of section 7.6, run only when `general.phd2_scan_enabled` is
    true. It is described below.
-6. **Post-passes.** Duplicate detection (section 9.7), then reference thumbnails
-   (section 11.4), then activity retention pruning.
+6. **Post-passes.** Duplicate detection (section 9.7), then mosaic detection (section 7.7,
+   ruling R4), then reference thumbnails (section 11.4), then activity retention pruning. Mosaic
+   detection runs only when the scan completed, after duplicate detection so that it reads the
+   targets that pass left behind; it registers as its own job, and its failure does not fail the
+   scan.
 
 **The guide-log pass (Phase 15A).** It runs after the header pass has finished, never beside it:
 the writer of section 5.1 owns the single write connection until the frame ingest is done, and
@@ -4047,6 +4524,9 @@ while a scan is running.
 | `scan` | `phd2_correlation_complete` | info | A correlation pass finishes. **Inside a scan**, only a pass that **visited at least one night** writes this row; with no night to visit that pass runs no job and writes nothing, the same silence rule `phd2_pass_complete` follows. **The out-of-scan re-run a settings save dispatches always writes this row when it finishes, whether or not it visited a night**, because `trigger` `settings_change` is the reader's only signal that their saved mapping, zone or site took effect; withholding it on an empty pass would leave a save that changed nothing correlatable looking as if it had not been read at all | `{nights, frames_considered, filled, cleared, below_gate, trigger}`. `trigger` is `scan` or `settings_change`. The out-of-scan re-run fires on a change to the normalised profile map, to `observer_timezone`, or to `observer_latitude` or `observer_longitude`, once per save (section 7.6). |
 | `scan` | `phd2_correlation_failed` | error | The correlation, or the session time re-derive that begins it, threw (section 7.6). Written inside a scan parented to `scan_started`, and in the out-of-scan re-run parentless | `{trigger, reason}`. `trigger` is `scan` or `settings_change`; `reason` is the exception's message. |
 | `scan` | `phd2_correlation_unattributed` | warning | Guiding sessions on a night were attributed to no rig (section 7.6 rig selection step 3) | `{profiles, nights}` |
+| `scan` | `mosaic_detection_complete` | info | A mosaic detection pass finishes, from a scan or from the Mosaics page's Run Detection (section 7.7) | `{trigger, suggestions, relabelled, backfilled}`. `trigger` is `scan` or `manual`. Inside a scan, parented to `scan_started`. |
+| `scan` | `mosaic_detection_failed` | error | A mosaic detection pass threw (section 7.7). The scan that hosted it still ends normally | `{trigger, reason}` |
+| `user_action` | `mosaic_action_failed` | warning | One item of a bulk Accept, Dismiss or Delete Selected job on the Mosaics page failed (section 12.17), one event per failed item | `{action, name, reason}`. `action` is `accept`, `dismiss` or `delete`; `name` is the suggestion's or the mosaic's name. |
 | `enrichment` | `target_created` | info | A new target row is inserted | `{primary_name, catalog_id, source}`. Manual creation (section 9.7) adds `linked_frames` and `closed_candidates`: `linked_frames` is the count of LIGHT frames the retro-link moved onto the new target, and `closed_candidates` is the count of distinct unresolved `OBJECT` names it closed, not a count of `merge_candidates` rows (the member and key names were kept from an earlier design; the value they carry moved with the frame-driven retro-link of section 9.7 step 5). |
 | `enrichment` | `target_merged` | info | A merge completes | `{winner, loser, moved_images}` |
 | `enrichment` | `target_unmerged` | info | An unmerge completes | `{winner, loser}` |
@@ -4488,8 +4968,8 @@ The preview is always autostretched. There are no manual stretch controls in v1.
 5.8.4). A rig-session is one (rig, target, session_date) group. Sections 12.4 and 12.5
 both use this definition.
 
-Shell: a single `MainWindow` with a left navigation rail (Dashboard, Statistics, Analysis,
-Activity, Diagnostics, Settings), a content region, and a persistent status bar. The status bar shows
+Shell: a single `MainWindow` with a left navigation rail (Dashboard, Mosaics, Statistics,
+Analysis, Activity, Diagnostics, Settings; Mosaics from Phase 18, ruling R3), a content region, and a persistent status bar. The status bar shows
 scan state, the progress envelope's message and percent, a cancel button while a scan runs,
 and the update indicator.
 
@@ -4557,13 +5037,16 @@ their passes to the same registry and to the same census rather than growing a s
 surface. The spine is built here, at the second occurrence of the pattern, rather than at the
 sixth.
 
-Target detail (section 12.4) is the one screen that is not a rail destination. It is a single
+Target detail (section 12.4) is a screen that is not a rail destination, and from Phase 18 the
+mosaic detail page is the second. It is a single
 nullable overlay on the shell: the content region shows the open detail page when there is
 one and the selected rail destination otherwise. The page's Back affordance closes it, and
 clicking any rail entry closes it too, including the entry that is already selected, because
 clicking a destination is a request to see that destination. At most one detail page is open,
 and opening a second target closes the first. There is no navigation stack: a maximum depth
-of one does not need one.
+of one does not need one. From Phase 18 the overlay holds either a Target detail page or a mosaic
+detail page (section 12.17), under the same rules: one detail page at a time, of either kind, and
+opening a target from a mosaic page closes the mosaic page.
 
 Every screen names the query it needs. Queries live in `GalactiLog.Data.Queries` and return
 read models, never entities.
@@ -4775,6 +5258,18 @@ text, and a comma separated common name is matched on its first entry, so a row 
 "NGC 1909 - the Witch Head Nebula" rather than that name with "the Witch Head Nebula" printed
 again beside it.
 
+**The mosaic link (Phase 18, ruling R19).** A row whose target has at least one night in any panel
+of any mosaic, `included` or `available` (section 5.24), carries a mosaic link in its Name cell,
+straight after the name and before the common name: a `Button.quiet` holding a drawn 2 by 2 tile
+glyph in the accent ink, the web's `TargetRow.tsx` glyph, with the tooltip "Mosaic: <name>" or,
+for a target in several mosaics, "Mosaics: <name>, <name>", names in ordinal case-insensitive
+order. Clicking it opens the mosaic detail page (section 12.17) of the first mosaic in that order
+and does not open the row's Target detail. An unresolved `obj:` row never carries it, because it
+has no target id to join. The set comes from step 6 of the query below, one extra read over
+`mosaic_panel_sessions` joined to `mosaic_panels` and `mosaics` for the page's target ids, so the
+link costs no round trip of its own. The web shows one mosaic per target and keeps whichever its
+dictionary saw last; the port names them all and opens the first.
+
 **The sessions control (Phase 14C, user ruling U3).** It sits in the row's trailing cell, after
 Last Session, in the web's own form: a `Button.sm` reading Expand while the sessions are hidden
 and Collapse while they show. The session count is that button's tooltip ("2 sessions"), not a
@@ -4910,7 +5405,8 @@ renders in `<main>`, beside `<TargetFeed />`, never inside `<Sidebar>`).
 4. Apply metric range filters per 12.2.1.
 5. Compute the page slice and the overall aggregates in the same round trip.
 6. Second pass over the page's groups only: filter distribution, equipment set, session
-   summaries, and aliases.
+   summaries, aliases, and from Phase 18 the mosaics each target has a night in (the mosaic link
+   above).
 
 Filter and equipment criteria are expanded through the alias map before matching, so
 selecting canonical `OIII` matches stored `Oiii` and `O3`. Port of
@@ -5010,7 +5506,8 @@ the target row's frame count. There is no "unknown" night.
 (section 12.9), unmerge from the merge history list, copy frame list to clipboard, export the
 checked nights for stacking (section 12.13), copy the AstroBin CSV for the checked nights
 (section 12.16), send the target's coordinates to a configured NINA instance, slew a configured
-Stellarium instance to it (both section 12.16), reveal the target's folder in Explorer.
+Stellarium instance to it (both section 12.16), reveal the target's folder in Explorer, and from
+Phase 18 create a mosaic from the checked nights (section 12.17).
 
 **Object type edit** (PAR-009). The Details panel renders the object type read-only beside a
 pencil button. The row is drawn whenever the target can be given a type, not only when it has one,
@@ -5507,6 +6004,16 @@ checked night's per-filter figures, which the ledger row does not carry, so it l
 detail for any checked night the page has not already opened before it builds a row. A night whose
 detail fails to load is named in the result and contributes no row, rather than failing the whole
 copy: the shape Copy Frame List's partial-load warning already uses.
+
+From Phase 18 the Create mosaic dialog (section 12.17) is its fourth consumer, on the same terms.
+
+**Create mosaic from selected nights (Phase 18, ruling R12).** The overflow menu's standing entries
+are Rename, Merge into another target and Re-resolve; Phase 18 adds a fourth after them, a
+`MenuItem` reading "Create mosaic from selected nights", above the separator that leads to the two
+submenus below. It reads `SelectedNights` and opens the Create mosaic dialog of section 12.17 over
+the checked nights. While nothing is checked it is disabled, with "Select one or more nights first"
+on its tooltip, the sentence the Export flyout's entries already use. It is drawn for a resolved
+target only, because an unresolved `obj:` group has no target id for a panel night to name.
 
 **The two submenus on the overflow menu (Phase 21, rulings B5 and B9).** Below the standing
 entries, behind a `Separator`, the overflow menu carries two submenu items, "Send to NINA" and
@@ -7074,7 +7581,11 @@ group that configures it. Each carries a tooltip instead, the way the ledger's n
 does. The stacking export wizard added four, `export.destination`, `export.method`,
 `export.review` and `export.result`, and moved `export.folders` and `export.quality` from literal
 headings onto the window's one bound step glyph, which places all six step ids; `export.settings`
-and `export.script` stay literal, on the staging folder step and the result step. The Source column
+and `export.script` stay literal, on the staging folder step and the result step. Phase 18 adds
+nine, the four `mosaics.*` ids and the five `mosaic.*` ids, each beside one literal placement, in
+three new markup files, `MosaicsView.axaml`, `MosaicDetailView.axaml` and
+`CreateMosaicWindow.axaml`, which brings the table to 112 topics placed by 96 `HelpButton`
+elements; the census test pins the new figures. The Source column
 says where the paragraph came
 from: a web file means the paragraph is that file's `HelpPopover` text, edited only for this
 port's vocabulary, for the surfaces the port does not ship, and for MAD units in place of sigma;
@@ -7180,6 +7691,15 @@ document's own section for that surface.
 | `export.method` | Copy or script | The wizard's step help glyph on step 4, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
 | `export.review` | Review | The wizard's step help glyph on step 5, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
 | `export.result` | Result | The wizard's step help glyph on step 6, bound (`WbppExportWindow.axaml`) | port-authored, 12.13 |
+| `mosaics.about` | Mosaics | The "Mosaics" page heading (`MosaicsView.axaml`) | web `MosaicsPage.tsx` |
+| `mosaics.keywords` | Detection keywords | The "Detection keywords" heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
+| `mosaics.suggestions` | Suggestions | The "Suggestions" heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
+| `mosaics.table` | Mosaics table | The mosaics table's heading (`MosaicsView.axaml`) | web `MosaicsTab.tsx` |
+| `mosaic.about` | Mosaic | The mosaic detail page's name (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
+| `mosaic.notes` | Notes | The "Notes" heading (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
+| `mosaic.labels` | New panel labels | The available labels banner's heading (`MosaicDetailView.axaml`) | web `MosaicDetailPage.tsx` |
+| `mosaic.sessions` | Panels and nights | The sessions region's header row (`MosaicDetailView.axaml`) | port-authored, 12.17 |
+| `mosaic.create` | Create mosaic | The dialog's heading (`CreateMosaicWindow.axaml`) | web `CreateMosaicDialog.tsx` |
 
 **The paragraph texts.** Seed `HelpTopics` from this sub-table verbatim. A paragraph is one to
 five sentences of plain text with no markup; where the web's original used bold or italic runs for
@@ -7288,6 +7808,15 @@ Line breaks inside a paragraph are not significant.
 | `settings.external-tools.bortle` | The Bortle class describes how dark your sky is, from 1 at a site with no light pollution to 9 in a city centre. It goes into every row of the AstroBin CSV, so an upload carries the sky it was shot under. It is one number for the whole library: if you image from two sites, set the one you use most and correct the other's rows on AstroBin. |
 | `settings.external-tools.nina` | Each instance here is one copy of NINA on your network. Give it a name you will recognise in a menu and the address of its API, which is http:// then the machine and then the port the API is listening on, usually 1888. An instance that is switched on and has both a name and an address appears on a target's menu as "Send to NINA". Choosing it opens that target in NINA's framing assistant at the target's coordinates and, when the target has a known orientation, rotates the frame to it. Nothing listens on this machine: GalactiLog only ever makes the call. |
 | `settings.external-tools.stellarium` | Each instance here is one copy of Stellarium running the Remote Control plugin. Its address is http:// then the machine and then the port the plugin is listening on, usually 8090. An instance that is switched on and has both a name and an address appears on a target's menu as "Slew Stellarium". Choosing it points Stellarium at the target by its catalogue name where Stellarium knows it, by its coordinates where it does not, and then sets the field of view to 20 degrees so the object is framed rather than filling the screen. |
+| `mosaics.about` | A mosaic collects the panels of one large field, each panel a set of nights from any target, and totals their integration so you can see which panel needs more time; suggestions come from Run Detection and every scan, and Create mosaic makes one by hand. |
+| `mosaics.keywords` | The words that introduce a panel number in a target's name, such as Panel in "M 31 Panel 2" or P in "NGC 7000 P3"; a change is applied to your frames at the next Run Detection or scan. |
+| `mosaics.suggestions` | Groups of targets that look like panels of one mosaic, found by name, by sky position or by both, where high confidence means name and position agree and low means review the notes first; Accept creates the mosaic from the checked panels, and Dismiss hides it until new nights appear. |
+| `mosaics.table` | Every mosaic with its panel count, integration, frames and date range, where a header click sorts, the column picker chooses the columns, and Expand renames the mosaic and edits its panels. |
+| `mosaic.about` | This mosaic's panels and the nights that count toward each, with the totals across all of them; the figures count only included nights. |
+| `mosaic.notes` | Free-form notes about this mosaic, saved a second after you stop typing. |
+| `mosaic.labels` | Panel labels found in the names of this mosaic's targets that no panel has yet; their frames count nowhere until you add a panel for the label. |
+| `mosaic.sessions` | Each panel lists the nights it counts as Included and the other nights of its targets as Available, and a night of one target can count in only one panel of a mosaic. |
+| `mosaic.create` | Makes a new mosaic, or grows an existing one, from the nights checked on this target, where nights given the same panel label become one panel. |
 
 The nine stacking export rows above are transcribed from `HelpTopics.cs` character for character,
 the four wizard rows and the corrected `page.export-stacking` and `export.settings` sentences
@@ -9242,7 +9771,7 @@ the custom-column half of `backend/app/services/target_listing.py`.
 
 A custom column is a field the user defines and fills in by hand, for what no FITS header carries:
 whether a target has been processed, a note tag, a priority. It has one of three **types** and one
-of three **scopes**, and the two are fixed at creation.
+of four **scopes**, and the two are fixed at creation.
 
 | Type | Stored values | Editor |
 | --- | --- | --- |
@@ -9255,8 +9784,9 @@ of three **scopes**, and the two are fixed at creation.
 | `target` | one target | The dashboard target row. |
 | `session` | one night of one target | The dashboard night expander, and the Nights ledger row on the Target detail page. |
 | `rig` | one rig of one night of one target | The rig label row of the Target detail page's session pane. |
+| `mosaic` | one mosaic (Phase 18) | The mosaics table row and the mosaic detail page's header (section 12.17). |
 
-The three scopes are the whole of what this phase offers. **The reserved mosaic scope** is below.
+The first three shipped in Phase 20; the fourth arrived with mosaics in Phase 18. **The mosaic scope** is below.
 
 #### The Custom Columns tab
 
@@ -9270,7 +9800,7 @@ together. The tab holds two blocks, each carrying its own help glyph (section 12
 | --- | --- | --- |
 | "Name" | `TextBox`, watermark "For example, Processed" | Required. Trimmed. 1 to 60 characters. |
 | "Type" | `ComboBox`: "Checkbox", "Text", "Dropdown" | Defaults to "Checkbox". |
-| "Applies to" | `ComboBox`: "Target", "Night", "Rig" | Defaults to "Target". |
+| "Applies to" | `ComboBox`: "Target", "Night", "Rig", "Mosaic" | Defaults to "Target". |
 | "Options" | Revealed only while Type is "Dropdown". A wrap panel of `Border.tag` chips, each with a remove glyph, over a `TextBox` watermarked "Type an option and press Enter" and an "Add" `Button.sm`. | At least one option is required before the column can be added. |
 | "Add column" | `Button.primary` | Disabled while the form cannot be submitted, with the reason on its tooltip. |
 
@@ -9282,7 +9812,7 @@ per column in `display_order`:
 | Order | Two `Button.quiet` arrows, "Move up" and "Move down" on their tooltips. The first row's up arrow and the last row's down arrow are disabled. |
 | Name | The name, or a `TextBox` over it while the row is being edited. |
 | Type | "Checkbox", "Text" or "Dropdown". |
-| Applies to | "Target", "Night" or "Rig". |
+| Applies to | "Target", "Night", "Rig" or "Mosaic". |
 | Options | The dropdown options as `Border.tag` chips, or the options editor while the row is being edited. Empty for the other two types. |
 | Values | The number of stored values for this column, so a delete states what it is about to take. |
 | Actions | "Edit", which turns into "Save" and "Cancel"; then "Delete". |
@@ -9630,18 +10160,19 @@ verbatim, and the repository is the only place any of them is composed.
 | A dropdown value that is not one of the column's options | "\"<value>\" is not one of this column's options." |
 | A dropdown value on a column with no options at all | "This column has no options yet. Add one on the Custom Columns tab." |
 | A text value longer than 500 characters after trimming | "Keep the value to 500 characters or fewer." |
-| A scope other than target, session or rig | "This column scope is not available yet." |
+| A scope other than target, session, rig or mosaic | "This column scope is not available yet." |
 | A write that threw rather than being refused | "The value could not be saved. Try again." |
 
-The scope sentence cannot be reached from any surface this phase ships. It is stated because the
-repository is the choke point and a later phase's mosaic scope arrives there first (design lesson
-2: the refusal lives at the one entry point, not at each caller). The last sentence is the view
+The scope sentence cannot be reached from any surface: every scope the picker offers is accepted.
+It is stated because the repository is the choke point, and a stored `applies_to` this build does
+not know is refused there rather than at each caller (design lesson 2). Phase 18's mosaic scope
+arrived at that one entry point, which is all it changed there. The last sentence is the view
 side's, not a validation: it is what a cell shows when the write throws, and it is the only one of
 the thirteen a reader can see without the repository having judged anything.
 
 Two refusals carry no sentence at all, because neither is a user path: a value written against a
 column id that does not exist, and a key whose shape disagrees with its column's scope (section
-5.20). Both are programming errors, and a surface that builds its key through the three key
+5.20). Both are programming errors, and a surface that builds its key through the four key
 factories cannot reach the second.
 
 **The boolean and dropdown sentences are the port's wording of the web's two.** The web answers
@@ -9748,16 +10279,26 @@ one. Such a value can occupy a slot an unmerge is about to restore into, which t
 `uq_custom_column_value` out of the unmerge; that transaction rolls back, so nothing is corrupted,
 and no surface this phase ships reaches a merged-away target's cells.
 
-#### The reserved mosaic scope
+#### The mosaic scope
 
-`applies_to` accepts three values in this phase. **`mosaic` is reserved and is not offered
-anywhere**: it is not in the "Applies to" picker, the repository refuses it with the sentence
-above, no surface reads it, and no fixture creates one. `custom_column_values.mosaic_id` exists as
-a nullable column with **no foreign key**, because no `mosaics` table exists yet, and with its
-index already created. The phase that builds mosaics adds the fourth choice, the mosaic-scope cells
-on the mosaics table and the mosaic detail header, and the foreign key with its cascade; it adds no
-column and no index. This is the user's ruling of 2026-09-21, which put mosaics on hold and moved
-this phase ahead of them.
+Phase 18 offers the fourth `applies_to` value, `mosaic` (ruling R2). It is the fourth entry of the
+"Applies to" picker, reading "Mosaic", and the Columns table shows it the same way. A mosaic-scope
+value belongs to one mosaic: its key sets `mosaic_id` alone (section 5.20), built through
+`CustomValueKey.ForMosaic`, and `CustomColumnRepository.SetValue` accepts it under the same key
+shape check as the other three scopes, so the scope arrives at the one write path and nowhere else.
+Its cells are the shared cell editor above, on two surfaces: the mosaics table, one cell per
+column after the built-in columns, shown only while its slug is in `display.columns.mosaics`
+(section 5.8.2) and off by default; and inline in the mosaic detail page's header, every
+mosaic-scope column in display order with its name as a caption, ungated by any picker (section
+12.17). The foreign key from `custom_column_values.mosaic_id` to `mosaics.id` carries the cascade,
+so deleting a mosaic deletes its values. No column and no index was added for it: the Phase 20
+migration had already created both.
+
+A mosaic-scope column has no place on the dashboard: the target row, the night expander, the
+Nights ledger and the rig label row draw only their own scopes, and the dashboard filter's Custom
+section lists target, night and rig columns only, because a target row cannot answer a question
+about a mosaic. A merge moves no mosaic value, because a mosaic value names no target. Values are
+counted in the Columns table's Values cell like any other, and the delete prompt counts them.
 
 #### Nothing here writes a user file
 
@@ -9809,8 +10350,10 @@ in `user_settings`. No surface here reads, writes, moves, renames or deletes a f
 18. **No matched-night count is adjusted by a custom filter.** The web's count comes from a second
     pre-fetch that requires a non-null session date and reads every column rather than the filtered
     ones, so it can disagree with the rows it labels.
-19. **The mosaic scope is not offered** (the user's ruling of 2026-09-21), and `mosaic_id` carries
-    no foreign key until the phase that builds mosaics.
+19. **The mosaic scope was held back until Phase 18** (the user's ruling of 2026-09-21), and was
+    refused by the repository until then. From Phase 18 it matches the web: the fourth choice,
+    cells on the mosaics table and the mosaic detail header, and a cascading foreign key (ruling
+    R2).
 20. **A rig row is drawn on a single-rig night while any rig-scope column exists**, so a rig column
     is usable on a one-telescope library.
 21. **The key's shape is checked against its column's scope at the one write path**, and a
@@ -10093,6 +10636,365 @@ disk**: there is no save dialog, no `AppWriter.BeginExport` call and no new entr
 - No credential of any kind. Neither NINA's API nor Stellarium's Remote Control plugin is
   authenticated in the configuration this section targets, and section 2.3 has no store to put one
   in.
+
+### 12.17 Mosaics
+
+Phase 18. Mirrors `frontend/src/pages/MosaicsPage.tsx` and `components/settings/MosaicsTab.tsx` (the
+Mosaics page), `pages/MosaicDetailPage.tsx` (the mosaic detail page) and
+`components/CreateMosaicDialog.tsx` (the Create mosaic dialog), with `backend/app/api/mosaics.py`
+and `backend/app/services/mosaic_stats.py` for their figures, amended by the plan's rulings. A
+mosaic is a named set of panels; a panel is a label holding nights, each night one target's
+`session_date`, and the frames a panel counts are the frames the membership join of section 5.24
+reaches. Reads go through `Data/Queries/MosaicQueries.cs` and return read models; every write goes
+through `Data/Repositories/MosaicRepository.cs`, the one place the one-panel-per-night rule is
+checked. Detection is section 7.7.
+
+**Figures.** Every figure on these surfaces counts LIGHT frames reached by the membership join and
+nothing else: a panel's integration is the sum of their `exposure_time`, its frames their count,
+its nights the number of its `included` rows, its targets the distinct targets of those rows, and
+its date range the first and last `session_date` among them. A mosaic's figures are the sums over
+its panels, which cannot count a frame twice because of the one-panel-per-night rule. Integration
+is shown in the integration formatter's form. Filter names are the canonical names of section 5.8.4.
+
+**Sentences** this section's refusals use, each shown inline beside the control that was refused,
+never in a dialog and never as a toast:
+
+| Refused | Sentence |
+| --- | --- |
+| A create or rename with an empty name | "Enter a name for the mosaic." |
+| A name another mosaic carries, compared case insensitively after trimming | "A mosaic named \"<name>\" already exists." |
+| A panel label that is empty | "Enter a panel label." |
+| A panel label another panel of the mosaic carries, compared case insensitively | "A panel named \"<label>\" already exists in this mosaic." |
+| A night of a target that an included row of another panel of the mosaic holds | "<night> of <target> is already in panel <label>." |
+| One night of one target given two labels in the Create mosaic dialog | "<night> has two panel labels. A night of one target counts in one panel only." |
+| Accept with no panel checked | "Select at least one panel to accept." |
+| A keyword already in the list, compared case insensitively | "\"<keyword>\" is already a keyword." |
+| A write that threw rather than being refused | "The change could not be saved. Try again." |
+
+#### The Mosaics page
+
+A rail destination, second on the rail after Dashboard (ruling R3), heading "Mosaics" with the
+`mosaics.about` glyph. Under the heading the page is a `Grid ColumnDefinitions="*,*"` with a 16
+pixel gutter, and **each column has its own `ScrollViewer`**; the page itself never scrolls, so a
+long suggestion list does not carry the mosaics table off screen. The left column holds the
+Detection keywords block over the Suggestions block, the right column the Mosaics table. The blocks
+are flat sections with a heading row, not collapsible cards: each column already scrolls on its own,
+which is what the web's collapse was for.
+
+**Detection keywords**, heading row "Detection keywords" with the `mosaics.keywords` glyph and the
+Run Detection button at its trailing end:
+
+| Control | Shape | Rule |
+| --- | --- | --- |
+| Run Detection | `Button.sm` | Starts the detection job of section 7.7. Disabled while a scan runs, tooltip "A scan is running. Detection runs when it ends.", and while a detection job runs, tooltip "Detection is running." |
+| Keyword chips | A wrap panel of `Border.tag` chips, one per entry of `general.mosaic_keywords` in stored order, each with a remove glyph | Removing writes the key at once. The last keyword may be removed; the tile pattern still applies. |
+| New keyword | `TextBox` watermarked "New keyword", and an "Add" `Button.sm` | Trimmed. Enter or Add appends it and writes the key. Add is disabled while the box is blank. A repeat is refused with the keyword sentence above. |
+| Position tolerance | `NumericUpDown`, 0 to 600, step 1, labelled "Position tolerance (arcmin)", with the caption "0 derives it from the field of view." | Writes `general.mosaic_position_tolerance_arcmin` on commit. |
+| Apply caption | The caption "Run Detection to apply." in the secondary ink | Shown after any change to the keywords, the tolerance or the campaign gap, until the next detection job ends. |
+
+**Suggestions**, heading row "Suggestions (n)", or "Suggestions (m of n)" while the filter narrows
+the list, with the `mosaics.suggestions` glyph and, at its trailing end, the **campaign gap**
+`ComboBox` with seven entries, "No grouping", "1 week", "2 weeks", "1 month", "3 months",
+"6 months" and "1 year", writing 0, 7, 14, 30, 90, 180 and 365 to
+`general.mosaic_campaign_gap_days` on selection. The list is every `pending` suggestion whose name
+no mosaic carries, compared case insensitively, ordered by suggested name, ordinal and case
+insensitive.
+
+- **The filter box**, watermarked "Filter suggestions", is shown only while there are more than
+  four suggestions. It keeps the rows whose suggested name contains its text, case insensitively.
+  Its text survives a reload.
+- **The selection row**, shown while at least one row is visible: a "Select all" `CheckBox` over
+  the visible rows, then "Accept all (n)" and "Dismiss all (n)", which read "Accept (k)" and
+  "Dismiss (k)" once k rows are checked. They act on the checked visible rows, or on every visible
+  row when none is checked.
+- **One row per suggestion**, a flat rule-separated row on the dashboard's row idiom (section 12.2):
+  a selection `CheckBox`, a `Button.chevron` expander, the suggested name, the **confidence tag**
+  and the **source tag**, the **totals line** under the name, and Accept and Dismiss at the
+  trailing end.
+- **The confidence tag** is a `Border.tag` reading "High confidence" in the success ink with the
+  tooltip "Name and position agree on these panels", or "Low confidence" in the warning ink with
+  the tooltip "Single signal or conflicting evidence; review before accepting".
+- **The source tag** is a `Border.tag` in the secondary ink reading "name", "position" or
+  "name + position" for the stored `name`, `position` and `both`.
+- **The totals line** reads "<p> panels, <f> frames, <integration>" over the session rows of the
+  **checked panels** only, so unchecking a panel changes it at once; p counts the checked labels
+  that have at least one row. The frames figure takes the warning ink at zero. When the
+  suggestion's targets carry frames of its panels on nights outside the suggestion's campaign, it
+  ends with "+k more nights" in the warning ink, k being the distinct (target, night) pairs outside.
+- **Accept** is a `Button.sm` reading "Accept", or "Accept (c of n)" while only c of the n labels
+  are checked. It is disabled with the tooltip "Select at least one panel to accept." while none is
+  checked. It asks nothing (ruling R13) and runs the accept of section 7.7 with the checked labels;
+  a taken name is refused with the sentence above under the row.
+- **Dismiss** is a `Button.sm` with the two-press inline confirm the Settings Maintenance cards use
+  (section 12.7): the first press arms the row and shows "Dismiss this suggestion? It comes back
+  only if new nights of these panels are catalogued." with "Confirm" and "Cancel" beside it; the
+  second press dismisses (section 7.7).
+
+Expanding a row shows, in order:
+
+1. **Review notes**, a `Border.callout warn` headed "Review notes" with one line per entry of the
+   suggestion's `flags`, shown only when there is at least one.
+2. **The targets**, each target's primary name as a link that opens its Target detail page.
+3. **The session table**, an aligned table (`DESIGN.md` section 6) with one row per (entry,
+   `OBJECT`, night, filter) over the suggestion's own nights, the frames being the entry target's
+   LIGHT frames whose `OBJECT` parses to the entry's base and number (section 7.7). Columns: a
+   panel `CheckBox`, Panel, OBJECT, Night, Filter, Frames, Integration. Every header but the first
+   sorts on click and reverses on a second click; the default is Panel ascending. A row's check box
+   checks or unchecks its panel, every row of that label at once; the header check box checks or
+   unchecks every panel. A row of an unchecked panel is drawn in the tertiary ink.
+
+The web's tile preview is the arranger in a read-only form and arrives with it (ruling R18); this
+phase draws no preview.
+
+The empty state is the sentence "No suggestions. Run Detection looks for panels in your target
+names and sky positions."
+
+**Bulk actions run as jobs (ruling R13).** Accept all or Accept (k) asks nothing and runs one job,
+kind `mosaic_accept`, titled "Accept suggestions"; Dismiss all or Dismiss (k) arms the two-press
+confirm with "Dismiss n suggestions? Each comes back only if new nights of its panels are
+catalogued." and runs one job, kind `mosaic_dismiss`, titled "Dismiss suggestions". Each item is
+accepted with its own checked labels, or every label when the reader never unchecked one. Progress
+is the job's percent and the message "k of n" in the status bar flyout; there is no page-local
+progress bar. Each item that fails writes one `mosaic_action_failed` row (section 10.9) and the job
+goes on; the job's summary is "Accepted k of n" or "Dismissed k of n", and it ends failed when every
+item failed. While a bulk job runs, every Accept, Dismiss and Delete control on the page is
+disabled. The job census of section 12 gains four members in this phase: `mosaic_detection`,
+`mosaic_accept`, `mosaic_dismiss` and `mosaic_delete`.
+
+**The reload rule (ruling R5).** When a `mosaic_detection` job or a bulk job ends, whatever started
+it, the page reloads the suggestion list and the mosaics table. Expanded rows, checked panels and
+the row selection are view state: they are not stored and they reset on that reload. Accepting or
+dismissing one suggestion removes its row and reloads the mosaics table without resetting the
+other rows' state.
+
+**The Mosaics table**, the right column. Its heading row reads "Mosaics (n)" with the
+`mosaics.table` glyph, and at its trailing end "Delete selected (k)" while k rows are checked,
+"Create mosaic" and the column gear.
+
+- **Create mosaic** is a `Button.sm` that reveals a one-line form under the heading, a `TextBox`
+  watermarked "Mosaic name" and a "Create" `Button.sm`, and reads "Cancel" while the form is
+  open. Enter in the box or Create makes an empty mosaic with the trimmed name; Create is disabled
+  while the box is blank, and a taken name is refused with the sentence above under the box. The
+  form closes on success and the new row appears.
+- **The column gear** opens a `ColumnPickerViewModel` for the table id `mosaics` in a flyout, the
+  dashboard gear's own shape (section 12.2): the five built-in columns with Name ticked and
+  disabled, then the mosaic-scope custom columns under a "Custom" heading. It writes
+  `display.columns.mosaics` (section 5.8.2).
+- **The columns**, in order: a selection `CheckBox`; Name, locked on; Panels, right aligned, the
+  panel count; Integration, right aligned; Frames, right aligned; Date range, the first and last
+  night as "yyyy-MM-dd to yyyy-MM-dd", one date when they are equal, and empty when the mosaic
+  counts no frame; then one cell per shown mosaic-scope custom column, the shared cell editor of
+  section 12.15; then the actions cell. A "Select all" `CheckBox` sits above the header while there
+  are two or more rows.
+- **Sorting.** A click on the Name, Panels, Integration, Frames or Date range header sorts by that
+  column ascending, and a second click on the same header reverses it; Date range sorts by the
+  first night, a mosaic with none sorting first ascending. Ties sort by name. The choice is written
+  to `display.sort.mosaics` and restored on the next visit. A custom column's header does not sort.
+- **The actions cell** holds Delete, a `Button.sm` with the two-press inline confirm, "Delete this
+  mosaic? Its panels and nights are removed; no frame is touched.", and Expand, a `Button.sm` that
+  reads Collapse while the row is open.
+- **A click on the row** outside its controls opens the mosaic detail page.
+- **Delete selected (k)** arms the two-press confirm with "Delete k mosaics? Their panels and
+  nights are removed; no frame is touched." and runs one job, kind `mosaic_delete`, titled "Delete
+  mosaics", under the bulk rule above, with the summary "Deleted k of n".
+
+**An expanded row** holds three things:
+
+1. **Rename**, a `Button.sm` that swaps for a `TextBox` holding the name with "Save" and "Cancel";
+   Enter saves and Escape cancels. The refusals are the name sentences above.
+2. **The panel list**, one line per panel in `sort_order`: the label, the targets' names joined
+   with ", ", the integration and the frame count, and Remove, a `Button.sm` with the two-press
+   inline confirm "Remove panel <label>? Its nights leave this mosaic; no frame is touched." The
+   empty state is "No panels yet."
+3. **Add panel**, the add panel form below.
+
+**The add panel form** is one view model, `AddPanelViewModel`, shared by this row and the detail
+page's header. It holds a target search `TextBox` watermarked "Search targets", which queries
+`TargetSearchQuery` with that query's own debounce once two characters are typed and lists the
+results under the box; a "Panel label" `TextBox`, prefilled with `Panel <n>` for the smallest n of 1
+or more that no panel of the mosaic carries; and an "Add" `Button.sm`, enabled once a target is
+chosen and the label is not blank. Add puts the chosen target's nights into the panel of that
+label, creating the panel at the end of `sort_order` when the mosaic has none: the nights whose
+LIGHT frames carry that `panel_label` when any frame of the target carries it, and every night of
+the target otherwise, each as an `included` row. A night an included row of another panel of the
+mosaic already holds is skipped, and the form's caption names how many were skipped ("2 nights
+already in another panel were skipped."). The web refuses a repeated target and label; the port
+adds the target's nights to the existing panel, because a panel may hold any targets.
+
+The table's empty state is "No mosaics yet." A failed load shows "The mosaics could not be
+loaded." with a Retry link in place of the rows.
+
+#### The mosaic detail page
+
+Opened from a Mosaics table row, a dashboard mosaic link (section 12.2) or a completed Create
+mosaic dialog, on the shell's detail overlay (section 12): Back closes it, a rail click closes it,
+and opening a target from it closes it. The page is a workbench with no page scroller (ruling R7):
+`Grid RowDefinitions="Auto,Auto,*,Auto,*"`.
+
+| Row | Content |
+| --- | --- |
+| 0, Auto | The header and the notes. |
+| 1, Auto | The available labels banner, collapsed to nothing when there is no label. |
+| 2, `*` | The arranger. This phase fills it with a 160 pixel placeholder band, top aligned: a `Border` in the surface ink with the centred sentence "Panel layout is not available yet." |
+| 3, Auto | A horizontal `GridSplitter` that trades height between rows 2 and 4. Its position is not stored; it replaces the web's corner grip. |
+| 4, `*` | The sessions region, in its own `ScrollViewer`. |
+
+**The header.** The identity line holds Back; the mosaic's name in the page heading style with a
+pencil `Button.quiet` that swaps it for a `TextBox` (Enter saves, Escape cancels, the name
+sentences above refuse); the `mosaic.about` glyph; one inline cell per mosaic-scope custom column,
+every such column in display order with its name as a caption, the shared cell editor of section
+12.15, ungated by any picker; then at its trailing end a **Composite** `Button`, disabled
+with the tooltip "Composite images are not available yet." until the composite phase, and the
+overflow menu. Its second line is the **summary line**, "<n> panels, <integration> total, <f>
+frames".
+
+The **overflow menu** is a `MenuFlyout` with two entries:
+
+- **Export panels (CSV)** opens a save dialog with the file name `<name>_panels.csv`, every
+  character of the mosaic name outside A to Z, a to z and 0 to 9 replaced by `_`, and writes one
+  new file at the path the dialog returned through `AppWriter.BeginExport` (section 2.1.1), from
+  `MosaicDetailViewModel`. The file is UTF-8 without a byte order mark, lines separated by `\n`, the
+  header `panel_label,targets,frames,integration_seconds,filters`, then one row per panel in
+  `sort_order`: the label; the targets' primary names joined with `; `; the frame count; the
+  integration in whole seconds, rounded; and the per-filter integration as `<filter>: <seconds>`
+  joined with `; `, filters in ordinal case-insensitive order, seconds rounded. A value holding a
+  comma, a double quote or a line break is wrapped in double quotes with each double quote doubled.
+  The web's column `target_name` becomes `targets`, because a panel may hold several. A cancelled
+  dialog writes nothing; a failed write shows "The file could not be written." under the header.
+  The CSV is built from the figures already on the page, with no query of its own.
+- **Delete mosaic** arms the two-press inline confirm in a strip under the identity line, "Delete
+  this mosaic? Its panels and nights are removed; no frame is touched.", with "Confirm" and
+  "Cancel". Confirm deletes the mosaic and closes the page.
+
+**Notes**, under the summary line: a "Notes" heading with the `mosaic.notes` glyph over a
+multi-line `TextBox`, 50 pixels high at least and 120 at most with its own scroll, autosaved
+through `AutosaveField` on a 1 second idle window with a "Saving..." indicator, the target notes'
+own shape (section 12.4). An emptied box stores null.
+
+**The available labels banner** is a `Border.callout` headed "New panel labels available" with the
+`mosaic.labels` glyph. It lists, as `Border.tag` chips reading "<label> on <target>", every
+(target, `panel_label`) pair carried by LIGHT frames of a target that has any row in any panel of
+this mosaic, where no panel of this mosaic carries that label, compared case insensitively. Each
+chip carries an "Add panel" `Button.sm`, which runs the add panel rule above for that target and
+label. Such frames count in no panel until a panel holds their nights.
+
+**The sessions region.** A header row, "Panels and nights" with the `mosaic.sessions` glyph and two
+actions at its trailing end: **Include all available**, a `Button.sm` that includes every available
+night of every panel, panels taken in `sort_order` so that a night available in two panels goes to
+the first, disabled when no panel has an available night; and **Add panel**, which opens the add
+panel form under the header.
+
+Under it, one row per panel in `sort_order`, an aligned table with a `Button.chevron` expander:
+
+| Column | Content |
+| --- | --- |
+| Label | The panel label. |
+| Targets | The primary names of the panel's targets, joined with ", ". |
+| Integration | The panel's integration. |
+| Frames | The panel's frame count. |
+| Nights | The number of included nights. |
+| Deficit | For every panel whose integration is below the **leading panel**, the one with the most, the difference as an integration followed by "behind", for example "2h 10m behind", in the secondary ink. Empty on the leading panel and on every panel while all are zero. A number, not a colour band: the arranger's tile overlays add the colour later. |
+| Available | A `Border.tag` in the warning ink reading "n available" while the panel has n available nights, and nothing at zero. |
+| Include all | A `Button.sm` that includes every available night of this panel, disabled at zero. |
+| Delete panel | A `Button.sm` with the two-press inline confirm "Delete panel <label>?", enabled only while the panel has no included night, with the tooltip "Remove its included nights first." while disabled. Deleting removes the panel and its available rows. |
+
+An expanded panel shows two tables side by side, `Grid ColumnDefinitions="*,*"`, each under its own
+heading:
+
+- **Included**, the panel's included nights, newest first: Night; Target, the primary name, a link
+  that opens its Target detail page; Filters, the per-filter frame counts as "<filter> <count>"
+  joined with ", " in ordinal case-insensitive order; Frames; Integration; and **Remove**, a
+  `Button.sm` that turns the row `available`. Remove asks nothing: it deletes no row and is undone
+  by Include.
+- **Available**, the panel's available nights, newest first, with the same five columns, then
+  **Include**, a `Button.sm` that makes the night `included` in this panel, and **As new panel**,
+  a `Button.sm` that opens an inline row under it holding a "Panel label" `TextBox` prefilled with
+  the **next suffix** and "Create" and "Cancel". Create makes a panel of that label at the end of
+  `sort_order` and includes the night in it. The next suffix of a label ending in a space and one
+  letter in parentheses is that label with the following letter, so `Panel 1 (b)` gives
+  `Panel 1 (c)`; of any other label it is the label followed by ` (b)`, so `Panel 1` gives
+  `Panel 1 (b)`. The web's browser prompt becomes the inline row.
+
+**A panel's Available nights** (ruling R19) are every night of every target that has any row on the
+panel, `included` or `available`, that carries at least one LIGHT frame of that target, except the
+nights this panel already includes and the nights another panel of this mosaic includes. A night
+another panel includes is hidden here rather than offered and then refused; the repository refuses
+it anyway if a stale page asks (section 5.24). Under the Available table sits **Add nights from any
+target**, a target search on the same `TargetSearchQuery` and debounce as the add panel form;
+choosing a target writes an `available` row on this panel for each night of that target that no
+panel of this mosaic includes, so the target becomes one of the panel's contributors and its nights
+appear in Available, where Include takes them one at a time. "North America Nebula" nights can join
+an "NGC 7000" panel this way.
+
+**One night of one target counts in one panel of a mosaic** (section 5.24). Include, Include all,
+Include all available, As new panel, the add panel form, accept and the Create mosaic dialog all
+pass through the one repository check and the night sentence above.
+
+Every include, remove, add and delete re-reads the page's detail, so the summary line, the panel
+figures, the deficits and the available counts follow at once. The page also re-reads when a scan
+or a detection job ends, because a scan can add frames to a night a panel already holds.
+
+#### The Create mosaic dialog
+
+Opened from the Target detail page's overflow menu entry "Create mosaic from selected nights"
+(section 12.4, ruling R12) over the nights `SelectedNights` holds. It is a `ModalPageWindow` page,
+`Views/TargetDetail/CreateMosaicWindow.axaml` over `CreateMosaicViewModel`, the shape the merge
+preview and Copy Frame List already use. Its heading reads "Create mosaic" with the `mosaic.create`
+glyph, and its subline "<target name>, n nights", "1 night" at one.
+
+| Control | Shape | Rule |
+| --- | --- | --- |
+| New mosaic | `RadioButton`, checked on open | Reveals the Name box. |
+| Name | `TextBox` | Prefilled with "<base> (<range>)". The base is the base name, by the token rule of section 7.7, carried by the most LIGHT frames of the checked nights, ties to the ordinally first, or the target's primary name when no frame carries a token. The range is the first and last checked nights as "Mar 2026", or "Mar 2026 - May 2026" when the months differ, the date range suffix of section 7.7. The prefill stays until the reader edits the box. |
+| Add to existing | `RadioButton` | Disabled with the tooltip "No existing mosaic includes this target." when no mosaic has a row of this target. Reveals the mosaic `ComboBox`. |
+| Mosaic | `ComboBox`, placeholder "Select a mosaic" | Every mosaic with at least one row, of either status, naming this target, ordered by name. |
+| Nights | An aligned table, one row per (checked night, frame `panel_label`) pair among the target's LIGHT frames on the checked nights: Night, Frames and a "Panel label" `TextBox`, prefilled with the frames' label, empty when they carry none, watermarked "For example, Panel 1" | Under it the caption "Nights with the same panel label are combined into one panel." |
+| Create | `Button`, the dialog's default button | Enabled when every label is non-blank after trimming and either New mosaic has a non-blank name or Add to existing has a mosaic chosen. |
+| Cancel | `Button` | Closes and writes nothing. |
+
+Create runs one transaction. With New mosaic it creates the mosaic, refusing a taken name with the
+sentence above under the Name box. Rows are grouped by trimmed label compared case insensitively;
+each group goes into the target mosaic's panel of that label, or a new panel at the end of
+`sort_order` when there is none; and each row's night is written as an `included` row of this
+target in that panel. Two rows of one night with different labels are refused with the two-labels
+sentence above, because a night of one target counts in one panel only, and a night another panel
+of an existing mosaic includes is refused with the night sentence. Any refusal writes nothing. On
+success the dialog closes and the mosaic detail page opens on the mosaic. The web claims frames per
+row by their original label; the port claims nothing, because membership is the join of section
+5.24.
+
+#### What is stored and what is not
+
+Stored: the four tables of sections 5.22 to 5.25, the mosaic-scope values of section 5.20, the three
+`general` keys of section 5.8.1, and `display.columns.mosaics` and `display.sort.mosaics` of section
+5.8.2. Not stored: expanded suggestion rows, checked panels, the selected suggestions and mosaics,
+the suggestion filter text, expanded mosaic rows and the open add panel form, expanded panel rows
+on the detail page, the splitter position and the Create mosaic dialog's choices. Nothing on these
+surfaces reads, writes, moves, renames or deletes a user file; Export panels (CSV) writes one new
+file at the dialog's path and nothing else (section 2.1).
+
+#### Departures from the web, in one place
+
+1. **No settings tab.** Keywords, campaign gap and position tolerance live on the Mosaics page and
+   are stored under `general` (ruling R3).
+2. **Each page column scrolls on its own**, and the blocks do not collapse.
+3. **No toasts and no page-local progress bars.** Bulk actions and detection are jobs; failures
+   are Activity rows (ruling R13).
+4. **Two-press inline confirms** replace the browser confirm dialog for Dismiss, Dismiss all,
+   Delete, Delete selected, Remove panel, Delete panel and Delete mosaic. Accept asks nothing.
+5. **No Needs Review pill, Clear All Reviews or Session Review banner** (ruling R11).
+6. **A panel's nights come from any target** (ruling R19): the detail page's sessions table becomes
+   per-panel Included and Available tables with Add nights from any target.
+7. **The detail page is a workbench** with a splitter in place of the corner grip (ruling R7).
+8. **The deficit is a number** on the panel row until the arranger draws its colour band.
+9. **No suggestion tile preview** until the arranger exists (ruling R18).
+10. **The mosaic list sort persists** in `display.sort.mosaics`, not in browser storage.
+11. **Inline rows** replace the browser prompt for As new panel.
+12. **The dashboard link names every mosaic** a target is in and opens the first.
+13. **The add panel form adds to an existing panel** of the same label rather than refusing.
+14. **No filled buttons.** The web's filled Accept, Create, Detail and Composite buttons are
+    outlined, because Run scan is the one filled button in the application (section 14); the
+    web's Detail button is the row's own click.
 
 ---
 
@@ -11485,12 +12387,10 @@ migration, `custom_columns` and `custom_column_values` (sections 5.19 and 5.20),
 nothing outside those two tables and `user_settings`: no file is read, written, moved, renamed or
 deleted by anything on it (section 2.1).
 
-**What the port does not take from it.** The mosaic scope is not offered. The web's fourth
-`applies_to` value is refused by the repository and appears in no picker, because this port has no
-mosaics table and mosaics are on hold by the user's ruling of 2026-09-21;
-`custom_column_values.mosaic_id` is created as a nullable column with no foreign key so the phase
-that builds mosaics adds the key, the cells and the fourth choice and nothing else. The web's
-`created_by` and `updated_by` columns are not created, for the reason section 2.3 gives.
+**What the port does not take from it.** The web's `created_by` and `updated_by` columns are not
+created, for the reason section 2.3 gives. `custom_column_values.mosaic_id` was created as a
+nullable column with no foreign key, so that Phase 18 added the key, the cells and the fourth choice
+and nothing else (section 12.15).
 Twenty-six further departures are listed in one place in section 12.15, most of them defects the
 port declines to copy rather than features it declines to build.
 
@@ -11513,8 +12413,28 @@ machine at `http://localhost:1888` is the ordinary configuration rather than the
 serves every instance, which is where the coordinates already are. The web's per-rig AstroBin
 button becomes an automatic split rather than a second control, described in section 12.16.
 
-**Mosaics, API keys, Prometheus, the backup and restore endpoint, filename-based target
-inference, fpack compressed FITS and any file deletion stay on the list**, and file deletion
+**Mosaics left that list in Phase 18**, which built them as data and as pages: the four tables of
+sections 5.22 to 5.25 and the four `images` columns, panel tokens and detection over names and sky
+positions (section 7.7), at the end of every scan and on demand, and the Mosaics page, the mosaic
+detail page, the Create mosaic dialog and the dashboard's mosaic link (section 12.17). It carries
+the port's eighth migration and writes nothing outside the catalogue and `user_settings` except
+Export panels (CSV), one new file at a path a save dialog returned, through
+`AppWriter.BeginExport` (section 2.1.1). No user file is read for it beyond the headers a scan
+already read, and none is written, moved, renamed or deleted (section 2.1). The panel arranger and
+the composite image are the two later phases of the same plan and are not built here: the detail
+page holds a placeholder band where the arranger goes, and its Composite button is disabled.
+
+**What the port does not take from it.** The web's `needs_review` flag, its Needs Review pill,
+Clear All Reviews and the Session Review banner (ruling R11). `images.panel_id` and
+`mosaic_panels.target_id`: membership is a join of target and night against a panel's nights,
+which may come from any target (ruling R19). The `pixel_coords` flag (ruling R8). The suggestion
+tile preview, which is the arranger in a read-only form and arrives with it. The toasts, the
+page-local progress bars and the browser confirm and prompt dialogs, which become the job registry,
+the Activity feed and inline confirms and fields (ruling R13). The settings tab: the three detection
+settings live on the Mosaics page (ruling R3).
+
+**API keys, Prometheus, the backup and restore endpoint, filename-based target inference, fpack
+compressed FITS and any file deletion stay on the list**, and file deletion
 stays there permanently (section 19.2). The light theme left the list in polish wave 6, which
 shipped `atlas` and `logbook` (section 14).
 
