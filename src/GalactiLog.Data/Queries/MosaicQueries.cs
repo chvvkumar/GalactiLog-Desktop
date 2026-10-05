@@ -340,6 +340,15 @@ public sealed class MosaicQueries(DatabaseConnectionString connectionString, Ali
                 entry.Dates.Contains(group.Key.Night))))];
     }
 
+    /// <summary>The primary name of each of these targets, for the suggestion row's target links
+    /// (spec 12.17). An id with no target row is absent.</summary>
+    public IReadOnlyDictionary<Guid, string> TargetNames(IReadOnlyCollection<Guid> targetIds)
+    {
+        using var context = Open();
+        return context.Targets.Where(target => targetIds.Contains(target.Id))
+            .ToDictionary(target => target.Id, target => target.PrimaryName);
+    }
+
     // ---- the pieces the reads share ------------------------------------------------------
 
     private static ILookup<TripleKey, FrameBucket> ByTriple(IEnumerable<FrameBucket> buckets)

@@ -226,4 +226,18 @@ public class MosaicQueriesTests : IDisposable
             rows.Select(row => (row.ObjectName, row.Night, row.Filter, row.Frames, row.InCampaign)));
         Assert.All(rows, row => Assert.Equal((target, "Panel 1"), (row.TargetId, row.Label)));
     }
+
+    // Phase 18 Task 4: the suggestion row's target links name each target by its primary name.
+    [Fact]
+    public void TargetNames_MapEachKnownTargetToItsPrimaryName()
+    {
+        var first = NewTarget("NGC 7000");
+        var second = NewTarget("M 31");
+
+        var names = _queries.TargetNames([first, second, Guid.NewGuid()]);
+
+        Assert.Equal(2, names.Count);
+        Assert.Equal("NGC 7000", names[first]);
+        Assert.Equal("M 31", names[second]);
+    }
 }

@@ -421,6 +421,55 @@ public class SettingsStoreTests
             display.Columns["frames"]);
     }
 
+    // Phase 18 Task 4, spec 5.8.2: the mosaics table's column list and sort.
+    [Fact]
+    public void GetDisplay_OnFreshDatabase_HasTheMosaicsColumnsAndSortDefaults()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        var display = store.GetDisplay();
+
+        Assert.Equal(
+            new[] { "name", "panels", "integration", "frames", "date_range" },
+            display.ColumnsFor(DisplaySettings.MosaicsTableId));
+        Assert.Equal(new TableSort { Key = "name", Ascending = true }, display.MosaicsSort);
+    }
+
+    [Fact]
+    public void SaveDisplay_TheMosaicsSortAndColumns_RoundTrip()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        var display = store.GetDisplay().WithSort(DisplaySettings.MosaicsTableId, new TableSort { Key = "frames", Ascending = false });
+        store.SaveDisplay(display with
+        {
+            Columns = new Dictionary<string, string[]>(display.Columns) { ["mosaics"] = ["name", "frames", "custom_owner"] },
+        });
+
+        Assert.Contains("\"sort\":{\"mosaics\":{\"key\":\"frames\",\"ascending\":false}}", StoredDisplayDocument(db), StringComparison.Ordinal);
+        var reloaded = store.GetDisplay();
+        Assert.Equal(new TableSort { Key = "frames", Ascending = false }, reloaded.MosaicsSort);
+        Assert.Equal(new[] { "name", "frames", "custom_owner" }, reloaded.ColumnsFor(DisplaySettings.MosaicsTableId));
+    }
+
+    // Spec 5.8.2: a stored key outside the five, a custom slug included, reads as the default; a
+    // document with no sort object takes the default too, so no migration is needed.
+    [Theory]
+    [InlineData("""{"sort":{"mosaics":{"key":"custom_owner","ascending":false}}}""")]
+    [InlineData("""{"sort":{"mosaics":{"key":"nonsense"}}}""")]
+    [InlineData("""{"sort":{}}""")]
+    [InlineData("""{}""")]
+    public void GetDisplay_AnUnknownMosaicsSortKey_ReadsAsTheDefault(string stored)
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+        SeedDisplayDocument(db, stored);
+
+        Assert.Equal(new TableSort(), store.GetDisplay().MosaicsSort);
+    }
+
     [Fact]
     public void SaveDisplay_PreservesAnUnknownTargetPageKey()
     {
