@@ -20,14 +20,13 @@ namespace GalactiLog.Data.Tests.Ingest;
 // and accept through the repository. The fixture files are hashed before and after: the scan and
 // everything after it leave every byte of the library as it was (spec 2.1).
 //
-// The base targets exist before the scan. Offline resolution never strips a panel token before a
-// catalogue designation lookup (spec 9.3 strips only for the common-name map), so "NGC 7000 Panel
-// 1" reaches its target only through spec 9.5's StripPanel alias match against a target that
-// already carries the alias "NGC 7000", and "IC 1396 P1" reaches none (StripPanel knows only
-// "Panel"). Without the seeding the first scan resolves no panel and detection suggests nothing.
+// The catalogue starts empty of targets: the scan creates every target from the frames. NGC 7000
+// and IC 1396 resolve offline, the panel token stripped before every lookup (spec 9.3); IC 5070
+// resolves offline with no token. No Sharpless table ships, so Sh2-155 resolves online, and the
+// SIMBAD stub answers that one query.
 //
 // FILE SAFETY: tests/** only. The library is written and removed by this class, in its own temp
-// folder. The network is stubbed with a clean miss from SIMBAD and SESAME.
+// folder. The network is stubbed: SIMBAD answers Sh2-155 only, SESAME misses cleanly.
 public sealed class MosaicFixtureEndToEndTests : IDisposable
 {
     private static readonly string[] AllLabels = ["Panel 1", "Panel 2", "Panel 3", "Panel 4"];
@@ -44,7 +43,7 @@ public sealed class MosaicFixtureEndToEndTests : IDisposable
         _resolver = new TargetResolver(
             _db.ConnectionString, StaticCatalogLoader.ResolveCatalogsDirectory(),
             new CatalogCacheRepository(_db.ConnectionString),
-            new SimbadClient(new NoMatchHandler()), new SesameClient(new NoMatchHandler()));
+            new SimbadClient(new SimbadStub()), new SesameClient(new SimbadStub()));
         _repository = new MosaicRepository(new DatabaseConnectionString(_db.ConnectionString));
         _settings.SaveGeneral(new GeneralSettings
         {
@@ -54,12 +53,6 @@ public sealed class MosaicFixtureEndToEndTests : IDisposable
             UseImagingNight = true,
             ObserverLongitude = 0.0,
         });
-
-        // NGC 7000 and IC 1396 resolve offline and so carry their designation as an alias. The
-        // bundled catalogues hold no Sharpless table, so Sh2-155 is a user target with its alias.
-        _resolver.Resolve("NGC 7000");
-        _resolver.Resolve("IC 1396");
-        LibrarySeeder.AddTarget(_db.ConnectionString, "Sh2-155", target => target.Aliases = "[\"SH2-155\"]");
     }
 
     public void Dispose()
@@ -113,6 +106,14 @@ public sealed class MosaicFixtureEndToEndTests : IDisposable
                 Assert.Equal(set.Dec, image.DecDeg!.Value, 6);
                 Assert.Equal(MosaicFixtureLibrary.WidthPx, image.WidthPx);
             }
+
+            // Every frame resolved, and the four sets of NGC 7000, IC 1396, Sh2-155 and IC 5070
+            // landed on four distinct targets.
+            Guid? TargetOf(string folder) => images
+                .Where(image => Path.GetFileName(Path.GetDirectoryName(image.FilePath))!.StartsWith(folder, StringComparison.Ordinal))
+                .Select(image => image.ResolvedTargetId).Distinct().Single();
+            Assert.DoesNotContain(images, image => image.ResolvedTargetId is null);
+            Assert.Equal(4, new[] { "NGC 7000", "IC 1396", "Sh2-155", "IC 5070" }.Select(TargetOf).Distinct().Count());
         }
 
         // ---- the first scan: suggestions ----------------------------------------------
@@ -128,9 +129,14 @@ public sealed class MosaicFixtureEndToEndTests : IDisposable
         Assert.Equal("low", sh2.Confidence);
         Assert.Contains(sh2.Flags, flag => flag.StartsWith("Positions not distinct", StringComparison.Ordinal));
 
-        // North America Nebula carries no token, so it is no candidate. Offline it resolves to
-        // NGC 7000 itself (its common name); its frames join that target with a null label.
-        Assert.DoesNotContain(pending, row => row.BaseName.Contains("North America", StringComparison.OrdinalIgnoreCase));
+        var ic = Assert.Single(pending, row => row.SuggestedName == "IC 1396");
+        Assert.Equal("low", ic.Confidence);
+        Assert.Equal("name", ic.DiscoverySource);
+        Assert.Equal(["Only one panel found."], ic.Flags);
+
+        // IC 5070 carries no token, so it is no candidate.
+        Assert.DoesNotContain(pending, row => row.BaseName.Contains("5070", StringComparison.Ordinal));
+        Assert.Equal(3, pending.Count);
 
         // ---- a second scan: the same suggestions, no relabel ----------------------------
         await RunScan();
@@ -168,31 +174,30 @@ public sealed class MosaicFixtureEndToEndTests : IDisposable
         Assert.Equal(before, HashLibrary());
     }
 
-    [Fact(Skip = "Task 6b ESCALATION: 'IC 1396 P1' never resolves to a target. OfflineCatalogLookup.Lookup "
-        + "tries the catalogue designation on the unstripped name, and NameNormalizer.StripPanel strips only "
-        + "'Panel N', so neither the offline lookup nor the spec 9.5 alias match reaches IC 1396. An unresolved "
-        + "frame has no target, and spec 7.7 builds candidates per target, so no one-panel suggestion is written.")]
-    public async Task Scan_OverTheMosaicFixture_SuggestsTheLoneIc1396Panel_AsOnePanelLowConfidence()
+    private sealed class SimbadStub : HttpMessageHandler
     {
-        MosaicFixtureLibrary.Write(_root);
-        await RunScan();
-
-        var ic = Assert.Single(_repository.ListPending(), row => row.SuggestedName == "IC 1396");
-        Assert.Equal("low", ic.Confidence);
-        Assert.Equal("name", ic.DiscoverySource);
-        Assert.Equal(["Only one panel found."], ic.Flags);
-    }
-
-    private sealed class NoMatchHandler : HttpMessageHandler
-    {
-        // SIMBAD's "queried, no match" marker and a Resolver-less SESAME body: a clean miss.
-        private static HttpResponseMessage Respond(HttpRequestMessage request) => new(HttpStatusCode.OK)
+        // SIMBAD finds Sh2-155 (the script query carries "SH 2-155" after spec 9.3's rewrite) and
+        // reports a clean miss for anything else; SESAME's Resolver-less body is a clean miss.
+        private static HttpResponseMessage Respond(HttpRequestMessage request)
         {
-            Content = new StringContent(
-                request.RequestUri!.Host.Contains("simbad", StringComparison.OrdinalIgnoreCase)
-                    ? "::error::\nnot found\n"
-                    : "<?xml version=\"1.0\"?><Sesame></Sesame>"),
-        };
+            var path = request.RequestUri!.AbsolutePath;
+            var body = request.Content?.ReadAsStringAsync().GetAwaiter().GetResult() ?? "";
+            string text;
+            if (path.Contains("sim-script", StringComparison.Ordinal))
+            {
+                text = body.Contains("2-155", StringComparison.Ordinal) ? "::data::\nSH 2-155|HII|343.99|62.62\n" : "::error::\nnot found\n";
+            }
+            else if (path.Contains("sim-tap", StringComparison.Ordinal))
+            {
+                text = "id\n\"SH 2-155\"\n";
+            }
+            else
+            {
+                text = "<?xml version=\"1.0\"?><Sesame></Sesame>";
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(text) };
+        }
 
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken cancellationToken)
             => Respond(request);

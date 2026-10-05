@@ -16,7 +16,8 @@ namespace GalactiLog.Data.Tests.Fixtures;
 /// <see cref="SharedNight"/>.</item>
 /// <item>"IC 1396 P1" alone, one night.</item>
 /// <item>"Sh2-155 Panel 1" and "Sh2-155 Panel 2" at one identical position.</item>
-/// <item>"North America Nebula", one night, no panel token.</item>
+/// <item>"IC 5070", one night, no panel token: the any-target include. Not "North America
+/// Nebula", which is NGC 7000's common name and resolves into NGC 7000.</item>
 /// </list>
 /// Every frame is 64 by 64 pixels carrying a gradient that rises along both axes at different
 /// rates, so a rotation or a flip of the rendered tile is visible (Phase 19A).
@@ -76,7 +77,7 @@ public static class MosaicFixtureLibrary
             new("IC 1396 P1", "Panel 1", 324.74, 57.49, [Day(8)], FullFramesPerFilterNight),
             new("Sh2-155 Panel 1", "Panel 1", 343.99, 62.62, [Day(9)], FullFramesPerFilterNight),
             new("Sh2-155 Panel 2", "Panel 2", 343.99, 62.62, [Day(10)], FullFramesPerFilterNight),
-            new("North America Nebula", null, NgcRa, NgcDec, [Day(11)], FullFramesPerFilterNight),
+            new("IC 5070", null, 312.70, 44.35, [Day(11)], FullFramesPerFilterNight),
         ];
     }
 
