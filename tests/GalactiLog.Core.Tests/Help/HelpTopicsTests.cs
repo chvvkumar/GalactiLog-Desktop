@@ -44,6 +44,27 @@ public class HelpTopicsTests
     public void TheMosaicTopics_ExistAndCarryTheirTitles(string id, string title)
         => Assert.Equal(title, HelpTopics.Get(id).Title);
 
+    // Phase 18 Task 7. Each mosaic paragraph is two to five sentences, and none grows into the
+    // five longest, which would make it spec text under TheLongestParagraphs_MatchTheSpecTextExactly.
+    [Theory]
+    [InlineData("mosaics.about")]
+    [InlineData("mosaics.keywords")]
+    [InlineData("mosaics.suggestions")]
+    [InlineData("mosaics.table")]
+    [InlineData("mosaic.about")]
+    [InlineData("mosaic.notes")]
+    [InlineData("mosaic.labels")]
+    [InlineData("mosaic.sessions")]
+    [InlineData("mosaic.create")]
+    public void TheMosaicParagraphs_AreTwoToFiveSentences(string id)
+    {
+        var paragraph = HelpTopics.Get(id).Paragraph;
+        var sentences = paragraph.Split(". ", StringSplitOptions.RemoveEmptyEntries).Length;
+
+        Assert.InRange(sentences, 2, 5);
+        Assert.DoesNotContain(id, FiveLongest().Select(topic => topic.Id));
+    }
+
     // A typo in the id or a paragraph that names no host would still leave the count at 103 (the
     // record exists), and the census reports it only as "placed nowhere" once the glyph lands.
     [Fact]

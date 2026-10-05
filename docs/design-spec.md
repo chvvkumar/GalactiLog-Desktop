@@ -5061,7 +5061,9 @@ Maintenance actions of section 12.7, two of which are the reference thumbnail pa
 thumbnail regeneration (they are not a tenth and eleventh member; naming them twice was a spec
 contradiction the brief-writer recorded and the coordinator ruled at dispatch). Later phases add
 their passes to the same registry and to the same census rather than growing a second status
-surface. The spine is built here, at the second occurrence of the pattern, rather than at the
+surface. Phase 18 adds the four mosaic kinds (`mosaic_detection`, `mosaic_accept`,
+`mosaic_dismiss` and `mosaic_delete`, section 12.17), which takes the set `JobRegistryCensusTest`
+declares to nineteen members. The spine is built here, at the second occurrence of the pattern, rather than at the
 sixth.
 
 Target detail (section 12.4) is a screen that is not a rail destination, and from Phase 18 the
@@ -7587,7 +7589,7 @@ list produces the six `export.*` step ids (section 12.13). The census resolves a
 its markup file rather than by restating either list, so a bound site in a file the map does not
 know carries its binding text into the failure instead of borrowing another site's ids.
 
-**The topic table.** 103 topics, placed by 87 `HelpButton` elements across 31 markup files: 83
+**The topic table.** 112 topics, placed by 96 `HelpButton` elements across 40 markup files: 92
 literal ids and the four bound sites above, which expand to the remaining 20. Phase 15A added one
 topic, `settings.equipment.phd2-profiles`, beside one literal placement; Phase 15B added two more,
 `target.guiding` and `stats.guiding`, each beside one literal placement (Phase 24 R3 moved
@@ -7837,15 +7839,15 @@ Line breaks inside a paragraph are not significant.
 | `settings.external-tools.bortle` | The Bortle class describes how dark your sky is, from 1 at a site with no light pollution to 9 in a city centre. It goes into every row of the AstroBin CSV, so an upload carries the sky it was shot under. It is one number for the whole library: if you image from two sites, set the one you use most and correct the other's rows on AstroBin. |
 | `settings.external-tools.nina` | Each instance here is one copy of NINA on your network. Give it a name you will recognise in a menu and the address of its API, which is http:// then the machine and then the port the API is listening on, usually 1888. An instance that is switched on and has both a name and an address appears on a target's menu as "Send to NINA". Choosing it opens that target in NINA's framing assistant at the target's coordinates and, when the target has a known orientation, rotates the frame to it. Nothing listens on this machine: GalactiLog only ever makes the call. |
 | `settings.external-tools.stellarium` | Each instance here is one copy of Stellarium running the Remote Control plugin. Its address is http:// then the machine and then the port the plugin is listening on, usually 8090. An instance that is switched on and has both a name and an address appears on a target's menu as "Slew Stellarium". Choosing it points Stellarium at the target by its catalogue name where Stellarium knows it, by its coordinates where it does not, and then sets the field of view to 20 degrees so the object is framed rather than filling the screen. |
-| `mosaics.about` | A mosaic collects the panels of one large field, each panel a set of nights from any target, and totals their integration so you can see which panel needs more time; suggestions come from Run Detection and every scan, and Create mosaic makes one by hand. |
-| `mosaics.keywords` | The words that introduce a panel number in a target's name, such as Panel in "M 31 Panel 2" or P in "NGC 7000 P3"; a change is applied to your frames at the next Run Detection or scan. |
-| `mosaics.suggestions` | Groups of targets that look like panels of one mosaic, found by name, by sky position or by both, where high confidence means name and position agree and low means review the notes first; Accept creates the mosaic from the checked panels, and Dismiss hides it until new nights appear. |
-| `mosaics.table` | Every mosaic with its panel count, integration, frames and date range, where a header click sorts, the column picker chooses the columns, and Expand renames the mosaic and edits its panels. |
-| `mosaic.about` | This mosaic's panels and the nights that count toward each, with the totals across all of them; the figures count only included nights. |
-| `mosaic.notes` | Free-form notes about this mosaic, saved a second after you stop typing. |
-| `mosaic.labels` | Panel labels found in the names of this mosaic's targets that no panel has yet; their frames count nowhere until you add a panel for the label. |
-| `mosaic.sessions` | Each panel lists the nights it counts as Included and the other nights of its targets as Available, each night with the panel label its frames carry, and frames of one target, night and label can count in only one panel of a mosaic. |
-| `mosaic.create` | Makes a new mosaic, or grows an existing one, from the nights checked on this target, where nights given the same panel label become one panel. |
+| `mosaics.about` | A mosaic collects the panels of one large field, each panel a set of nights from any target. It totals the integration of each panel so you can see which one needs more time. Suggestions come from Run Detection and from every scan, and Create mosaic makes one by hand. Only light frames are counted. |
+| `mosaics.keywords` | A keyword is a word that introduces a panel number in a target's name, such as Panel in "M 31 Panel 2" or P in "NGC 7000 P3". Detection reads these tokens to group targets into suggested mosaics, and the position tolerance sets how close two panels must sit on the sky. A change applies to your frames at the next Run Detection or scan, not at once. |
+| `mosaics.suggestions` | Each suggestion is a group of targets that look like panels of one mosaic, found by name, by sky position or by both. High confidence means name and position agree; low means review the notes before accepting. The source badge says which signal found it. Accept creates the mosaic from the checked panels. Dismiss asks twice, and a dismissed suggestion comes back only when new nights of its panels are catalogued. |
+| `mosaics.table` | Every mosaic with its panel count, integration, frames and date range, counting light frames only. A header click sorts by that column and a second click reverses it; the choice is kept for your next visit. The column picker chooses which columns show, including your own mosaic columns. Expand renames the mosaic and edits its panels, and Delete asks twice before it removes the mosaic and its panels. No frame is ever touched. |
+| `mosaic.about` | This mosaic's panels and the nights that count toward each. The summary line gives the panel count, the total integration and the total frames, and each panel row shows its own figures. The Deficit column shows how far a panel's integration is behind the leading panel, the one with the most, as a time such as 2h 10m behind. The figures count only included nights. |
+| `mosaic.notes` | Free-form notes about this mosaic. They are saved a second after you stop typing, and an emptied box clears the note. They are yours and nothing reads them: no figure on this page is derived from them. |
+| `mosaic.labels` | A panel label is the label carried by a target's frames, such as Panel 2. This banner lists labels found on this mosaic's targets that no panel of the mosaic has yet. Their frames count nowhere until you add a panel for the label, so the integration shown is lower than the data on disk. Add panel creates it and includes the nights that carry the label. |
+| `mosaic.sessions` | Each panel counts a night as Included, and lists the other nights of its targets as Available. A night is one target, one date and one frame label, and that triple counts in only one panel of a mosaic. Include and Remove move a night between the two lists. As new panel moves an available night into a panel of its own, and Add nights from any target brings in nights from another target. Delete panel asks twice and is enabled once the panel has no included night. |
+| `mosaic.create` | Makes a new mosaic, or adds to an existing one, from the nights checked on this target. Rows given the same panel label combine into one panel, and the label starts as the frame label when the frames carry one. The name starts as the target's base name with the date range and stays until you edit it. Nothing is written until you press Create, and a refusal writes nothing. |
 
 The nine stacking export rows above are transcribed from `HelpTopics.cs` character for character,
 the four wizard rows and the corrected `page.export-stacking` and `export.settings` sentences
