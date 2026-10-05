@@ -3006,7 +3006,10 @@ matching `Panel 12` (AUD-008) has nothing to guard.
 
 #### Step 0: relabel and backfill
 
-Every run begins with two maintenance passes, inside the detection job.
+Every run begins with two maintenance passes, inside the detection job. Step 0 also runs alone,
+once, in the startup that applies the Mosaics migration, in the App and the CLI alike, before any
+page reads, so rows a scan wrote before the upgrade carry their labels from the first read on; it
+logs one line with both counts, and a failure there is logged and does not block startup.
 
 1. **Relabel (ruling R6).** For each distinct `OBJECT` among LIGHT frames, the label is computed
    with the current keywords, and every LIGHT row whose stored `panel_label` differs from it,
@@ -4248,7 +4251,9 @@ Phase 1 of a scan, and the only phase that writes image rows.
    The extracted metadata carries `ra_deg`, `dec_deg` and `width_px` (section 7.1), and
    `ScanWriter` writes them with the row together with `panel_label`, computed from `OBJECT` by
    the token rule of section 7.7 with the `general.mosaic_keywords` read once at the start of the
-   run, for a LIGHT frame, and null for any other (Phase 18, rulings R6 and R10).
+   run, for a LIGHT frame, and null for any other (Phase 18, rulings R6 and R10). Rows written
+   before Phase 18 are labelled by the step 0 that the startup applying the Mosaics migration runs
+   (section 7.7), not by this step.
    One file whose header read, metadata extraction or session-date derivation fails for any
    reason is one failed file, recorded `file_rejected` with its reason and counted in
    `scan_runs.failed`; the scan continues and ends `complete`. It writes no `images` row, so
@@ -10974,7 +10979,8 @@ page asks (section 5.24). A triple whose frame label equals another panel's labe
 compared case insensitively, is hidden from this panel too, so a new night carrying `Panel 2` and
 `Panel 3` frames is offered on Panel 2 and Panel 3 only; a null label and a label no panel carries
 are offered to every panel. Detail, Include all, Include all available and As new panel read the
-one list. Under the Available table sits **Add nights from any
+one list. A keyword change can leave an `included` row matching no frame once step 0 relabels its
+frames (section 7.7); the row stays in Included with zero frames and Remove takes it out. Under the Available table sits **Add nights from any
 target**, a target search on the same `TargetSearchQuery` and debounce as the add panel form;
 choosing a target writes an `available` row on this panel for each (night, frame label) pair of
 that target's LIGHT frames whose triple no panel of this mosaic includes, so the target becomes one

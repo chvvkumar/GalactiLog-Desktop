@@ -4,6 +4,9 @@ using GalactiLog.Data.Entities;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace GalactiLog.Data.Tests.Ingest;
@@ -102,6 +105,28 @@ public class MosaicDetectionPassTests : IDisposable
         using var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString));
         var dark = context.Images.Single(image => image.ImageType == "DARK");
         Assert.Equal(((string?)null, (double?)null), (dark.PanelLabel, dark.RaDeg));
+    }
+
+    // Spec 10.3: the startup that applies the Mosaics migration runs step 0 once, so a library
+    // scanned before the upgrade carries its labels before any page reads; a startup with nothing
+    // pending runs nothing, and step 0 again writes nothing.
+    [Fact]
+    public void MigrateAndUpgrade_RunsStep0OnlyWhenTheMosaicsMigrationIsApplied()
+    {
+        MosaicDetectionPass.MigrateAndUpgrade(_db.ConnectionString, () => Default, NullLogger.Instance);
+        Assert.All(Lights(), image => Assert.Null(image.PanelLabel));
+
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString, tracking: true)))
+        {
+            context.GetService<IMigrator>().Migrate("20261005022536_SkippedFiles");
+        }
+
+        MosaicDetectionPass.MigrateAndUpgrade(_db.ConnectionString, () => Default, NullLogger.Instance);
+
+        var frame = Lights().First(image => image.RawHeaders!.Contains("\"NGC 7000 Panel 3\"", StringComparison.Ordinal));
+        Assert.Equal(("Panel 3", 6000), (frame.PanelLabel, frame.WidthPx!.Value));
+        Assert.Equal(19, Lights().Count(image => image.PanelLabel is not null));
+        Assert.Equal((0, 0), new MosaicDetectionPass(_db.ConnectionString, Default).RunStepZero());
     }
 
     [Fact]

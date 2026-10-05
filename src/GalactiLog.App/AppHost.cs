@@ -181,14 +181,6 @@ public static class AppHost
         var connectionString = DatabasePaths.BuildConnectionString(
             appWriter.ResolveAppDataPath(DatabasePaths.DatabaseFileName));
 
-        // Migration runs before any window is shown (design-spec 17.2). A failure here
-        // propagates out of Build() uncaught; Serilog has already been configured above so
-        // whatever it can log about the failure is captured.
-        using (var migrationContext = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true)))
-        {
-            migrationContext.Database.Migrate();
-        }
-
         var settingsRepository = new SettingsRepository(connectionString);
         // Fix-wave review P2-4: SettingsStore's repair of a hand-edited display document
         // (SettingsStore.cs ReadDisplay/RepairDisplay) logs through the optional trailing
@@ -202,6 +194,16 @@ public static class AppHost
         // method reaches, ring buffer sink included.
         var settingsStore = new SettingsStore(
             settingsRepository, new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger<SettingsStore>());
+
+        // Migration runs before any window is shown (design-spec 17.2). A failure here
+        // propagates out of Build() uncaught; Serilog has already been configured above so
+        // whatever it can log about the failure is captured. The startup that applies the
+        // Mosaics migration also runs detection step 0 once (spec 7.7, 10.3), for the GUI and the
+        // CLI alike; the settings store is constructed above but read only after the migration.
+        MosaicDetectionPass.MigrateAndUpgrade(
+            connectionString,
+            () => MosaicDetectionPass.SettingsFrom(settingsStore.GetGeneral()),
+            new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger<MosaicDetectionPass>());
 
         // Empty thumbnail_cache_dir means the default location under the app data root;
         // any other value is used as given (design-spec 5.8.1, 17.2). Shared between the

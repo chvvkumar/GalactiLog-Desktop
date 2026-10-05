@@ -5,6 +5,7 @@ using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace GalactiLog.Data.Ingest;
 
@@ -51,6 +52,57 @@ public sealed class MosaicDetectionPass(string connectionString, DetectionSettin
     /// null when it carries no token (spec 7.7). The one rule <c>ScanWriter</c> and step 0 share.</summary>
     public static string? LabelFor(string? objectName, IReadOnlyList<string> keywords)
         => PanelTokens.Match(objectName, keywords) is { } match ? PanelTokens.Label(match.Number) : null;
+
+    /// <summary>The migration that adds <c>images.panel_label</c> and the mosaic tables (spec 5.22
+    /// to 5.25); the startup that applies it runs step 0 once.</summary>
+    public const string MosaicsMigrationId = "20261005175255_Mosaics";
+
+    /// <summary>Spec 7.7's step 0 alone: relabels frames and backfills positions, under the same
+    /// lock as <see cref="Run"/>. A second call over an unchanged catalogue writes nothing.</summary>
+    public (int Relabelled, int Backfilled) RunStepZero()
+    {
+        lock (Gate)
+        {
+            using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+            context.Database.OpenConnection();
+            var connection = (SqliteConnection)context.Database.GetDbConnection();
+            return (Relabel(connection), Backfill(connection));
+        }
+    }
+
+    /// <summary>
+    /// Applies the pending migrations (spec 10.3). When the Mosaics migration was among them, step
+    /// 0 runs once before any page can read, so rows written before the upgrade carry their
+    /// <c>panel_label</c> from the first read on; the counts are logged. A migration failure
+    /// propagates; a step 0 failure is logged and does not block startup. The App and the CLI both
+    /// start through this call.
+    /// </summary>
+    /// <param name="settings">Read after the migration, when the settings table exists.</param>
+    public static void MigrateAndUpgrade(string connectionString, Func<DetectionSettings> settings, ILogger logger)
+    {
+        bool upgrading;
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true)))
+        {
+            upgrading = context.Database.GetPendingMigrations().Contains(MosaicsMigrationId);
+            context.Database.Migrate();
+        }
+
+        if (!upgrading)
+        {
+            return;
+        }
+
+        try
+        {
+            var (relabelled, backfilled) = new MosaicDetectionPass(connectionString, settings()).RunStepZero();
+            logger.LogInformation(
+                "Mosaics upgrade: step 0 relabelled {Relabelled} frames and filled positions on {Backfilled}", relabelled, backfilled);
+        }
+        catch (Exception exception)
+        {
+            logger.LogWarning(exception, "Mosaics upgrade: step 0 failed; the next scan or Run Detection repeats it");
+        }
+    }
 
     /// <param name="report">(step, totalSteps, message), once per step; the coordinator forwards it
     /// into its <c>mosaic_detection</c> envelope or the on-demand caller's job.</param>
