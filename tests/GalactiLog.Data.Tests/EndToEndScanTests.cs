@@ -253,7 +253,9 @@ public sealed class EndToEndScanTests : IDisposable
         Assert.Equal(1, counts["duplicates_detected"]);
         Assert.False(counts.ContainsKey("orphans_pruned"));
         Assert.False(counts.ContainsKey("orphan_prune_skipped"));
-        Assert.Equal(7, context.ActivityEvents.Count());
+        // Spec 7.7: a completed scan always ends with mosaic detection, which records one event.
+        Assert.Equal(1, counts["mosaic_detection_complete"]);
+        Assert.Equal(8, context.ActivityEvents.Count());
 
         var orphan = Assert.Single(context.MergeCandidates.ToList());
         Assert.Equal("Zzyzx Blob 42", orphan.SourceName);

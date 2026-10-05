@@ -325,6 +325,38 @@ public class SettingsStoreTests
         Assert.Equal(1000, value.AppLogMaxRows);
     }
 
+    // Spec 5.8.1's three Phase 18 keys: keywords trimmed with blanks and case-insensitive repeats
+    // dropped, a gap outside the seven choices read as 0, the tolerance clamped to 0 to 600.
+    [Fact]
+    public void TheMosaicKeys_AreNormalizedOnRead_AndDefaultWhenAbsent()
+    {
+        using var db = TestDatabaseFactory.CreateMigratedDatabase();
+        var repository = new SettingsRepository(db.ConnectionString);
+        var store = new SettingsStore(repository);
+        Assert.Equal(["Panel", "P"], store.GetGeneral().MosaicKeywords);
+        Assert.Equal((0, 0d), (store.GetGeneral().MosaicCampaignGapDays, store.GetGeneral().MosaicPositionToleranceArcmin));
+
+        var row = repository.Load();
+        row.General = """{"mosaic_keywords":[" Panel ","","panel","Tile"],"mosaic_campaign_gap_days":10,"mosaic_position_tolerance_arcmin":900}""";
+        repository.Save(row);
+
+        var value = store.GetGeneral();
+        Assert.Equal(["Panel", "Tile"], value.MosaicKeywords);
+        Assert.Equal((0, 600d), (value.MosaicCampaignGapDays, value.MosaicPositionToleranceArcmin));
+    }
+
+    [Fact]
+    public void SaveGeneral_AMosaicGapOrToleranceOutOfRange_Throws()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        Assert.Throws<SettingsValidationException>(() => store.SaveGeneral(new GeneralSettings { MosaicCampaignGapDays = 10 }));
+        Assert.Throws<SettingsValidationException>(() => store.SaveGeneral(new GeneralSettings { MosaicPositionToleranceArcmin = -1 }));
+        store.SaveGeneral(new GeneralSettings { MosaicCampaignGapDays = 30, MosaicPositionToleranceArcmin = 12.5 });
+        Assert.Equal((30, 12.5), (store.GetGeneral().MosaicCampaignGapDays, store.GetGeneral().MosaicPositionToleranceArcmin));
+    }
+
     [Fact]
     public void AStoredValueAboveTheRange_IsClampedOnRead()
     {

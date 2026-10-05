@@ -32,6 +32,10 @@ public sealed class ScanWriter
     private readonly int? _scanStartedActivityId;
     private readonly Action<string>? _onWarning;
 
+    // Spec 10.3 step 3: general.mosaic_keywords read once at the start of the run, so a change
+    // made while a scan runs applies from the next run.
+    private readonly IReadOnlyList<string> _mosaicKeywords;
+
     // Per-scan-run circuit breaker (Phase 3 ruling): the first transient network failure
     // disables SIMBAD/SESAME for the rest of the run and logs once. A OnceGate rather than
     // the bool alone because the warning must fire exactly once even though every subsequent
@@ -43,12 +47,14 @@ public sealed class ScanWriter
         GalactiLogContext context,
         TargetResolver resolver,
         int? scanStartedActivityId = null,
-        Action<string>? onWarning = null)
+        Action<string>? onWarning = null,
+        IReadOnlyList<string>? mosaicKeywords = null)
     {
         _context = context;
         _resolver = resolver;
         _scanStartedActivityId = scanStartedActivityId;
         _onWarning = onWarning;
+        _mosaicKeywords = mosaicKeywords ?? new Core.Settings.GeneralSettings().MosaicKeywords;
     }
 
     // Read once by the coordinator after RunAsync completes, to build the scan_runs row
@@ -170,6 +176,12 @@ public sealed class ScanWriter
 
         MapMetadata(image, record);
 
+        // Phase 18 (rulings R6 and R10): the token rule over OBJECT for a LIGHT frame, null for
+        // any other. Mosaic detection step 0 recomputes it with the keywords then in force.
+        image.PanelLabel = record.Metadata.ImageType == "LIGHT"
+            ? MosaicDetectionPass.LabelFor(objectName, _mosaicKeywords)
+            : null;
+
         // Spec 5.2: an empty OBJECT is a legitimate state, not a resolution failure. Nothing
         // was looked up, so no event and no target.
         image.ResolvedTargetId = resolution?.TargetId;
@@ -279,6 +291,9 @@ public sealed class ScanWriter
         image.EccentricitySource = m.EccentricitySource;
         image.AltitudeDeg = m.AltitudeDeg;
         image.ArcsecPerPixel = m.ArcsecPerPixel;
+        image.RaDeg = m.RaDeg;
+        image.DecDeg = m.DecDeg;
+        image.WidthPx = m.WidthPx;
         image.HfrStdev = m.HfrStdev;
         image.Fwhm = m.Fwhm;
         image.DetectedStars = m.DetectedStars;

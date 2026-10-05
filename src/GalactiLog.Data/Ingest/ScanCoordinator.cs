@@ -503,6 +503,13 @@ public sealed class ScanCoordinator(
 
             RunDuplicateDetection(newFiles, startedActivityId, ct);
 
+            // Spec 7.7 and 10.3 step 6 (ruling R4): mosaic detection after duplicate detection,
+            // so it reads the targets that pass left behind, and only on a run not cancelled. A
+            // cancellation inside the pass throws and records the run cancelled; any other failure
+            // is the pass's own and does not fail the scan.
+            ct.ThrowIfCancellationRequested();
+            RunMosaicDetection(startedActivityId, ct);
+
             RunReferenceThumbnails(startedActivityId, ct);
 
             // Spec 10.5 again, and this one is load-bearing: the reference pass BREAKS on
@@ -628,7 +635,7 @@ public sealed class ScanCoordinator(
         if (files.Count == 0) return (0, 0, 0);
 
         using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
-        var writer = new ScanWriter(context, targetResolver, startedActivityId, Warn);
+        var writer = new ScanWriter(context, targetResolver, startedActivityId, Warn, general.MosaicKeywords);
         // Spec 10.3: the run's scope reaches step 2's known set and step 3's calibration decision
         // and nothing else. The
         // GeneralSettings snapshot is NOT mutated and not copied with a `with`: it is shared with
@@ -1150,6 +1157,111 @@ public sealed class ScanCoordinator(
             },
             parentId: startedActivityId);
         context.SaveChanges();
+    }
+
+    // The scan's post-pass shape of mosaic detection: its envelope goes out on ProgressChanged
+    // under mosaic_detection, terminal envelopes forced, and a failure is logged, reported and
+    // swallowed so the scan still completes (spec 7.7).
+    private void RunMosaicDetection(int? startedActivityId, CancellationToken ct)
+    {
+        try
+        {
+            RunMosaicDetectionCore(
+                "scan", startedActivityId,
+                (step, total, message, forced) => RaiseProgress(ScanTaskNames.MosaicDetection, step, total, message, forced),
+                ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            // Already logged, reported and recorded by the core.
+        }
+    }
+
+    /// <summary>
+    /// Spec 7.7's Run Detection: the same pass the scan's post-phase runs, on a background thread,
+    /// under the resolution lease, writing the same activity event with <c>trigger</c>
+    /// <c>manual</c>. <b>Null means a scan or another pass holds the lease.</b> A pass that throws
+    /// writes <c>mosaic_detection_failed</c> and rethrows, so the caller's job ends failed.
+    /// </summary>
+    /// <remarks>
+    /// The shape of <see cref="RunReferenceThumbnailsAsync"/>: the lease is held for the whole run,
+    /// so a scan requested meanwhile is refused rather than racing it, and progress arrives through
+    /// <paramref name="report"/> rather than <see cref="ProgressChanged"/>, which is the scan's
+    /// envelope vocabulary. The App registers the job (kind <c>mosaic_detection</c>).
+    /// </remarks>
+    /// <param name="report">(step, totalSteps, message), called on the background thread: the four
+    /// steps, then the summary "n suggestions".</param>
+    public Task<MosaicDetectionResult?> RunMosaicDetectionAsync(Action<int, int, string> report, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(report);
+
+        return Task.Run(
+            () =>
+            {
+                using var lease = TryBeginResolution();
+                if (lease is null)
+                {
+                    _logger.LogInformation("Mosaic detection refused: a scan is already running");
+                    return null;
+                }
+
+                return (MosaicDetectionResult?)RunMosaicDetectionCore(
+                    "manual", startedActivityId: null, (step, total, message, _) => report(step, total, message), ct);
+            },
+            ct);
+    }
+
+    // The one implementation of the pass's settings read, its terminal envelopes and its two
+    // activity events, shared by the scan and Run Detection (design-lessons rule 1). The bool on
+    // the report delegate is "this is a terminal envelope", as RunReferenceThumbnailsCore's is.
+    private MosaicDetectionResult RunMosaicDetectionCore(
+        string trigger, int? startedActivityId, Action<int, int, string, bool> report, CancellationToken ct)
+    {
+        MosaicDetectionResult result;
+        try
+        {
+            var pass = new MosaicDetectionPass(connectionString, MosaicDetectionPass.SettingsFrom(settingsStore.GetGeneral()));
+            result = pass.Run((step, total, message) => report(step, total, message, false), ct);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException || !ct.IsCancellationRequested)
+        {
+            _logger.LogError(ex, "Mosaic detection failed");
+            report(0, MosaicDetectionPass.FailedEnvelopeTotalSteps, $"Mosaic detection failed: {ex.Message}", true);
+            EmitMosaicDetectionEvent(
+                "error", "mosaic_detection_failed", $"Mosaic detection failed: {ex.Message}",
+                new { trigger, reason = ex.Message }, startedActivityId);
+            throw;
+        }
+
+        var summary = $"{result.SuggestionsWritten} suggestion{(result.SuggestionsWritten == 1 ? "" : "s")}";
+        report(MosaicDetectionPass.TotalSteps, MosaicDetectionPass.TotalSteps, summary, true);
+        EmitMosaicDetectionEvent(
+            "info", "mosaic_detection_complete", $"Mosaic detection: {summary}",
+            new
+            {
+                trigger,
+                suggestions = result.SuggestionsWritten,
+                relabelled = result.Relabelled,
+                backfilled = result.Backfilled,
+            },
+            startedActivityId);
+        return result;
+    }
+
+    // Guarded like EmitScanTerminal: the event is the feed's copy, and failing to write it must
+    // not replace what the pass is reporting.
+    private void EmitMosaicDetectionEvent(string severity, string eventType, string message, object details, int? startedActivityId)
+    {
+        try
+        {
+            using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+            ActivityRepository.Emit(context, "scan", severity, eventType, message, details, parentId: startedActivityId);
+            context.SaveChanges();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Could not write the {EventType} activity event", eventType);
+        }
     }
 
     // Spec 11.4's reference thumbnail pass, run after duplicate detection (spec 10.3 step 5's
