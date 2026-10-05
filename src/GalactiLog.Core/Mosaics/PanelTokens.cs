@@ -48,8 +48,8 @@ public static class PanelTokens
     /// <summary>The panel label, "Panel " and the number (spec 7.7).</summary>
     public static string Label(string number) => $"Panel {number}";
 
-    /// <summary>The number of a "Panel n" label; any other label is returned whole. Port of
-    /// <c>panel_number_from_label</c>.</summary>
+    /// <summary>The number of a "Panel n" label; any other label is returned whole (spec 7.7, the
+    /// panel label). Port of <c>panel_number_from_label</c>.</summary>
     public static string NumberFromLabel(string label) =>
         label.StartsWith("Panel ", StringComparison.Ordinal)
             ? label.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)[^1]

@@ -1,5 +1,6 @@
 using System.Globalization;
 using GalactiLog.Core.Metrics;
+using GalactiLog.Core.Sessions;
 
 namespace GalactiLog.Core.Mosaics;
 
@@ -54,8 +55,8 @@ public static class MosaicDetection
         if (cos == 0) cos = 1e-9;
         var reference = Statistics.Median(coords.Select(c => c.Ra))!.Value;
         var offset = Statistics.Median(coords.Select(c =>
-            (SkyCoordinates.Modulo(c.Ra - reference + 180, 360) - 180) * cos))!.Value;
-        return (SkyCoordinates.Modulo(reference + offset / cos, 360), dec);
+            (AstroNight.Mod360(c.Ra - reference + 180) - 180) * cos))!.Value;
+        return (AstroNight.Mod360(reference + offset / cos), dec);
     }
 
     /// <summary><c>width_px * arcsec_per_pixel / 60</c> in arcminutes, or null when either is

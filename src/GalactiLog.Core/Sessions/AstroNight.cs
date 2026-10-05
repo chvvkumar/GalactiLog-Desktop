@@ -320,13 +320,20 @@ public static class AstroNight
         return week1.AddDays(7 * (isoWeek - 1));
     }
 
-    // ((x % m) + m) % m. C#'s % on a negative operand returns a negative value, and
+    // x % m, plus m when negative. C#'s % on a negative operand returns a negative value, and
     // n = julianDate(utc) - 2451545.0 is negative for any date before 2000, so the plain
     // operator is not sufficient. Covered by Mod360_IsNonNegative_ForANegativeOperand and
     // Mod24_IsNonNegative_ForANegativeOperand: trig is 360-degree periodic, so a raw % here
     // does not perturb any SunAltitudeDegrees result and cannot be caught by an altitude or
     // dark-hours assertion, only by these two non-negativity checks directly on Mod360/Mod24.
-    internal static double Mod360(double x) => ((x % 360.0) + 360.0) % 360.0;
+    // The form avoids ((x % m) + m) % m, which adds and removes m on a positive operand and
+    // loses its low bits (10.684 came back as 10.684000000000026). This is the one mod-360 helper
+    // in Core; Mosaics.SkyCoordinates and Mosaics.MosaicDetection call it too (spec 7.1, 7.7).
+    internal static double Mod360(double x)
+    {
+        var r = x % 360.0;
+        return r < 0 ? r + 360.0 : r;
+    }
 
     // Same reasoning as Mod360, for the 24 hour sidereal-time modulus.
     internal static double Mod24(double x) => ((x % 24.0) + 24.0) % 24.0;

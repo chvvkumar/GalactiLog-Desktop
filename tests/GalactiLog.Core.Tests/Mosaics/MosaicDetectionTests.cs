@@ -163,6 +163,54 @@ public class MosaicDetectionTests
     }
 
     [Fact]
+    public void IrregularGeometry_SpreadBeyondEightFields_IsFlagged()
+    {
+        // Three panels with a 16.67 arcmin field; Panel 3 sits 3 degrees (180 arcmin) away, more
+        // than 8 fields (133 arcmin). The reach does not matter: the name path groups them.
+        var s = Assert.Single(Detect([
+            T(1, F("M31 Panel 1", 10, 0)), T(2, F("M31 Panel 2", 10.25, 0)), T(3, F("M31 Panel 3", 13, 0)),
+        ]));
+
+        Assert.Equal("both", s.DiscoverySource);
+        Assert.Equal("low", s.Confidence);
+        Assert.Equal(["Panel spread is far larger than the field of view (irregular geometry)."], s.Flags);
+    }
+
+    [Fact]
+    public void MixedPlateScales_BeyondOneAndAHalf_AreFlagged()
+    {
+        var wide = new DetectionFrame(Night1, 10.5, 0, 2.0, 1000, 300, "L", "M31 Panel 2");
+        var s = Assert.Single(Detect([T(1, F("M31 Panel 1", 10, 0)), T(2, wide)]));
+
+        Assert.Equal("low", s.Confidence);
+        Assert.Equal(["Mixed plate scales across panels."], s.Flags);
+    }
+
+    [Fact]
+    public void PositionPath_TwoTargetsCarryingPanel1_StayTwoEntries()
+    {
+        var s = Assert.Single(Detect([
+            T(1, F("Alpha Panel 1", 10, 0)), T(2, F("Beta Panel 1", 10.25, 0)), T(3, F("Gamma Panel 2", 10.5, 0)),
+        ]));
+
+        Assert.Equal("position", s.DiscoverySource);
+        Assert.Equal(["Panel 1", "Panel 1", "Panel 2"], s.PanelLabels);
+        Assert.Equal([Id(1), Id(2), Id(3)], s.TargetIds);
+    }
+
+    [Fact]
+    public void OnePanelGroup_SplitByTheGap_KeepsEachOneNumberCampaign()
+    {
+        DateOnly sep10 = new(2026, 9, 10);
+        var result = Detect(
+            [T(1, F("IC 1396 P1", 10, 0, Night1), F("IC 1396 P1", 10, 0, sep10))],
+            Settings with { CampaignGapDays = 30 });
+
+        Assert.Equal(["IC 1396 (Mar 2026)", "IC 1396 (Sep 2026)"], result.Select(s => s.SuggestedName));
+        Assert.All(result, s => Assert.Equal(["Only one panel found."], s.Flags));
+    }
+
+    [Fact]
     public void MixedKeywords_AreFlagged()
     {
         var s = Assert.Single(Detect([T(1, F("NGC 7000 Panel 1", 10, 0)), T(2, F("NGC 7000 P2", 10.25, 0))]));

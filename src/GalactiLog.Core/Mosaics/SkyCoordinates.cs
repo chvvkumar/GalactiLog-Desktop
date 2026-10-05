@@ -1,4 +1,5 @@
 using System.Globalization;
+using GalactiLog.Core.Sessions;
 
 namespace GalactiLog.Core.Mosaics;
 
@@ -13,11 +14,11 @@ public readonly record struct FramePosition(double RaDeg, double DecDeg, string 
 public static class SkyCoordinates
 {
     /// <summary>A decimal value as degrees, else "h m s" as hours times 15; null otherwise.
-    /// Colon-separated values are not parsed, as in the web.</summary>
+    /// Colon-separated values are not parsed, as in the web (spec 7.1, the coordinate rule).</summary>
     public static double? ParseRa(string? value) => DecimalDegrees(value) ?? Sexagesimal(value, signed: false) * 15;
 
     /// <summary>A decimal value as degrees, else "[+-]d m s" as degrees, negated when the value
-    /// begins with '-'; null otherwise.</summary>
+    /// begins with '-'; null otherwise (spec 7.1, the coordinate rule).</summary>
     public static double? ParseDec(string? value) => DecimalDegrees(value) ?? Sexagesimal(value, signed: true);
 
     /// <summary><c>RA</c> falls back to <c>OBJCTRA</c> and <c>DEC</c> to <c>OBJCTDEC</c>
@@ -28,14 +29,7 @@ public static class SkyCoordinates
         var (raDeg, raSource) = ParseRa(ra) is { } r ? (r, "RA") : (ParseRa(objctRa), "OBJCTRA");
         var (decDeg, decSource) = ParseDec(dec) is { } d ? (d, "DEC") : (ParseDec(objctDec), "OBJCTDEC");
         if (raDeg is not { } a || decDeg is not { } b || b < -90 || b > 90) return null;
-        return new FramePosition(Modulo(a, 360), b, raSource, decSource);
-    }
-
-    /// <summary>A floating modulo that maps a negative value upward, as Python's <c>%</c>.</summary>
-    internal static double Modulo(double value, double divisor)
-    {
-        var r = value % divisor;
-        return r < 0 ? r + divisor : r;
+        return new FramePosition(AstroNight.Mod360(a), b, raSource, decSource);
     }
 
     // Non-finite values ("nan", "inf") are rejected where Python's float() would accept them:
