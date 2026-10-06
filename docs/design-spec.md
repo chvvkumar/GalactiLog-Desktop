@@ -5188,7 +5188,8 @@ session CSV arrives with `pier_side` or a rescan backfills `width_px`. It holds 
 adding a twenty-first evicts the oldest inserted. The web holds 100 entries for an hour; the port
 holds 20 without expiry, because a new or changed best frame changes the key. The inclusion rules
 run before the lookup, so the left-out sentence of section 12.17 is always current. A cache hit
-shows at once, runs no job and writes no Activity row. A cancelled or failed build caches nothing.
+shows Building only while the cached JPEG decodes off the UI thread, then Ready; it runs no job
+and writes no Activity row. A cancelled or failed build caches nothing.
 Nothing is written to disk except Download (section 12.17).
 
 **The job and the feed (ruling R13).** A build runs off the UI thread as one job in the job
@@ -11534,9 +11535,9 @@ build is instant, from the cache of section 11.6.
 | Ready | The image; the left-out sentence when any panel was left out | Enabled |
 | Failed | The reason in the error ink and a Retry `Button` that starts a new build, a new job | Disabled |
 
-Opening on a cache hit goes straight to Ready with no job. A build cancelled from the status bar
-flyout while the window is open shows Failed with the reason "The build was cancelled." and Retry;
-a build cancelled by closing the window shows nothing.
+Opening on a cache hit shows Building only while the cached JPEG decodes, then Ready, with no job.
+A build cancelled from the status bar flyout while the window is open shows Failed with the
+reason "The build was cancelled." and Retry; a build cancelled by closing the window shows nothing.
 
 **The image.** Zoom and pan as section 11.5's preview: the wheel zooms at the pointer from 0.1x to
 8x of fit, a left drag pans while zoomed, and a double-click or the `0` key resets to fit, through

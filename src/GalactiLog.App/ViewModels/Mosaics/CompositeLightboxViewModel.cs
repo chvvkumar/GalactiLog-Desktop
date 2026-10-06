@@ -18,7 +18,7 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Opening on a cache hit goes straight to Ready with no job. Closing (<see cref="Dispose"/>)
+/// Opening on a cache hit shows Building only while the cached JPEG decodes, then Ready, with no job. Closing (<see cref="Dispose"/>)
 /// cancels a build in flight and shows nothing; a build cancelled from the status bar flyout while
 /// the window is open shows Failed with <see cref="CancelledText"/>.
 /// </para>
@@ -78,6 +78,8 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
 
         if (service.TryGetCached(request, out var hit))
         {
+            // Building shows while the cached JPEG decodes off the UI thread; no job runs.
+            IsBuilding = true;
             PendingBuild = ShowReadyAsync(null, hit);
         }
         else
