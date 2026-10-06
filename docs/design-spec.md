@@ -5050,10 +5050,9 @@ The preview is always autostretched. There are no manual stretch controls in v1.
 ### 11.6 Mosaic composite
 
 Phase 19B. Port of `backend/app/services/mosaic_composite.py`: `generate_panel_thumbnail`,
-`PanelInfo`, `compute_panel_layout`, `composite_panels`, the cache functions
-(`_compute_cache_key`, `_get_cached`, `_set_cached`) and `build_mosaic_composite`, amended by
-rulings R9, R10, R13, R15 and R16. The lightbox that shows the result is section 12.17 ("The
-composite lightbox").
+`PanelInfo`, `compute_panel_layout`, `composite_panels`, the cache functions (`_compute_cache_key`,
+`_get_cached`, `_set_cached`) and `build_mosaic_composite`, amended by rulings R9, R10, R13, R15,
+R16 and R16a. The lightbox that shows the result is section 12.17 ("The composite lightbox").
 
 **Purpose and inputs.** A composite is built for one mosaic and one canonical filter, the
 arranger's selected filter (section 12.17), from the best frame per panel in that filter
@@ -5096,9 +5095,9 @@ pixels. 1,600 is the renderer's width parameter: a frame narrower than 1,600 pix
 native width, and a portrait frame's tile may be taller than 1,600; the output cap below bounds the
 result either way. The frame is read through `UserFiles` (section 2.1.1), read only. A frame the
 renderer skips (unreadable, a rejected header, too large for pixel reading) fails the build with the
-skip reason in the error, "<panel label>: <skip reason>". The web logs a warning and drops the panel;
-the port fails loudly so the reader learns why a panel is missing. A panel's decoded tile is `w_p`
-by `h_p` pixels.
+skip reason in the error, "<panel label>: <skip reason>". The web logs a warning and drops the
+panel; the port fails loudly so the reader learns why a panel is missing. A panel's decoded tile is
+`w_p` by `h_p` pixels.
 
 **The projection** (port of `compute_panel_layout`, ruling R9). Angles are in degrees unless said.
 
@@ -5124,10 +5123,10 @@ by `h_p` pixels.
 - **Tile size.** Each tile is drawn scaled by `g_p = (s_p * W_p / w_p) / c` about its centre, to
   `w_p * g_p` by `h_p * g_p` canvas pixels. A panel binned 2x (half the `width_px`, twice the
   `arcsec_per_pixel`, the same field) lands at the same offset and draws at the size its field
-  deserves; panels that share a rig and a tile width have `g = 1`. A tile's drawn dimension under `g`, capped
-  or not, is rounded to the nearest whole pixel and at least 1, halves rounding away from zero (the
-  rule stated for `f` below); the bounding box and the output cap use those rounded drawn
-  dimensions, and the cap rounds again under `f`.
+  deserves; panels that share a rig and a tile width have `g = 1`. A tile's drawn dimension under
+  `g`, capped or not, is rounded to the nearest whole pixel and at least 1, halves rounding away
+  from zero (the rule stated for `f` below); the bounding box and the output cap use those rounded
+  drawn dimensions, and the cap rounds again under `f`.
 - **Per-tile rotation.** `r = rotator_position - t`, plus 180 when the panel's pier side differs
   from the reference panel's, normalised into [-180, 180) by `r = ((r + 180) mod 360) - 180`, the
   modulo taking the sign of the divisor. The tile is drawn turned clockwise by `r` degrees about its
@@ -5165,10 +5164,10 @@ and `(2800, 800)`.
 side`. The capped canvas is 6,000 by the uncapped shorter side times `f`, rounded to the nearest
 whole pixel and at least 1. Every shifted centre and every drawn tile dimension is multiplied by
 `f`, the tile dimensions rounded to the nearest whole pixel and at least 1, and the tiles are
-resampled to them (Mitchell cubic, section 11.2), so the layout keeps its proportions. For example, two 1,600 by
-1,000 tiles at `(0, 0)` and `(10400, 0)` with `r = 0` span 12,000 by 1,000, so `f = 0.5`: the
-canvas is 6,000 by 500, the tiles 800 by 500, centred at `(400, 250)` and `(5600, 250)`. The web has
-no cap.
+resampled to them (Mitchell cubic, section 11.2), so the layout keeps its proportions. For example,
+two 1,600 by 1,000 tiles at `(0, 0)` and `(10400, 0)` with `r = 0` span 12,000 by 1,000, so
+`f = 0.5`: the canvas is 6,000 by 500, the tiles 800 by 500, centred at `(400, 250)` and
+`(5600, 250)`. The web has no cap.
 
 **Drawing.** Tiles are drawn in `sort_order`, a later tile over an earlier one, each as its rotated
 rectangle and nothing outside it, onto a black background. The web masks each tile on its non-black
@@ -5177,15 +5176,20 @@ black background and the stretched pixels are the generated image's data, not in
 section 14's rule against colour literals does not reach them. The result is encoded as JPEG at
 quality 90 (ruling R9) through SkiaSharp.
 
-**The cache (ruling R16).** In memory, for the process lifetime: a dictionary keyed by the SHA-256,
-as lowercase hexadecimal, of the UTF-8 string `<mosaic id>:<filter>:<best-frame ids>`, the mosaic id and the best-frame ids
-(the included panels' best-frame image ids) in their lowercase hyphenated form, the best-frame ids sorted ordinally and
-joined by commas (the web's `_compute_cache_key` shape), holding the JPEG bytes. It holds at most 20
-entries; adding a twenty-first evicts the oldest inserted. The web holds 100 entries for an hour; the
-port holds 20 without expiry, because a new best frame changes the key. The inclusion rules run
-before the lookup, so the left-out sentence of section 12.17 is always current. A cache hit shows at
-once, runs no job and writes no Activity row. A cancelled or failed build caches nothing. Nothing is
-written to disk except Download (section 12.17).
+**The cache (rulings R16 and R16a).** In memory, for the process lifetime: a dictionary keyed by the
+SHA-256, as lowercase hexadecimal, of the UTF-8 string `<mosaic id>:<filter>:<frames>`, holding the
+JPEG bytes. The key covers the mosaic id, the filter, the included best-frame ids and each one's six
+geometry values: each frame is its image id followed by its `ra_deg`, `dec_deg`, `width_px`,
+`arcsec_per_pixel`, `rotator_position` and `pier_side`, joined by `|`, numbers in the invariant
+culture at round-trip precision and a null as an empty field; the ids are in their lowercase
+hyphenated form, and the frames are sorted ordinally by id and joined by commas (the web's
+`_compute_cache_key` shape, widened). A changed best frame therefore changes the key, as when the
+session CSV arrives with `pier_side` or a rescan backfills `width_px`. It holds at most 20 entries;
+adding a twenty-first evicts the oldest inserted. The web holds 100 entries for an hour; the port
+holds 20 without expiry, because a new or changed best frame changes the key. The inclusion rules
+run before the lookup, so the left-out sentence of section 12.17 is always current. A cache hit
+shows at once, runs no job and writes no Activity row. A cancelled or failed build caches nothing.
+Nothing is written to disk except Download (section 12.17).
 
 **The job and the feed (ruling R13).** A build runs off the UI thread as one job in the job
 registry, kind `mosaic_composite`, titled "Composite: <mosaic name>, <filter>", cancellable. It
@@ -5194,9 +5198,9 @@ completed build writes the Activity row `mosaic_composite_built`, category `user
 `info`, message "<mosaic name>, <filter>: <w> by <h> pixels from <n> panels", `<w>` and `<h>` the
 encoded image's size and `<n>` the included panel count; a failed build writes
 `mosaic_composite_failed`, category `user_action`, severity `error`, with the reason as its message.
-Both carry `{mosaic_id, filter}` as details, the failure adding `reason`. A cancelled build writes no
-row: the job's Cancelled result in Recent is the record. Nothing pushes a toast. The job census of
-section 12 gains `mosaic_composite`, which takes it to twenty members.
+Both carry `{mosaic_id, filter}` as details, the failure adding `reason`. A cancelled build writes
+no row: the job's Cancelled result in Recent is the record. Nothing pushes a toast. The job census
+of section 12 gains `mosaic_composite`, which takes it to twenty members.
 
 **Departures from the web, for the build.**
 
@@ -5218,6 +5222,8 @@ section 12 gains `mosaic_composite`, which takes it to twenty members.
 11. **The left-out sentence** names every panel not drawn (section 12.17); the web shows nothing.
 12. **A completed build is an Activity row** and every build is a job; the web records only a
     failure.
+13. **The cache key covers each best frame's geometry** (ruling R16a); the web keys on frame ids
+    only.
 
 ---
 
@@ -7850,13 +7856,14 @@ three new markup files, `MosaicsView.axaml`, `MosaicDetailView.axaml` and
 `CreateMosaicWindow.axaml`, which brings the table to 112 topics placed by 96 `HelpButton`
 elements. Phase 19A adds one, `mosaic.arranger`, beside one literal placement in the one new markup
 file `ArrangerView.axaml`, the forty-first, which brings the table to 113 topics placed by 97
-`HelpButton` elements. Phase 19B adds one, `mosaic.composite`, beside one literal placement in the one new
-markup file `CompositeLightboxWindow.axaml`, the forty-second, which brings the table to 114 topics
-placed by 98 `HelpButton` elements; the help topics test
-(`tests/GalactiLog.Core.Tests/Help/HelpTopicsTests.cs`) pins the topic count. The Source column says where the paragraph came from: a web file means the paragraph is that file's `HelpPopover` text, edited only for this
-port's vocabulary, for the surfaces the port does not ship, and for MAD units in place of sigma;
-`port-authored` means the web has no matching popover and the paragraph was written from this
-document's own section for that surface.
+`HelpButton` elements. Phase 19B adds one, `mosaic.composite`, beside one literal placement in the
+one new markup file `CompositeLightboxWindow.axaml`, the forty-second, which brings the table to 114
+topics placed by 98 `HelpButton` elements; the help topics test
+(`tests/GalactiLog.Core.Tests/Help/HelpTopicsTests.cs`) pins the topic count. The Source column says
+where the paragraph came from: a web file means the paragraph is that file's `HelpPopover` text,
+edited only for this port's vocabulary, for the surfaces the port does not ship, and for MAD units
+in place of sigma; `port-authored` means the web has no matching popover and the paragraph was
+written from this document's own section for that surface.
 
 | Topic id | Title | Placed beside | Source |
 | --- | --- | --- | --- |
@@ -11119,16 +11126,17 @@ Back, as on the Target detail page (section 12.4). The page is a workbench with 
 pencil `Button.quiet` that swaps it for a `TextBox` (Enter saves, Escape cancels, the name
 sentences above refuse); the `mosaic.about` glyph; one inline cell per mosaic-scope custom column,
 every such column in display order with its name as a caption, the shared cell editor of section
-12.15, ungated by any picker; then at its trailing end a **Composite** `Button` and the
-overflow menu. Composite opens the composite lightbox (below) for the arranger's selected filter.
-It is enabled when at least one panel has a positioned best frame in that filter and a plate scale
-exists (section 11.6, ruling R15). Otherwise it is disabled with one tooltip, the first that
-applies: "No frames to composite" while the arranger has no filter, "No panel carries a plate
-scale" when no panel's best frame in the filter carries one, and "No panel has a positioned frame
-in <filter>" when no panel is included. The enablement is computed per filter from the geometry
-read that the arranger's frame set load brings with it, off the UI thread, and the build reuses that
-read (section 11.6). It is recomputed whenever the frame set loads and whenever the filter changes. Its second line is the **summary line**, "<n> panels, <integration> total, <f>
-frames".
+12.15, ungated by any picker; then at its trailing end a **Composite** `Button` and the overflow
+menu. Composite opens the composite lightbox (below) for the arranger's selected filter. It is
+enabled when at least one panel has a positioned best frame in that filter and a plate scale exists
+(section 11.6, ruling R15). Otherwise it is disabled with one tooltip, the first that applies: "No
+frames to composite" while the arranger has no filter, "No panel carries a plate scale" when no
+panel's best frame in the filter carries one, and "No panel has a positioned frame in <filter>" when
+no panel is included. The enablement is computed per filter from the geometry read that the
+arranger's frame set load brings with it, off the UI thread, and the build reuses that read (section
+11.6). It is recomputed whenever the frame set loads and whenever the filter changes.
+
+The header's second line is the **summary line**, "<n> panels, <integration> total, <f> frames".
 
 The **overflow menu** is a `MenuFlyout` with two entries:
 
