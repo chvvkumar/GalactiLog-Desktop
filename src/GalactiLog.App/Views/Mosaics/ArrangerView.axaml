@@ -18,11 +18,14 @@
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
         <TextBlock Classes="t-label" Text="Panels" VerticalAlignment="Center" />
         <controls:HelpButton Topic="mosaic.arranger" />
-        <!-- Faded out rather than collapsed while a tile is selected, so the toolbar does not
-             reflow and shift the viewport under a press. -->
+        <!-- Every status caption in the toolbar (this hint, Loading, Saving and the save failure)
+             is always laid out and only faded, and left out of the automation tree while faded,
+             so showing or hiding one never changes the toolbar's line count and never shifts
+             the viewport under a captured drag or pan. -->
         <TextBlock x:Name="Hint"
                    Text="Click a tile to select it, then rotate or flip"
                    Opacity="{Binding HasSelection, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}"
+                   AutomationProperties.AccessibilityView="{Binding HasSelection, Converter={x:Static mosaics:ArrangerView.RawWhen}}"
                    VerticalAlignment="Center"
                    Foreground="{DynamicResource ColorTextTertiary}" />
       </StackPanel>
@@ -52,7 +55,7 @@
       <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
 
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
-        <TextBlock Text="Rotation" VerticalAlignment="Center" />
+        <TextBlock Classes="t-caption" Text="Rotation" VerticalAlignment="Center" />
         <Slider Width="140"
                 VerticalAlignment="Center"
                 Minimum="{x:Static mos:ArrangerViewModel.MinRotation}"
@@ -81,7 +84,7 @@
       <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
 
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
-        <TextBlock Text="Tile opacity" VerticalAlignment="Center" />
+        <TextBlock Classes="t-caption" Text="Tile opacity" VerticalAlignment="Center" />
         <Slider Width="120"
                 VerticalAlignment="Center"
                 Minimum="{x:Static mos:ArrangerViewModel.MinOpacity}"
@@ -100,33 +103,36 @@
       </StackPanel>
 
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center" IsVisible="{Binding HasFilters}">
-        <TextBlock Text="Filter" VerticalAlignment="Center" />
+        <TextBlock Classes="t-caption" Text="Filter" VerticalAlignment="Center" />
         <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" MinWidth="90" AutomationProperties.Name="Filter" />
-        <TextBlock Classes="t-caption"
+        <TextBlock x:Name="LoadingCaption"
+                   Classes="t-caption"
                    Text="Loading..."
-                   IsVisible="{Binding IsLoading}"
+                   Opacity="{Binding !IsLoading, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}"
+                   AutomationProperties.AccessibilityView="{Binding !IsLoading, Converter={x:Static mosaics:ArrangerView.RawWhen}}"
                    VerticalAlignment="Center"
                    Foreground="{DynamicResource ColorTextSecondary}" />
       </StackPanel>
 
-      <!-- The save rule: "Saving..." during a write, the failure sentence in its place after one fails. -->
-      <TextBlock Classes="t-caption"
-                 Text="Saving..."
-                 Margin="0,0,10,4"
-                 IsVisible="{Binding IsSaving}"
-                 VerticalAlignment="Center"
-                 Foreground="{DynamicResource ColorTextSecondary}" />
-      <TextBlock Text="{Binding SaveError}"
-                 Margin="0,0,10,4"
-                 VerticalAlignment="Center"
-                 Foreground="{DynamicResource ColorError}">
-        <TextBlock.IsVisible>
-          <MultiBinding Converter="{x:Static BoolConverters.And}">
-            <Binding Path="SaveError" Converter="{x:Static ObjectConverters.IsNotNull}" />
-            <Binding Path="!IsSaving" />
-          </MultiBinding>
-        </TextBlock.IsVisible>
-      </TextBlock>
+      <!-- The save rule: "Saving..." during a write, the failure sentence in its place after one
+           fails. One slot holds both, overlaid, so it keeps the wider one's size either way. -->
+      <Panel x:Name="SaveSlot" Margin="0,0,10,4" VerticalAlignment="Center">
+        <TextBlock x:Name="SavingCaption"
+                   Classes="t-caption"
+                   Text="Saving..."
+                   VerticalAlignment="Center"
+                   Opacity="{Binding !IsSaving, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}"
+                   AutomationProperties.AccessibilityView="{Binding !IsSaving, Converter={x:Static mosaics:ArrangerView.RawWhen}}"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+        <Panel Opacity="{Binding IsSaving, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}">
+          <TextBlock x:Name="SaveFailure"
+                     Text="{x:Static mos:ArrangerViewModel.SaveFailedText}"
+                     VerticalAlignment="Center"
+                     Opacity="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.ShownWhenSet}}"
+                     AutomationProperties.AccessibilityView="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.RawWhenUnset}}"
+                     Foreground="{DynamicResource ColorError}" />
+        </Panel>
+      </Panel>
     </WrapPanel>
 
     <!-- ===== The viewport. The Border answers every press no tile takes (empty canvas), and its
@@ -166,7 +172,6 @@
             <Panel x:Name="Tile"
                    Width="{x:Static mos:ArrangerViewModel.TileWidth}"
                    Height="{x:Static mos:ArrangerViewModel.TileHeight}"
-                   Classes.selected="{Binding IsSelected}"
                    AutomationProperties.Name="{Binding AutomationName}">
               <!-- A right press selects the tile (code-behind); the menu acts on this tile. -->
               <Panel.ContextMenu>

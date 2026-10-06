@@ -1,4 +1,5 @@
 using Avalonia;
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
@@ -21,8 +22,19 @@ public partial class ArrangerView : UserControl
     /// <summary>The image's <c>ScaleX</c>: -1 while the tile is flipped.</summary>
     public static readonly IValueConverter FlipScale = new FuncValueConverter<bool, double>(flip => flip ? -1 : 1);
 
-    /// <summary>An opacity of 0 while the bound flag is set: the hint keeps its place.</summary>
+    /// <summary>An opacity of 0 while the bound flag is set: a status caption keeps its place.</summary>
     public static readonly IValueConverter HiddenWhen = new FuncValueConverter<bool, double>(hidden => hidden ? 0 : 1);
+
+    /// <summary>An opacity of 1 while the bound value is set (the save failure sentence).</summary>
+    public static readonly IValueConverter ShownWhenSet = new FuncValueConverter<object?, double>(value => value is null ? 0 : 1);
+
+    /// <summary>Leaves a faded caption out of the automation tree while the bound flag is set.</summary>
+    public static readonly IValueConverter RawWhen = new FuncValueConverter<bool, AccessibilityView>(
+        hidden => hidden ? AccessibilityView.Raw : AccessibilityView.Default);
+
+    /// <summary>Leaves the save failure sentence out of the automation tree while there is none.</summary>
+    public static readonly IValueConverter RawWhenUnset = new FuncValueConverter<object?, AccessibilityView>(
+        value => value is null ? AccessibilityView.Raw : AccessibilityView.Default);
 
     private TileViewModel? _pressed;
     private bool _wasSelected;
@@ -104,7 +116,7 @@ public partial class ArrangerView : UserControl
         }
         else
         {
-            arranger.Select(null);
+            // A drag here pans and keeps the selection; only a click deselects (on release).
             _panning = true;
         }
 
@@ -134,6 +146,7 @@ public partial class ArrangerView : UserControl
         else
         {
             arranger.Pan(position.X - _last.X, position.Y - _last.Y);
+            _moved = true;
         }
 
         _last = position;
@@ -141,18 +154,30 @@ public partial class ArrangerView : UserControl
 
     private void OnViewportReleased(object? sender, PointerReleasedEventArgs e)
     {
-        if (_pressed is null && !_panning)
+        // Only the left button's own release ends the gesture the left press started. The kind
+        // of update names the button released; InitialPressMouseButton names the sequence's first
+        // press, which is still Left when the right button is released during a left drag.
+        if (e.GetCurrentPoint(TileItems).Properties.PointerUpdateKind != PointerUpdateKind.LeftButtonReleased
+            || (_pressed is null && !_panning))
         {
             return;
         }
 
-        // A click with no movement on a tile that was already selected deselects it.
-        if (_pressed is { } tile && Arranger is { } arranger)
+        if (Arranger is { } arranger)
         {
-            arranger.EndDrag(tile);
-            if (!_moved && _wasSelected)
+            if (_pressed is { } tile)
             {
-                arranger.ToggleSelect(tile);
+                // A click with no movement on a tile that was already selected deselects it.
+                arranger.EndDrag(tile);
+                if (!_moved && _wasSelected)
+                {
+                    arranger.ToggleSelect(tile);
+                }
+            }
+            else if (!_moved)
+            {
+                // A click on empty canvas deselects; a pan does not.
+                arranger.Select(null);
             }
         }
 

@@ -132,13 +132,15 @@ public sealed class ArrangerViewTests
         Assert.True(mounted.Button("Flip H").IsEffectivelyEnabled);
         Assert.True(mounted.Slider("Tile opacity").IsEffectivelyEnabled);
         var root = mounted.Container(1).GetVisualDescendants().OfType<Control>().First(control => control.Name == "Tile");
-        Assert.Contains("selected", root.Classes);
+        Assert.True(mounted.Container(1).GetVisualDescendants().OfType<Border>().First(border => border.Name == "Outline").IsVisible);
+        Assert.False(mounted.Container(0).GetVisualDescendants().OfType<Border>().First(border => border.Name == "Outline").IsVisible);
         Assert.Equal("Panel 2, selected, no thumbnail", AutomationProperties.GetName(root));
 
         // The hint fades out and keeps its place, so the toolbar does not reflow under a press.
         var hint = mounted.View.FindControl<TextBlock>("Hint")!;
         Assert.Equal(0, hint.Opacity);
         Assert.True(hint.IsVisible);
+        Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(hint));
 
         // The opacity fades the tile's content and not its outline.
         mounted.Slider("Tile opacity").Value = 50;
@@ -192,7 +194,7 @@ public sealed class ArrangerViewTests
     }
 
     [AvaloniaFact]
-    public async Task EmptyCanvas_DeselectsAndPans_AndTheWheelZooms()
+    public async Task EmptyCanvas_PansKeepingTheSelection_ClickDeselects_AndTheWheelZooms()
     {
         using var mounted = await Mount(new FakeMosaic());
         mounted.Arranger.Select(mounted.Arranger.Tiles[0]);
@@ -205,9 +207,25 @@ public sealed class ArrangerViewTests
         mounted.Window.MouseUp(empty - new Point(30, 10), MouseButton.Left);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Null(mounted.Arranger.Selected);
+        // Spec 12.17: a drag on empty canvas pans and the selection stays.
+        Assert.Same(mounted.Arranger.Tiles[0], mounted.Arranger.Selected);
         Assert.Equal(offsetX - 30, mounted.Arranger.OffsetX, 3);
         Assert.Equal(offsetY - 10, mounted.Arranger.OffsetY, 3);
+
+        // A right release during a left press is not the left click's release: it does not
+        // deselect. (The platform may drop the capture on it, which ends the gesture quietly.)
+        mounted.Window.MouseDown(empty, MouseButton.Left);
+        mounted.Window.MouseUp(empty, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(mounted.Arranger.Tiles[0], mounted.Arranger.Selected);
+        mounted.Window.MouseUp(empty, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+
+        // A press and release with no movement on empty canvas deselects.
+        mounted.Window.MouseDown(empty, MouseButton.Left);
+        mounted.Window.MouseUp(empty, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Null(mounted.Arranger.Selected);
 
         var zoom = mounted.Arranger.Zoom;
         mounted.Window.MouseWheel(empty, new Vector(0, 0.25));
@@ -299,6 +317,50 @@ public sealed class ArrangerViewTests
         Assert.Equal("Ha", combo.SelectedItem);
     }
 
+    // The status captions keep their slots: showing or hiding one never moves the viewport, so a
+    // captured drag or pan is not shifted under the pointer when Saving appears after a release.
+    [AvaloniaFact]
+    public async Task TheStatusCaptions_NeverReflowTheToolbar()
+    {
+        using var mounted = await Mount(new FakeMosaic());
+        var viewport = mounted.View.FindControl<Border>("Viewport")!;
+        var toolbar = mounted.View.FindControl<WrapPanel>("Toolbar")!;
+        var (top, height) = (viewport.Bounds.Y, toolbar.Bounds.Height);
+
+        // At 1280 the toolbar may sit far from a wrap point, so the slots themselves are pinned
+        // too: a caption whose slot keeps its size cannot reflow the toolbar at any width.
+        var slots = new[] { "Hint", "LoadingCaption", "SaveSlot" }.Select(name => mounted.View.FindControl<Control>(name)!).ToList();
+        var sizes = slots.Select(slot => slot.Bounds.Size).ToList();
+        var isSaving = typeof(ArrangerViewModel).GetProperty(nameof(ArrangerViewModel.IsSaving))!;
+        var saveError = typeof(ArrangerViewModel).GetProperty(nameof(ArrangerViewModel.SaveError))!;
+
+        void Settled(string state)
+        {
+            Dispatcher.UIThread.RunJobs();
+            Assert.True(top == viewport.Bounds.Y, $"{state}: the viewport moved from {top} to {viewport.Bounds.Y}");
+            Assert.True(height == toolbar.Bounds.Height, $"{state}: the toolbar's height changed");
+            Assert.Equal(sizes, slots.Select(slot => slot.Bounds.Size).ToList());
+        }
+
+        isSaving.SetValue(mounted.Arranger, true);
+        Settled("saving");
+        Assert.Equal(1, mounted.View.FindControl<TextBlock>("SavingCaption")!.Opacity);
+        isSaving.SetValue(mounted.Arranger, false);
+        saveError.SetValue(mounted.Arranger, ArrangerViewModel.SaveFailedText);
+        Settled("failed");
+        Assert.Equal(0, mounted.View.FindControl<TextBlock>("SavingCaption")!.Opacity);
+        Assert.Equal(1, mounted.View.FindControl<TextBlock>("SaveFailure")!.Opacity);
+        Assert.Equal(AccessibilityView.Default, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<TextBlock>("SaveFailure")!));
+        saveError.SetValue(mounted.Arranger, null);
+        Settled("saved");
+        Assert.Equal(0, mounted.View.FindControl<TextBlock>("SaveFailure")!.Opacity);
+        Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<TextBlock>("SaveFailure")!));
+        mounted.Arranger.Select(mounted.Arranger.Tiles[0]);
+        Settled("selected");
+        mounted.Arranger.Select(null);
+        Settled("deselected");
+    }
+
     [Fact]
     public void TheView_WritesNoColourLiteral()
     {
@@ -336,18 +398,18 @@ public sealed class ArrangerViewTests
             ("SliderTrackFillDisabled", "ColorTextTertiary"),
         ];
 
+        // One loaded dictionary, compared by reference: an alias resolves to its token's own
+        // brush, so a wrong alias whose token shares a colour still fails.
+        var dictionary = new ResourceInclude((Uri?)null) { Source = new Uri(source) };
         foreach (var (fluent, token) in aliases)
         {
-            Assert.Equal(TokenOf(source, token), TokenOf(source, fluent));
+            Assert.Same(Resource(dictionary, token), Resource(dictionary, fluent));
         }
-
-        Assert.NotEqual(TokenOf(source, "ColorAccent"), TokenOf(source, "ColorBorderEmphasis"));
     }
 
-    private static Color TokenOf(string source, string key)
+    private static object Resource(ResourceInclude dictionary, string key)
     {
-        var dictionary = new ResourceInclude((Uri?)null) { Source = new Uri(source) };
-        Assert.True(dictionary.TryGetResource(key, ThemeVariant.Dark, out var value), $"{source} is missing '{key}'");
-        return ((ISolidColorBrush)value!).Color;
+        Assert.True(dictionary.TryGetResource(key, ThemeVariant.Dark, out var value) && value is not null, $"Missing '{key}'");
+        return value!;
     }
 }
