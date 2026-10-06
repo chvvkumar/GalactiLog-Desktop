@@ -45,7 +45,8 @@ public class MosaicDetailViewTests
         Assert.Equal(2, Grid.GetRow(arranger));
         Assert.Same(page.Arranger, arranger.DataContext);
         Assert.True(arranger.Bounds.Height > 0);
-        Assert.NotNull(view.FindControl<GridSplitter>("ArrangerSplitter"));
+        // The handle's height is the GridSplitter style's (spec 14.5), not a local value.
+        Assert.Equal(8d, view.FindControl<GridSplitter>("ArrangerSplitter")!.Bounds.Height, 3);
 
         // One scroller, the sessions region's: the page itself does not scroll (ruling R7).
         var scrollers = view.GetVisualDescendants().OfType<ScrollViewer>()

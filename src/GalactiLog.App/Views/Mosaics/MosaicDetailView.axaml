@@ -198,12 +198,11 @@
          its height with the sessions region (ruling R7) ===== -->
     <mosaics:ArrangerView Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding Arranger}" />
 
-    <!-- ===== Row 3: the splitter; its position is not stored ===== -->
+    <!-- ===== Row 3: the splitter; its position is not stored. Its height and look are the
+         GridSplitter style's in Theme/Controls.axaml (spec 14) ===== -->
     <GridSplitter Grid.Row="3"
                   x:Name="ArrangerSplitter"
-                  Height="6"
-                  ResizeDirection="Rows"
-                  Background="Transparent" />
+                  ResizeDirection="Rows" />
 
     <!-- ===== Row 4: the sessions region ===== -->
     <ScrollViewer Grid.Row="4" x:Name="SessionsScroller">

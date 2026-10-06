@@ -12129,6 +12129,11 @@ motion.
   globally through a `:focus-visible` style, not per control.
 - `Border.tag` for a badge: a 1 pixel `ColorBorderDefault` outline over `ColorBadgeBg`, which the
   two new themes declare transparent, with `ColorBadgeText` ink. Not a filled pill.
+- `GridSplitter` for a splitter handle: an 8 pixel grab zone, transparent at rest, with three
+  3 pixel `ColorTextTertiary` grip dots centred along the bar, stacked for a column splitter and
+  in a row for a row splitter; `ColorBgHover` fill and `ColorTextPrimary` dots while the pointer
+  is over it or it is dragged. The style in `Theme/Controls.axaml` is the one place a splitter is
+  drawn, and a view sets neither its size nor its background. `GridSplitterThemeTests` pins it.
 - Modals use an opaque surface: `ColorBgSurface` composited over the gradient's `from`
   colour, so a table behind the modal does not bleed through.
 - Metric colours are a data-series palette, one stable hue per metric in every theme. Never
