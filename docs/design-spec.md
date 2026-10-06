@@ -11479,9 +11479,12 @@ part. The **default filter**, chosen when the page opens, is the rule of section
 filter sets every tile's image to its panel's best frame in that filter (section 11.4): that
 frame's existing `frames/<key>.jpg` through `ThumbnailCache.EnsureFrame`, requested off the UI
 thread through `ThumbnailWorker.RequestFrame` with the most recent request served first, decoded at
-the tile's display size, 250 pixels wide, and released when the page closes (plan risk 1). A
-request that a newer filter choice supersedes is disposed, so a stale thumbnail never lands on a
-tile. "Loading..." shows while the frame set read is in flight or any tile's thumbnail is
+the cached thumbnail's own width (section 11.3, `general.thumbnail_width`, 800 by default) rather
+than the tile's 250 pixel footprint, because the viewport scales a tile up to 3.0 times and the
+display scale multiplies that again, and released when the page closes. At 800 pixels a tile stays
+sharp to a stretch of 3.2 times; sixteen such bitmaps hold about 27 MB. A request that a newer
+filter choice supersedes is disposed, so a stale thumbnail never lands on a tile. "Loading..."
+shows while the frame set read is in flight or any tile's thumbnail is
 outstanding, and the `ComboBox` stays enabled meanwhile: the latest choice wins. A frame set read
 that fails leaves no tile blank: before any read has succeeded every tile shows the empty tile's
 "No thumbnail", and after one the tiles keep its frames. A panel with no frame in that filter shows

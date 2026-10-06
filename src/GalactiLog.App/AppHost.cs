@@ -2498,13 +2498,16 @@ public static class AppHost
                 SuggestionBestFrame = frames.ForSuggestionEntry,
                 UpdateLayout = repository.UpdateLayout,
 
-                // Spec 12.17 and plan risk 1: a tile decodes its frame thumbnail at its display
-                // width, 250 pixels, from bytes the cache read (never a filename, spec 2.1.2).
+                // Spec 12.17: a tile decodes its frame thumbnail at the cached width (spec 11.3,
+                // 800 by default), not its 250 pixel footprint, because the viewport scales a tile
+                // up to 3.0 times and the display scale multiplies again; a 250 pixel decode drawn
+                // at 875 physical pixels was visibly soft. From bytes the cache read (never a
+                // filename, spec 2.1.2).
                 ThumbnailFor = framePath => new ThumbnailSlotViewModel(
                     framePath,
                     serviceProvider.GetRequiredService<ThumbnailWorker>(),
                     serviceProvider.GetRequiredService<ThumbnailCache>().ReadBytes,
-                    decode: bytes => Avalonia.Media.Imaging.Bitmap.DecodeToWidth(new MemoryStream(bytes), (int)ArrangerViewModel.TileWidth),
+                    decode: bytes => new Avalonia.Media.Imaging.Bitmap(new MemoryStream(bytes)),
                     logger: serviceProvider.GetRequiredService<ILogger<ThumbnailSlotViewModel>>()),
                 EmitActionFailed = (message, details) => serviceProvider
                     .GetRequiredService<ActivityRepository>()
