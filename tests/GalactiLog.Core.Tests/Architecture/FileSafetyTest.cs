@@ -66,7 +66,7 @@ public class FileSafetyTest
     private static readonly string[] BeginExportPatterns = { @"\.BeginExport\s*\(" };
 
     private static readonly string[] BeginExportAllowlist =
-        { "AppWriter.cs", "DiagnosticsService.cs", "WbppExportViewModel.cs", "MosaicDetailViewModel.cs" };
+        { "AppWriter.cs", "DiagnosticsService.cs", "WbppExportViewModel.cs", "MosaicDetailViewModel.cs", "CompositeLightboxViewModel.cs" };
 
     // Phase 10 Task 9: the data location pointer is the one authorized write outside the two roots
     // and the export destination (spec 2.1.1), and CopyFileInto is the one copy into app data.
@@ -174,6 +174,7 @@ public class FileSafetyTest
             Path.Combine(repoRoot, "src", "GalactiLog.App", "Services", "DiagnosticsService.cs"),
             Path.Combine(repoRoot, "src", "GalactiLog.App", "ViewModels", "TargetDetail", "Wbpp", "WbppExportViewModel.cs"),
             Path.Combine(repoRoot, "src", "GalactiLog.App", "ViewModels", "Mosaics", "MosaicDetailViewModel.cs"),
+            Path.Combine(repoRoot, "src", "GalactiLog.App", "ViewModels", "Mosaics", "CompositeLightboxViewModel.cs"),
         };
         foreach (var path in beginExportAllowlisted)
         {

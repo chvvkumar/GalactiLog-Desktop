@@ -4,6 +4,7 @@ using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Io;
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
@@ -23,6 +24,7 @@ public sealed class MosaicDetailViewModelTests : IDisposable
 
     private readonly string _root = Directory.CreateTempSubdirectory("galactilog-mosaic-detail-").FullName;
     private readonly List<MosaicDetailViewModel> _pages = [];
+    private readonly ThumbnailWorker _worker = new((path, _) => $"frames/{path}.jpg", (_, _) => null, post: action => action());
 
     public void Dispose()
     {
@@ -30,6 +32,8 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         {
             page.Dispose();
         }
+
+        _worker.Dispose();
 
         if (Directory.Exists(_root))
         {
@@ -62,11 +66,13 @@ public sealed class MosaicDetailViewModelTests : IDisposable
 
     private async Task<MosaicDetailViewModel> Open(
         FakeMosaic mosaic, JobRegistry? jobs = null, Func<TimeSpan, CancellationToken, Task>? delay = null,
-        MosaicsBackend? backend = null)
+        MosaicsBackend? backend = null, CompositeService? composite = null,
+        Func<CompositeLightboxViewModel, Task>? openComposite = null)
     {
         var page = new MosaicDetailViewModel(
             mosaic.Id, backend ?? mosaic.Backend(), new AppWriter(_root), jobs,
-            post: action => action(), delay: delay ?? ((_, _) => Task.CompletedTask));
+            post: action => action(), delay: delay ?? ((_, _) => Task.CompletedTask),
+            composite: composite, openComposite: openComposite);
         _pages.Add(page);
         await page.PendingLoad;
         return page;
@@ -649,4 +655,161 @@ public sealed class MosaicDetailViewModelTests : IDisposable
     [InlineData("Ünïcode", "_n_code_panels.csv")]
     public void ExportFileName_ReplacesEveryCharacterOutsideAsciiLettersAndDigits(string name, string expected)
         => Assert.Equal(expected, MosaicDetailViewModel.ExportFileName(name));
+
+    // ---- Phase 19B Task 4: the Composite button (spec 12.17, ruling R15) ------------------------
+
+    private static PanelGeometry Positioned(double ra, double? scale = 15.0) => new(ra, 44.3, 64, scale, 0, "West");
+
+    private static PanelGeometry Unpositioned(double? scale = 15.0) => new(null, null, 64, scale, 0, "West");
+
+    // Both panels of TwoPanels hold an Ha and an OIII best frame; the geometry comes from the
+    // delegate, counted.
+    private sealed class CompositeFixture
+    {
+        private readonly ThumbnailWorker _worker;
+
+        public FakeMosaic Mosaic { get; } = TwoPanels();
+
+        public Dictionary<Guid, PanelGeometry> Geometry { get; } = [];
+
+        public int GeometryReads { get; private set; }
+
+        public List<IReadOnlyCollection<Guid>> Asked { get; } = [];
+
+        public Guid HaFrame1 { get; } = Guid.NewGuid();
+
+        public Guid HaFrame2 { get; } = Guid.NewGuid();
+
+        public Guid OiiiFrame1 { get; } = Guid.NewGuid();
+
+        public CompositeFixture(ThumbnailWorker worker)
+        {
+            _worker = worker;
+            var (one, two) = (Mosaic.Panels[0].Id, Mosaic.Panels[1].Id);
+            Mosaic.Frames = new PanelFrameSet(["Ha", "OIII"], "Ha", new Dictionary<Guid, IReadOnlyDictionary<string, BestFrame>>
+            {
+                [one] = new Dictionary<string, BestFrame>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Ha"] = new(HaFrame1, "one-ha.fits", "Ha", 1), ["OIII"] = new(OiiiFrame1, "one-oiii.fits", "OIII", 1),
+                },
+                [two] = new Dictionary<string, BestFrame>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["Ha"] = new(HaFrame2, "two-ha.fits", "Ha", 1),
+                },
+            });
+        }
+
+        public MosaicsBackend Backend() => Mosaic.Backend() with
+        {
+            ThumbnailFor = path => new ThumbnailSlotViewModel(path, _worker, _ => [0x01], decode: _ => null, post: action => action()),
+            FrameGeometry = ids =>
+            {
+                GeometryReads++;
+                Asked.Add(ids);
+                return Geometry;
+            },
+        };
+    }
+
+    private async Task<MosaicDetailViewModel> OpenComposite(
+        CompositeFixture fixture, CompositeService? composite = null, Func<CompositeLightboxViewModel, Task>? openComposite = null)
+    {
+        var page = await Open(fixture.Mosaic, backend: fixture.Backend(), composite: composite, openComposite: openComposite);
+        await page.Arranger.PendingFrames;
+        return page;
+    }
+
+    [Fact]
+    public async Task Composite_WithNoFilter_IsDisabled_WithNoFramesToComposite()
+    {
+        var page = await Open(TwoPanels());
+        await page.Arranger.PendingFrames;
+
+        Assert.Null(page.Arranger.SelectedFilter);
+        Assert.False(page.CanComposite);
+        Assert.False(page.CompositeCommand.CanExecute(null));
+        Assert.Equal("No frames to composite", page.CompositeTooltip);
+    }
+
+    [Fact]
+    public async Task Composite_WithNoPlateScale_IsDisabled_WithThatTooltip()
+    {
+        var fixture = new CompositeFixture(_worker);
+        fixture.Geometry[fixture.HaFrame1] = Positioned(10, scale: null);
+        fixture.Geometry[fixture.HaFrame2] = Positioned(10.3, scale: 0);
+        var page = await OpenComposite(fixture);
+
+        Assert.False(page.CompositeCommand.CanExecute(null));
+        Assert.Equal("No panel carries a plate scale", page.CompositeTooltip);
+    }
+
+    [Fact]
+    public async Task Composite_WithNoPositionedPanel_IsDisabled_NamingTheFilter()
+    {
+        var fixture = new CompositeFixture(_worker);
+        fixture.Geometry[fixture.HaFrame1] = Unpositioned();
+        var page = await OpenComposite(fixture);
+
+        Assert.False(page.CompositeCommand.CanExecute(null));
+        Assert.Equal("No panel has a positioned frame in Ha", page.CompositeTooltip);
+    }
+
+    [Fact]
+    public async Task Composite_IsEnabled_WhenAPanelIsPositioned_AndFollowsTheFilter_OnOneGeometryRead()
+    {
+        var fixture = new CompositeFixture(_worker);
+        fixture.Geometry[fixture.HaFrame1] = Positioned(10);
+        fixture.Geometry[fixture.OiiiFrame1] = Unpositioned();
+        var page = await OpenComposite(fixture);
+
+        Assert.True(page.CanComposite);
+        Assert.True(page.CompositeCommand.CanExecute(null));
+        Assert.Null(page.CompositeTooltip);
+
+        page.Arranger.SelectedFilter = "OIII";
+        Assert.Equal("No panel has a positioned frame in OIII", page.CompositeTooltip);
+        Assert.False(page.CanComposite);
+
+        page.Arranger.SelectedFilter = "Ha";
+        Assert.True(page.CanComposite);
+
+        // One read per frame-set load, of every best frame in every panel and filter.
+        Assert.Equal(1, fixture.GeometryReads);
+        Assert.Equal(
+            new[] { fixture.HaFrame1, fixture.HaFrame2, fixture.OiiiFrame1 }.Order(),
+            Assert.Single(fixture.Asked).Order());
+    }
+
+    [Fact]
+    public async Task TheCompositeCommand_OpensTheLightbox_OverTheRequestForTheSelectedFilter()
+    {
+        var fixture = new CompositeFixture(_worker);
+        fixture.Geometry[fixture.HaFrame1] = Positioned(10);
+        fixture.Geometry[fixture.HaFrame2] = Positioned(10.3);
+        var jobs = new JobRegistry(action => action());
+        using var gate = new ManualResetEventSlim();
+        var composite = new CompositeService(jobs, (_, _, _, _) => { }, (_, _, _, ct) =>
+        {
+            gate.Wait(ct);
+            return new CompositeResult([1], 1, 1);
+        });
+        CompositeLightboxViewModel? opened = null;
+        var page = await OpenComposite(fixture, composite, lightbox =>
+        {
+            opened = lightbox;
+            lightbox.Dispose();
+            return Task.CompletedTask;
+        });
+
+        await page.CompositeCommand.ExecuteAsync(null);
+
+        Assert.NotNull(opened);
+        Assert.Equal(fixture.Mosaic.Id, opened.Request.MosaicId);
+        Assert.Equal("M 31 mosaic", opened.Request.MosaicName);
+        Assert.Equal("Ha", opened.Request.Filter);
+        Assert.Equal(new[] { "Panel 1", "Panel 2" }, opened.Request.Panels.Select(panel => panel.Label));
+        Assert.Same(fixture.Mosaic.Frames, opened.Request.Frames);
+        Assert.Same(fixture.Geometry, opened.Request.Geometry);
+        Assert.Equal("M 31 mosaic, Ha composite", opened.Title);
+    }
 }

@@ -77,7 +77,9 @@ public sealed class CompositeService(
     /// <c>mosaic_composite_built</c>; a cancel caches nothing, writes no row and rethrows; any other
     /// failure caches nothing, finishes the job Failed, writes <c>mosaic_composite_failed</c> and
     /// rethrows.</summary>
-    public async Task<CompositeResult> BuildAsync(CompositeRequest request, CancellationToken ct)
+    /// <param name="progress">Hears each "Decoding &lt;label&gt;" the job reports, on the build's
+    /// thread: the lightbox's Building caption (spec 12.17).</param>
+    public async Task<CompositeResult> BuildAsync(CompositeRequest request, CancellationToken ct, Action<string>? progress = null)
     {
         var selection = Select(request);
         var key = KeyOf(request, selection);
@@ -99,7 +101,12 @@ public sealed class CompositeService(
         {
             var done = 0;
             var result = await Task.Run(
-                () => _build(selection, framePaths, label => job.Report($"Decoding {label}", 100.0 * done++ / count), cancel.Token),
+                () => _build(selection, framePaths, label =>
+                {
+                    var message = $"Decoding {label}";
+                    job.Report(message, 100.0 * done++ / count);
+                    progress?.Invoke(message);
+                }, cancel.Token),
                 cancel.Token).ConfigureAwait(false);
 
             Store(key, result);

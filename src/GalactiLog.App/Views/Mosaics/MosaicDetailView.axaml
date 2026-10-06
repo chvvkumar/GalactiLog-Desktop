@@ -95,7 +95,7 @@
           <Button x:Name="CompositeButton"
                   Content="Composite"
                   Command="{Binding CompositeCommand}"
-                  ToolTip.Tip="{x:Static mos:MosaicDetailViewModel.CompositeTooltip}"
+                  ToolTip.Tip="{Binding CompositeTooltip}"
                   ToolTip.ShowOnDisabled="True" />
           <Button x:Name="OverflowButton" Classes="quiet" Padding="9,0" AutomationProperties.Name="More">
             <Path Width="16"

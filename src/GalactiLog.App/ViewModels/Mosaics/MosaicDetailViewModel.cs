@@ -8,6 +8,7 @@ using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Io;
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
 using Microsoft.Extensions.Logging;
@@ -43,8 +44,11 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// </remarks>
 public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposable
 {
-    /// <summary>Composite's tooltip until the composite phase enables it (spec 12.17).</summary>
-    public const string CompositeTooltip = "Composite images are not available yet.";
+    /// <summary>Composite's tooltip while the arranger has no filter (spec 12.17).</summary>
+    public const string NoFramesTooltip = "No frames to composite";
+
+    /// <summary>Composite's tooltip when no panel's best frame in the filter carries a plate scale.</summary>
+    public const string NoPlateScaleTooltip = "No panel carries a plate scale";
 
     /// <summary>Delete mosaic's confirm sentence.</summary>
     public const string DeleteConfirmText = MosaicRowViewModel.DeleteConfirmText;
@@ -64,6 +68,8 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
 
     private readonly AppWriter _appWriter;
     private readonly JobRegistry? _jobs;
+    private readonly CompositeService _composite;
+    private readonly Func<CompositeLightboxViewModel, Task> _openComposite;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<Guid, PanelViewModel> _panelsById = [];
     private CustomCellGroup _cells = CustomCellGroup.Empty;
@@ -83,6 +89,12 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// <param name="delay">The debounce seam the notes, the custom cells and the target searches
     /// wait on.</param>
     /// <param name="logger">A failed read or write is logged, never thrown on the UI thread.</param>
+    /// <param name="composite">Spec 11.6's cache and build, for Composite's enablement and the
+    /// lightbox. Null in a test that does not exercise it: a private service, enough for the
+    /// enablement; a test that runs Composite passes its own, because the lightbox starts its build
+    /// when it is constructed.</param>
+    /// <param name="openComposite">Shows the composite lightbox and completes when it closes,
+    /// disposing it. Null in a test: the lightbox is disposed at once.</param>
     public MosaicDetailViewModel(
         Guid mosaicId,
         MosaicsBackend backend,
@@ -90,12 +102,20 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         JobRegistry? jobs = null,
         Action<Action>? post = null,
         Func<TimeSpan, CancellationToken, Task>? delay = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        CompositeService? composite = null,
+        Func<CompositeLightboxViewModel, Task>? openComposite = null)
     {
         Id = mosaicId;
         Backend = backend;
         _appWriter = appWriter;
         _jobs = jobs;
+        _composite = composite ?? new CompositeService(new JobRegistry(action => action()), (_, _, _, _) => { });
+        _openComposite = openComposite ?? (lightbox =>
+        {
+            lightbox.Dispose();
+            return Task.CompletedTask;
+        });
         Post = post ?? UiPost.Default;
         Delay = delay ?? Task.Delay;
         Logger = logger ?? NullLogger.Instance;
@@ -107,6 +127,15 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
             mosaicId, [], backend.SearchTargets, backend.AddPanelWithTarget, () => _ = ReloadAsync(),
             Delay, Post, Logger);
         Arranger = new ArrangerViewModel(mosaicId, backend, readOnly: false, Post, Delay, Logger);
+
+        // The arranger raises SelectedFilter on every frame set it takes and every filter change.
+        Arranger.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ArrangerViewModel.SelectedFilter))
+            {
+                RefreshComposite();
+            }
+        };
 
         if (jobs is not null)
         {
@@ -167,13 +196,57 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// shared cell editor of spec 12.15 with the column's name as its caption.</summary>
     public IReadOnlyList<CustomValueViewModel> CustomCells => _cells.Cells;
 
-    /// <summary>Composite, disabled with <see cref="CompositeTooltip"/> until the composite phase.</summary>
+    /// <summary>Composite's enablement (spec 12.17, ruling R15): at least one panel has a
+    /// positioned best frame in the arranger's filter and a plate scale exists.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(CompositeCommand))]
+    public partial bool CanComposite { get; private set; }
+
+    /// <summary>Composite's tooltip, the first disabled state that applies; null when enabled.</summary>
+    [ObservableProperty]
+    public partial string? CompositeTooltip { get; private set; } = NoFramesTooltip;
+
+    /// <summary>Composite's tooltip when no panel is included in <paramref name="filter"/>.</summary>
+    public static string NoPositionedPanelTooltip(string filter) => $"No panel has a positioned frame in {filter}";
+
+    /// <summary>Opens the composite lightbox for the arranger's selected filter.</summary>
     [RelayCommand(CanExecute = nameof(CanComposite))]
-    private void Composite()
+    private Task Composite()
     {
+        if (_disposed || !CanComposite || CompositeRequestNow() is not { } request)
+        {
+            return Task.CompletedTask;
+        }
+
+        return _openComposite(new CompositeLightboxViewModel(request, _composite, _appWriter, Post, Logger));
     }
 
-    private static bool CanComposite() => false;
+    // The request for the arranger's selected filter, as the filter's available spelling (the cache
+    // key takes it as passed), over the frame set and the geometry the arranger's load brought.
+    private CompositeRequest? CompositeRequestNow()
+        => _detail is { } detail && Arranger.SelectedFilter is { } filter && Arranger.FrameSet is { } frames
+            ? new CompositeRequest(Id, Name, filter, [.. detail.Panels.Select(panel => (panel.Id, panel.Label))], frames, Arranger.Geometry)
+            : null;
+
+    // Spec 12.17: recomputed whenever the frame set loads, the filter changes or the page re-reads.
+    private void RefreshComposite()
+    {
+        if (CompositeRequestNow() is not { } request)
+        {
+            CanComposite = false;
+            CompositeTooltip = NoFramesTooltip;
+            return;
+        }
+
+        var block = _composite.Select(request).Block;
+        CanComposite = block == CompositeBlock.None;
+        CompositeTooltip = block switch
+        {
+            CompositeBlock.NoPlateScale => NoPlateScaleTooltip,
+            CompositeBlock.NoPositionedPanel => NoPositionedPanelTooltip(request.Filter),
+            _ => null,
+        };
+    }
 
     // Rename.
 
@@ -299,8 +372,12 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
 
     /// <summary><c>&lt;name&gt;_panels.csv</c>, every character outside A to Z, a to z and 0 to 9
     /// replaced by <c>_</c>.</summary>
-    public static string ExportFileName(string name)
-        => string.Concat(name.Select(c => char.IsAsciiLetterOrDigit(c) ? c : '_')) + "_panels.csv";
+    public static string ExportFileName(string name) => SafeFileName(name) + "_panels.csv";
+
+    /// <summary>Spec 12.17's file name rule, shared by Export panels and the composite's Download:
+    /// every character outside A to Z, a to z and 0 to 9 replaced by <c>_</c>.</summary>
+    internal static string SafeFileName(string text)
+        => string.Concat(text.Select(c => char.IsAsciiLetterOrDigit(c) ? c : '_'));
 
     /// <summary>The CSV text: the header, then one row per panel in <c>sort_order</c>; every line
     /// ends with <c>\n</c>. <c>File.WriteAllText</c> writes it as UTF-8 without a byte order mark.</summary>
@@ -535,6 +612,7 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         AddPanel.SetLabels(labels);
         IncludeAllAvailableCommand.NotifyCanExecuteChanged();
         Arranger.Apply(detail);
+        RefreshComposite();
     }
 
     /// <summary>Makes <paramref name="target"/> hold <paramref name="wanted"/> in order with the

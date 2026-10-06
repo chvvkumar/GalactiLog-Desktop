@@ -49,16 +49,17 @@ public class WbppExportContainmentTests
         .OrderBy(file => file, StringComparer.Ordinal);
 
     [Fact]
-    public void BeginExport_IsCalledByExactlyThreeFiles()
+    public void BeginExport_IsCalledByExactlyFourFiles()
     {
         // The needle is the FileSafetyTest group's own, which matches a CALL and not a
         // declaration, so AppWriter.cs, which declares the member and never calls it, does not
-        // appear. The allowlist still names all three, because the exemption is decided per file
-        // and the declaring file is scanned like every other.
+        // appear. The allowlist still names it, because the exemption is decided per file and the
+        // declaring file is scanned like every other.
         var files = SourceScan.FilesMatching(@"\.BeginExport\s*\(", RegexOptions.None);
 
-        // Phase 18 Task 5 adds the mosaic detail page's Export panels (CSV), spec 2.1.1.
-        Assert.Equal(new[] { "DiagnosticsService.cs", "MosaicDetailViewModel.cs", Page }, files);
+        // Phase 18 Task 5 adds the mosaic detail page's Export panels (CSV) and Phase 19B Task 4
+        // the composite lightbox's Download, spec 2.1.1.
+        Assert.Equal(new[] { "CompositeLightboxViewModel.cs", "DiagnosticsService.cs", "MosaicDetailViewModel.cs", Page }, files);
     }
 
     [Fact]

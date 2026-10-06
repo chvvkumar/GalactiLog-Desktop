@@ -325,15 +325,22 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
     /// <param name="pointerX">The pointer's offset from the viewport centre, in pixels.</param>
     /// <param name="pointerY">The pointer's offset from the viewport centre, in pixels.</param>
     public void Zoom(double delta, double pointerX, double pointerY)
+        => (Scale, OffsetX, OffsetY) = ZoomAbout(Scale, OffsetX, OffsetY, delta, pointerX, pointerY);
+
+    /// <summary>Spec 11.5's wheel zoom as a pure step: the scale after one wheel
+    /// <paramref name="delta"/>, clamped to <see cref="MinZoom"/> and <see cref="MaxZoom"/> of fit,
+    /// and the offsets after <see cref="ScaleAbout"/>. At or below fit the offsets are 0. The
+    /// preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static (double Scale, double OffsetX, double OffsetY) ZoomAbout(
+        double scale, double offsetX, double offsetY, double delta, double pointerX, double pointerY)
     {
-        var old = Scale;
-        var next = Math.Clamp(old * Math.Exp(-delta * WheelZoomRate), MinZoom, MaxZoom);
+        var next = Math.Clamp(scale * Math.Exp(-delta * WheelZoomRate), MinZoom, MaxZoom);
 
         // The web's `if (newScale === oldScale) return`: at either clamp a further notch must not
         // move the offsets either, or the image drifts while the scale stands still.
-        if (next == old)
+        if (next == scale)
         {
-            return;
+            return (scale, offsetX, offsetY);
         }
 
         if (Math.Abs(next - 1d) < FitTolerance)
@@ -341,17 +348,16 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
             next = 1d;
         }
 
-        (OffsetX, OffsetY) = ScaleAbout(OffsetX, OffsetY, pointerX, pointerY, next / old);
-        Scale = next;
-
         // At or below fit the image is centred and cannot be panned (coordinator ruling on the
         // zoom-out range): the web snaps to centre on return to fit, and below fit there is
         // nothing off screen to pan to. Double-click or 0 restores fit.
         if (next <= 1d)
         {
-            OffsetX = 0d;
-            OffsetY = 0d;
+            return (next, 0d, 0d);
         }
+
+        var (x, y) = ScaleAbout(offsetX, offsetY, pointerX, pointerY, next / scale);
+        return (next, x, y);
     }
 
     /// <summary>Drag pan. A no-op unless <see cref="Scale"/> is above 1: at fit and below it, the

@@ -67,7 +67,7 @@ public class MosaicDetailViewTests
 
         var composite = view.FindControl<Button>("CompositeButton")!;
         Assert.False(composite.IsEffectivelyEnabled);
-        Assert.Equal(MosaicDetailViewModel.CompositeTooltip, ToolTip.GetTip(composite));
+        Assert.Equal(MosaicDetailViewModel.NoFramesTooltip, ToolTip.GetTip(composite));
         window.Close();
     }
 }
