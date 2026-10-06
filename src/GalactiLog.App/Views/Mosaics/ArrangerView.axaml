@@ -1,0 +1,251 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:mosaics="using:GalactiLog.App.Views.Mosaics"
+             x:Class="GalactiLog.App.Views.Mosaics.ArrangerView"
+             x:DataType="mos:ArrangerViewModel">
+  <!-- Spec 12.17's arranger (Phase 19A, ruling R18): a composed control, not a drawn one. A
+       toolbar row over a clipped viewport whose Canvas holds one tile per panel. The detail page
+       mounts it in row 2; a suggestion row mounts it read-only, not hit-testable and with no
+       toolbar. Every colour is a theme token, nothing sets FontSize, no button is filled, and the
+       view declares no style: the Sliders and the ToggleButton take the theme's own. -->
+  <Grid RowDefinitions="Auto,*">
+
+    <!-- ===== The toolbar, left to right in the spec's order; a WrapPanel so a narrow page wraps
+         it rather than clipping a control ===== -->
+    <WrapPanel x:Name="Toolbar" Grid.Row="0" Orientation="Horizontal" IsVisible="{Binding !IsReadOnly}" Margin="0,0,0,2">
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <TextBlock Classes="t-label" Text="Panels" VerticalAlignment="Center" />
+        <controls:HelpButton Topic="mosaic.arranger" />
+        <!-- Faded out rather than collapsed while a tile is selected, so the toolbar does not
+             reflow and shift the viewport under a press. -->
+        <TextBlock x:Name="Hint"
+                   Text="Click a tile to select it, then rotate or flip"
+                   Opacity="{Binding HasSelection, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <Button Classes="sm"
+                Content="Rotate CW"
+                Command="{Binding RotateSelectedCommand}"
+                ToolTip.Tip="Rotate the selected tile 90° clockwise. Right-click a tile for the same."
+                ToolTip.ShowOnDisabled="True" />
+        <Button Classes="sm"
+                Content="Flip H"
+                Command="{Binding FlipSelectedCommand}"
+                ToolTip.Tip="Flip the selected tile horizontally."
+                ToolTip.ShowOnDisabled="True" />
+      </StackPanel>
+
+      <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <Button Classes="sm" Content="Fit" Command="{Binding FitCommand}" ToolTip.Tip="Fit every tile in view." />
+        <Button Classes="sm" Content="-" Command="{Binding ZoomOutCommand}" ToolTip.Tip="Zoom out" AutomationProperties.Name="Zoom out" />
+        <TextBlock x:Name="ZoomReadout" Classes="num" Text="{Binding ZoomText}" MinWidth="40" VerticalAlignment="Center" />
+        <Button Classes="sm" Content="+" Command="{Binding ZoomInCommand}" ToolTip.Tip="Zoom in" AutomationProperties.Name="Zoom in" />
+      </StackPanel>
+
+      <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <TextBlock Text="Rotation" VerticalAlignment="Center" />
+        <Slider Width="140"
+                VerticalAlignment="Center"
+                Minimum="{x:Static mos:ArrangerViewModel.MinRotation}"
+                Maximum="{x:Static mos:ArrangerViewModel.MaxRotation}"
+                TickFrequency="1"
+                IsSnapToTickEnabled="True"
+                Value="{Binding GlobalRotation}"
+                AutomationProperties.Name="Rotation" />
+        <TextBlock Classes="num" Text="{Binding RotationText}" MinWidth="40" VerticalAlignment="Center" />
+        <Button Classes="sm"
+                Content="0"
+                Command="{Binding ResetRotationCommand}"
+                ToolTip.Tip="Reset the rotation to 0°."
+                AutomationProperties.Name="Reset rotation" />
+      </StackPanel>
+
+      <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
+
+      <Button Classes="quiet sm"
+              Content="Reset all"
+              Margin="0,0,10,4"
+              VerticalAlignment="Center"
+              Command="{Binding ResetAllCommand}"
+              ToolTip.Tip="Reset every tile's rotation and flip, and the rotation, to 0." />
+
+      <Separator Width="1" Height="20" Margin="0,0,10,4" Background="{DynamicResource ColorBorderDefault}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <TextBlock Text="Tile opacity" VerticalAlignment="Center" />
+        <Slider Width="120"
+                VerticalAlignment="Center"
+                Minimum="{x:Static mos:ArrangerViewModel.MinOpacity}"
+                Maximum="{x:Static mos:ArrangerViewModel.MaxOpacity}"
+                TickFrequency="{x:Static mos:ArrangerViewModel.OpacityStep}"
+                IsSnapToTickEnabled="True"
+                Value="{Binding SelectedOpacity}"
+                IsEnabled="{Binding HasSelection}"
+                ToolTip.Tip="Fade the selected tile so overlapping panels show through. Not saved."
+                ToolTip.ShowOnDisabled="True"
+                AutomationProperties.Name="Tile opacity" />
+        <TextBlock Classes="num" Text="{Binding OpacityText}" MinWidth="40" VerticalAlignment="Center" />
+        <ToggleButton Content="Labels"
+                      IsChecked="{Binding ShowLabels}"
+                      ToolTip.Tip="Show the panel labels, the integration and the badges on every tile." />
+      </StackPanel>
+
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center" IsVisible="{Binding HasFilters}">
+        <TextBlock Text="Filter" VerticalAlignment="Center" />
+        <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" MinWidth="90" AutomationProperties.Name="Filter" />
+        <TextBlock Classes="t-caption"
+                   Text="Loading..."
+                   IsVisible="{Binding IsLoading}"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextSecondary}" />
+      </StackPanel>
+
+      <!-- The save rule: "Saving..." during a write, the failure sentence in its place after one fails. -->
+      <TextBlock Classes="t-caption"
+                 Text="Saving..."
+                 Margin="0,0,10,4"
+                 IsVisible="{Binding IsSaving}"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+      <TextBlock Text="{Binding SaveError}"
+                 Margin="0,0,10,4"
+                 VerticalAlignment="Center"
+                 Foreground="{DynamicResource ColorError}">
+        <TextBlock.IsVisible>
+          <MultiBinding Converter="{x:Static BoolConverters.And}">
+            <Binding Path="SaveError" Converter="{x:Static ObjectConverters.IsNotNull}" />
+            <Binding Path="!IsSaving" />
+          </MultiBinding>
+        </TextBlock.IsVisible>
+      </TextBlock>
+    </WrapPanel>
+
+    <!-- ===== The viewport. The Border answers every press no tile takes (empty canvas), and its
+         bounds never turn or scale; the Canvas turns by the global rotation about the tiles'
+         bounding box centre, then scales and translates by the view-model's matrix. Pointer
+         bookkeeping lives in the code-behind, every rule in ArrangerViewModel. ===== -->
+    <Border x:Name="Viewport"
+            Grid.Row="1"
+            ClipToBounds="True"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="1"
+            PointerPressed="OnViewportPressed"
+            PointerMoved="OnViewportMoved"
+            PointerReleased="OnViewportReleased"
+            PointerCaptureLost="OnViewportCaptureLost"
+            PointerWheelChanged="OnViewportWheel">
+      <ItemsControl x:Name="TileItems" ItemsSource="{Binding Tiles}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <Canvas x:DataType="mos:ArrangerViewModel" RenderTransformOrigin="0,0">
+              <Canvas.RenderTransform>
+                <TransformGroup>
+                  <RotateTransform Angle="{Binding GlobalRotation}" CenterX="{Binding RotationCentreX}" CenterY="{Binding RotationCentreY}" />
+                  <MatrixTransform Matrix="{Binding ViewMatrix}" />
+                </TransformGroup>
+              </Canvas.RenderTransform>
+            </Canvas>
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+
+        <!-- Each tile's container sits at the tile's canvas position, and its ZIndex is the
+             stacking order a press raises (the collection stays in sort_order). The code-behind
+             binds the three on ContainerPrepared: no control theme or style is declared here. -->
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="mos:TileViewModel">
+            <Panel x:Name="Tile"
+                   Width="{x:Static mos:ArrangerViewModel.TileWidth}"
+                   Height="{x:Static mos:ArrangerViewModel.TileHeight}"
+                   Classes.selected="{Binding IsSelected}"
+                   AutomationProperties.Name="{Binding AutomationName}">
+              <!-- A right press selects the tile (code-behind); the menu acts on this tile. -->
+              <Panel.ContextMenu>
+                <ContextMenu>
+                  <MenuItem Header="Rotate CW" Click="OnRotateItem" />
+                  <MenuItem Header="Flip H" Click="OnFlipItem" />
+                </ContextMenu>
+              </Panel.ContextMenu>
+
+              <!-- The tile opacity fades the image, the overlays and the empty caption, never the outline. -->
+              <Border x:Name="TileContent"
+                      CornerRadius="4"
+                      ClipToBounds="True"
+                      Background="{DynamicResource ColorBgSurface}"
+                      Opacity="{Binding Opacity}">
+                <Panel>
+                  <!-- Rotation and flip turn the image only, refitted inside the tile. -->
+                  <LayoutTransformControl>
+                    <LayoutTransformControl.LayoutTransform>
+                      <TransformGroup>
+                        <ScaleTransform ScaleX="{Binding FlipH, Converter={x:Static mosaics:ArrangerView.FlipScale}}" />
+                        <RotateTransform Angle="{Binding Rotation}" />
+                      </TransformGroup>
+                    </LayoutTransformControl.LayoutTransform>
+                    <Image Stretch="Uniform" Source="{Binding Thumbnail.Image}" />
+                  </LayoutTransformControl>
+
+                  <TextBlock Text="{Binding EmptyText}"
+                             IsVisible="{Binding IsEmpty}"
+                             HorizontalAlignment="Center"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource ColorTextTertiary}" />
+
+                  <!-- The four overlays, upright, 4 pixels in, each on a scrim in the elevated ink
+                       at 0.85 so it reads over a photograph; the text itself stays at full strength. -->
+                  <Panel Margin="4" IsVisible="{Binding $parent[ItemsControl].((mos:ArrangerViewModel)DataContext).ShowLabels}">
+                    <Panel HorizontalAlignment="Left" VerticalAlignment="Bottom">
+                      <Border Background="{DynamicResource ColorBgElevated}" Opacity="0.85" CornerRadius="3" />
+                      <TextBlock Classes="t-caption" Margin="3" Text="{Binding Label}" Foreground="{DynamicResource ColorTextPrimary}" />
+                    </Panel>
+                    <Panel HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                      <Border Background="{DynamicResource ColorBgElevated}" Opacity="0.85" CornerRadius="3" />
+                      <TextBlock Classes="t-caption" Margin="3" Text="{Binding IntegrationText}" Foreground="{DynamicResource ColorTextPrimary}" />
+                    </Panel>
+                    <Panel HorizontalAlignment="Left"
+                           VerticalAlignment="Top"
+                           IsVisible="{Binding StateBadge, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <Border Background="{DynamicResource ColorBgElevated}" Opacity="0.85" CornerRadius="3" />
+                      <TextBlock Classes="t-caption" Margin="3" Text="{Binding StateBadge}" Foreground="{DynamicResource ColorTextPrimary}" />
+                    </Panel>
+                    <!-- The deficit badge in its band's ink: Theme/Controls.axaml's three band
+                         classes carry ColorSuccess, ColorWarning and ColorError. -->
+                    <Panel HorizontalAlignment="Right"
+                           VerticalAlignment="Top"
+                           IsVisible="{Binding DeficitText, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <Border Background="{DynamicResource ColorBgElevated}" Opacity="0.85" CornerRadius="3" />
+                      <TextBlock Classes="t-caption"
+                                 Margin="3"
+                                 Text="{Binding DeficitText}"
+                                 Classes.band-better="{Binding Deficit, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static mos:DeficitBand.Success}}"
+                                 Classes.band-watch="{Binding Deficit, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static mos:DeficitBand.Warning}}"
+                                 Classes.band-reject="{Binding Deficit, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static mos:DeficitBand.Error}}" />
+                    </Panel>
+                  </Panel>
+                </Panel>
+              </Border>
+
+              <!-- The selection: a 2 pixel accent outline 1 pixel outside the tile, at full strength. -->
+              <Border x:Name="Outline"
+                      Margin="-3"
+                      BorderThickness="2"
+                      CornerRadius="6"
+                      BorderBrush="{DynamicResource ColorAccent}"
+                      IsVisible="{Binding IsSelected}"
+                      IsHitTestVisible="False" />
+            </Panel>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </Border>
+  </Grid>
+</UserControl>

@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:mosaics="using:GalactiLog.App.Views.Mosaics"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
              x:Class="GalactiLog.App.Views.Mosaics.MosaicDetailView"
@@ -9,7 +10,7 @@
              x:DataType="mos:MosaicDetailViewModel">
   <!-- Spec 12.17's mosaic detail page (Phase 18 Task 5), on the shell's detail overlay. A
        workbench with no page scroller (ruling R7): the header and notes, the labels banner, the
-       arranger's placeholder band, a splitter that trades height between the band and the
+       arranger (Phase 19A), a splitter that trades height between the arranger and the
        sessions region, and the sessions region in its own ScrollViewer. Every colour is a theme
        token, nothing sets FontSize, and no button is filled. -->
   <!-- The target page's Back shortcuts (spec 12.4), so the overlay's two pages behave alike:
@@ -193,20 +194,9 @@
       </StackPanel>
     </Border>
 
-    <!-- ===== Row 2: the arranger, a placeholder band in this phase ===== -->
-    <Border Grid.Row="2"
-            x:Name="ArrangerBand"
-            Height="160"
-            VerticalAlignment="Top"
-            Margin="0,10,0,0"
-            Background="{DynamicResource ColorBgSurface}"
-            BorderBrush="{DynamicResource ColorBorderDefault}"
-            BorderThickness="1">
-      <TextBlock Text="{x:Static mos:MosaicDetailViewModel.ArrangerPlaceholderText}"
-                 HorizontalAlignment="Center"
-                 VerticalAlignment="Center"
-                 Foreground="{DynamicResource ColorTextTertiary}" />
-    </Border>
+    <!-- ===== Row 2: the arranger (Phase 19A), filling the starred row; the splitter below trades
+         its height with the sessions region (ruling R7) ===== -->
+    <mosaics:ArrangerView Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding Arranger}" />
 
     <!-- ===== Row 3: the splitter; its position is not stored ===== -->
     <GridSplitter Grid.Row="3"

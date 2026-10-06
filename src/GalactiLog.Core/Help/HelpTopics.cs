@@ -838,6 +838,13 @@ public static class HelpTopics
             + "Add panel creates it and includes the nights that carry "
             + "the label."),
 
+        // Phase 19A Task 4: the arranger's glyph (spec 12.12, 12.17). Provisional wording; Task 5
+        // writes the final paragraph.
+        new("mosaic.arranger", "Panels",
+            "Each tile is one panel of this mosaic, showing its best frame in the chosen filter. "
+            + "Drag a tile to place it, and select one to rotate, flip or fade it. The layout is "
+            + "saved for this page only and changes no figure."),
+
         new("mosaic.sessions", "Panels and nights",
             "Each panel counts a night as Included, and lists the other nights of its targets as "
             + "Available. A night is one target, one date and one frame label, and that triple counts "

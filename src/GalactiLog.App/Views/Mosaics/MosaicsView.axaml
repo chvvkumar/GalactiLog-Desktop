@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:mosaics="using:GalactiLog.App.Views.Mosaics"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
              xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
@@ -297,6 +298,17 @@
                           </ItemsControl.ItemTemplate>
                         </ItemsControl>
                       </StackPanel>
+
+                      <!-- Spec 12.17's read-only tile preview (Phase 19A, ruling R18): the arranger
+                           with no toolbar and no hit test, so a wheel over it reaches the column's
+                           ScrollViewer, one tile per checked label. -->
+                      <TextBlock Classes="t-caption" Text="Tile preview" />
+                      <Border Height="200" IsVisible="{Binding !Preview.IsEmpty}">
+                        <mosaics:ArrangerView DataContext="{Binding Preview}" IsHitTestVisible="False" />
+                      </Border>
+                      <TextBlock Text="{x:Static mos:ArrangerViewModel.NoPanelsText}"
+                                 IsVisible="{Binding Preview.IsEmpty}"
+                                 Foreground="{DynamicResource ColorTextTertiary}" />
                     </StackPanel>
                   </StackPanel>
                 </Border>

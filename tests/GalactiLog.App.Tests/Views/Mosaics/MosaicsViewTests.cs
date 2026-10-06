@@ -1,3 +1,4 @@
+using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
@@ -59,6 +60,64 @@ public class MosaicsViewTests
         Assert.Contains(
             view.GetVisualDescendants().OfType<TextBlock>(),
             block => block.Text == "Panel 2 has no position" && block.IsEffectivelyVisible);
+        window.Close();
+    }
+
+    // Phase 19A Task 4, spec 12.17's read-only preview: an expanded suggestion row shows the
+    // arranger under "Tile preview", not hit-testable and with no toolbar, one tile per checked
+    // label, and "No panels selected." once every label is unchecked.
+    [AvaloniaFact]
+    public async Task AnExpandedSuggestion_ShowsTheReadOnlyTilePreview()
+    {
+        var target = Guid.NewGuid();
+        var night = new DateOnly(2026, 3, 1);
+        using var harness = new MosaicsPageHarness(new MosaicsBackend
+        {
+            ListPending = () =>
+            [
+                new MosaicSuggestionRow(
+                    Guid.NewGuid(), "NGC 7000", "NGC 7000",
+                    [new SuggestionPanel(target, "Panel 1", "%", [night]), new SuggestionPanel(target, "Panel 2", "%", [night])],
+                    "high", "both", null, [], "sig", DateTime.UtcNow),
+            ],
+            SuggestionSessions = _ =>
+            [
+                new SuggestionSessionRow(target, "Panel 1", "NGC 7000 P1", night, "Ha", 4, 1200, true),
+                new SuggestionSessionRow(target, "Panel 2", "NGC 7000 P2", night, "Ha", 2, 600, true),
+            ],
+        });
+        await harness.Page.PendingLoad;
+        var row = harness.Page.VisibleSuggestions[0];
+        row.IsExpanded = true;
+        await row.Preview.PendingFrames;
+
+        var view = new MosaicsView { DataContext = harness.Page };
+        var window = new Window { Width = 1280, Height = 720, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var preview = Assert.Single(view.GetVisualDescendants().OfType<ArrangerView>());
+        Assert.Same(row.Preview, preview.DataContext);
+        Assert.False(preview.IsHitTestVisible);
+        Assert.True(preview.IsEffectivelyVisible);
+        Assert.Equal(200, preview.Bounds.Height, 1);
+        Assert.False(preview.FindControl<Control>("Toolbar")!.IsEffectivelyVisible);
+        Assert.Equal(2, preview.FindControl<ItemsControl>("TileItems")!.ItemCount);
+        Assert.Contains(
+            view.GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == "Tile preview" && block.IsEffectivelyVisible);
+        Assert.Contains(
+            preview.GetVisualDescendants().OfType<Control>(),
+            control => AutomationProperties.GetName(control) is { } name && name.StartsWith("Panel 2", StringComparison.Ordinal)
+                && control.IsEffectivelyVisible);
+
+        row.AllPanelsChecked = false;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(preview.IsEffectivelyVisible);
+        Assert.Contains(
+            view.GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == ArrangerViewModel.NoPanelsText && block.IsEffectivelyVisible);
         window.Close();
     }
 }

@@ -23,11 +23,12 @@ public class HelpTopicsTests
     // Phase 18 Task 4 added the Mosaics page's four `mosaics.*` ids, taking it to 107.
     // Phase 18 Task 5 added the mosaic detail page's four `mosaic.*` ids, taking it to 111.
     // Phase 18 Task 6 added `mosaic.create`, the Create mosaic dialog's heading, taking it to 112.
+    // Phase 19A Task 4 added `mosaic.arranger`, the arranger's caption, taking it to 113.
     [Fact]
-    public void All_Holds112Topics()
+    public void All_Holds113Topics()
     {
-        Assert.Equal(112, HelpTopics.All.Count);
-        Assert.Equal(112, HelpTopics.Ids.Count);
+        Assert.Equal(113, HelpTopics.All.Count);
+        Assert.Equal(113, HelpTopics.Ids.Count);
     }
 
     // Phase 18 Task 4. The four ids carry spec 12.12's titles.

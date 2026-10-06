@@ -14,7 +14,7 @@ namespace GalactiLog.App.Tests.Views.Mosaics;
 
 // Phase 18 Task 5, design-spec 18.3's view smoke test for spec 12.17's mosaic detail page: the
 // view constructs and lays out over a populated page with the labels banner showing and a panel
-// expanded, as the five-row workbench the spec draws.
+// expanded, as the five-row workbench the spec draws, with Phase 19A's arranger in row 2.
 public class MosaicDetailViewTests
 {
     [AvaloniaFact]
@@ -40,7 +40,11 @@ public class MosaicDetailViewTests
         Assert.True(view.Bounds.Width > 0);
         var grid = Assert.IsType<Grid>(view.Content);
         Assert.Equal(5, grid.RowDefinitions.Count);
-        Assert.Equal(160, view.FindControl<Border>("ArrangerBand")!.Bounds.Height);
+        // Phase 19A: the arranger fills the starred row 2 in place of Phase 18's placeholder band.
+        var arranger = Assert.Single(view.GetVisualDescendants().OfType<ArrangerView>());
+        Assert.Equal(2, Grid.GetRow(arranger));
+        Assert.Same(page.Arranger, arranger.DataContext);
+        Assert.True(arranger.Bounds.Height > 0);
         Assert.NotNull(view.FindControl<GridSplitter>("ArrangerSplitter"));
 
         // One scroller, the sessions region's: the page itself does not scroll (ruling R7).
@@ -51,14 +55,14 @@ public class MosaicDetailViewTests
         Assert.True(view.FindControl<ScrollViewer>("SessionsScroller")!.Bounds.Bottom <= view.Bounds.Height + 0.5);
 
         var texts = view.GetVisualDescendants().OfType<TextBlock>().Where(block => block.IsEffectivelyVisible).Select(block => block.Text).ToList();
-        Assert.Contains(MosaicDetailViewModel.ArrangerPlaceholderText, texts);
+        Assert.Contains("Panels", texts);
         Assert.Contains("Panel 2 on M 31", texts);
         Assert.Contains("Panels and nights", texts);
         Assert.Contains("Included", texts);
         Assert.Contains("Available", texts);
 
         var topics = view.GetVisualDescendants().OfType<HelpButton>().Select(button => button.Topic).ToList();
-        Assert.Equal(new[] { "mosaic.about", "mosaic.notes", "mosaic.labels", "mosaic.sessions" }, topics);
+        Assert.Equal(new[] { "mosaic.about", "mosaic.notes", "mosaic.labels", "mosaic.arranger", "mosaic.sessions" }, topics);
 
         var composite = view.FindControl<Button>("CompositeButton")!;
         Assert.False(composite.IsEffectivelyEnabled);
