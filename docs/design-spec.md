@@ -67,7 +67,7 @@ solution goes through it. It takes a destination path and throws
 | --- | --- | --- |
 | The app data directory, the root resolved at startup, by default `%LOCALAPPDATA%\GalactiLogData` (section 17.2) | Fixed at startup | Database, WAL, logs, temporary files |
 | The configured thumbnail cache directory | `general.thumbnail_cache_dir` | Frame, preview, and reference thumbnails, and the Sky view survey images under `survey/` (section 11.3) |
-| One export destination, valid for one operation | A path the user picked in a save dialog, handed to `AppWriter.BeginExport(path)` which returns a scoped writer that is disposed when the operation ends | Two caller classes and nothing else: **exports of this application's own records**, which are the diagnostics JSON bundle (section 16.3), the log viewer's Save log as (section 12.8) and, from Phase 18, Export panels (CSV) on the mosaic detail page (section 12.17), written from `src/GalactiLog.App/ViewModels/Mosaics/MosaicDetailViewModel.cs`; and **generated scripts**, which is the stacking export's copy script (section 12.13). Every one of them writes one new file at the path the dialog returned; none chooses a path of its own, and none reuses the scoped writer after its own operation ends. |
+| One export destination, valid for one operation | A path the user picked in a save dialog, handed to `AppWriter.BeginExport(path)` which returns a scoped writer that is disposed when the operation ends | Two caller classes and nothing else: **exports of this application's own records**, which are the diagnostics JSON bundle (section 16.3), the log viewer's Save log as (section 12.8), from Phase 18, Export panels (CSV) on the mosaic detail page (section 12.17), written from `src/GalactiLog.App/ViewModels/Mosaics/MosaicDetailViewModel.cs`, and, from Phase 19B, the composite lightbox's Download (section 12.17), written from `src/GalactiLog.App/ViewModels/Mosaics/CompositeLightboxViewModel.cs`; and **generated scripts**, which is the stacking export's copy script (section 12.13). Every one of them writes one new file at the path the dialog returned; none chooses a path of its own, and none reuses the scoped writer after its own operation ends. |
 | One staging root, valid for one operation | A folder the user picked in the stacking export wizard and confirmed on its review step, handed to `AppWriter.BeginStagingCopy(root)` which returns a scoped writer that creates directories and new files (`FileMode.CreateNew`) under that root and nothing else | One caller class and nothing else: `WbppExportViewModel`, the stacking export's in-app copy (section 12.13). |
 
 The staging writer never overwrites, deletes, moves, renames, truncates or opens an existing file
@@ -5044,6 +5044,164 @@ default keeps Q18's shipped behaviour for a profile that never touches the box, 
 finding both rulings takes this one.
 
 The preview is always autostretched. There are no manual stretch controls in v1.
+
+### 11.6 Mosaic composite
+
+Phase 19B. Port of `backend/app/services/mosaic_composite.py`: `generate_panel_thumbnail`,
+`PanelInfo`, `compute_panel_layout`, `composite_panels`, the cache functions
+(`_compute_cache_key`, `_get_cached`, `_set_cached`) and `build_mosaic_composite`, amended by
+rulings R9, R10, R13, R15 and R16. The lightbox that shows the result is section 12.17 ("The
+composite lightbox").
+
+**Purpose and inputs.** A composite is built for one mosaic and one canonical filter, the
+arranger's selected filter (section 12.17), from the best frame per panel in that filter
+(section 11.4): the `BestByPanel` dictionaries of the `PanelFrameSet` that
+`PanelFrameQuery.ForMosaic` returned to the arranger, each looked up by filter ordinal case
+insensitive. Geometry comes from six `images` columns, `ra_deg`, `dec_deg`, `width_px`,
+`arcsec_per_pixel`, `rotator_position` and `pier_side` (ruling R10), in a read of their own by image
+id, never from `raw_headers`. The arranger's positions, tile rotation, flip and global rotation feed
+nothing here (ruling R9): they are display state, and the composite places every tile from the sky.
+There are no hardcoded optics (ruling R15): the web's `FOCALLEN` default of 448 and `XPIXSZ` default
+of 3.76 are dropped, and so is its fallback of `OBJCTROT` and `PIERSIDE` from the header.
+
+**Which panels take part (ruling R15).** Every panel of the mosaic, in `sort_order`, is either
+included or left out, by these rules:
+
+1. A panel with no best frame in the filter is left out, for the reason "no <filter> frames".
+2. A panel whose best frame lacks any of `ra_deg`, `dec_deg` or `width_px` has no position and is
+   left out, for the reason "no position". `width_px` is required because it is the tile scale's
+   denominator, below.
+3. Every other panel is included.
+
+The **plate scale** is the `arcsec_per_pixel` of the first panel in `sort_order` whose best frame in
+the filter carries a value above zero, whether or not that panel is included. When no panel's best
+frame carries one, no composite is possible and the Composite button is disabled (section 12.17
+gives the tooltip). A null `rotator_position` counts as 0 degrees and a null `pier_side` as "West",
+the web's header defaults; pier sides compare ordinal case insensitive. `pier_side` comes from the
+session CSV only (section 7.1), so a frame without one counts as "West". The **reference panel** is
+the first included panel in `sort_order`. A composite is possible when at least one panel is
+included and a plate scale exists. The build applies these rules to its own geometry read, so a
+catalogue that changed after the button was enabled fails the build with the button's own tooltip
+sentence as the reason rather than drawing an empty image.
+
+**The tile.** Each included panel's best frame is rendered by section 11.2's thumbnail pipeline,
+`ThumbnailRenderer.Render` in `RenderMode.Thumbnail` (block-bin, normalise, flip for FITS, resize,
+stretch), with a width parameter of 1,600 pixels and JPEG quality 90, and the JPEG is decoded to
+pixels. 1,600 is the renderer's width parameter: a frame narrower than 1,600 pixels stays at its
+native width, and a portrait frame's tile may be taller than 1,600; the output cap below bounds the
+result either way. The frame is read through `UserFiles` (section 2.1.1), read only. A frame the
+renderer skips (unreadable, a rejected header, too large for pixel reading) fails the build with the
+skip reason in the error, "<panel label>: <skip reason>". The web logs a warning and drops the panel;
+the port fails loudly so the reader learns why a panel is missing. The **tile scale** `k` of a panel
+is its decoded tile width divided by its `width_px`, tile pixels per native pixel, computed per
+panel.
+
+**The projection** (port of `compute_panel_layout`, ruling R9). Angles are in degrees unless said.
+
+- **Centre.** `a0` is the mean of the included panels' `ra_deg`, each first brought to within 180
+  degrees of the reference panel's RA by adding or subtracting 360, then taken into [0, 360); `d0`
+  is the mean of their `dec_deg`. The web takes a plain mean, which breaks across RA 0.
+- **Plate scale** in degrees per native pixel: `s = arcsec_per_pixel / 3600`.
+- **Standard coordinates.** For a panel at `(a, d)`: `da = a - a0`;
+  `cosc = sin d0 sin d + cos d0 cos d cos da`; the gnomonic standard coordinates, in degrees, are
+  `X = (cos d sin da / cosc) * 180 / pi` and
+  `Y = ((cos d0 sin d - sin d0 cos d cos da) / cosc) * 180 / pi`.
+- **Native pixel offsets.** With `t` the reference panel's `rotator_position` (the web's
+  `OBJCTROT`): `px = (cos t * X + sin t * Y) / s` and `py = (-sin t * X + cos t * Y) / s`. This is
+  the web's CD matrix `[[-s cos t, -s sin t], [-s sin t, s cos t]]` inverted, with the web's
+  negation of the x pixel coordinate folded in (its comment: "match the camera's actual view"). On
+  the canvas, with x to the right and y down, a panel east of the centre lands to the right and a
+  panel north of it lands lower at `t = 0`: the camera's own orientation and the web's behaviour
+  (ruling R9), not a north-up chart.
+- **Tile centre** in tile pixels: `x = px * k`, `y = py * k`, with `k` the panel's own tile scale.
+- **Per-tile rotation.** `r = rotator_position - t`, plus 180 when the panel's pier side differs
+  from the reference panel's, normalised into [-180, 180) by `r = ((r + 180) mod 360) - 180`, the
+  modulo taking the sign of the divisor. The tile is drawn turned clockwise by `r` degrees about its
+  centre.
+
+**Hand-computed cases.** Plate scale 15 arcseconds per pixel (`s = 1/240`), `k = 1`, every value
+rounded to two decimals; Tasks 2 and 3 assert the pixel values within 0.01 pixel.
+
+| Case | Inputs | `X`, `Y` (degrees) | `px`, `py` (pixels) |
+| --- | --- | --- | --- |
+| 1 | `t = 0`, `a0 = 0`, `d0 = 0`; panel `a = 1`, `d = 0` | 1.00, 0.00 | 240.02, 0.00 |
+| 2 | `t = 0`, `a0 = 0`, `d0 = 45`; panel `a = 0`, `d = 46` | 0.00, 1.00 | 0.00, 240.02 |
+| 3 | `t = 0`, `a0 = 0`, `d0 = 80`; panel `a = 2`, `d = 80` | 0.35, 0.01 | 83.34, 1.43 |
+| 4 | `t = 90`, `a0 = 0`, `d0 = 0`; panel `a = 1`, `d = 0` | 1.00, 0.00 | 0.00, -240.02 |
+| 5 | `t = 0`; reference at `a = 359.5`, `d = 0`, a second panel at `a = 0.5`, `d = 0`, so `a0 = 0`, `d0 = 0` | reference -0.50, 0.00; second 0.50, 0.00 | reference -120.00, 0.00; second 120.00, 0.00 |
+
+| Case | Panel `rotator_position`, `pier_side` | Reference `rotator_position`, `pier_side` | `r` |
+| --- | --- | --- | --- |
+| 6 | 0, "East" | 0, "West" | -180 |
+| 7 | 350, "West" | 10, "West" | -20 |
+| 8 | 10, null | 10, "west" | 0 |
+
+**The canvas.** The bounding box of every rotated tile: for a tile of `w` by `h` tile pixels centred
+at `(x, y)` and turned by `r`, the half extents are `hw = (w |cos r| + h |sin r|) / 2` and
+`hh = (w |sin r| + h |cos r|) / 2`. The canvas spans the minimum to the maximum of `x - hw`,
+`x + hw`, `y - hh` and `y + hh` over the included tiles; each span is rounded to six decimals and
+then up to a whole pixel, so a floating remainder at a quarter turn adds no pixel. Every centre is
+shifted so that each minimum is 0. For example, a 1,600 by 1,000 tile at `(0, 0)` with `r = 0` and a
+second at `(2000, 0)` with `r = 90` give a canvas of 3,300 by 1,600 with the centres at `(800, 800)`
+and `(2800, 800)`.
+
+**The output cap.** When the canvas's longer side exceeds 6,000 pixels, every shifted centre and
+every tile dimension is multiplied by `f = 6000 / longer side` before drawing, the tiles resampled by
+the same factor (Mitchell cubic, section 11.2) to dimensions rounded to the nearest whole pixel and
+at least 1, so the layout keeps its proportions and the longer
+side is exactly 6,000; the shorter side is scaled and rounded as above. For example, two 1,600 by
+1,000 tiles at `(0, 0)` and `(10400, 0)` with `r = 0` span 12,000 by 1,000, so `f = 0.5`: the
+canvas is 6,000 by 500, the tiles 800 by 500, centred at `(400, 250)` and `(5600, 250)`. The web has
+no cap.
+
+**Drawing.** Tiles are drawn in `sort_order`, a later tile over an earlier one, each as its rotated
+rectangle and nothing outside it, onto a black background. The web masks each tile on its non-black
+pixels; the port masks on the rectangle, so a tile's own dark sky covers the tile under it. The
+black background and the stretched pixels are the generated image's data, not interface colour, so
+section 14's rule against colour literals does not reach them. The result is encoded as JPEG at
+quality 90 (ruling R9) through SkiaSharp.
+
+**The cache (ruling R16).** In memory, for the process lifetime: a dictionary keyed by the SHA-256,
+as lowercase hexadecimal, of the UTF-8 string `<mosaic id>:<filter>:<best-frame ids>`, the ids being
+the included panels' best-frame image ids in their lowercase hyphenated form, sorted ordinally and
+joined by commas (the web's `_compute_cache_key` shape), holding the JPEG bytes. It holds at most 20
+entries; adding a twenty-first evicts the oldest inserted. The web holds 100 entries for an hour; the
+port holds 20 without expiry, because a new best frame changes the key. The inclusion rules run
+before the lookup, so the left-out sentence of section 12.17 is always current. A cache hit shows at
+once, runs no job and writes no Activity row. A cancelled or failed build caches nothing. Nothing is
+written to disk except Download (section 12.17).
+
+**The job and the feed (ruling R13).** A build runs off the UI thread as one job in the job
+registry, kind `mosaic_composite`, titled "Composite: <mosaic name>, <filter>", cancellable. It
+reports "Decoding <panel label>" as each tile starts, with the fraction of included tiles done. A
+completed build writes the Activity row `mosaic_composite_built`, category `user_action`, severity
+`info`, message "<mosaic name>, <filter>: <w> by <h> pixels from <n> panels", `<w>` and `<h>` the
+encoded image's size and `<n>` the included panel count; a failed build writes
+`mosaic_composite_failed`, category `user_action`, severity `error`, with the reason as its message.
+Both carry `{mosaic_id, filter}` as details, the failure adding `reason`. A cancelled build writes no
+row: the job's Cancelled result in Recent is the record. Nothing pushes a toast. The job census of
+section 12 gains `mosaic_composite`, which takes it to twenty members.
+
+**Departures from the web, for the build.**
+
+1. **No hardcoded optics** (ruling R15). The plate scale is the panels' own `arcsec_per_pixel`,
+   not the first panel's `FOCALLEN` and `XPIXSZ` with the defaults 448 and 3.76.
+2. **Geometry from columns**, not from `raw_headers` (ruling R10).
+3. **The RA is unwrapped** about the reference panel before the mean.
+4. **The tile scale is per panel**, the panel's tile width over its own `width_px`; the web uses one
+   scale for every tile, the first tile's width over the last decoded frame's native width, and
+   that native width is the height for a mono frame.
+5. **Tiles are centred** on their projected points; the web anchors the unrotated tile's top-left
+   corner there, the same picture only while every tile has one size.
+6. **A skipped frame fails the build** instead of silently dropping the panel.
+7. **The rectangle mask** replaces the web's non-black mask, and every tile is turned by its `r`,
+   where the web leaves a turn under 0.1 degrees undone.
+8. **The cache** holds 20 entries without expiry; the web holds 100 for an hour.
+9. **The tile width is 1,600 pixels**; the web's is 400.
+10. **The output is capped at 6,000 pixels** on its longer side; the web has no cap.
+11. **The left-out sentence** names every panel not drawn (section 12.17); the web shows nothing.
+12. **A completed build is an Activity row** and every build is a job; the web records only a
+    failure.
 
 ---
 
@@ -10942,9 +11100,14 @@ Back, as on the Target detail page (section 12.4). The page is a workbench with 
 pencil `Button.quiet` that swaps it for a `TextBox` (Enter saves, Escape cancels, the name
 sentences above refuse); the `mosaic.about` glyph; one inline cell per mosaic-scope custom column,
 every such column in display order with its name as a caption, the shared cell editor of section
-12.15, ungated by any picker; then at its trailing end a **Composite** `Button`, disabled
-with the tooltip "Composite images are not available yet." until the composite phase, and the
-overflow menu. Its second line is the **summary line**, "<n> panels, <integration> total, <f>
+12.15, ungated by any picker; then at its trailing end a **Composite** `Button` and the
+overflow menu. Composite opens the composite lightbox (below) for the arranger's selected filter.
+It is enabled when at least one panel has a positioned best frame in that filter and a plate scale
+exists (section 11.6, ruling R15). Otherwise it is disabled with one tooltip, the first that
+applies: "No frames to composite" while the arranger has no filter, "No panel carries a plate
+scale" when no panel's best frame in the filter carries one, and "No panel has a positioned frame
+in <filter>" when no panel is included. The enablement is recomputed whenever the frame set loads
+and whenever the filter changes. Its second line is the **summary line**, "<n> panels, <integration> total, <f>
 frames".
 
 The **overflow menu** is a `MenuFlyout` with two entries:
@@ -11323,6 +11486,59 @@ the name joins the parts in that order, "Panel 1, selected, no thumbnail". Every
 content is not a word carries a name: "Zoom out" on "-", "Zoom in" on "+" and "Reset rotation"
 on "0". The two sliders carry "Rotation" and "Tile opacity".
 
+#### The composite lightbox
+
+Phase 19B. Mirrors `frontend/src/components/mosaics/MosaicCompositeModal.tsx`, amended by rulings
+R9, R13, R15 and R16; the build behind it is section 11.6.
+
+**Window.** A window on the shell's modal host, the shape of the preview modal (section 11.5,
+`PreviewModalService` over `ModalHost`): `Views/Mosaics/CompositeLightboxWindow.axaml` over
+`CompositeLightboxViewModel`, titled "<mosaic name>, <filter> composite". Composite on the detail
+page header opens it for the arranger's selected filter. Escape and the Close `Button` close it.
+Closing cancels a build in flight, and a partial result is not cached. Reopening after a completed
+build is instant, from the cache of section 11.6.
+
+**States, in order.**
+
+| State | Shows | Download |
+| --- | --- | --- |
+| Building | A spinner, the caption "Building the composite..." and under it the job's current message, "Decoding <panel label>" | Disabled |
+| Ready | The image; the left-out sentence when any panel was left out | Enabled |
+| Failed | The reason in the error ink and a Retry `Button` that starts a new build, a new job | Disabled |
+
+Opening on a cache hit goes straight to Ready with no job. A build cancelled from the status bar
+flyout while the window is open shows Failed with the reason "The build was cancelled." and Retry;
+a build cancelled by closing the window shows nothing.
+
+**The image.** Zoom and pan as section 11.5's preview: the wheel zooms at the pointer from 0.1x to
+8x of fit, a left drag pans while zoomed, and a double-click or the `0` key resets to fit, through
+the shared `PreviewModalViewModel.ScaleAbout` rule the arranger also uses. There is no header
+panel, no navigation and no Reveal.
+
+**The left-out sentence.** One sentence in the caption tier under the image, exactly "Not in this
+composite: <label> (no <filter> frames), <label> (no position).", naming every left-out panel in
+`sort_order`, each with its reason in parentheses, the two reasons being "no <filter> frames" and
+"no position" (section 11.6). With one panel left out it reads, for example, "Not in this
+composite: Panel 3 (no position)." There is no sentence when every panel is in.
+
+**Download.** A `Button` reading "Download" opens a save dialog with the file name
+`<name>-<filter>.jpg`, the mosaic name and the filter each passed through the Export panels rule
+(every character outside A to Z, a to z and 0 to 9 replaced by `_`), starting at the Documents
+folder (`SaveDialogStart`). It writes the composite's bytes, byte for byte the image shown, as one
+new file at the path the dialog returned, through `AppWriter.BeginExport` (section 2.1.1) from
+`CompositeLightboxViewModel`. A cancelled dialog writes nothing; a failed write shows "The file
+could not be written." under the image, as Export panels does. The dialog seam is the detail page's
+`ExportDestinationPicker` shape, a delegate the view sets.
+
+**Accessibility.** The image's automation name is "Composite of <mosaic name>, <filter>". The
+spinner's caption and the error are live text, announced when they change. The buttons carry their
+labels.
+
+**What the lightbox reads and writes.** The build reads the best frames' files through section
+11.2's reader, user files read only, and writes nothing but the job and the Activity rows of
+section 11.6. Download writes one new file at the dialog's path (section 2.1). Nothing else is
+written.
+
 #### The Create mosaic dialog
 
 Opened from the Target detail page's overflow menu entry "Create mosaic from selected nights"
@@ -11362,9 +11578,10 @@ Stored: the four tables of sections 5.22 to 5.25, the mosaic-scope values of sec
 suggestions and mosaics, the suggestion filter text, expanded mosaic rows and the open add panel
 form, expanded panel rows on the detail page, the splitter position and the Create mosaic dialog's
 choices; and the arranger's selection, tile opacity, zoom, pan, stacking order, Labels state,
-filter choice, and Loading and Saving captions. Nothing on these
-surfaces reads, writes, moves, renames or deletes a user file; Export panels (CSV) writes one new
-file at the dialog's path and nothing else (section 2.1).
+filter choice, and Loading and Saving captions; and the composite cache, which is in memory for
+the process lifetime (section 11.6, ruling R16), and the lightbox's zoom and pan. Nothing on these
+surfaces reads, writes, moves, renames or deletes a user file; Export panels (CSV) and the composite
+lightbox's Download each write one new file at the dialog's path and nothing else (section 2.1).
 
 #### Departures from the web, in one place
 
@@ -11424,6 +11641,14 @@ file at the dialog's path and nothing else (section 2.1).
     marks the tile, so the toolbar never reflows under a captured pointer.
 30. **The overlay text is the caption tier**, 0.714 of the root size, rather than the web's 11
     pixels, so the overlays follow the reader's text size.
+31. **The composite lightbox keeps the web's states**, building, ready and failed with Retry, and
+    adds: the left-out sentence; cancel on close; Failed for a build cancelled from the flyout.
+32. **The Composite button has three disabled states** with their tooltips (ruling R15); the web's
+    button is always enabled and fails late.
+33. **The download name is `<name>-<filter>.jpg`**, not the web's `<name>_<filter>_composite.jpg`,
+    and Download goes through a save dialog and `BeginExport` rather than a browser download.
+34. **The build is a job and a completed build is an Activity row** (ruling R13); the web runs it
+    inside the request and records only a failure. Section 11.6 lists the build's own departures.
 
 ---
 
