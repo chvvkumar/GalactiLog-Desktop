@@ -1,3 +1,5 @@
+using Avalonia;
+using Avalonia.Controls;
 using Avalonia.Platform.Storage;
 using Serilog;
 
@@ -51,6 +53,41 @@ internal static class SaveDialogStart
             // at its own default instead. The static Serilog logger for the reason the views'
             // own picker handlers use it: a view has no injected one.
             Log.Warning(exception, "The Documents folder could not be resolved for a save dialog");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// The save dialog of the mosaic exports, Export panels and the composite's Download (spec
+    /// 12.17): opened over <paramref name="view"/>'s top level at the Documents folder, with the
+    /// operating system's own overwrite prompt as the only way an existing file is replaced (spec
+    /// 2.1.1). Returns the chosen absolute path, or null when the user cancelled, when there is no
+    /// top level, or when the location is not on the filesystem.
+    /// </summary>
+    public static async Task<string?> PickPathAsync(Visual view, string title, string suggestedFileName, string extension, string typeName)
+    {
+        if (TopLevel.GetTopLevel(view)?.StorageProvider is not { } storage)
+        {
+            return null;
+        }
+
+        try
+        {
+            var startLocation = await SaveDialogStart.DocumentsAsync(storage).ConfigureAwait(true);
+            var file = await storage.SaveFilePickerAsync(new FilePickerSaveOptions
+            {
+                Title = title,
+                SuggestedFileName = suggestedFileName,
+                DefaultExtension = extension,
+                SuggestedStartLocation = startLocation,
+                ShowOverwritePrompt = true,
+                FileTypeChoices = [new FilePickerFileType(typeName) { Patterns = [$"*.{extension}"] }],
+            }).ConfigureAwait(true);
+            return file?.TryGetLocalPath();
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "The {Title} save dialog could not be opened", title);
             return null;
         }
     }

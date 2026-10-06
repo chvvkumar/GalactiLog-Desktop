@@ -1,0 +1,140 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+        x:Class="GalactiLog.App.Views.Mosaics.CompositeLightboxWindow"
+        x:DataType="mos:CompositeLightboxViewModel"
+        Title="{Binding Title}"
+        Width="1280"
+        Height="900"
+        CanResize="True"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- Spec 12.17's composite lightbox, the shape of spec 11.5's preview modal: the same window,
+       viewport, transform, spinner and error block. Every colour is a theme token (spec 14). No
+       text box lives here, so 0 and Escape are plain KeyBindings. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding CloseCommand}" />
+    <KeyBinding Gesture="D0" Command="{Binding ResetFitCommand}" />
+    <KeyBinding Gesture="NumPad0" Command="{Binding ResetFitCommand}" />
+  </Window.KeyBindings>
+
+  <Grid RowDefinitions="Auto,*,Auto,Auto">
+
+    <Border Grid.Row="0"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,0,0,1"
+            Padding="16,10">
+      <StackPanel x:Name="TitleRow" Orientation="Horizontal" Spacing="12">
+        <TextBlock x:Name="TitleText"
+                   Text="{Binding Title}"
+                   FontWeight="SemiBold"
+                   TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+      </StackPanel>
+    </Border>
+
+    <Border x:Name="Viewport"
+            Grid.Row="1"
+            Focusable="True"
+            IsTabStop="False"
+            ClipToBounds="True"
+            Background="{DynamicResource ColorBgBase}">
+      <Panel>
+        <Image x:Name="CompositeImage"
+               Source="{Binding Image}"
+               Stretch="Uniform"
+               AutomationProperties.Name="{Binding ImageName}"
+               RenderTransformOrigin="50%,50%">
+          <Image.RenderTransform>
+            <TransformGroup>
+              <ScaleTransform ScaleX="{Binding Scale}" ScaleY="{Binding Scale}" />
+              <TranslateTransform X="{Binding OffsetX}" Y="{Binding OffsetY}" />
+            </TransformGroup>
+          </Image.RenderTransform>
+        </Image>
+
+        <StackPanel x:Name="BuildingIndicator"
+                    Spacing="8"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding IsBuilding}">
+          <ProgressBar IsIndeterminate="True" Width="120" HorizontalAlignment="Center" />
+          <TextBlock x:Name="BuildingText"
+                     Text="{x:Static mos:CompositeLightboxViewModel.BuildingText}"
+                     HorizontalAlignment="Center"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock x:Name="ProgressText"
+                     Text="{Binding ProgressText}"
+                     HorizontalAlignment="Center"
+                     AutomationProperties.LiveSetting="Polite"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+
+        <Border x:Name="ErrorPanel"
+                IsVisible="{Binding HasError}"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Background="{DynamicResource ColorErrorCalloutFill}"
+                BorderBrush="{DynamicResource ColorErrorCalloutBorder}"
+                BorderThickness="1"
+                CornerRadius="{StaticResource RadiusMd}"
+                Padding="16">
+          <StackPanel Spacing="8">
+            <TextBlock x:Name="ErrorText"
+                       Text="{Binding ErrorText}"
+                       TextWrapping="Wrap"
+                       AutomationProperties.LiveSetting="Assertive"
+                       Foreground="{DynamicResource ColorError}" />
+            <Button x:Name="RetryButton"
+                    Content="Retry"
+                    HorizontalAlignment="Center"
+                    Padding="14,4"
+                    Command="{Binding RetryCommand}" />
+          </StackPanel>
+        </Border>
+      </Panel>
+    </Border>
+
+    <!-- The caption tier under the image: the left-out sentence and a failed Download. -->
+    <StackPanel Grid.Row="2" Margin="16,6,16,0" Spacing="4">
+      <TextBlock x:Name="LeftOutText"
+                 Classes="t-caption"
+                 Text="{Binding LeftOutText}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding LeftOutText, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+      <TextBlock x:Name="DownloadErrorText"
+                 Text="{Binding DownloadError}"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding DownloadError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorError}" />
+    </StackPanel>
+
+    <Border Grid.Row="3"
+            Background="{DynamicResource ColorBgSurface}"
+            BorderBrush="{DynamicResource ColorBorderDefault}"
+            BorderThickness="0,1,0,0"
+            Margin="0,6,0,0"
+            Padding="16,10">
+      <Grid ColumnDefinitions="Auto,*,Auto">
+        <Button Grid.Column="0"
+                x:Name="DownloadButton"
+                Content="Download"
+                Padding="14,4"
+                Command="{Binding DownloadCommand}" />
+        <TextBlock Grid.Column="1"
+                   Text="Wheel to zoom, drag to pan, double-click or 0 to fit"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorTextTertiary}" />
+        <Button Grid.Column="2"
+                x:Name="CloseButton"
+                Content="Close (Esc)"
+                Padding="14,4"
+                Command="{Binding CloseCommand}" />
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

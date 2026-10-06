@@ -2,9 +2,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.VisualTree;
-using Avalonia.Platform.Storage;
 using GalactiLog.App.ViewModels.Mosaics;
-using Serilog;
 
 namespace GalactiLog.App.Views.Mosaics;
 
@@ -66,40 +64,6 @@ public partial class MosaicDetailView : UserControl
         }
     }
 
-    /// <summary>Opens the platform save dialog on the suggested name and returns the chosen
-    /// absolute path, or null when the user cancelled, when there is no top level, or when the
-    /// location is not on the filesystem.</summary>
-    private async Task<string?> PickDestinationAsync(string suggestedFileName)
-    {
-        if (TopLevel.GetTopLevel(this)?.StorageProvider is not { } storage)
-        {
-            return null;
-        }
-
-        IStorageFile? file;
-        try
-        {
-            var start = await SaveDialogStart.DocumentsAsync(storage).ConfigureAwait(true);
-            file = await storage.SaveFilePickerAsync(SaveOptions(suggestedFileName, start)).ConfigureAwait(true);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "The mosaic panels save dialog could not be opened");
-            return null;
-        }
-
-        return file?.TryGetLocalPath();
-    }
-
-    /// <summary>The save dialog's options. The operating system's own overwrite prompt is the only
-    /// way an existing file is replaced (spec 2.1.1).</summary>
-    internal static FilePickerSaveOptions SaveOptions(string suggestedFileName, IStorageFolder? startLocation) => new()
-    {
-        Title = "Export panels",
-        SuggestedFileName = suggestedFileName,
-        DefaultExtension = "csv",
-        SuggestedStartLocation = startLocation,
-        ShowOverwritePrompt = true,
-        FileTypeChoices = [new FilePickerFileType("CSV") { Patterns = ["*.csv"] }],
-    };
+    private Task<string?> PickDestinationAsync(string suggestedFileName)
+        => SaveDialogStart.PickPathAsync(this, "Export panels", suggestedFileName, "csv", "CSV");
 }

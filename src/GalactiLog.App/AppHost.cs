@@ -17,6 +17,7 @@ using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.App.ViewModels.Update;
+using GalactiLog.App.Views.Mosaics;
 using GalactiLog.App.Views.TargetDetail;
 using GalactiLog.Core.Catalogs;
 using GalactiLog.Core.Diagnostics;
@@ -2542,7 +2543,13 @@ public static class AppHost
             serviceProvider.GetRequiredService<JobRegistry>(),
             post: null,
             delay: null,
-            logger: serviceProvider.GetRequiredService<ILogger<MosaicDetailViewModel>>()));
+            logger: serviceProvider.GetRequiredService<ILogger<MosaicDetailViewModel>>(),
+            // Spec 12.17's Composite: the composite lightbox on the modal host, the
+            // PreviewModalService shape, disposed when it closes, which cancels a build in flight.
+            composite: serviceProvider.GetRequiredService<CompositeService>(),
+            openComposite: lightbox => serviceProvider.GetRequiredService<ModalHost>().ShowAsync<bool>(
+                () => new CompositeLightboxWindow { DataContext = lightbox },
+                () => lightbox.Dispose())));
 
         // Spec 12.6's Activity page (Phase 9 Task 4). A singleton for the reason DashboardViewModel
         // is one: the filter pills, the search term and the pages already loaded are session state,

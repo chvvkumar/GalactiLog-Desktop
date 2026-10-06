@@ -99,11 +99,13 @@ public class ExportWriterContainmentTests : IDisposable
         // confinement rule can never let be a scan root. The set stays EXACT and NAMED: a fourth
         // save dialog fails this rather than shipping without a start location, which is how five
         // default-named log files landed in a fixture library. Phase 18 Task 5 adds a fourth by
-        // ruling: spec 12.17's Export panels (CSV), on the same start-location spine.
+        // ruling: spec 12.17's Export panels (CSV), on the same start-location spine. Phase 19B
+        // Task 4 moves that dialog into SaveDialogStart.PickPathAsync, which the composite
+        // lightbox's Download shares, so the fourth source is now the spine's own file.
         var files = SourceScan.FilesMatching(@"SaveFilePickerAsync", RegexOptions.None);
 
         Assert.Equal(
-            new[] { "DiagnosticsView.axaml.cs", "LogViewerView.axaml.cs", "MosaicDetailView.axaml.cs", "WbppExportWindow.axaml.cs" },
+            new[] { "DiagnosticsView.axaml.cs", "LogViewerView.axaml.cs", "SaveDialogStart.cs", "WbppExportWindow.axaml.cs" },
             files);
 
         // Verification E2, ruled over both seams. A save dialog with no SuggestedStartLocation
@@ -160,7 +162,7 @@ public class ExportWriterContainmentTests : IDisposable
             (Needle: @"StagingFolderPicker\s*=",
                 Files: new[] { "WbppExportWindow.axaml.cs" }),
             (Needle: @"ExportDestinationPicker\s*=",
-                Files: new[] { "MosaicDetailView.axaml.cs" }),
+                Files: new[] { "CompositeLightboxWindow.axaml.cs", "MosaicDetailView.axaml.cs" }),
         };
 
         // Compared as one value rather than four assertions in a row, so a further file assigning
