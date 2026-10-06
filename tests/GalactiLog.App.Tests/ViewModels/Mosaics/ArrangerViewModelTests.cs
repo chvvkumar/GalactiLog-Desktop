@@ -671,6 +671,30 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal((0d, 250 * 200 / 300d + 4), (arranger.Tiles[2].X, arranger.Tiles[2].Y));
     }
 
+    // The frame's aspect does not change with the filter: a tile keeps its last known height
+    // while a new thumbnail is outstanding, and when it ends empty after having had an image.
+    [AvaloniaFact]
+    public async Task AFilterChange_KeepsTheTilesLastKnownHeight()
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
+        var panels = Panels(1);
+        var frames = Frames(["Ha", "OIII", "SII"], "Ha", (panels[0].Id, "Ha", "a-ha.fits"), (panels[0].Id, "OIII", "a-oiii.fits"));
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => frames, ThumbnailFor = thumbs.Create });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        thumbs.PumpUntil(() => arranger.Tiles[0].HasImage);
+        var tile = arranger.Tiles[0];
+        Assert.Equal(250, tile.Height, 9);
+
+        arranger.SelectedFilter = "OIII";
+        Assert.False(tile.HasImage);
+        Assert.Equal(250, tile.Height, 9);
+
+        arranger.SelectedFilter = "SII";
+        Assert.True(tile.IsEmpty);
+        Assert.Equal(250, tile.Height, 9);
+    }
+
     // Fit lands at min(520 / 250, 320 / 160) = 2 on the placeholder, then at min(520 / 250,
     // 320 / 250) = 1.28 once the square image is known, unless the reader has moved the view.
     [AvaloniaTheory]

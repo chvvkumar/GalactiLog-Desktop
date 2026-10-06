@@ -64,8 +64,9 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
     public partial double Y { get; private set; }
 
     /// <summary>The tile's height in canvas pixels at zoom 1 (spec 12.17's tiles): 250 times the
-    /// thumbnail's pixel height over its pixel width once the image is known, else
-    /// <see cref="ArrangerViewModel.TileHeight"/>. The width is always
+    /// thumbnail's pixel height over its pixel width once an image is known; until the tile has
+    /// ever had one, <see cref="ArrangerViewModel.TileHeight"/>. While a new thumbnail is
+    /// outstanding, or the tile ends empty, it keeps its last known height. The width is always
     /// <see cref="ArrangerViewModel.TileWidth"/>.</summary>
     [ObservableProperty]
     public partial double Height { get; private set; } = ArrangerViewModel.TileHeight;
@@ -256,10 +257,10 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(AutomationName));
         _loadingChanged();
 
-        var height = Thumbnail?.Image?.PixelSize is { Width: > 0, Height: > 0 } size
-            ? ArrangerViewModel.TileWidth * size.Height / size.Width
-            : ArrangerViewModel.TileHeight;
-        if (height != Height)
+        // Only an image moves the height: a slot still outstanding, or a filter with no frame,
+        // keeps the last known one, since the panel's aspect does not change with the filter.
+        if (Thumbnail?.Image?.PixelSize is { Width: > 0, Height: > 0 } size &&
+            ArrangerViewModel.TileWidth * size.Height / size.Width is var height && height != Height)
         {
             Height = height;
             _heightChanged();

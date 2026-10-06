@@ -11106,7 +11106,10 @@ order in its code-behind when the `ItemsControl` prepares the tile's container, 
 raises when a drag starts, so `Tiles` stays in `sort_order`. A tile is 250 pixels wide at zoom 1
 and follows its thumbnail, as the web's does: once the image is known its height is 250 times the
 thumbnail's pixel height over its pixel width (a square thumbnail makes a 250 pixel square, a 300
-by 200 one a tile 166.67 high); until the image loads, and for the empty tile, it is 160. The tile
+by 200 one a tile 166.67 high). Until the tile has ever had an image it is 160; after that it keeps
+its last known height while a new thumbnail is outstanding and when a filter leaves it empty,
+because the panel's aspect does not change with the filter, so a filter change does not drop
+the tile to 160 and back. The tile
 is a clipped `Border` with a 4 pixel corner radius and a 1 pixel `ColorBorderDefault` border drawn
 inside the tile's footprint, holding the thumbnail `Image` with `Stretch="Uniform"` and four
 overlays drawn over it. Its background is transparent while it has an image, so nothing but the
@@ -11391,7 +11394,8 @@ file at the dialog's path and nothing else (section 2.1).
 15. **A right click opens a context menu** with Rotate CW and Flip H, rather than rotating the tile
     at once (ruling R18).
 16. **A tile is 250 pixels wide**, not the web's 300. It is resized to its thumbnail's aspect
-    once the image loads, as the web does, and is 160 high until then and for the empty tile.
+    once an image loads, as the web does, is 160 high until it has ever had one, and keeps its
+    last known height across a filter change.
 17. **The auto layout leaves a 4 pixel gap** between cells, not 1, and nothing snaps (ruling R8).
 18. **Tiles show frame thumbnails**, each panel's best frame's existing `frames/<key>.jpg`, rather
     than panel thumbnails rendered and cached per filter (ruling R14).

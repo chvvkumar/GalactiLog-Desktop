@@ -42,8 +42,8 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     /// <summary>A tile's width at zoom 1, in canvas pixels.</summary>
     public const double TileWidth = 250;
 
-    /// <summary>A tile's height at zoom 1, in canvas pixels, until its thumbnail is known and for
-    /// the empty tile; a tile with an image takes the image's aspect (<see cref="TileViewModel.Height"/>).</summary>
+    /// <summary>A tile's height at zoom 1, in canvas pixels, until it has ever had a thumbnail; a
+    /// tile with an image takes the image's aspect and keeps it (<see cref="TileViewModel.Height"/>).</summary>
     public const double TileHeight = 160;
 
     /// <summary>The gap between auto layout cells: the pitch is 254 across and the tallest
@@ -461,7 +461,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         }
     }
 
-    // A thumbnail arrived or went: the unplaced tiles reflow to the new row pitch, the rotation
+    // A thumbnail arrived with a new aspect: the unplaced tiles reflow to the new row pitch, the rotation
     // centre is retaken (not mid-drag, so the group does not swing under the pointer), and until
     // the reader's first gesture the view refits, so the first frame of a mosaic of square
     // thumbnails is not cut off.
