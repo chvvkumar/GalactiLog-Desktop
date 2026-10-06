@@ -843,7 +843,7 @@ public static class HelpTopics
             "Each tile is one panel's best frame in the chosen filter, with its label, its integration and, when it trails the leading panel, a deficit badge: green under 20 percent behind, amber 20 to 60, red 60 or more. A panel with no frame in the filter reads No, the filter's name and frames, such as No Ha frames. "
             + "Drag a tile to place it, or select one and use Rotate CW or Flip H, or right-click it. "
             + "Fit, zoom and the wheel change the view, the Rotation slider turns the whole group, and Reset all clears every tile's rotation and flip and the group rotation, leaving positions as they are. "
-            + "Positions, rotation and flip are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not. "
+            + "Positions, rotation, flip and the group rotation are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not. "
             + "The layout is for the eye only and changes no figure and no composite."),
 
         new("mosaic.sessions", "Panels and nights",
