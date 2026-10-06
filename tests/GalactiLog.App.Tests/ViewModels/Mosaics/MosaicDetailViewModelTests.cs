@@ -812,4 +812,26 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         Assert.Same(fixture.Geometry, opened.Request.Geometry);
         Assert.Equal("M 31 mosaic, Ha composite", opened.Title);
     }
+
+    // Fix round 1: with no service of its own the page's composite is inert. Its drawing reads no
+    // file and ends as a cancel, which the open lightbox shows as Failed.
+    [Fact]
+    public async Task TheDefaultComposite_IsInert_ItsBuildEndsAsACancel()
+    {
+        var fixture = new CompositeFixture(_worker);
+        fixture.Geometry[fixture.HaFrame1] = Positioned(10);
+        CompositeLightboxViewModel? opened = null;
+        var page = await OpenComposite(fixture, openComposite: lightbox =>
+        {
+            opened = lightbox;
+            return Task.CompletedTask;
+        });
+
+        await page.CompositeCommand.ExecuteAsync(null);
+        await opened!.PendingBuild.WaitAsync(TimeSpan.FromSeconds(30));
+
+        Assert.Equal(CompositeLightboxViewModel.CancelledText, opened.ErrorText);
+        Assert.Null(opened.Image);
+        opened.Dispose();
+    }
 }

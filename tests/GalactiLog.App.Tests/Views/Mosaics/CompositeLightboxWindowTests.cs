@@ -86,6 +86,15 @@ public class CompositeLightboxWindowTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(page.Scale > 1d);
+
+        // A left drag pans while zoomed in, through the shared gestures.
+        var offset = page.OffsetX;
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseMove(centre + new Point(30, 0), RawInputModifiers.LeftMouseButton);
+        window.MouseUp(centre + new Point(30, 0), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(offset + 30, page.OffsetX, 6);
+
         window.Close();
     }
 }

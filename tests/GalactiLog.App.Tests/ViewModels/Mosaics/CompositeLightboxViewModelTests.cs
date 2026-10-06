@@ -323,4 +323,17 @@ public sealed class CompositeLightboxViewModelTests : IDisposable
         page.ResetFit();
         Assert.Equal((1d, 0d, 0d), (page.Scale, page.OffsetX, page.OffsetY));
     }
+
+    [AvaloniaFact]
+    public async Task AThrowingPicker_IsShownAsTheWriteFailure_AndWritesNothing()
+    {
+        var page = Open();
+        await Complete(page, new CompositeResult(Jpeg(4, 4), 4, 4));
+        page.ExportDestinationPicker = _ => throw new InvalidOperationException("no dialog");
+
+        await page.DownloadCommand.ExecuteAsync(null);
+
+        Assert.Equal(CompositeLightboxViewModel.DownloadFailedText, page.DownloadError);
+        Assert.Empty(Directory.EnumerateFileSystemEntries(_root));
+    }
 }

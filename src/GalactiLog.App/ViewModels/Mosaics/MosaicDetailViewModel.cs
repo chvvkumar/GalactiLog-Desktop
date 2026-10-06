@@ -91,8 +91,7 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// <param name="logger">A failed read or write is logged, never thrown on the UI thread.</param>
     /// <param name="composite">Spec 11.6's cache and build, for Composite's enablement and the
     /// lightbox. Null in a test that does not exercise it: a private service, enough for the
-    /// enablement; a test that runs Composite passes its own, because the lightbox starts its build
-    /// when it is constructed.</param>
+    /// enablement, whose drawing reads no file and ends as a cancel.</param>
     /// <param name="openComposite">Shows the composite lightbox and completes when it closes,
     /// disposing it. Null in a test: the lightbox is disposed at once.</param>
     public MosaicDetailViewModel(
@@ -110,7 +109,9 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         Backend = backend;
         _appWriter = appWriter;
         _jobs = jobs;
-        _composite = composite ?? new CompositeService(new JobRegistry(action => action()), (_, _, _, _) => { });
+        // Inert: the default drawing touches no file and ends as a cancel.
+        _composite = composite ?? new CompositeService(
+            new JobRegistry(action => action()), (_, _, _, _) => { }, (_, _, _, _) => throw new OperationCanceledException());
         _openComposite = openComposite ?? (lightbox =>
         {
             lightbox.Dispose();

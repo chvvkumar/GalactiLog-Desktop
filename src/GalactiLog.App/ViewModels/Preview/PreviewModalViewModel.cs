@@ -29,7 +29,7 @@ namespace GalactiLog.App.ViewModels.Preview;
 /// view-model only asks for a preview.
 /// </para>
 /// </remarks>
-public sealed partial class PreviewModalViewModel : ObservableObject, IDisposable
+public sealed partial class PreviewModalViewModel : ObservableObject, IZoomPanSurface, IDisposable
 {
     /// <summary>Spec 11.5's zoom range, as a multiple of fit. The web application clamps to
     /// [1, 20]; the spec's range is the port's, so zooming out below fit is allowed.</summary>
@@ -435,6 +435,8 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
         OffsetY = 0d;
     }
 
+    void IZoomPanSurface.ResetFit() => Fit();
+
     /// <summary><c>H</c>. The panel is built on its first show for a frame and kept while the
     /// frame is on screen, so hiding and showing it again issues no second query.</summary>
     [RelayCommand]
@@ -631,4 +633,19 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
             lifetime: _lifetimeToken);
         Headers.Load();
     }
+}
+
+/// <summary>Spec 11.5's zoom and pan, as the shared image gestures (<c>Views/ZoomPanGestures</c>)
+/// drive them: the preview modal and the composite lightbox (spec 12.17) implement it.</summary>
+public interface IZoomPanSurface
+{
+    /// <summary>A wheel step in the web's <c>deltaY</c> sign, at the pointer's offset from the
+    /// viewport centre.</summary>
+    void Zoom(double delta, double pointerX, double pointerY);
+
+    /// <summary>A drag step; refused at fit and below.</summary>
+    void Pan(double deltaX, double deltaY);
+
+    /// <summary>Back to fit: double-click and the <c>0</c> key.</summary>
+    void ResetFit();
 }

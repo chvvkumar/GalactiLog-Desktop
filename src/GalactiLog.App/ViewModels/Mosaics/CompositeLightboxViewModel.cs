@@ -28,7 +28,7 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// the save dialog returned and nothing else.
 /// </para>
 /// </remarks>
-public sealed partial class CompositeLightboxViewModel : ObservableObject, IDisposable
+public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoomPanSurface, IDisposable
 {
     /// <summary>The Building caption (spec 12.17).</summary>
     public const string BuildingText = "Building the composite...";
@@ -260,14 +260,14 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IDisp
         }
 
         DownloadError = null;
-        var path = await picker(DownloadFileName(Request.MosaicName, Request.Filter)).ConfigureAwait(true);
-        if (path is null || _disposed)
-        {
-            return;
-        }
-
         try
         {
+            var path = await picker(DownloadFileName(Request.MosaicName, Request.Filter)).ConfigureAwait(true);
+            if (path is null || _disposed)
+            {
+                return;
+            }
+
             using var writer = _appWriter.BeginExport(path);
             writer.WriteAllBytes(path, result.Jpeg);
         }

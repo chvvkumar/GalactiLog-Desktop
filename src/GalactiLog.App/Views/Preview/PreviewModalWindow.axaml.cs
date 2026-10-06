@@ -7,7 +7,8 @@ using GalactiLog.App.ViewModels.Preview;
 namespace GalactiLog.App.Views.Preview;
 
 /// <summary>
-/// Spec 11.5's preview modal. The window owns closing, the pointer geometry, the focus placed on
+/// Spec 11.5's preview modal. The window owns closing, the image gestures (through
+/// <see cref="ZoomPanGestures"/>, shared with the composite lightbox), the focus placed on
 /// open (P13 R10) and the four bare-key shortcuts, and holds no logic of its own: every shortcut
 /// is a command on
 /// <see cref="PreviewModalViewModel"/> (spec 18.3), and the view only supplies the geometry the
@@ -15,19 +16,11 @@ namespace GalactiLog.App.Views.Preview;
 /// </summary>
 public partial class PreviewModalWindow : Window
 {
-    /// <summary>
-    /// The per-notch <c>deltaY</c> a browser reports, which is the unit
-    /// <see cref="PreviewModalViewModel.WheelZoomRate"/> was tuned against in
-    /// <c>FilePreviewModal.tsx</c>. Avalonia reports wheel movement in notches, so a notch is
-    /// scaled to the web's figure here and the view-model's contract stays the web's.
-    /// </summary>
-    private const double WebWheelNotchDelta = 100d;
-
     private readonly Border? _viewport;
 
+    private readonly ZoomPanGestures? _gestures;
+
     private PreviewModalViewModel? _subscribed;
-    private bool _panning;
-    private Point _panOrigin;
 
     public PreviewModalWindow()
     {
@@ -38,9 +31,14 @@ public partial class PreviewModalWindow : Window
         _viewport = this.FindControl<Border>("Viewport");
         if (_viewport is not null)
         {
-            _viewport.PointerWheelChanged += OnViewportWheel;
-            _viewport.PointerPressed += OnViewportPressed;
+            _gestures = ZoomPanGestures.Attach(this, _viewport);
         }
+    }
+
+    protected override void OnClosed(EventArgs e)
+    {
+        _gestures?.Detach();
+        base.OnClosed(e);
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -134,84 +132,6 @@ public partial class PreviewModalWindow : Window
         }
 
         base.OnKeyDown(e);
-    }
-
-    /// <summary>Spec 11.5's pointer-centred wheel zoom. Attached to the viewport, not to the
-    /// window: a wheel over the header panel or the navigation bar would otherwise zoom the image
-    /// with an offset measured from a rectangle the pointer is not inside. The pointer's offset
-    /// from the viewport centre is the geometry the view-model asks for, and Avalonia's
-    /// <c>Delta.Y</c> is the opposite sign from the web's <c>e.deltaY</c>, so it is negated
-    /// here.</summary>
-    private void OnViewportWheel(object? sender, PointerWheelEventArgs e)
-    {
-        if (DataContext is not PreviewModalViewModel page || _viewport is null)
-        {
-            return;
-        }
-
-        var position = e.GetPosition(_viewport);
-        page.Zoom(
-            -e.Delta.Y * WebWheelNotchDelta,
-            position.X - (_viewport.Bounds.Width / 2d),
-            position.Y - (_viewport.Bounds.Height / 2d));
-        e.Handled = true;
-    }
-
-    /// <summary>Fit on double-click, and the start of a drag pan. Attached to the viewport for the
-    /// same reason the wheel is: a double-click on the caption or the navigation bar must not
-    /// reset the transform.</summary>
-    private void OnViewportPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (DataContext is not PreviewModalViewModel page)
-        {
-            return;
-        }
-
-        if (e.ClickCount == 2)
-        {
-            // Spec 11.5's fit on double-click, the same command the 0 key runs.
-            page.FitCommand.Execute(null);
-            _panning = false;
-            e.Handled = true;
-            return;
-        }
-
-        if (e.GetCurrentPoint(_viewport).Properties.IsLeftButtonPressed)
-        {
-            _panning = true;
-            _panOrigin = e.GetPosition(this);
-        }
-    }
-
-    /// <summary>Drag pan, the web's <c>onPointerMove</c>. The move is tracked on the window rather
-    /// than the viewport so a drag that wanders over the header panel keeps working, and it is
-    /// gated on the left button still being down rather than on a pointer capture: a button
-    /// released outside the window never delivers a release here, and without the gate the image
-    /// would keep following the pointer afterwards. The view-model refuses the move unless the
-    /// image is zoomed in, so that rule lives in one place.</summary>
-    protected override void OnPointerMoved(PointerEventArgs e)
-    {
-        if (_panning)
-        {
-            if (!e.GetCurrentPoint(this).Properties.IsLeftButtonPressed)
-            {
-                _panning = false;
-            }
-            else if (DataContext is PreviewModalViewModel page)
-            {
-                var position = e.GetPosition(this);
-                page.Pan(position.X - _panOrigin.X, position.Y - _panOrigin.Y);
-                _panOrigin = position;
-            }
-        }
-
-        base.OnPointerMoved(e);
-    }
-
-    protected override void OnPointerReleased(PointerReleasedEventArgs e)
-    {
-        _panning = false;
-        base.OnPointerReleased(e);
     }
 
     private bool IsTypingInATextBox()
