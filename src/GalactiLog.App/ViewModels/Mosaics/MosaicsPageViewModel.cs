@@ -491,6 +491,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     {
         row.PropertyChanged -= OnSuggestionChanged;
         _suggestions.Remove(row);
+        row.Dispose();
         RefreshVisibleSuggestions();
         if (reloadMosaics)
         {
@@ -619,6 +620,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         foreach (var row in _suggestions)
         {
             row.PropertyChanged -= OnSuggestionChanged;
+            row.Dispose();
         }
 
         _suggestions.Clear();
@@ -703,6 +705,11 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         if (_scanStatus is not null)
         {
             _scanStatus.PropertyChanged -= OnScanStatusChanged;
+        }
+
+        foreach (var row in _suggestions)
+        {
+            row.Dispose();
         }
 
         Table.Dispose();

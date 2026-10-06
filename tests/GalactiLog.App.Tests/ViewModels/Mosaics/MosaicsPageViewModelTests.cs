@@ -1,6 +1,7 @@
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Mosaics;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Mosaics;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
@@ -214,6 +215,54 @@ public class MosaicsPageViewModelTests
         Assert.True(suggestion.FramesAreZero);
         Assert.False(suggestion.AcceptCommand.CanExecute(null));
         Assert.Equal("Select at least one panel to accept.", suggestion.AcceptTooltip);
+    }
+
+    // Phase 19A Task 3: the tile preview follows the check boxes in label order, whatever the
+    // session table's sort, and runs no best frame query until the row first expands.
+    [Fact]
+    public async Task TheTilePreview_FollowsTheCheckBoxes_InLabelOrder()
+    {
+        var row = Suggestion("M 31", "panel 2", "Panel 1", "Panel 3");
+        var asked = new List<(Guid, string, IReadOnlyCollection<DateOnly>)>();
+        using var harness = await Ready(new MosaicsBackend
+        {
+            ListPending = () => [row],
+            SuggestionSessions = _ =>
+            [
+                new(TargetA, "panel 2", "M 31 Panel 2", Night(1), "Ha", 3, 900, true),
+                new(TargetA, "panel 2", "M 31 Panel 2", Night(2), "OIII", 1, 300, true),
+                new(TargetB, "Panel 1", "M 31 Panel 1", Night(1), "Ha", 2, 600, true),
+                new(TargetA, "Panel 3", "M 31 Panel 3", Night(9), "Ha", 4, 1200, false),
+            ],
+            SuggestionBestFrame = (target, label, nights) =>
+            {
+                lock (asked)
+                {
+                    asked.Add((target, label, nights));
+                }
+
+                return null;
+            },
+        });
+        var suggestion = Assert.Single(harness.Page.VisibleSuggestions);
+        Assert.True(suggestion.Preview.IsReadOnly);
+        Assert.Empty(suggestion.Preview.Tiles);
+
+        suggestion.IsExpanded = true;
+        await suggestion.Preview.PendingFrames;
+
+        Assert.Equal(new[] { "Panel 1", "panel 2", "Panel 3" }, suggestion.Preview.Tiles.Select(tile => tile.Label));
+        Assert.Equal(MetricText.Integration(1200), suggestion.Preview.Tiles[1].IntegrationText);
+        var panelTwo = Assert.Single(asked, entry => entry.Item2 == "panel 2");
+        Assert.Equal(TargetA, panelTwo.Item1);
+        Assert.Equal(new[] { Night(1), Night(2) }, panelTwo.Item3.Order());
+
+        suggestion.SetChecked("Panel 1", false);
+        Assert.Equal(new[] { "panel 2", "Panel 3" }, suggestion.Preview.Tiles.Select(tile => tile.Label));
+        Assert.Equal((0d, 0d), (suggestion.Preview.Tiles[0].X, suggestion.Preview.Tiles[0].Y));
+
+        suggestion.AllPanelsChecked = false;
+        Assert.True(suggestion.Preview.IsEmpty);
     }
 
     [Fact]

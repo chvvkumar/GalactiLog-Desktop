@@ -109,6 +109,7 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         AddPanel = new AddPanelViewModel(
             mosaicId, [], backend.SearchTargets, backend.AddPanelWithTarget, () => _ = ReloadAsync(),
             Delay, Post, Logger);
+        Arranger = new ArrangerViewModel(mosaicId, backend, readOnly: false, Post, Delay, Logger);
 
         if (jobs is not null)
         {
@@ -329,6 +330,13 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     private static string CsvField(string value)
         => value.IndexOfAny([',', '"', '\n', '\r']) < 0 ? value : "\"" + value.Replace("\"", "\"\"", StringComparison.Ordinal) + "\"";
 
+    // ---- the arranger ------------------------------------------------------------------------------
+
+    /// <summary>Spec 12.17's arranger in row 2, fed by every read. Its layout save calls
+    /// <c>UpdateLayout</c> directly and not through <see cref="Write"/>: it changes no figure, so it
+    /// triggers no re-read.</summary>
+    public ArrangerViewModel Arranger { get; }
+
     // ---- notes -----------------------------------------------------------------------------------
 
     /// <summary>The notes box, autosaved one second after the last keystroke; an emptied box stores
@@ -529,6 +537,7 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         // SetLabels re-prefills the label box and leaves a label the reader is typing alone.
         AddPanel.SetLabels(labels);
         IncludeAllAvailableCommand.NotifyCanExecuteChanged();
+        Arranger.Apply(detail);
     }
 
     /// <summary>Makes <paramref name="target"/> hold <paramref name="wanted"/> in order with the
@@ -594,6 +603,9 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
                 Logger.LogWarning(ex, "Flushing the mosaic page on close failed");
             }
         }
+
+        // Runs a pending layout write the same bounded way, then releases the tiles' thumbnails.
+        Arranger.Dispose();
 
         _disposed = true;
         if (_jobs is not null)

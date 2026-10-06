@@ -84,6 +84,45 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         Assert.False(page.CompositeCommand.CanExecute(null));
     }
 
+    // Phase 19A Task 3: the page feeds its arranger from every read, a layout save reaches the
+    // repository without re-reading the page, and closing the page flushes a pending save.
+    [Fact]
+    public async Task TheArranger_IsFedFromTheDetail_AndItsSaveDoesNotReReadThePage()
+    {
+        var mosaic = TwoPanels();
+        mosaic.RotationAngle = 30;
+        var reads = 0;
+        var backend = mosaic.Backend() with { Detail = _ => { reads++; return mosaic.Read(); } };
+        var page = await Open(mosaic, backend: backend);
+
+        Assert.Equal(new[] { "Panel 1", "Panel 2" }, page.Arranger.Tiles.Select(tile => tile.Label));
+        Assert.Equal(30, page.Arranger.GlobalRotation);
+        Assert.False(page.Arranger.IsReadOnly);
+
+        page.Arranger.Flip(page.Arranger.Tiles[1]);
+        await page.Arranger.PendingSave;
+
+        Assert.Equal(1, mosaic.LayoutWrites);
+        Assert.True(mosaic.Layouts[page.Arranger.Tiles[1].PanelId].FlipH);
+        Assert.Equal((254d, 0d), (mosaic.Layouts[page.Arranger.Tiles[1].PanelId].X, mosaic.Layouts[page.Arranger.Tiles[1].PanelId].Y));
+        Assert.Equal(1, reads);
+    }
+
+    [Fact]
+    public async Task ClosingThePage_RunsAPendingLayoutSave()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic, delay: (_, ct) => Task.Delay(Timeout.Infinite, ct));
+
+        page.Arranger.Rotate(page.Arranger.Tiles[0]);
+        Assert.Equal(0, mosaic.LayoutWrites);
+
+        page.Dispose();
+
+        Assert.Equal(1, mosaic.LayoutWrites);
+        Assert.Equal(90, mosaic.Layouts[page.Arranger.Tiles[0].PanelId].Rotation);
+    }
+
     [Fact]
     public async Task AMosaicThatIsGone_ShowsTheLoadFailure()
     {
@@ -594,211 +633,4 @@ public sealed class MosaicDetailViewModelTests : IDisposable
     [InlineData("Ünïcode", "_n_code_panels.csv")]
     public void ExportFileName_ReplacesEveryCharacterOutsideAsciiLettersAndDigits(string name, string expected)
         => Assert.Equal(expected, MosaicDetailViewModel.ExportFileName(name));
-}
-
-// The in-memory mosaic behind MosaicDetailViewModelTests. It applies the rules the page relies on
-// MosaicRepository and MosaicQueries for, in their simplest form, so a test reads what the page
-// shows after a write rather than which delegate was called.
-internal sealed class FakeMosaic
-{
-    internal sealed record Triple(Guid Target, string TargetName, DateOnly Date, string? Label, int Frames, double Seconds, string Filter);
-
-    internal sealed class SessionRow(Guid panel, Guid target, DateOnly date, string? label, bool included)
-    {
-        public Guid Panel { get; } = panel;
-
-        public Guid Target { get; } = target;
-
-        public DateOnly Date { get; } = date;
-
-        public string? Label { get; } = label;
-
-        public bool Included { get; set; } = included;
-
-        public bool Is(Guid target, DateOnly date, string? label)
-            => Target == target && Date == date && string.Equals(Label ?? "", label ?? "", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public Guid Id { get; } = Guid.NewGuid();
-
-    public string Name { get; set; } = "M 31 mosaic";
-
-    public bool Deleted { get; set; }
-
-    public List<string?> NotesWrites { get; } = [];
-
-    public List<(Guid Id, string Label)> Panels { get; } = [];
-
-    public List<SessionRow> Rows { get; } = [];
-
-    public List<Triple> Catalogue { get; } = [];
-
-    public List<AvailableLabel> AvailableLabels { get; } = [];
-
-    public Guid AddPanel(string label)
-    {
-        if (Panels.Any(panel => string.Equals(panel.Label, label, StringComparison.OrdinalIgnoreCase)))
-        {
-            throw new DuplicatePanelLabelException(label);
-        }
-
-        var id = Guid.NewGuid();
-        Panels.Add((id, label));
-        return id;
-    }
-
-    public void Row(Guid panel, Guid target, DateOnly date, string? label, bool included)
-        => Rows.Add(new SessionRow(panel, target, date, label, included));
-
-    private string PanelLabel(Guid id) => Panels.Single(panel => panel.Id == id).Label;
-
-    private Triple Find(Guid target, DateOnly date, string? label)
-        => Catalogue.Single(triple => triple.Target == target && triple.Date == date
-            && string.Equals(triple.Label ?? "", label ?? "", StringComparison.OrdinalIgnoreCase));
-
-    private bool IncludedAnywhere(Guid target, DateOnly date, string? label)
-        => Rows.Any(row => row.Included && row.Is(target, date, label));
-
-    private static PanelNight NightOf(Triple triple)
-        => new(triple.Target, triple.TargetName, triple.Date, triple.Label,
-            new Dictionary<string, int> { [triple.Filter] = triple.Frames }, triple.Frames, triple.Seconds);
-
-    private List<Triple> AvailableOf(Guid panel)
-    {
-        var contributors = Rows.Where(row => row.Panel == panel).Select(row => row.Target).ToHashSet();
-        return [.. Catalogue
-            .Where(triple => contributors.Contains(triple.Target) && !IncludedAnywhere(triple.Target, triple.Date, triple.Label))
-            .OrderByDescending(triple => triple.Date)];
-    }
-
-    private void Include(Guid panel, Guid target, DateOnly date, string? label)
-    {
-        if (Rows.FirstOrDefault(row => row.Included && row.Panel != panel && row.Is(target, date, label)) is { } other)
-        {
-            throw new NightAlreadyInMosaicException(date, Find(target, date, label).TargetName, label, PanelLabel(other.Panel));
-        }
-
-        if (Rows.FirstOrDefault(row => row.Panel == panel && row.Is(target, date, label)) is { } existing)
-        {
-            existing.Included = true;
-        }
-        else
-        {
-            Row(panel, target, date, label, included: true);
-        }
-    }
-
-    public MosaicDetail? Read()
-    {
-        if (Deleted)
-        {
-            return null;
-        }
-
-        var panels = Panels.Select((panel, order) =>
-        {
-            var included = Rows.Where(row => row.Panel == panel.Id && row.Included)
-                .Select(row => Find(row.Target, row.Date, row.Label))
-                .OrderByDescending(triple => triple.Date)
-                .ToList();
-            var available = AvailableOf(panel.Id);
-            return new PanelDetail(
-                panel.Id, panel.Label, order, null, null, 0, false,
-                [.. included.Select(triple => triple.Target).Distinct()],
-                [.. included.Select(triple => triple.TargetName).Distinct()],
-                included.Sum(triple => triple.Seconds),
-                included.Sum(triple => triple.Frames),
-                included.Select(triple => (triple.Target, triple.Date)).Distinct().Count(),
-                available.Count,
-                0,
-                [.. included.Select(NightOf)],
-                [.. available.Select(NightOf)],
-                included.GroupBy(triple => triple.Filter).ToDictionary(group => group.Key, group => group.Sum(triple => triple.Seconds)));
-        }).ToList();
-
-        var leader = panels.Count == 0 ? 0 : panels.Max(panel => panel.IntegrationSeconds);
-        panels = [.. panels.Select(panel => panel with { DeficitSeconds = leader > 0 ? leader - panel.IntegrationSeconds : 0 })];
-        var labels = AvailableLabels
-            .Where(label => !Panels.Any(panel => string.Equals(panel.Label, label.Label, StringComparison.OrdinalIgnoreCase)))
-            .ToList();
-        return new MosaicDetail(
-            Id, Name, null, 0, panels.Sum(panel => panel.IntegrationSeconds), panels.Sum(panel => panel.Frames),
-            null, null, [], panels, labels);
-    }
-
-    public MosaicsBackend Backend() => new()
-    {
-        Detail = _ => Read(),
-        Rename = (_, name) =>
-        {
-            if (string.Equals(name, "Andromeda", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new DuplicateMosaicNameException(name);
-            }
-
-            Name = name;
-        },
-        Delete = _ => Deleted = true,
-        SetNotes = (_, notes) => NotesWrites.Add(notes),
-        IncludeNight = Include,
-        RemoveNight = (panel, target, date, label) => Rows.Single(row => row.Panel == panel && row.Is(target, date, label)).Included = false,
-        IncludeAll = panel =>
-        {
-            var available = AvailableOf(panel);
-            available.ForEach(triple => Include(panel, triple.Target, triple.Date, triple.Label));
-            return available.Count;
-        },
-        IncludeAllAvailable = _ =>
-        {
-            var count = 0;
-            foreach (var (panel, _) in Panels)
-            {
-                foreach (var triple in AvailableOf(panel))
-                {
-                    Include(panel, triple.Target, triple.Date, triple.Label);
-                    count++;
-                }
-            }
-
-            return count;
-        },
-        IncludeAsNewPanel = (_, _, target, date, label, newLabel) =>
-        {
-            var panel = AddPanel(newLabel);
-            Include(panel, target, date, label);
-            return panel;
-        },
-        AddTargetNights = (panel, target) =>
-        {
-            var added = Catalogue.Where(triple => triple.Target == target && !IncludedAnywhere(target, triple.Date, triple.Label)).ToList();
-            added.ForEach(triple => Row(panel, target, triple.Date, triple.Label, included: false));
-            return added.Count;
-        },
-        DeletePanel = panel =>
-        {
-            if (Rows.Any(row => row.Panel == panel && row.Included))
-            {
-                throw new PanelNotEmptyException();
-            }
-
-            Rows.RemoveAll(row => row.Panel == panel);
-            Panels.RemoveAll(entry => entry.Id == panel);
-        },
-        AddPanelWithTarget = (_, target, label) =>
-        {
-            var panel = AddPanel(label);
-            var triples = Catalogue.Where(triple => triple.Target == target
-                && string.Equals(triple.Label, label, StringComparison.OrdinalIgnoreCase)).ToList();
-            triples.ForEach(triple => Include(panel, target, triple.Date, triple.Label));
-            return new PanelAddResult(panel, triples.Count, 0);
-        },
-        SearchTargets = term =>
-        [
-            .. Catalogue
-                .Where(triple => triple.TargetName.Contains(term, StringComparison.OrdinalIgnoreCase))
-                .Select(triple => (triple.Target, triple.TargetName))
-                .Distinct()
-                .Select(target => new TargetSearchResult(target.Target, null, target.TargetName, null, null, 1, 1)),
-        ],
-    };
 }

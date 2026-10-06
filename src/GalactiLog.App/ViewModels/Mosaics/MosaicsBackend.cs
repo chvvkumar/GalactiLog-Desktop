@@ -105,6 +105,29 @@ public sealed record MosaicsBackend
     /// <summary>Normally <c>CustomColumnRepository.SetValue</c>. Null draws no custom cell.</summary>
     public Func<Guid, CustomValueKey, string?, CustomWriteResult>? WriteValue { get; init; }
 
+    // ---- the arranger (spec 12.17, Phase 19A) ----------------------------------------------------
+
+    /// <summary>The available filters, the default filter and each panel's best frame per filter
+    /// (spec 11.4). Normally <c>PanelFrameQuery.ForMosaic</c>.</summary>
+    public Func<Guid, PanelFrameSet> PanelFrames { get; init; }
+        = _ => new PanelFrameSet([], null, new Dictionary<Guid, IReadOnlyDictionary<string, BestFrame>>());
+
+    /// <summary>(target, label, nights): the best frame of one suggestion entry, for the read-only
+    /// preview. Normally <c>PanelFrameQuery.ForSuggestionEntry</c>.</summary>
+    public Func<Guid, string, IReadOnlyCollection<DateOnly>, BestFrame?> SuggestionBestFrame { get; init; } = (_, _, _) => null;
+
+    /// <summary>(mosaic, rotation angle, every panel's layout), one transaction. Normally
+    /// <c>MosaicRepository.UpdateLayout</c>.</summary>
+    public Action<Guid, double, IReadOnlyList<(Guid PanelId, double? X, double? Y, int Rotation, bool FlipH)>> UpdateLayout { get; init; }
+        = (_, _, _) => { };
+
+    /// <summary>Builds the slot that shows one frame's thumbnail on a tile, decoded at the tile's
+    /// display width (spec 12.17, plan risk 1). <c>AppHost</c> binds it to the thumbnail worker and
+    /// cache; a test passes a slot with a stub decode. The default throws, so a test that reaches it
+    /// without binding it fails loudly.</summary>
+    public Func<string, ThumbnailSlotViewModel> ThumbnailFor { get; init; }
+        = _ => throw new InvalidOperationException("No thumbnail worker");
+
     /// <summary>(message, details): one spec 10.9 <c>mosaic_action_failed</c> row, normally
     /// <c>ActivityRepository.EmitStandalone</c> pinned to <c>user_action</c> and warning.</summary>
     public Action<string, object> EmitActionFailed { get; init; } = (_, _) => { };

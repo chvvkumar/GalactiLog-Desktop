@@ -1139,6 +1139,10 @@ public static class AppHost
         builder.Services.AddSingleton(serviceProvider => new MosaicQueries(
             serviceProvider.GetRequiredService<DatabaseConnectionString>(),
             serviceProvider.GetRequiredService<AliasMapCache>()));
+        // Spec 11.4's best frame per panel and filter, the arranger's read (Phase 19A).
+        builder.Services.AddSingleton(serviceProvider => new PanelFrameQuery(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>(),
+            serviceProvider.GetRequiredService<AliasMapCache>()));
         // The catalog re-enrichment writer (Phase 7 Task 7, FIXER LIST item 13). The third named
         // sibling, and with the two above the complete list of App-callable writers of targets
         // rows: rename and notes, merge and unmerge, catalog columns.
@@ -2458,6 +2462,7 @@ public static class AppHost
             var repository = serviceProvider.GetRequiredService<MosaicRepository>();
             var queries = serviceProvider.GetRequiredService<MosaicQueries>();
             var columns = serviceProvider.GetRequiredService<CustomColumnRepository>();
+            var frames = serviceProvider.GetRequiredService<PanelFrameQuery>();
             return new MosaicsBackend
             {
                 General = settingsStore.GetGeneral,
@@ -2487,6 +2492,18 @@ public static class AppHost
                 CustomColumns = columns.List,
                 MosaicValues = ids => columns.ValuesForMosaics(ids),
                 WriteValue = columns.SetValue,
+                PanelFrames = frames.ForMosaic,
+                SuggestionBestFrame = frames.ForSuggestionEntry,
+                UpdateLayout = repository.UpdateLayout,
+
+                // Spec 12.17 and plan risk 1: a tile decodes its frame thumbnail at its display
+                // width, 250 pixels, from bytes the cache read (never a filename, spec 2.1.2).
+                ThumbnailFor = framePath => new ThumbnailSlotViewModel(
+                    framePath,
+                    serviceProvider.GetRequiredService<ThumbnailWorker>(),
+                    serviceProvider.GetRequiredService<ThumbnailCache>().ReadBytes,
+                    decode: bytes => Avalonia.Media.Imaging.Bitmap.DecodeToWidth(new MemoryStream(bytes), (int)ArrangerViewModel.TileWidth),
+                    logger: serviceProvider.GetRequiredService<ILogger<ThumbnailSlotViewModel>>()),
                 EmitActionFailed = (message, details) => serviceProvider
                     .GetRequiredService<ActivityRepository>()
                     .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),

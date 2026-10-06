@@ -16,8 +16,9 @@ public sealed record SuggestionTargetLink(Guid TargetId, string Name);
 /// the checked labels and Dismiss behind the two-press confirm.
 /// </summary>
 /// <remarks>Checked panels, the expansion and the selection are view state: a reload builds new
-/// rows, which is what resets them (spec 12.17's reload rule).</remarks>
-public sealed partial class SuggestionRowViewModel : ObservableObject
+/// rows, which is what resets them (spec 12.17's reload rule). The page disposes a row it drops,
+/// which releases the tile preview's thumbnails.</remarks>
+public sealed partial class SuggestionRowViewModel : ObservableObject, IDisposable
 {
     /// <summary>The Dismiss confirm sentence.</summary>
     public const string DismissConfirmText = "Dismiss this suggestion? It comes back only if new nights of these panels are catalogued.";
@@ -41,6 +42,7 @@ public sealed partial class SuggestionRowViewModel : ObservableObject
             .Select(id => new SuggestionTargetLink(id, targetNames.TryGetValue(id, out var name) ? name : id.ToString()))];
         Sessions = [.. sessions.Where(session => session.InCampaign).Select(session => new SuggestionSessionViewModel(session, this))];
         SortSessions();
+        Preview = new ArrangerViewModel(Guid.Empty, page.Backend, readOnly: true, page.Post, page.Delay, page.Logger);
     }
 
     /// <summary>The stored suggestion.</summary>
@@ -90,6 +92,16 @@ public sealed partial class SuggestionRowViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsExpanded { get; set; }
 
+    // The preview is fed on the first expansion and on every check change after it, so a page of
+    // collapsed rows runs no best frame query.
+    partial void OnIsExpandedChanged(bool value)
+    {
+        if (value && !_previewFed)
+        {
+            FeedPreview();
+        }
+    }
+
     [RelayCommand]
     private void ToggleExpanded() => IsExpanded = !IsExpanded;
 
@@ -135,6 +147,11 @@ public sealed partial class SuggestionRowViewModel : ObservableObject
         }
 
         AcceptError = null;
+        if (_previewFed)
+        {
+            FeedPreview();
+        }
+
         OnPropertyChanged(nameof(AllPanelsChecked));
         OnPropertyChanged(nameof(CheckedLabels));
         OnPropertyChanged(nameof(TotalsText));
@@ -177,6 +194,34 @@ public sealed partial class SuggestionRowViewModel : ObservableObject
     }
 
     public bool HasMoreNights => MoreNightsText.Length > 0;
+
+    // ---- the tile preview ---------------------------------------------------------------------
+
+    /// <summary>Spec 12.17's read-only tile preview: one tile per checked label in label order,
+    /// ordinal and case insensitive, whatever the session table's sort.</summary>
+    public ArrangerViewModel Preview { get; }
+
+    private bool _previewFed;
+
+    private void FeedPreview()
+    {
+        _previewFed = true;
+        var backend = _page.Backend;
+        Preview.ApplyPreview(
+        [
+            .. CheckedLabels.Order(StringComparer.OrdinalIgnoreCase).Select(label =>
+            {
+                // The entry's target, and the label's in-campaign nights on it: the session
+                // table's rows for that label.
+                var target = Row.Panels.First(panel => string.Equals(panel.Label, label, StringComparison.OrdinalIgnoreCase)).TargetId;
+                var rows = _sessions.Where(session => session.InCampaign && string.Equals(session.Label, label, StringComparison.OrdinalIgnoreCase)).ToList();
+                IReadOnlyCollection<DateOnly> nights = [.. rows.Where(session => session.TargetId == target).Select(session => session.Night).Distinct()];
+                return new PreviewTile(label, rows.Sum(session => session.IntegrationSeconds), () => backend.SuggestionBestFrame(target, label, nights));
+            }),
+        ]);
+    }
+
+    public void Dispose() => Preview.Dispose();
 
     // ---- the session table -----------------------------------------------------------------
 
