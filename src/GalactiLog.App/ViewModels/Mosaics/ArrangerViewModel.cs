@@ -84,33 +84,17 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     /// <summary>The save debounce (the web's SAVE_DEBOUNCE_MS).</summary>
     public static readonly TimeSpan SaveDebounce = TimeSpan.FromMilliseconds(500);
 
-    private sealed record Layout(double Rotation, IReadOnlyList<(Guid PanelId, double? X, double? Y, int Rotation, bool FlipH)> Panels);
-
     private readonly Guid _mosaicId;
     private readonly MosaicsBackend _backend;
     private readonly Action<Action> _post;
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _lifetime = new();
-    private readonly Debouncer _debouncer;
     private readonly Dictionary<Guid, TileViewModel> _byPanel = [];
-    private readonly Lock _gate = new();
-
-    // The newest layout scheduled and not yet claimed by a write. The window that outlives the
-    // debounce claims it; Dispose claims it if no window got there first.
-    private Layout? _pending;
-
-    // The write chain: one write at a time, in order (the AutosaveField shape).
-    private Task _chain = Task.CompletedTask;
-    private int _inFlight;
-
     private PanelFrameSet? _frameSet;
     private int _framesGeneration;
     private int _topZ;
     private bool _applied;
-    private bool _fitted;
     private bool _applyingRotation;
-    private double _viewportWidth;
-    private double _viewportHeight;
     private TileViewModel? _dragging;
     private double _grabX;
     private double _grabY;
@@ -343,120 +327,6 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         }
     }
 
-    // ---- zoom and pan --------------------------------------------------------------------------------
-
-    /// <summary>0.1 to 3.0.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ZoomText), nameof(ViewMatrix))]
-    public partial double Zoom { get; private set; } = 1;
-
-    /// <summary>The canvas's translation in viewport pixels from the viewport's top left corner.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ViewMatrix))]
-    public partial double OffsetX { get; private set; }
-
-    /// <inheritdoc cref="OffsetX"/>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ViewMatrix))]
-    public partial double OffsetY { get; private set; }
-
-    /// <summary>Scale then translate: the view's <c>MatrixTransform</c>, after the rotation.</summary>
-    public Matrix ViewMatrix => Matrix.CreateScale(Zoom, Zoom) * Matrix.CreateTranslation(OffsetX, OffsetY);
-
-    /// <summary>"&lt;n&gt;%", the zoom times 100, rounded.</summary>
-    public string ZoomText => Percent(Zoom * 100);
-
-    /// <summary>The view reports the viewport's size; the first size with a tile fits.</summary>
-    public void SetViewportSize(double width, double height)
-    {
-        var first = _viewportWidth <= 0 || _viewportHeight <= 0;
-        (_viewportWidth, _viewportHeight) = (width, height);
-        if (first)
-        {
-            FitOnce();
-        }
-    }
-
-    /// <summary>The wheel: one step per event by the sign of <paramref name="steps"/> (the wheel's
-    /// <c>Delta.Y</c>) about the pointer, in viewport pixels.</summary>
-    public void ZoomAt(double steps, double pointerX, double pointerY)
-    {
-        if (steps != 0)
-        {
-            StepZoom(Math.Sign(steps) * ZoomStep, pointerX, pointerY);
-        }
-    }
-
-    [RelayCommand]
-    private void ZoomIn() => StepZoom(ZoomStep, _viewportWidth / 2, _viewportHeight / 2);
-
-    [RelayCommand]
-    private void ZoomOut() => StepZoom(-ZoomStep, _viewportWidth / 2, _viewportHeight / 2);
-
-    /// <summary>A drag on empty canvas, in viewport pixels.</summary>
-    public void Pan(double deltaX, double deltaY)
-    {
-        OffsetX += deltaX;
-        OffsetY += deltaY;
-    }
-
-    /// <summary>Scales the tiles' bounding box into the viewport less the padding, and centres it.
-    /// Does nothing with no tile or no size.</summary>
-    [RelayCommand]
-    private void Fit()
-    {
-        if (Bounds() is not { } box || _viewportWidth <= 0 || _viewportHeight <= 0)
-        {
-            return;
-        }
-
-        var scale = Math.Clamp(
-            Math.Min((_viewportWidth - 2 * FitPadding) / box.Width, (_viewportHeight - 2 * FitPadding) / box.Height),
-            MinZoom, MaxZoom);
-        Zoom = scale;
-        OffsetX = _viewportWidth / 2 - box.Center.X * scale;
-        OffsetY = _viewportHeight / 2 - box.Center.Y * scale;
-        _fitted = true;
-    }
-
-    private void FitOnce()
-    {
-        if (!_fitted)
-        {
-            Fit();
-        }
-    }
-
-    // PreviewModalViewModel.Zoom's rule in viewport pixels from the top left corner: a step the
-    // clamp leaves unchanged moves nothing.
-    private void StepZoom(double step, double pointerX, double pointerY)
-    {
-        var old = Zoom;
-        var next = Math.Clamp(old + step, MinZoom, MaxZoom);
-        if (next == old)
-        {
-            return;
-        }
-
-        var ratio = next / old;
-        OffsetX = pointerX - (pointerX - OffsetX) * ratio;
-        OffsetY = pointerY - (pointerY - OffsetY) * ratio;
-        Zoom = next;
-    }
-
-    // Every tile's 250 by 160 box; the rotated footprint is not considered.
-    private Rect? Bounds()
-    {
-        if (Tiles.Count == 0)
-        {
-            return null;
-        }
-
-        var left = Tiles.Min(tile => tile.X);
-        var top = Tiles.Min(tile => tile.Y);
-        return new Rect(left, top, Tiles.Max(tile => tile.X) + TileWidth - left, Tiles.Max(tile => tile.Y) + TileHeight - top);
-    }
-
     // ---- feeding -------------------------------------------------------------------------------------
 
     /// <summary>Takes a read of the detail page: tiles kept by panel id, a new panel unplaced, a
@@ -502,7 +372,8 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         MosaicDetailViewModel.Reconcile(Tiles, wanted);
         AutoLayout();
 
-        if (!_applied || !SavePending)
+        // A slider the reader is moving, or a layout whose save failed, is not snapped back.
+        if (!_applied || (!SavePending && SaveError is null))
         {
             SetRotationQuietly(detail.RotationAngle);
         }
@@ -595,15 +466,35 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     public bool HasFilters => Filters.Count > 0;
 
     /// <summary>The chosen filter, always in the <see cref="Filters"/> spelling; never saved.</summary>
-    [ObservableProperty]
-    public partial string? SelectedFilter { get; set; }
+    /// <remarks>A null write while a filter is available is refused: a ComboBox writes null back
+    /// through its two-way <c>SelectedItem</c> when its items change (the Phase 15B defect
+    /// <c>SharedFilterViewModel.Publish</c> records), and taking it would empty every tile. The
+    /// refusal raises the property again so the control moves back.</remarks>
+    public string? SelectedFilter
+    {
+        get => _selectedFilter;
+        set
+        {
+            if (_publishingFilters || (value is null && HasFilters))
+            {
+                OnPropertyChanged();
+                return;
+            }
+
+            if (SetProperty(ref _selectedFilter, value))
+            {
+                RePoint();
+            }
+        }
+    }
+
+    private string? _selectedFilter;
+    private bool _publishingFilters;
 
     /// <summary>"Loading..." while any tile's thumbnail is outstanding.</summary>
     public bool IsLoading => Tiles.Any(tile => tile.IsLoading);
 
     private void NotifyLoading() => OnPropertyChanged(nameof(IsLoading));
-
-    partial void OnSelectedFilterChanged(string? value) => RePoint();
 
     private async Task ReadFramesAsync()
     {
@@ -635,23 +526,29 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
                 return;
             }
 
+            // The reader's choice is captured before the list moves, and every write the control
+            // makes while it moves is refused, so a null write-back cannot replace it.
+            var previous = _selectedFilter;
             _frameSet = set;
             if (!Filters.SequenceEqual(set.AvailableFilters, StringComparer.Ordinal))
             {
-                Filters = set.AvailableFilters;
+                _publishingFilters = true;
+                try
+                {
+                    Filters = set.AvailableFilters;
+                }
+                finally
+                {
+                    _publishingFilters = false;
+                }
             }
 
             // The choice survives while still available, else the default; always the available
             // list's spelling, since the default and a frame's filter may differ in case.
-            var wanted = Spelling(SelectedFilter) ?? Spelling(set.DefaultFilter) ?? set.AvailableFilters.FirstOrDefault();
-            if (string.Equals(wanted, SelectedFilter, StringComparison.Ordinal))
-            {
-                RePoint();
-            }
-            else
-            {
-                SelectedFilter = wanted;
-            }
+            var wanted = Spelling(previous) ?? Spelling(set.DefaultFilter) ?? set.AvailableFilters.FirstOrDefault();
+            _selectedFilter = wanted;
+            OnPropertyChanged(nameof(SelectedFilter));
+            RePoint();
         });
     }
 
@@ -665,7 +562,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
             return;
         }
 
-        var filter = SelectedFilter;
+        var filter = _selectedFilter;
         foreach (var tile in Tiles)
         {
             BestFrame? best = null;
@@ -707,133 +604,6 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
                 }
             }
         });
-    }
-
-    // ---- the save rule -------------------------------------------------------------------------------
-
-    /// <summary>"Saving..." from a write's start to its end.</summary>
-    [ObservableProperty]
-    public partial bool IsSaving { get; private set; }
-
-    /// <summary><see cref="SaveFailedText"/> after a failed write, until the next success.</summary>
-    [ObservableProperty]
-    public partial string? SaveError { get; private set; }
-
-    private bool SavePending => Volatile.Read(ref _pending) is not null || Volatile.Read(ref _inFlight) > 0;
-
-    private Layout Snapshot()
-        => new(GlobalRotation, [.. Tiles.Select(tile => (tile.PanelId, (double?)tile.X, (double?)tile.Y, tile.Rotation, tile.FlipH))]);
-
-    // The first save writes every tile, so from here on every tile is placed and none reflows.
-    private void ScheduleSave()
-    {
-        if (IsReadOnly || _disposed)
-        {
-            return;
-        }
-
-        foreach (var tile in Tiles)
-        {
-            tile.Place();
-        }
-
-        Volatile.Write(ref _pending, Snapshot());
-        PendingSave = _debouncer.Restart(async (_, cancellationToken) =>
-        {
-            try
-            {
-                await _debouncer.Wait(cancellationToken).ConfigureAwait(false);
-            }
-            catch (OperationCanceledException)
-            {
-                return;
-            }
-
-            if (!cancellationToken.IsCancellationRequested && Interlocked.Exchange(ref _pending, null) is { } layout)
-            {
-                await Attach(layout).ConfigureAwait(false);
-            }
-        });
-    }
-
-    // A re-read that adds or removes a panel under a pending write re-takes the snapshot, so the
-    // write never names a panel that is gone.
-    private void RefreshPendingLayout()
-    {
-        if (Volatile.Read(ref _pending) is { } observed)
-        {
-            Interlocked.CompareExchange(ref _pending, Snapshot(), observed);
-        }
-    }
-
-    private Task Attach(Layout layout)
-    {
-        lock (_gate)
-        {
-            Interlocked.Increment(ref _inFlight);
-            return _chain = _chain.ContinueWith(_ => Write(layout), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
-        }
-    }
-
-    private void Write(Layout layout)
-    {
-        _post(() => IsSaving = true);
-        string? error = null;
-        try
-        {
-            _backend.UpdateLayout(_mosaicId, layout.Rotation, layout.Panels);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Saving the mosaic layout failed; the tiles keep what the reader did");
-            error = SaveFailedText;
-        }
-        finally
-        {
-            Interlocked.Decrement(ref _inFlight);
-        }
-
-        _post(() =>
-        {
-            IsSaving = Volatile.Read(ref _inFlight) > 0;
-            SaveError = error;
-        });
-    }
-
-    /// <summary>Runs a pending write at once and waits for it, bounded by 2 seconds (the shape of
-    /// <c>MosaicDetailViewModel.Dispose</c>'s notes flush), then releases every tile.</summary>
-    public void Dispose()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _debouncer.Dispose();
-        if (!IsReadOnly)
-        {
-            try
-            {
-                // Attach runs the write on the pool (TaskScheduler.Default) and posts nothing this
-                // wait depends on, so blocking the UI thread here cannot deadlock. With nothing
-                // pending, a write already in flight is waited for instead.
-                var flush = Interlocked.Exchange(ref _pending, null) is not null ? Attach(Snapshot()) : _chain;
-                flush.Wait(TimeSpan.FromSeconds(2));
-            }
-            catch (Exception ex)
-            {
-                _logger.LogWarning(ex, "Flushing the mosaic layout on close failed");
-            }
-        }
-
-        _disposed = true;
-        foreach (var tile in Tiles)
-        {
-            tile.Dispose();
-        }
-
-        _lifetime.Cancel();
-        _lifetime.Dispose();
     }
 
     private static string Percent(double value)

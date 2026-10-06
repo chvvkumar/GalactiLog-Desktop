@@ -148,6 +148,24 @@ public sealed class ArrangerViewModelTests : IDisposable
     }
 
     [Fact]
+    public void TheDeficitBand_AtItsBoundaries()
+    {
+        var arranger = Arranger();
+
+        // 60 s behind shows nothing, 61 s shows a badge; exactly 0.8 of the leader is Success and
+        // exactly 0.4 is Warning.
+        arranger.Apply(Detail(WithDeficits(3600, 3540, 3539, 2880, 1440)));
+
+        var tiles = arranger.Tiles;
+        Assert.Equal(DeficitBand.None, tiles[1].Deficit);
+        Assert.Null(tiles[1].DeficitText);
+        Assert.Equal(DeficitBand.Success, tiles[2].Deficit);
+        Assert.Equal("-" + MetricText.Integration(61), tiles[2].DeficitText);
+        Assert.Equal(DeficitBand.Success, tiles[3].Deficit);
+        Assert.Equal(DeficitBand.Warning, tiles[4].Deficit);
+    }
+
+    [Fact]
     public void NoBadge_WhileTheLeaderIsZero()
     {
         var arranger = Arranger();
@@ -327,6 +345,41 @@ public sealed class ArrangerViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task APendingWrite_DropsAPanelThatAReReadRemoved()
+    {
+        var log = new LayoutLog();
+        var delay = new ManualDelay();
+        var arranger = Arranger(new MosaicsBackend { UpdateLayout = log.Write }, delay: delay.Wait);
+        var panels = Panels(3);
+        arranger.Apply(Detail(panels));
+        arranger.Flip(arranger.Tiles[0]);
+
+        arranger.Apply(Detail([panels[0], panels[1]]));
+        delay.Release();
+        await arranger.PendingSave.WaitAsync(Budget);
+
+        var write = Assert.Single(log.Writes);
+        Assert.Equal(new[] { panels[0].Id, panels[1].Id }, write.Panels.Select(panel => panel.PanelId));
+        Assert.True(write.Panels[0].FlipH);
+    }
+
+    [Fact]
+    public async Task AFailedSave_KeepsTheReadersRotationAcrossAReRead()
+    {
+        var log = new LayoutLog { Fail = true };
+        var arranger = Arranger(new MosaicsBackend { UpdateLayout = log.Write });
+        var panels = Panels(1);
+        arranger.Apply(Detail(panels, rotation: 10));
+
+        arranger.GlobalRotation = 70;
+        await arranger.PendingSave.WaitAsync(Budget);
+        Assert.NotNull(arranger.SaveError);
+        arranger.Apply(Detail(panels, rotation: 10));
+
+        Assert.Equal(70, arranger.GlobalRotation);
+    }
+
+    [Fact]
     public void Disposing_WithASavePending_RunsIt()
     {
         var log = new LayoutLog();
@@ -361,12 +414,20 @@ public sealed class ArrangerViewModelTests : IDisposable
     {
         var arranger = Arranger();
         arranger.Apply(Detail(Panels(1)));
-        arranger.SetViewportSize(1000, 600);
+        arranger.SetViewportSize(400, 300);
 
+        // Fit lands at min(320 / 250, 220 / 160) = 1.28, so the steps have room to climb.
+        Assert.Equal(1.28, arranger.Zoom, 9);
+        var climbed = new List<double>();
         for (var step = 0; step < 40; step++)
         {
             arranger.ZoomInCommand.Execute(null);
+            climbed.Add(arranger.Zoom);
         }
+
+        Assert.Equal(1.38, climbed[0], 9);
+        // 1.28 plus 17 steps is 2.98; the 18th clamps to 3.0.
+        Assert.Equal(17, climbed.Count(zoom => zoom < ArrangerViewModel.MaxZoom - 1e-9));
 
         Assert.Equal(ArrangerViewModel.MaxZoom, arranger.Zoom, 9);
         Assert.Equal("300%", arranger.ZoomText);
@@ -596,6 +657,41 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal("OIII", arranger.SelectedFilter);
     }
 
+    // The Phase 15B defect: a ComboBox writes null back through SelectedItem while its items
+    // change. The still-available choice survives and no tile loses its slot.
+    [Fact]
+    public async Task ANullWriteBack_WhileTheFiltersChange_KeepsTheChoiceAndTheSlots()
+    {
+        var panels = Panels(2);
+        var frames = Frames(["Ha", "OIII"], "Ha", (panels[0].Id, "OIII", "a.fits"), (panels[1].Id, "OIII", "b.fits"));
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => frames, ThumbnailFor = Slot });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        arranger.SelectedFilter = "OIII";
+        var slots = arranger.Tiles.Select(tile => tile.Thumbnail).ToList();
+        Assert.All(slots, Assert.NotNull);
+        arranger.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(ArrangerViewModel.Filters))
+            {
+                arranger.SelectedFilter = null;
+            }
+        };
+
+        frames = Frames(["OIII", "Ha", "SII"], "Ha", (panels[0].Id, "OIII", "a.fits"), (panels[1].Id, "OIII", "b.fits"));
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+
+        Assert.Equal(new[] { "OIII", "Ha", "SII" }, arranger.Filters);
+        Assert.Equal("OIII", arranger.SelectedFilter);
+        Assert.Equal(slots, arranger.Tiles.Select(tile => tile.Thumbnail));
+
+        // A null write outside a publish is refused too while a filter is available.
+        arranger.SelectedFilter = null;
+        Assert.Equal("OIII", arranger.SelectedFilter);
+        Assert.Equal(slots, arranger.Tiles.Select(tile => tile.Thumbnail));
+    }
+
     [Fact]
     public async Task AFilterChange_RePointsEveryTile_AndIsLoadingHoldsUntilTheSlotsSettle()
     {
@@ -677,7 +773,6 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.True(arranger.IsEmpty);
         Assert.False(arranger.HasFilters);
         Assert.Equal(1, arranger.Zoom);
-        Assert.Equal(ArrangerViewModel.NoPanelsText, "No panels selected.");
     }
 
     // ---- the read-only preview ---------------------------------------------------------------

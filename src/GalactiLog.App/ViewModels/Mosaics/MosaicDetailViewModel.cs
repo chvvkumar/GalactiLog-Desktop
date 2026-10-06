@@ -592,19 +592,25 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
             return;
         }
 
+        // The notes, the custom cells and a pending layout write flush together under one bound.
+        // A deleted mosaic flushes nothing, its layout write included.
         if (!_deleted)
         {
             try
             {
-                Task.WhenAll(Notes.FlushAsync(), _cells.FlushAsync()).Wait(TimeSpan.FromSeconds(2));
+                Task.WhenAll(Notes.FlushAsync(), _cells.FlushAsync(), Arranger.FlushAsync()).Wait(TimeSpan.FromSeconds(2));
             }
             catch (Exception ex)
             {
                 Logger.LogWarning(ex, "Flushing the mosaic page on close failed");
             }
         }
+        else
+        {
+            Arranger.Discard();
+        }
 
-        // Runs a pending layout write the same bounded way, then releases the tiles' thumbnails.
+        // Releases the tiles' thumbnails; the flush above already ran or dropped the layout write.
         Arranger.Dispose();
 
         _disposed = true;

@@ -124,6 +124,22 @@ public sealed class MosaicDetailViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task ClosingThePage_AfterDeleteMosaic_DropsAPendingLayoutSave()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic, delay: (_, ct) => Task.Delay(Timeout.Infinite, ct));
+
+        page.Arranger.Rotate(page.Arranger.Tiles[0]);
+        page.DeleteMosaicCommand.Execute(null);
+        page.DeleteMosaicCommand.Execute(null);
+        Assert.True(mosaic.Deleted);
+
+        page.Dispose();
+
+        Assert.Equal(0, mosaic.LayoutWrites);
+    }
+
+    [Fact]
     public async Task AMosaicThatIsGone_ShowsTheLoadFailure()
     {
         var mosaic = TwoPanels();
