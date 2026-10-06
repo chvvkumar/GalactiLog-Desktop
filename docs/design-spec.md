@@ -4905,8 +4905,9 @@ section 2.1. Nothing outside it is ever deleted.
   or a preview opening requests them; the request is queued to a bounded worker with the
   most recently requested item served first, so scrolling does not queue thousands of stale
   requests. Missing thumbnails render a placeholder that is replaced when generation
-  completes. In v1 the preview modal (section 11.5) is the only on-demand requester: there is
-  no frame grid yet, and neither the dashboard nor the target detail page asks for one.
+  completes. There are two on-demand requesters: the preview modal (section 11.5) and, from
+  Phase 19A, the mosaic arranger (section 12.17), which asks for each panel's best frame below.
+  There is no frame grid yet, and neither the dashboard nor the target detail page asks for one.
 - **Reference thumbnails**, one per target, are generated in the background after the header
   pass, matching the decisions. The source frame is the target's most recent LIGHT frame
   that has a capture date and is not rejected for pixel reading. "Not rejected for pixel
@@ -4917,6 +4918,42 @@ section 2.1. Nothing outside it is ever deleted.
   action; a forced run re-offers every target and asks for a forced render, which is what
   replaces the existing file rather than serving it as a hit (section 11.3). It is cancellable
   and commits every 10 targets so an interrupted run keeps what it produced.
+
+**Best frame per panel** (Phase 19A, ruling R14). `Core/Mosaics/FrameScore.cs` scores a pool of
+frames with the web's `score_frames` rule (`backend/app/services/mosaic_composite.py`), ported
+exactly. Five metrics carry weights:
+
+| Metric | Column | Weight | Better |
+| --- | --- | --- | --- |
+| Detected stars | `detected_stars` | 0.35 | Higher |
+| Median HFR | `median_hfr` | 0.30 | Lower |
+| Eccentricity | `eccentricity` | 0.15 | Lower |
+| Guiding RMS | `guiding_rms_arcsec` | 0.12 | Lower |
+| FWHM | `fwhm` | 0.08 | Lower |
+
+Each metric is min-max normalised within the pool over the values that are present and above
+zero: a value v scores (v - min) / span for a higher-is-better metric and 1 minus that for a
+lower-is-better one, the span being max minus min, or 1 when every such value is equal, so equal
+values score 0 on detected stars and 1 on the other four, as on the web. A metric with fewer than
+two such values scores 0.5 for every frame of the pool, and a frame whose value is null or not
+above zero scores 0.5 on that metric. A frame's score is the weighted sum, from 0 to 1. A pool of
+one frame scores 1.0 without normalising.
+
+`Data/Queries/PanelFrameQuery.cs` builds one pool per panel per filter: the LIGHT frames the
+membership join of section 5.24 reaches for the panel whose canonical filter (section 5.8.4) is
+that filter. It returns the pool's top frame, ties going to the most recent `capture_date`, a null
+date last, then to the ordinally first `file_path`, so the choice is stable across reads; a panel
+with no frame in the filter has no best frame. The query also returns the mosaic's **available
+filters**, the canonical filters of every panel's frames ordered by summed `exposure_time`
+descending, ties by name, ordinal and case insensitive, frames with no filter excluded.
+
+**The default filter** follows the web's `find_default_filter`. Each panel, in `sort_order`, is
+scored on its own pool of every frame the join reaches for it in any available filter, and its
+top frame is taken; the default filter is the filter of the best-scoring of those top frames, the
+first panel in `sort_order` winning a tie. A panel with no frame takes no part. When no panel
+yields a top frame the default is the first available filter, the most integrated (the web's
+fallback); with no available filter there is no default. Section 12.17 ("The filter selector and the
+thumbnails") states how the arranger uses all three.
 
 Settled divergence from the web application: `reference_thumbnail_path` there holds a DSS
 survey image fetched from NASA SkyView
@@ -10686,8 +10723,9 @@ disk**: there is no save dialog, no `AppWriter.BeginExport` call and no new entr
 
 ### 12.17 Mosaics
 
-Phase 18. Mirrors `frontend/src/pages/MosaicsPage.tsx` and `components/settings/MosaicsTab.tsx` (the
-Mosaics page), `pages/MosaicDetailPage.tsx` (the mosaic detail page) and
+Phase 18, with the arranger in Phase 19A. Mirrors `frontend/src/pages/MosaicsPage.tsx` and
+`components/settings/MosaicsTab.tsx` (the Mosaics page), `pages/MosaicDetailPage.tsx` (the mosaic
+detail page), `components/mosaics/KonvaMosaicArranger.tsx` (the arranger) and
 `components/CreateMosaicDialog.tsx` (the Create mosaic dialog), with `backend/app/api/mosaics.py`
 and `backend/app/services/mosaic_stats.py` for their figures, amended by the plan's rulings. A
 mosaic is a named set of panels; a panel is a label holding nights, each night one target's
@@ -10790,9 +10828,9 @@ Expanding a row shows, in order:
    sorts on click and reverses on a second click; the default is Panel ascending. A row's check box
    checks or unchecks its panel, every row of that label at once; the header check box checks or
    unchecks every panel. A row of an unchecked panel is drawn in the tertiary ink.
-
-The web's tile preview is the arranger in a read-only form and arrives with it (ruling R18); this
-phase draws no preview.
+4. **The tile preview**, under the heading "Tile preview": the arranger in its read-only form
+   (ruling R18), one tile per checked panel label. "The read-only preview" in the subsection "The
+   arranger" below states it.
 
 The empty state is the sentence "No suggestions. Run Detection looks for panels in your target
 names and sky positions." A failed read of the list shows "The suggestions could not be loaded."
@@ -10887,7 +10925,7 @@ Back, as on the Target detail page (section 12.4). The page is a workbench with 
 | --- | --- |
 | 0, Auto | The header and the notes. |
 | 1, Auto | The available labels banner, collapsed to nothing when there is no label. |
-| 2, `*` | The arranger. This phase fills it with a 160 pixel placeholder band, top aligned: a `Border` in the surface ink with the centred sentence "Panel layout is not available yet." |
+| 2, `*` | The arranger, below. |
 | 3, Auto | A horizontal `GridSplitter` that trades height between rows 2 and 4. Its position is not stored; it replaces the web's corner grip. |
 | 4, `*` | The sessions region, in its own `ScrollViewer`. |
 
@@ -10946,7 +10984,7 @@ Under it, one row per panel in `sort_order`, an aligned table with a `Button.che
 | Integration | The panel's integration. |
 | Frames | The panel's frame count. |
 | Nights | The number of distinct (target, night) pairs among the included rows. |
-| Deficit | For every panel whose integration is below the **leading panel**, the one with the most, the difference as an integration followed by "behind", for example "2h 10m behind", in the secondary ink. Empty on the leading panel and on every panel while all are zero. A number, not a colour band: the arranger's tile overlays add the colour later. |
+| Deficit | For every panel whose integration is below the **leading panel**, the one with the most, the difference as an integration followed by "behind", for example "2h 10m behind", in the secondary ink. Empty on the leading panel and on every panel while all are zero. The arranger's tile carries the same deficit as its colour-coded deficit badge ("The deficit badge" in the subsection "The arranger" below). |
 | Available | A `Border.tag` in the warning ink reading "n available" while the panel has n available rows of its Available table, and nothing at zero. |
 | Include all | A `Button.sm` that includes every available triple of this panel, disabled at zero. |
 | Delete panel | A `Button.sm` with the two-press inline confirm "Delete panel <label>?", enabled only while the panel has no included night, with the tooltip "Remove its included nights first." while disabled. Deleting removes the panel and its available rows. |
@@ -11007,6 +11045,221 @@ label) triple, so typed input survives it: an open As new panel row keeps its la
 refusal sentence until the next re-read clears the refusal, and the add panel label box keeps
 what the reader typed, following the prefill only while it is untouched.
 
+#### The arranger
+
+Phase 19A. Mirrors `frontend/src/components/mosaics/KonvaMosaicArranger.tsx` (the canvas, its
+tiles and its toolbar), the filter selection of `pages/MosaicDetailPage.tsx` (the default filter
+effect and `handleFilterChange`) and `backend/app/services/mosaic_composite.py`
+(`find_default_filter` and `score_frames`, section 11.4), amended by rulings R7, R8, R9, R14 and
+R18. The web draws on a Konva stage; the port is XAML. The arranger's layout is display state of
+its own (ruling R9): the composite and every figure on the page ignore it.
+
+**Parts.** The arranger fills row 2 of the detail page grid (ruling R7; the grid's rows do not
+change). It is `Views/Mosaics/ArrangerView.axaml` over `ArrangerViewModel`, a composed control and
+not a drawn one (ruling R18, section 13): a toolbar row over a viewport, a clipped `Border` in the
+surface ink (`ColorBgSurface`) with a 1 pixel `ColorBorderDefault` edge, holding a `Canvas` of tile
+`ContentControl`s, each bound to a `TileViewModel`. The toolbar is a `WrapPanel`, so a narrow page
+wraps it rather than clipping a control. Left to right:
+
+| Control | Shape | Rule |
+| --- | --- | --- |
+| Caption | "Panels" in the label tier with the `mosaic.arranger` glyph | Always shown. |
+| Hint | "Click a tile to select it, then rotate or flip" in the tertiary ink | Shown while no tile is selected, and nothing takes its place while one is: the selection outline marks the tile. The web's "Tile selected" caption is dropped for that reason. |
+| Rotate CW | `Button.sm`, tooltip "Rotate the selected tile 90° clockwise. Right-click a tile for the same." | Enabled while a tile is selected. |
+| Flip H | `Button.sm`, tooltip "Flip the selected tile horizontally." | Enabled while a tile is selected. |
+| Separator | A vertical `Separator` in `ColorBorderDefault` | |
+| Fit | `Button.sm`, tooltip "Fit every tile in view." | Zoom and pan, below. |
+| Zoom out | `Button.sm` reading "-", tooltip "Zoom out" | Zoom and pan, below. |
+| Zoom readout | `TextBlock.num` reading "<n>%", the zoom times 100, rounded | |
+| Zoom in | `Button.sm` reading "+", tooltip "Zoom in" | Zoom and pan, below. |
+| Separator | As above | |
+| Rotation | The caption "Rotation", a `Slider` from -180 to 180, step 1, snapped to its ticks, and its readout "<n>°" as a `TextBlock.num` | The global rotation, below. |
+| Rotation reset | `Button.sm` reading "0", tooltip "Reset the rotation to 0°." | Sets the global rotation to 0. |
+| Separator | As above | |
+| Reset all | `Button.quiet` with `sm`, reading "Reset all", tooltip "Reset every tile's rotation and flip, and the rotation, to 0." | Reset all, below. |
+| Separator | As above | |
+| Tile opacity | The caption "Tile opacity", a `Slider` from 20 to 100, step 5, snapped to its ticks, starting at 100, and its readout "<n>%" as a `TextBlock.num` | Disabled while no tile is selected. Tooltip "Fade the selected tile so overlapping panels show through. Not saved." |
+| Labels | `ToggleButton` reading "Labels", checked on open, tooltip "Show the panel labels, the integration and the badges on every tile." | Unchecked hides every overlay of every tile; the empty tile's caption stays. |
+| Filter | At the trailing end: the caption "Filter" and a `ComboBox` of the available filters | The filter selector, below. Hidden while the mosaic has no available filter. |
+| Loading | The caption "Loading..." beside the Filter `ComboBox` | Shown while any tile's thumbnail is outstanding. |
+| Saving | The caption "Saving...", or the save failure sentence in the error ink | The save rule, below. |
+
+No button is filled (departure 14). Every control is in the shared vocabulary of
+`Theme/Controls.axaml`; the two `Slider`s and the `ToggleButton` take the theme's own styles, and
+the view declares no style of its own. The `mosaic.arranger` glyph is a new key of the help census
+of section 12.12.
+
+**Tiles.** One tile per panel, in `sort_order`. A tile is 250 by 160 pixels at zoom 1, a `Border`
+in the surface ink with a 4 pixel corner radius, clipped, holding the thumbnail `Image` with
+`Stretch="Uniform"` and four overlays drawn over it. The size is the mockup's; the web's 300 pixel
+square, resized to each thumbnail's aspect once it loads, was sized for its own panel thumbnails,
+and a fixed tile keeps the auto layout and Fit independent of when thumbnails arrive. The tile's
+rotation and flip apply to the image only, through a `LayoutTransformControl` holding a
+`RotateTransform` by the tile's rotation and a `ScaleTransform` with `ScaleX` -1 while `flip_h` is
+set, so a quarter turn refits the image inside the tile rather than overflowing it; the overlays
+stay upright, as on the web.
+
+| Overlay | Place | Content | Shown |
+| --- | --- | --- | --- |
+| Label | Bottom left | The panel label. | While Labels is checked. |
+| Integration | Bottom right | The panel's integration in the integration formatter's form, the Panels row's figure. | While Labels is checked. |
+| State badge | Top left | "90°", "180°" or "270°" for the tile's rotation and "flipped" for `flip_h`, joined with a middle dot and a space ("90° · flipped") when both apply. The web's "R90 FH" becomes words. | While Labels is checked and the tile is rotated or flipped. |
+| Deficit badge | Top right | The deficit badge, below. | While Labels is checked and the badge has a figure. |
+
+Each overlay is a `TextBlock.t-caption` on a scrim `Border` in the elevated surface ink
+(`ColorBgElevated`) at 0.85 opacity with a 3 pixel corner radius and 3 pixels of padding, 4 pixels
+in from the tile's edges, so it reads over a photograph. The label, the integration and the state
+badge are in the primary ink (`ColorTextPrimary`) rather than the caption tier's tertiary ink; the
+deficit badge is in its band's ink. The web's 11 pixel overlay text becomes the caption tier, 0.714
+of the root size, so the overlays follow the reader's text size. No new token (section 14.1). The
+web's 40 pixel background grid lines are dropped: nothing snaps, so a grid aligns nothing.
+
+**The empty tile.** A tile whose panel has no frame in the chosen filter shows no image: the
+surface ink with the caption "No <filter> frames" centred in the tertiary ink (the web's "No
+<filter> data"), and its overlays as any tile's. A tile whose best frame's thumbnail cannot be
+rendered shows the caption "No thumbnail" the same way. An empty tile is selected, dragged,
+rotated and flipped like any other.
+
+**Selection.** At most one tile is selected. Selection is a class on the tile, `selected`, drawing
+a 2 pixel outline in the accent ink (`ColorAccent`) offset 1 pixel outside the tile. The tile
+opacity applies to the selected tile's image, overlays and empty caption and not to its outline,
+which stays at full strength so the tile stays marked. It returns to 1 when the selection leaves
+the tile, and the slider keeps its value for the next tile selected, as on the web.
+
+**The deficit badge.** It is measured against the **leading panel** of the mosaic, the one with
+the most integration over its included frames: the figure the Panels row's Deficit column uses,
+over every filter and not the chosen one. The badge is absent when the panel's deficit is 60
+seconds or less, and on every tile while the leader has zero. Otherwise it reads
+"-<integration>", an ASCII hyphen-minus followed by the deficit in the integration formatter's
+form (the web prints a Unicode minus sign), in its band's ink. The band is the panel's integration
+as a share of the leader's:
+
+| Share of the leader's integration | Behind the leader | Ink | Resource key |
+| --- | --- | --- | --- |
+| 80 percent or more | Under 20 percent | Success | `ColorSuccess` |
+| 40 percent up to under 80 | 20 percent up to under 60 | Warning | `ColorWarning` |
+| Under 40 percent | 60 percent or more | Error | `ColorError` |
+
+These are the web's `DELTA_GREEN`, `DELTA_AMBER` and `DELTA_RED` at `pct >= 0.8` and
+`pct >= 0.4`, mapped to the semantic tokens of section 14.1 (plan risk 2). The figure and the
+band follow every re-read of the page.
+
+**Layout and auto layout (ruling R8).** A panel with both `canvas_x` and `canvas_y` sits at those
+coordinates, in canvas pixels at zoom 1, as its tile's top left corner. A panel with either null
+is **unplaced** and takes the auto layout: the unplaced panels, in `sort_order`, fill a near-square
+grid of `ceil(sqrt(n))` columns, n being the unplaced count, row by row from the canvas origin,
+the cell pitch being the tile size plus 4 pixels, 254 across and 164 down. This is the web's
+`buildTiles` grid with `TILE_SIZE + SNAP`, the gap widened from 1 pixel to 4 so tiles do not
+touch. Nothing snaps: a tile stays where it is dropped. The web's `pixel_coords` flag and its
+legacy grid conversion (`LEGACY_CELL_PX`) are not ported, because the port has never stored grid
+cells. The auto layout is not written until the first save, which writes every tile (the save
+rule, below), so a mosaic the reader never touched keeps null coordinates and follows
+`sort_order` as panels come and go.
+
+**Gestures.** The pointer acts in the viewport only. The arranger takes no keyboard gesture: the
+web has none, and none is invented.
+
+| Gesture | Result |
+| --- | --- |
+| Left press on a tile | Selects it and captures the pointer. The tile rises to the top of the stacking order and stays there. |
+| Left drag of a tile | Moves it with the pointer: the tile's position follows the pointer's movement in canvas coordinates, read as the pointer's position relative to the `Canvas`, which undoes the zoom, the pan and the global rotation, so the tile stays under the pointer under any of them. |
+| Release after a drag | Ends the drag, releases the capture and schedules a save. The selection stays. |
+| Left click on a tile already selected | A press and release with no pointer movement between them deselects it, the web's toggle. A click on a tile not yet selected leaves it selected. |
+| Left click on empty canvas | Deselects. |
+| Left drag on empty canvas | Pans the view by the pointer's movement in viewport pixels. The selection stays. |
+| Wheel | Zooms about the pointer by one step of 0.1 per notch, away from the reader to zoom in and toward the reader to zoom out (the web's `ZOOM_STEP`, added to the zoom and not multiplied). A plain wheel with no modifier: the detail page has no page scroller (ruling R7), so section 13's wheel rule, which keeps a plain wheel for scrolling, is not engaged. |
+| Right press on a tile | Selects it and opens a `ContextMenu` with two items, "Rotate CW" and "Flip H", acting on that tile (ruling R18). The web rotates on a right click directly; the port shows the menu. A right press starts no drag. |
+| Rotate CW, the button or the menu item | Adds 90 to the selected tile's rotation, modulo 360, and schedules a save. |
+| Flip H, the button or the menu item | Toggles the selected tile's `flip_h` and schedules a save. |
+| Double click; the middle button | Nothing. |
+
+The web's touch events are dropped: the port is a desktop pointer application. The web's
+drop-to-swap (`findOverlapping`, `swapTiles`, `SWAP_DURATION`) is never wired to a gesture, so it
+is not a target, and a tile dropped over another simply overlaps it.
+
+**Zoom and pan.** The zoom ranges from 0.1 to 3.0 (the web's `MIN_ZOOM` and `MAX_ZOOM`). Minus and
+plus step it by 0.1 about the viewport centre; the wheel steps it by 0.1 about the pointer. A step
+is clamped to the range, and a step the clamp leaves unchanged moves nothing. **Fit** scales the
+tiles' bounding box, in canvas pixels at zoom 1, into the viewport less 40 pixels of padding a side
+(the web's `FIT_PADDING`), clamped to the range, and centres it. The viewport transforms the
+`Canvas` with a `TransformGroup`: first a `RotateTransform` by the global rotation about the
+bounding box centre (the web's `mosaicGroup.rotation`), then one `MatrixTransform` of scale and
+translation that `ArrangerViewModel` computes. Stepping the zoom about a point is the rule
+`PreviewModalViewModel.Zoom` (section 11.5) already states: take the new scale, then each offset
+becomes the pointer minus (the pointer minus the offset) times the ratio of the new scale to the
+old, in viewport pixels. Fit runs once, when the control first has both a size and at least one
+tile, and again on each press of Fit; a re-read of the page and a splitter drag do not refit. Zoom
+and pan are view state.
+
+**Global rotation.** The Rotation slider turns every tile as one group about the tiles' bounding
+box centre, for the reader's eye only (ruling R9: display state; the composite never reads it).
+The centre is taken when the rotation changes and when the tiles are rebuilt, not while a tile is
+dragged, so the group does not swing under the pointer. The value is written as
+`mosaics.rotation_angle` by the save rule; a slider change schedules a save. The "0" button sets
+it to 0.
+
+**Reset all.** Sets every tile's rotation to 0 and `flip_h` to false, and the global rotation to
+0, leaving every position as it is (the web's `resetAllTransforms`), and schedules a save. It
+asks nothing, as on the web: it changes no figure, and a rotate, a flip or the slider puts any of
+it back.
+
+**The save rule.** Every layout change (a drag's release, Rotate CW, Flip H, a Rotation slider
+change, the "0" button and Reset all) schedules one write 500 milliseconds after the last change
+(the web's `SAVE_DEBOUNCE_MS`) through `Services/Debouncer.cs`: `MosaicRepository.UpdateLayout`
+with the mosaic's rotation angle and every tile's x, y, rotation and flip, in one transaction, an
+unplaced tile writing the auto layout position it shows. Positions are written as they are,
+without the web's rounding to whole pixels, because the columns are REAL (ruling R8). "Saving..."
+shows from the write's start to its end. A failed write shows "The layout could not be saved." in
+the error ink at the toolbar's trailing end, in place of "Saving...", until the next successful
+save; the tiles keep what the reader did, so the next change retries the whole layout. Closing the
+page with a write still pending runs it at once rather than dropping it; the web's cleanup cancels
+the timer and loses the last change.
+
+A re-read of the page (every include, remove, add and delete, and a scan or detection job ending,
+the existing rule above) keeps every tile that stays as the same tile, matched by panel id: its
+position, rotation, flip, selection and thumbnail stay, so a drag in flight is not lost, and its
+label, integration and deficit badge take the re-read's figures. A new panel appears unplaced, in
+its cell of the auto layout over the tiles still unplaced, and its thumbnail is requested in the
+chosen filter. A removed panel's tile goes, and the selection with it when it was selected.
+
+**Not saved.** The selection, the tile opacity, the zoom, the pan, the stacking order, the Labels
+state, the filter choice, and the Loading and Saving captions. Each starts afresh when the page
+opens: no selection, opacity 100 percent, Fit, Labels checked and the default filter.
+
+**The filter selector and the thumbnails (ruling R14).** The **available filters** are the
+canonical filters (section 5.8.4) of the LIGHT frames the membership join of section 5.24 reaches
+over every panel of the mosaic, ordered by their summed `exposure_time` descending, ties by name,
+ordinal and case insensitive (the web's `find_default_filter`); a frame with no filter takes no
+part. The **default filter**, chosen when the page opens, is the rule of section 11.4. Choosing a
+filter sets every tile's image to its panel's best frame in that filter (section 11.4): that
+frame's existing `frames/<key>.jpg` through `ThumbnailCache.EnsureFrame`, requested off the UI
+thread through `ThumbnailWorker.RequestFrame` with the most recent request served first, decoded
+at the tile's display size, 250 pixels wide, and released when the page closes (plan risk 1). A
+request that a newer filter choice supersedes is disposed, so a stale thumbnail never lands on a
+tile. "Loading..." shows while any tile's thumbnail is outstanding, and the `ComboBox` stays
+enabled meanwhile: the latest choice wins. A panel with no frame in that filter shows the empty
+tile. The filter choice survives a re-read of the page while the filter is still available, and
+falls back to the default filter when it is not. No panel thumbnail service and no `mosaics/`
+cache: the web renders a panel thumbnail at 800 pixels per filter and caches it under its own
+key; the port reuses the frame thumbnail the preview modal already makes, so the only files the
+arranger causes to be written are frame thumbnails under the cache (section 11.3).
+
+**The read-only preview (ruling R18).** Item 4 of an expanded suggestion row on the Mosaics page,
+after the session table, under the heading "Tile preview": the same control with
+`IsHitTestVisible="False"` and no toolbar, 200 pixels high, one tile per checked panel label in
+the session table's Panel order, every tile unplaced so the auto layout applies, Fit applied once
+it has a size. A tile's image is the best frame, by the score of section 11.4, among the frames
+the session table lists for that label, over every filter; its overlays are the label and the
+integration over those frames only, with no state badge and no deficit badge. Unchecking a label
+removes its tile, and the tiles left take the auto layout again. When no label is checked, "No
+panels selected." in the tertiary ink stands in place of the tiles. Nothing is written, and
+because the control is not hit-testable a wheel over it reaches the column's own `ScrollViewer`.
+
+**Accessibility.** Each tile carries `AutomationProperties.Name` "<label>", "<label>, selected"
+while selected, or "<label>, no frames in <filter>" while it is the empty tile, the mockup's
+names. Every button whose content is not a word carries a name: "Zoom out" on "-", "Zoom in" on
+"+" and "Reset rotation" on "0". The two sliders carry "Rotation" and "Tile opacity".
+
 #### The Create mosaic dialog
 
 Opened from the Target detail page's overflow menu entry "Create mosaic from selected nights"
@@ -11040,9 +11293,13 @@ because the row's frame label is that claim and membership is the join of sectio
 
 Stored: the four tables of sections 5.22 to 5.25, the mosaic-scope values of section 5.20, the three
 `general` keys of section 5.8.1, and `display.columns.mosaics` and `display.sort.mosaics` of section
-5.8.2. Not stored: expanded suggestion rows, checked panels, the selected suggestions and mosaics,
-the suggestion filter text, expanded mosaic rows and the open add panel form, expanded panel rows
-on the detail page, the splitter position and the Create mosaic dialog's choices. Nothing on these
+5.8.2. Of those, the arranger writes the layout columns and nothing else: `mosaic_panels.canvas_x`,
+`canvas_y`, `rotation` and `flip_h`, and `mosaics.rotation_angle`, through
+`MosaicRepository.UpdateLayout`. Not stored: expanded suggestion rows, checked panels, the selected
+suggestions and mosaics, the suggestion filter text, expanded mosaic rows and the open add panel
+form, expanded panel rows on the detail page, the splitter position and the Create mosaic dialog's
+choices; and the arranger's selection, tile opacity, zoom, pan, stacking order, Labels state,
+filter choice, and Loading and Saving captions (rulings R8 and R9). Nothing on these
 surfaces reads, writes, moves, renames or deletes a user file; Export panels (CSV) writes one new
 file at the dialog's path and nothing else (section 2.1).
 
@@ -11059,8 +11316,11 @@ file at the dialog's path and nothing else (section 2.1).
 6. **A panel's nights come from any target** (ruling R19): the detail page's sessions table becomes
    per-panel Included and Available tables with Add nights from any target.
 7. **The detail page is a workbench** with a splitter in place of the corner grip (ruling R7).
-8. **The deficit is a number** on the panel row until the arranger draws its colour band.
-9. **No suggestion tile preview** until the arranger exists (ruling R18).
+8. **The deficit is a number and a colour.** The panel row's Deficit column prints it as words
+   ("2h 10m behind") and the arranger's tile carries it as a colour-coded badge in the success,
+   warning or error ink; the web's row prints no deficit.
+9. **The suggestion tile preview is the arranger** with `IsHitTestVisible="False"` and no toolbar
+   (ruling R18), not a second component.
 10. **The mosaic list sort persists** in `display.sort.mosaics`, not in browser storage.
 11. **Inline rows** replace the browser prompt for As new panel.
 12. **The dashboard link names every mosaic** a target has an `included` night in and opens the
@@ -11069,6 +11329,18 @@ file at the dialog's path and nothing else (section 2.1).
 14. **No filled buttons.** The web's filled Accept, Create, Detail and Composite buttons are
     outlined, because Run scan is the one filled button in the application (section 14); the
     web's Detail button is the row's own click.
+15. **A right click opens a context menu** with Rotate CW and Flip H, rather than rotating the tile
+    at once (ruling R18).
+16. **A tile is 250 by 160 pixels** with the image fitted inside it, rather than a 300 pixel
+    square resized to the thumbnail's aspect.
+17. **The auto layout leaves a 4 pixel gap** between cells, not 1, and nothing snaps (ruling R8).
+18. **Tiles show frame thumbnails**, each panel's best frame's existing `frames/<key>.jpg`, rather
+    than panel thumbnails rendered and cached per filter (ruling R14).
+19. **A failed layout save is a sentence** in the toolbar, "The layout could not be saved.",
+    rather than a console error, and a save pending when the page closes runs rather than being
+    dropped.
+20. **No drop-to-swap.** The web's swap animation (`SWAP_DURATION`) is never wired to a gesture
+    and is not a target.
 
 ---
 
@@ -11336,6 +11608,17 @@ zoom and pan onto the canvas rather than add `chartjs-plugin-zoom`
 colour literal in the source, hover through a hit test, and a headless render tick in the
 tests. What two of the four would otherwise duplicate is extracted when the second of them
 needs it, and not before.
+
+**Phase 19A's mosaic arranger (section 12.17) is a composed control and adds no drawn control**,
+so the four drawn controls above are still the four. It is a `Canvas` of templated tile
+`ContentControl`s under one `RotateTransform` for the global rotation and one `MatrixTransform` for
+zoom and pan, each tile's rotation and flip a `LayoutTransformControl` around its `Image`, and the
+tiles' overlays ordinary `TextBlock`s on `Border`s, so the theme, the style census and the
+no-colour-literal rule reach every part of it. It is not drawn because its marks are controls, not
+data: a tile is a pressable, draggable, selectable box holding an image and text, and drawing it
+would re-implement the hit testing, pointer capture, text layout, automation names and theming
+that `Canvas` and a template give for nothing (ruling R18). The chart table above lists charts and
+gains no row for it.
 
 Chart metric and filter selections persist in `user_settings.graph`, matching
 `schemas/settings.py::GraphSettings`: `enabled_metrics` defaulting to
