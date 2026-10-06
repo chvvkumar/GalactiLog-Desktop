@@ -4,6 +4,7 @@ using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Data.Queries;
 using Microsoft.Extensions.Logging;
 
@@ -92,6 +93,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     private readonly ILogger _logger;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly Dictionary<Guid, TileViewModel> _byPanel = [];
+    private static readonly IReadOnlyDictionary<Guid, PanelGeometry> NoGeometry = new Dictionary<Guid, PanelGeometry>();
     private PanelFrameSet? _frameSet;
     private int _framesGeneration;
     private int _topZ;
@@ -523,6 +525,15 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     private string? _selectedFilter;
     private bool _publishingFilters;
 
+    /// <summary>The newest frame set, null until the first read lands. The composite's input
+    /// (spec 11.6): <see cref="SelectedFilter"/>'s notification is raised whenever it lands.</summary>
+    internal PanelFrameSet? FrameSet => _frameSet;
+
+    /// <summary>The geometry of every best frame in <see cref="FrameSet"/>, every panel and every
+    /// filter, read once in the same load by image id (spec 11.6). Empty when the read failed, so
+    /// every panel then has no position.</summary>
+    internal IReadOnlyDictionary<Guid, PanelGeometry> Geometry { get; private set; } = NoGeometry;
+
     /// <summary>"Loading..." while the frame set read is in flight or any tile's thumbnail is
     /// outstanding.</summary>
     public bool IsLoading => _readingFrames || Tiles.Any(tile => tile.IsLoading);
@@ -547,9 +558,16 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         var generation = ++_framesGeneration;
         SetReadingFrames(true);
         PanelFrameSet set;
+        IReadOnlyDictionary<Guid, PanelGeometry> geometry;
         try
         {
-            set = await Task.Run(() => _backend.PanelFrames(_mosaicId), _lifetime.Token).ConfigureAwait(false);
+            (set, geometry) = await Task.Run(
+                () =>
+                {
+                    var frames = _backend.PanelFrames(_mosaicId);
+                    return (frames, ReadGeometry(frames));
+                },
+                _lifetime.Token).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -597,6 +615,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
             // makes while it moves is refused, so a null write-back cannot replace it.
             var previous = _selectedFilter;
             _frameSet = set;
+            Geometry = geometry;
             if (!Filters.SequenceEqual(set.AvailableFilters, StringComparer.Ordinal))
             {
                 _publishingFilters = true;
@@ -617,6 +636,21 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(SelectedFilter));
             RePoint();
         });
+    }
+
+    // Spec 11.6's one geometry read, beside the frame set and on its thread. A failure is not the
+    // frame set's: it is logged and leaves every panel with no position.
+    private IReadOnlyDictionary<Guid, PanelGeometry> ReadGeometry(PanelFrameSet set)
+    {
+        try
+        {
+            return _backend.FrameGeometry([.. set.BestByPanel.Values.SelectMany(byFilter => byFilter.Values).Select(best => best.ImageId).Distinct()]);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Reading the best frames' geometry failed");
+            return NoGeometry;
+        }
     }
 
     private string? Spelling(string? filter)

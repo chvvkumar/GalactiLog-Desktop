@@ -977,6 +977,57 @@ public sealed class ArrangerViewModelTests : IDisposable
         });
     }
 
+    // ---- Phase 19B Task 4: the geometry read (spec 11.6) ----------------------------------------
+
+    [Fact]
+    public async Task TheGeometryRead_RunsInTheFrameSetLoad_OverEveryBestFrame()
+    {
+        var panels = Panels(2);
+        var frames = Frames(["Ha", "OIII"], "Ha", (panels[0].Id, "Ha", "a.fits"), (panels[0].Id, "OIII", "b.fits"), (panels[1].Id, "Ha", "c.fits"));
+        var ids = frames.BestByPanel.Values.SelectMany(byFilter => byFilter.Values).Select(best => best.ImageId).ToHashSet();
+        var geometry = new Dictionary<Guid, GalactiLog.Core.Mosaics.PanelGeometry>();
+        var threads = new List<bool>();
+        IReadOnlyCollection<Guid>? asked = null;
+        var arranger = Arranger(new MosaicsBackend
+        {
+            PanelFrames = _ => frames,
+            ThumbnailFor = Slot,
+            FrameGeometry = requested =>
+            {
+                threads.Add(Thread.CurrentThread.IsThreadPoolThread);
+                asked = requested;
+                return geometry;
+            },
+        });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+
+        Assert.Equal(new[] { true }, threads);
+        Assert.True(ids.SetEquals(asked!));
+        Assert.Same(frames, arranger.FrameSet);
+        Assert.Same(geometry, arranger.Geometry);
+    }
+
+    [Fact]
+    public async Task AFailedGeometryRead_LeavesTheFrameSetIntact_AndNoGeometry()
+    {
+        var panels = Panels(1);
+        var frames = Frames(["Ha"], "Ha", (panels[0].Id, "Ha", "a.fits"));
+        var arranger = Arranger(new MosaicsBackend
+        {
+            PanelFrames = _ => frames,
+            FrameGeometry = _ => throw new InvalidOperationException("locked"),
+            ThumbnailFor = Slot,
+        });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+
+        Assert.Same(frames, arranger.FrameSet);
+        Assert.Empty(arranger.Geometry);
+        Assert.Equal("Ha", arranger.SelectedFilter);
+        Assert.NotNull(arranger.Tiles[0].Thumbnail);
+    }
+
     // ---- the read-only preview ---------------------------------------------------------------
 
     [Fact]
