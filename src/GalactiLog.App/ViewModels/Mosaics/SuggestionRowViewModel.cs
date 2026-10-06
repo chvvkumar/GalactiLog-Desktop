@@ -211,11 +211,11 @@ public sealed partial class SuggestionRowViewModel : ObservableObject, IDisposab
         [
             .. CheckedLabels.Order(StringComparer.OrdinalIgnoreCase).Select(label =>
             {
-                // The entry's target, and the label's in-campaign nights on it: the session
-                // table's rows for that label.
+                // The entry's target, and the label's in-campaign rows on it, so the integration
+                // matches the frame the tile shows.
                 var target = Row.Panels.First(panel => string.Equals(panel.Label, label, StringComparison.OrdinalIgnoreCase)).TargetId;
-                var rows = _sessions.Where(session => session.InCampaign && string.Equals(session.Label, label, StringComparison.OrdinalIgnoreCase)).ToList();
-                IReadOnlyCollection<DateOnly> nights = [.. rows.Where(session => session.TargetId == target).Select(session => session.Night).Distinct()];
+                var rows = _sessions.Where(session => session.InCampaign && session.TargetId == target && string.Equals(session.Label, label, StringComparison.OrdinalIgnoreCase)).ToList();
+                IReadOnlyCollection<DateOnly> nights = [.. rows.Select(session => session.Night).Distinct()];
                 return new PreviewTile(label, rows.Sum(session => session.IntegrationSeconds), () => backend.SuggestionBestFrame(target, label, nights));
             }),
         ]);

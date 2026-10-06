@@ -218,7 +218,8 @@ public class MosaicsPageViewModelTests
     }
 
     // Phase 19A Task 3: the tile preview follows the check boxes in label order, whatever the
-    // session table's sort, and runs no best frame query until the row first expands.
+    // session table's sort, and runs no best frame query until the row first expands. A tile's
+    // integration counts only the entry's target, the target its frame comes from.
     [Fact]
     public async Task TheTilePreview_FollowsTheCheckBoxes_InLabelOrder()
     {
@@ -231,6 +232,9 @@ public class MosaicsPageViewModelTests
             [
                 new(TargetA, "panel 2", "M 31 Panel 2", Night(1), "Ha", 3, 900, true),
                 new(TargetA, "panel 2", "M 31 Panel 2", Night(2), "OIII", 1, 300, true),
+
+                // The label on a second target: outside the entry's frame pool, so outside its figure.
+                new(TargetB, "panel 2", "M 31 Panel 2", Night(3), "Ha", 2, 500, true),
                 new(TargetB, "Panel 1", "M 31 Panel 1", Night(1), "Ha", 2, 600, true),
                 new(TargetA, "Panel 3", "M 31 Panel 3", Night(9), "Ha", 4, 1200, false),
             ],

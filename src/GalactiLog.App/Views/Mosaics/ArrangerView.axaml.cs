@@ -90,8 +90,9 @@ public partial class ArrangerView : UserControl
         var tile = (e.Source as StyledElement)?.DataContext as TileViewModel;
         if (point.Properties.IsRightButtonPressed)
         {
-            // Selects; the tile's ContextMenu opens on the release. No drag starts.
-            if (tile is not null)
+            // Selects; the tile's ContextMenu opens on the release. No drag starts. A right press
+            // while a left press drags or pans is ignored, so it never moves the selection.
+            if (tile is not null && _pressed is null && !_panning)
             {
                 arranger.Select(tile);
             }

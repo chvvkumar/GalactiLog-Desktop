@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Automation;
+using Avalonia.Automation.Peers;
 using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -113,10 +114,18 @@ public sealed class ArrangerViewTests
         Assert.Contains("Panels", texts);
         Assert.Contains("Click a tile to select it, then rotate or flip", texts);
         Assert.Contains("Panel 1", texts);
-        Assert.DoesNotContain("Filter", texts);
 
-        Assert.Equal("Panel 1, no thumbnail", AutomationProperties.GetName(mounted.View.FindControl<ItemsControl>("TileItems")!
-            .ContainerFromIndex(0)!.GetVisualDescendants().OfType<Control>().First(control => control.Name == "Tile")));
+        // With no available filter the Filter group keeps its place, faded and inert.
+        var filterGroup = view.FindControl<Control>("FilterGroup")!;
+        Assert.Equal(0, filterGroup.Opacity);
+        Assert.False(filterGroup.IsHitTestVisible);
+        Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(filterGroup));
+
+        // The tile's name reaches the automation tree, not only the attached property.
+        var tileRoot = mounted.Container(0).GetVisualDescendants().OfType<Control>().First(control => control.Name == "Tile");
+        var peer = ControlAutomationPeer.CreatePeerForElement(tileRoot);
+        Assert.Equal("Panel 1, no thumbnail", peer.GetName());
+        Assert.True(peer.IsControlElement());
     }
 
     [AvaloniaFact]
@@ -191,6 +200,26 @@ public sealed class ArrangerViewTests
         mounted.Window.MouseUp(now, MouseButton.Left);
         Dispatcher.UIThread.RunJobs();
         Assert.Null(mounted.Arranger.Selected);
+    }
+
+    // A right press on another tile while the left button drags one is not a selection.
+    [AvaloniaFact]
+    public async Task ARightPress_DuringALeftDrag_KeepsTheDraggedTileSelected()
+    {
+        using var mounted = await Mount(new FakeMosaic());
+        var dragged = mounted.Arranger.Tiles[3];
+        var start = mounted.Container(3).TranslatePoint(new Point(125, 80), mounted.Window)!.Value;
+        var other = mounted.Container(0).TranslatePoint(new Point(125, 80), mounted.Window)!.Value;
+
+        mounted.Window.MouseDown(start, MouseButton.Left);
+        mounted.Window.MouseDown(other, MouseButton.Right);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(dragged, mounted.Arranger.Selected);
+
+        mounted.Window.MouseUp(other, MouseButton.Right);
+        mounted.Window.MouseUp(start, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(dragged, mounted.Arranger.Selected);
     }
 
     [AvaloniaFact]
@@ -322,7 +351,8 @@ public sealed class ArrangerViewTests
     [AvaloniaFact]
     public async Task TheStatusCaptions_NeverReflowTheToolbar()
     {
-        using var mounted = await Mount(new FakeMosaic());
+        var mosaic = new FakeMosaic();
+        using var mounted = await Mount(mosaic);
         var viewport = mounted.View.FindControl<Border>("Viewport")!;
         var toolbar = mounted.View.FindControl<WrapPanel>("Toolbar")!;
         var (top, height) = (viewport.Bounds.Y, toolbar.Bounds.Height);
@@ -359,6 +389,21 @@ public sealed class ArrangerViewTests
         Settled("selected");
         mounted.Arranger.Select(null);
         Settled("deselected");
+
+        // The first frame set can arrive mid-gesture: the Filter group appearing or going keeps
+        // the toolbar's height.
+        async Task Filters(string state, params string[] filters)
+        {
+            mosaic.Frames = new PanelFrameSet(filters, filters.FirstOrDefault(), new Dictionary<Guid, IReadOnlyDictionary<string, BestFrame>>());
+            mounted.Arranger.Apply(mosaic.Read()!);
+            await mounted.Arranger.PendingFrames;
+            Settled(state);
+            Assert.Equal(filters.Length > 0, mounted.Arranger.HasFilters);
+        }
+
+        await Filters("filters", "Ha", "OIII");
+        Assert.Equal(1, mounted.View.FindControl<Control>("FilterGroup")!.Opacity);
+        await Filters("no filters");
     }
 
     [Fact]

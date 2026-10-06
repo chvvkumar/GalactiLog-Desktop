@@ -491,8 +491,17 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     private string? _selectedFilter;
     private bool _publishingFilters;
 
-    /// <summary>"Loading..." while any tile's thumbnail is outstanding.</summary>
-    public bool IsLoading => Tiles.Any(tile => tile.IsLoading);
+    /// <summary>"Loading..." while the frame set read is in flight or any tile's thumbnail is
+    /// outstanding.</summary>
+    public bool IsLoading => _readingFrames || Tiles.Any(tile => tile.IsLoading);
+
+    private bool _readingFrames;
+
+    private void SetReadingFrames(bool value)
+    {
+        _readingFrames = value;
+        NotifyLoading();
+    }
 
     private void NotifyLoading() => OnPropertyChanged(nameof(IsLoading));
 
@@ -504,6 +513,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         }
 
         var generation = ++_framesGeneration;
+        SetReadingFrames(true);
         PanelFrameSet set;
         try
         {
@@ -516,6 +526,29 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Reading the mosaic's best frames failed");
+            _post(() =>
+            {
+                if (_disposed || generation != _framesGeneration)
+                {
+                    return;
+                }
+
+                // A failed read resolves the tiles rather than leaving them blank: with no frame
+                // set yet every tile shows "No thumbnail"; after an earlier read the tiles keep
+                // its frames and a new panel shows its empty caption.
+                SetReadingFrames(false);
+                if (_frameSet is null)
+                {
+                    foreach (var tile in Tiles)
+                    {
+                        tile.SetFrame(null, null, _backend.ThumbnailFor);
+                    }
+                }
+                else
+                {
+                    RePoint();
+                }
+            });
             return;
         }
 
@@ -525,6 +558,8 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
             {
                 return;
             }
+
+            SetReadingFrames(false);
 
             // The reader's choice is captured before the list moves, and every write the control
             // makes while it moves is refused, so a null write-back cannot replace it.

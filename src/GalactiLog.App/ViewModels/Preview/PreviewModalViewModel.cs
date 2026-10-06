@@ -310,6 +310,12 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
     private void OnGeneralChanged(object? sender, GeneralSettings general)
         => OnPropertyChanged(nameof(RenderOnNavigate));
 
+    /// <summary>The offsets after scaling by <paramref name="ratio"/> about the pointer, so the
+    /// point under the pointer stays under it. <see cref="Zoom"/> and the mosaic arranger's zoom
+    /// share it; both measure the offsets and the pointer in the same viewport frame.</summary>
+    public static (double X, double Y) ScaleAbout(double offsetX, double offsetY, double pointerX, double pointerY, double ratio)
+        => (pointerX - (pointerX - offsetX) * ratio, pointerY - (pointerY - offsetY) * ratio);
+
     /// <summary>Pointer-centred wheel zoom, the web's transform ported exactly: it is what makes
     /// the point under the cursor stay under the cursor.</summary>
     /// <param name="delta">The raw wheel delta in the web's <c>e.deltaY</c> sign convention:
@@ -335,9 +341,7 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
             next = 1d;
         }
 
-        var ratio = next / old;
-        OffsetX = pointerX - (pointerX - OffsetX) * ratio;
-        OffsetY = pointerY - (pointerY - OffsetY) * ratio;
+        (OffsetX, OffsetY) = ScaleAbout(OffsetX, OffsetY, pointerX, pointerY, next / old);
         Scale = next;
 
         // At or below fit the image is centred and cannot be panned (coordinator ruling on the

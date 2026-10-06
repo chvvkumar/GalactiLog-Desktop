@@ -46,9 +46,6 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// <summary>Composite's tooltip until the composite phase enables it (spec 12.17).</summary>
     public const string CompositeTooltip = "Composite images are not available yet.";
 
-    /// <summary>The arranger placeholder band's sentence (spec 12.17).</summary>
-    public const string ArrangerPlaceholderText = "Panel layout is not available yet.";
-
     /// <summary>Delete mosaic's confirm sentence.</summary>
     public const string DeleteConfirmText = MosaicRowViewModel.DeleteConfirmText;
 

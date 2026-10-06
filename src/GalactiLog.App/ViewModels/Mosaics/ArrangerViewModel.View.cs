@@ -1,6 +1,7 @@
 using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.ViewModels.Preview;
 
 namespace GalactiLog.App.ViewModels.Mosaics;
 
@@ -104,9 +105,7 @@ public sealed partial class ArrangerViewModel
             return;
         }
 
-        var ratio = next / old;
-        OffsetX = pointerX - (pointerX - OffsetX) * ratio;
-        OffsetY = pointerY - (pointerY - OffsetY) * ratio;
+        (OffsetX, OffsetY) = PreviewModalViewModel.ScaleAbout(OffsetX, OffsetY, pointerX, pointerY, next / old);
         Zoom = next;
     }
 

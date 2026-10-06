@@ -102,9 +102,19 @@
                       ToolTip.Tip="Show the panel labels, the integration and the badges on every tile." />
       </StackPanel>
 
-      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center" IsVisible="{Binding HasFilters}">
-        <TextBlock Classes="t-caption" Text="Filter" VerticalAlignment="Center" />
-        <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" MinWidth="90" AutomationProperties.Name="Filter" />
+      <!-- The Filter group is faded, inert and out of the automation tree while the mosaic has no
+           available filter, never collapsed, so the first frame set arriving mid-gesture does not
+           reflow the toolbar. Loading sits outside it: it shows during that first read too. -->
+      <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,10,4" VerticalAlignment="Center">
+        <StackPanel x:Name="FilterGroup"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    Opacity="{Binding !HasFilters, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}"
+                    IsHitTestVisible="{Binding HasFilters}"
+                    AutomationProperties.AccessibilityView="{Binding !HasFilters, Converter={x:Static mosaics:ArrangerView.RawWhen}}">
+          <TextBlock Classes="t-caption" Text="Filter" VerticalAlignment="Center" />
+          <ComboBox ItemsSource="{Binding Filters}" SelectedItem="{Binding SelectedFilter}" MinWidth="90" AutomationProperties.Name="Filter" />
+        </StackPanel>
         <TextBlock x:Name="LoadingCaption"
                    Classes="t-caption"
                    Text="Loading..."
@@ -169,10 +179,13 @@
              binds the three on ContainerPrepared: no control theme or style is declared here. -->
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="mos:TileViewModel">
+            <!-- A plain Panel's peer is left out of the automation tree by default; Control puts
+                 the tile and its name in it. -->
             <Panel x:Name="Tile"
                    Width="{x:Static mos:ArrangerViewModel.TileWidth}"
                    Height="{x:Static mos:ArrangerViewModel.TileHeight}"
-                   AutomationProperties.Name="{Binding AutomationName}">
+                   AutomationProperties.Name="{Binding AutomationName}"
+                   AutomationProperties.AccessibilityView="Control">
               <!-- A right press selects the tile (code-behind); the menu acts on this tile. -->
               <Panel.ContextMenu>
                 <ContextMenu>

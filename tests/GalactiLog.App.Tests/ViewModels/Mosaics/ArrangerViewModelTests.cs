@@ -407,6 +407,45 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Empty(log.Writes);
     }
 
+    // The real post queues onto the UI thread, which Dispose is blocking. A write that waited on
+    // anything it posted would hold the close for the whole 2 second bound; here every post is
+    // held in a queue drained only after Dispose returns.
+    [Fact]
+    public void TheCloseFlush_NeverWaitsOnTheUiThread()
+    {
+        var log = new LayoutLog();
+        var delay = new ManualDelay();
+        var queued = new List<Action>();
+        var arranger = new ArrangerViewModel(
+            MosaicId,
+            new MosaicsBackend { UpdateLayout = log.Write },
+            readOnly: false,
+            post: action =>
+            {
+                lock (queued)
+                {
+                    queued.Add(action);
+                }
+            },
+            delay: delay.Wait,
+            NullLogger.Instance);
+        _owned.Add(arranger);
+        arranger.Apply(Detail(Panels(2)));
+        arranger.Flip(arranger.Tiles[1]);
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        arranger.Dispose();
+        clock.Stop();
+
+        Assert.True(clock.Elapsed < TimeSpan.FromSeconds(1), $"Dispose took {clock.Elapsed}");
+        var write = Assert.Single(log.Writes);
+        Assert.True(write.Panels[1].FlipH);
+        lock (queued)
+        {
+            queued.ForEach(action => action());
+        }
+    }
+
     // ---- zoom and pan ------------------------------------------------------------------------
 
     [Fact]
@@ -773,6 +812,43 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.True(arranger.IsEmpty);
         Assert.False(arranger.HasFilters);
         Assert.Equal(1, arranger.Zoom);
+    }
+
+    [Fact]
+    public async Task IsLoading_HoldsWhileTheFrameSetReadIsInFlight()
+    {
+        using var gate = new ManualResetEventSlim();
+        var arranger = Arranger(new MosaicsBackend
+        {
+            PanelFrames = _ =>
+            {
+                gate.Wait(Budget);
+                return Frames(["Ha"], "Ha");
+            },
+        });
+        arranger.Apply(Detail(Panels(2)));
+
+        Assert.True(arranger.IsLoading);
+
+        gate.Set();
+        await arranger.PendingFrames.WaitAsync(Budget);
+        Assert.False(arranger.IsLoading);
+        Assert.All(arranger.Tiles, tile => Assert.Equal("No Ha frames", tile.EmptyText));
+    }
+
+    [Fact]
+    public async Task AFailedFrameSetRead_ResolvesEveryTileToNoThumbnail()
+    {
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => throw new InvalidOperationException("locked") });
+        arranger.Apply(Detail(Panels(2)));
+        await arranger.PendingFrames.WaitAsync(Budget);
+
+        Assert.False(arranger.IsLoading);
+        Assert.All(arranger.Tiles, tile =>
+        {
+            Assert.True(tile.IsEmpty);
+            Assert.Equal("No thumbnail", tile.EmptyText);
+        });
     }
 
     // ---- the read-only preview ---------------------------------------------------------------
