@@ -1,3 +1,4 @@
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Data.Entities;
 
 namespace GalactiLog.Data.Queries;
@@ -5,6 +6,12 @@ namespace GalactiLog.Data.Queries;
 /// <summary>One (target, night, frame label, raw filter) group of LIGHT frames, the unit every
 /// mosaic figure is summed from. <see cref="Label"/> is the stored <c>images.panel_label</c>.</summary>
 internal sealed record FrameBucket(Guid TargetId, DateOnly Date, string? Label, string? Filter, int Frames, double Seconds);
+
+/// <summary>One LIGHT frame with what spec 11.4's best frame needs: its triple, raw filter,
+/// exposure, capture date and the five scored metrics.</summary>
+internal sealed record LightFrame(
+    Guid Id, string FilePath, Guid TargetId, DateOnly Date, string? Label, string? Filter, double Seconds,
+    DateTime? CaptureDate, FrameMetrics Metrics);
 
 /// <summary>A (target, night, frame label) triple with the label folded the way the unique index
 /// of spec 5.24 folds it: null and empty are one value, case is ignored.</summary>
@@ -34,11 +41,7 @@ internal static class MosaicFrames
             return [];
         }
 
-        return [.. context.Images
-            .Where(image => image.ImageType == "LIGHT"
-                && image.ResolvedTargetId != null
-                && image.SessionDate != null
-                && ids.Contains(image.ResolvedTargetId.Value))
+        return [.. LightImages(context, ids)
             .GroupBy(image => new { image.ResolvedTargetId, image.SessionDate, image.PanelLabel, image.FilterUsed })
             .Select(group => new
             {
@@ -53,6 +56,47 @@ internal static class MosaicFrames
             .Select(row => new FrameBucket(
                 row.ResolvedTargetId!.Value, row.SessionDate!.Value, row.PanelLabel, row.FilterUsed, row.Frames, row.Seconds))];
     }
+
+    /// <summary>Every LIGHT frame of the given targets one by one, the frame-level reach of the
+    /// join that spec 11.4's best frame scores; nights with no <c>session_date</c> excluded, as in
+    /// <see cref="Buckets"/>.</summary>
+    public static List<LightFrame> Frames(GalactiLogContext context, IEnumerable<Guid> targetIds)
+    {
+        var ids = targetIds.Distinct().ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        return [.. LightImages(context, ids)
+            .Select(image => new
+            {
+                image.Id,
+                image.FilePath,
+                image.ResolvedTargetId,
+                image.SessionDate,
+                image.PanelLabel,
+                image.FilterUsed,
+                image.ExposureTime,
+                image.CaptureDate,
+                image.DetectedStars,
+                image.MedianHfr,
+                image.Eccentricity,
+                image.GuidingRmsArcsec,
+                image.Fwhm,
+            })
+            .AsEnumerable()
+            .Select(row => new LightFrame(
+                row.Id, row.FilePath, row.ResolvedTargetId!.Value, row.SessionDate!.Value, row.PanelLabel, row.FilterUsed,
+                row.ExposureTime ?? 0d, row.CaptureDate,
+                new FrameMetrics(row.DetectedStars, row.MedianHfr, row.Eccentricity, row.GuidingRmsArcsec, row.Fwhm)))];
+    }
+
+    private static IQueryable<Image> LightImages(GalactiLogContext context, List<Guid> ids)
+        => context.Images.Where(image => image.ImageType == "LIGHT"
+            && image.ResolvedTargetId != null
+            && image.SessionDate != null
+            && ids.Contains(image.ResolvedTargetId.Value));
 
     /// <summary>The distinct triples the buckets carry, each in the spelling of its first bucket,
     /// ordered by night, target and label so every caller writes and lists them in one order.</summary>
