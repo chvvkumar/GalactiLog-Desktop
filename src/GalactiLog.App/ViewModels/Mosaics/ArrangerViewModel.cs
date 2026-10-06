@@ -247,7 +247,8 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     public string RotationText => Math.Round(GlobalRotation, MidpointRounding.AwayFromZero).ToString("0", CultureInfo.InvariantCulture) + "°";
 
     /// <summary>The tiles' bounding box centre in canvas pixels, the <c>RotateTransform</c>'s
-    /// centre. Taken when the rotation changes and when panels come or go, never during a drag.</summary>
+    /// centre. Taken when the rotation changes, when panels come or go and when a tile's height
+    /// changes, never during a drag.</summary>
     [ObservableProperty]
     public partial double RotationCentreX { get; private set; }
 
@@ -465,6 +466,8 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     // centre is retaken (not mid-drag, so the group does not swing under the pointer), and until
     // the reader's first gesture the view refits, so the first frame of a mosaic of square
     // thumbnails is not cut off.
+    // ponytail: AutoLayout and Fit run once per image that lands, O(n squared) per filter change,
+    // bounded by a mosaic's panel count; batching per frame set is the upgrade if it ever shows.
     private void OnTileHeightChanged()
     {
         if (_disposed)

@@ -11229,10 +11229,11 @@ scale, then each offset becomes the pointer minus (the pointer minus the offset)
 of the new scale to the old. Minus and plus use the viewport centre as the pointer. Fit runs
 once, when the control first has both a size and at least one tile, and again on each press of
 Fit; a re-read of the page, a panel coming or going and a splitter drag do not refit. Until the
-reader's first gesture (a zoom, a pan or a press on a tile) since the page opened, a tile's height
-changing as its thumbnail arrives refits too, so the first frame of a mosaic of square thumbnails
-is not cut off; after that gesture the view stays where the reader put it. A height change also
-retakes the rotation centre. Zoom and pan are view state.
+reader's first gesture (a zoom, a pan, or a drag or a left press on a tile) since the page
+opened, a tile's height changing as its thumbnail arrives refits too, so the first frame of a
+mosaic of square thumbnails is not cut off; after that gesture the view stays where the reader
+put it. A right press only selects and does not count. A height change also retakes the rotation
+centre. Zoom and pan are view state.
 
 **No panel.** A mosaic with no panel draws nothing in the viewport: Fit does nothing, and the
 Filter selector is hidden. The toolbar stays, its tile controls disabled as with no selection.
@@ -11408,7 +11409,8 @@ file at the dialog's path and nothing else (section 2.1).
     choice wins.
 22. **No refit after a structural change.** Adding or removing a panel and dragging the splitter
     keep the zoom and pan; the web refits after every rebuild and every resize of its grip. A
-    thumbnail arriving refits only until the reader's first zoom, pan or press on a tile.
+    thumbnail arriving refits only until the reader's first zoom, pan, or drag or left press on a
+    tile.
 23. **Positions are stored unrounded**, as REAL; the web rounds them to whole pixels.
 24. **The deficit badge's minus is an ASCII hyphen-minus**, not the web's Unicode minus sign.
 25. **The state badge is words**, "90° · flipped", not the web's "R90 FH".

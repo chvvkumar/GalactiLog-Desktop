@@ -698,9 +698,11 @@ public sealed class ArrangerViewModelTests : IDisposable
     // Fit lands at min(520 / 250, 320 / 160) = 2 on the placeholder, then at min(520 / 250,
     // 320 / 250) = 1.28 once the square image is known, unless the reader has moved the view.
     [AvaloniaTheory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task AHeightChange_RefitsUntilTheFirstGesture(bool dragged)
+    [InlineData("none")]
+    [InlineData("drag")]
+    [InlineData("pan")]
+    [InlineData("zoom")]
+    public async Task AHeightChange_RefitsUntilTheFirstGesture(string gesture)
     {
         using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
         var panels = Panels(1);
@@ -709,17 +711,26 @@ public sealed class ArrangerViewModelTests : IDisposable
         arranger.Apply(Detail(panels));
         await arranger.PendingFrames.WaitAsync(Budget);
         Assert.Equal(2, arranger.Zoom, 9);
-        if (dragged)
+        var tile = arranger.Tiles[0];
+        switch (gesture)
         {
-            var tile = arranger.Tiles[0];
-            arranger.BeginDrag(tile, 10, 10);
-            arranger.Drag(tile, 10, 10);
-            arranger.EndDrag(tile);
+            case "drag":
+                arranger.BeginDrag(tile, 10, 10);
+                arranger.Drag(tile, 10, 10);
+                arranger.EndDrag(tile);
+                break;
+            case "pan":
+                arranger.Pan(1, 0);
+                break;
+            case "zoom":
+                arranger.ZoomOutCommand.Execute(null);
+                break;
         }
 
+        var zoom = arranger.Zoom;
         thumbs.PumpUntil(() => arranger.Tiles[0].HasImage);
 
-        Assert.Equal(dragged ? 2 : 1.28, arranger.Zoom, 9);
+        Assert.Equal(gesture == "none" ? 1.28 : zoom, arranger.Zoom, 9);
         Assert.Equal((125d, 125d), (arranger.RotationCentreX, arranger.RotationCentreY));
     }
 
