@@ -840,9 +840,10 @@ public static class HelpTopics
 
         // Phase 19A Task 5: the arranger's glyph (spec 12.12, 12.17).
         new("mosaic.arranger", "Panels",
-            "Each tile is one panel, showing its best frame in the chosen filter, with the panel label, its integration and, when it is behind the leading panel, a deficit badge. The badge is green under 20 percent behind, amber from 20 to 60 and red at 60 or more, and a panel with no frame in the filter shows a No filter frames tile. "
-            + "Drag a tile anywhere to place it. Select one and use Rotate CW or Flip H, or right-click it for the same. Fit, the zoom buttons and the mouse wheel change the view, the Rotation slider turns the whole group, and Reset all returns every tile and the rotation to 0. "
-            + "Positions, rotation, flip and the group rotation are saved a moment after your last change, with Saving shown while it writes. Tile opacity, zoom, Labels and the filter are not saved. "
+            "Each tile is one panel's best frame in the chosen filter, with its label, its integration and, when it trails the leading panel, a deficit badge: green under 20 percent behind, amber 20 to 60, red 60 or more. A panel with no frame in the filter reads No, the filter's name and frames, such as No Ha frames. "
+            + "Drag a tile to place it, or select one and use Rotate CW or Flip H, or right-click it. "
+            + "Fit, zoom and the wheel change the view, the Rotation slider turns the whole group, and Reset all clears every tile's rotation and flip and the group rotation, leaving positions as they are. "
+            + "Positions, rotation and flip are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not. "
             + "The layout is for the eye only and changes no figure and no composite."),
 
         new("mosaic.sessions", "Panels and nights",
