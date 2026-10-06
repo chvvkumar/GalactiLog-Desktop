@@ -1284,7 +1284,7 @@ Mirrors `backend/app/models/activity_event.py`.
 | `id` | INTEGER | no | PK, autoincrement. |
 | `timestamp` | TEXT datetime | no | |
 | `severity` | TEXT | no | `info`, `warning`, `error`. |
-| `category` | TEXT | no | `scan`, `rebuild`, `thumbnail`, `enrichment`, `migration`, `user_action`, `system`. The `user_action` event types are `target_renamed` (carrying `previous_name` and `new_name`, and the only record of a rename: there is no rename-history table), `retry_unresolved` (carrying the run's counts), `target_object_type_changed` (carrying `previous_object_type`, `previous_category`, `new_object_type` and `new_category`; section 12.4), `settings_changed`, and the three Phase 21 integration types `nina_send`, `stellarium_send` and `astrobin_csv_copied` (section 12.16). |
+| `category` | TEXT | no | `scan`, `rebuild`, `thumbnail`, `enrichment`, `migration`, `user_action`, `system`. The `user_action` event types are `target_renamed` (carrying `previous_name` and `new_name`, and the only record of a rename: there is no rename-history table), `retry_unresolved` (carrying the run's counts), `target_object_type_changed` (carrying `previous_object_type`, `previous_category`, `new_object_type` and `new_category`; section 12.4), `settings_changed`, the two composite types `mosaic_composite_built` and `mosaic_composite_failed` (sections 11.6, 12.17), and the three Phase 21 integration types `nina_send`, `stellarium_send` and `astrobin_csv_copied` (section 12.16). |
 | `event_type` | TEXT | no | |
 | `message` | TEXT | no | |
 | `details` | TEXT JSON | yes | |
@@ -4570,6 +4570,8 @@ while a scan is running.
 | `scan` | `mosaic_detection_complete` | info | A mosaic detection pass finishes, from a scan or from the Mosaics page's Run Detection (section 7.7) | `{trigger, suggestions, relabelled, backfilled}`. `trigger` is `scan` or `manual`. Inside a scan, parented to `scan_started`. |
 | `scan` | `mosaic_detection_failed` | error | A mosaic detection pass threw (section 7.7). The scan that hosted it still ends normally | `{trigger, reason}` |
 | `user_action` | `mosaic_action_failed` | warning | One item of a bulk Accept, Dismiss or Delete Selected job on the Mosaics page failed (section 12.17), one event per failed item, and the failed read that opens the Create mosaic dialog from the Target detail page (section 12.17), carrying that target's id | `{action, name, reason}`. `action` is `accept`, `dismiss`, `delete` or `create`; `name` is the suggestion's or the mosaic's name, or the target's name for `create`. |
+| `user_action` | `mosaic_composite_built` | info | A composite finished building for one mosaic and filter (sections 11.6, 12.17). A cache hit writes no row | `{mosaic_id, filter}`. The message reads "<mosaic name>, <filter>: <w> by <h> pixels from <n> panels". |
+| `user_action` | `mosaic_composite_failed` | error | A composite build threw; a cancelled build writes no row (sections 11.6, 12.17) | `{mosaic_id, filter, reason}`. `reason` is the exception's message, which is also the row's message. |
 | `enrichment` | `target_created` | info | A new target row is inserted | `{primary_name, catalog_id, source}`. Manual creation (section 9.7) adds `linked_frames` and `closed_candidates`: `linked_frames` is the count of LIGHT frames the retro-link moved onto the new target, and `closed_candidates` is the count of distinct unresolved `OBJECT` names it closed, not a count of `merge_candidates` rows (the member and key names were kept from an earlier design; the value they carry moved with the frame-driven retro-link of section 9.7 step 5). |
 | `enrichment` | `target_merged` | info | A merge completes | `{winner, loser, moved_images}` |
 | `enrichment` | `target_unmerged` | info | An unmerge completes | `{winner, loser}` |
@@ -5073,8 +5075,8 @@ included or left out, by these rules:
 
 1. A panel with no best frame in the filter is left out, for the reason "no <filter> frames".
 2. A panel whose best frame lacks any of `ra_deg`, `dec_deg` or `width_px` has no position and is
-   left out, for the reason "no position". `width_px` is required because it is the tile scale's
-   denominator, below.
+   left out, for the reason "no position". `width_px` is required because it is the denominator of
+   the canvas scale `c` and of the draw factor `g`, below.
 3. Every other panel is included.
 
 The **plate scale** is the `arcsec_per_pixel` of the first panel in `sort_order` whose best frame in
@@ -5122,7 +5124,10 @@ by `h_p` pixels.
 - **Tile size.** Each tile is drawn scaled by `g_p = (s_p * W_p / w_p) / c` about its centre, to
   `w_p * g_p` by `h_p * g_p` canvas pixels. A panel binned 2x (half the `width_px`, twice the
   `arcsec_per_pixel`, the same field) lands at the same offset and draws at the size its field
-  deserves; panels that share a rig and a tile width have `g = 1`.
+  deserves; panels that share a rig and a tile width have `g = 1`. A tile's drawn dimension under `g`, capped
+  or not, is rounded to the nearest whole pixel and at least 1, halves rounding away from zero (the
+  rule stated for `f` below); the bounding box and the output cap use those rounded drawn
+  dimensions, and the cap rounds again under `f`.
 - **Per-tile rotation.** `r = rotator_position - t`, plus 180 when the panel's pier side differs
   from the reference panel's, normalised into [-180, 180) by `r = ((r + 180) mod 360) - 180`, the
   modulo taking the sign of the divisor. The tile is drawn turned clockwise by `r` degrees about its
@@ -7816,7 +7821,7 @@ list produces the six `export.*` step ids (section 12.13). The census resolves a
 its markup file rather than by restating either list, so a bound site in a file the map does not
 know carries its binding text into the failure instead of borrowing another site's ids.
 
-**The topic table.** 114 topics, placed by 98 `HelpButton` elements across 42 markup files: 93
+**The topic table.** 114 topics, placed by 98 `HelpButton` elements across 42 markup files: 94
 literal ids and the four bound sites above, which expand to the remaining 20. Phase 15A added one
 topic, `settings.equipment.phd2-profiles`, beside one literal placement; Phase 15B added two more,
 `target.guiding` and `stats.guiding`, each beside one literal placement (Phase 24 R3 moved
@@ -7847,9 +7852,8 @@ elements. Phase 19A adds one, `mosaic.arranger`, beside one literal placement in
 file `ArrangerView.axaml`, the forty-first, which brings the table to 113 topics placed by 97
 `HelpButton` elements. Phase 19B adds one, `mosaic.composite`, beside one literal placement in the one new
 markup file `CompositeLightboxWindow.axaml`, the forty-second, which brings the table to 114 topics
-placed by 98 `HelpButton` elements; the census test pins the new figures. The Source column
-says where the paragraph came
-from: a web file means the paragraph is that file's `HelpPopover` text, edited only for this
+placed by 98 `HelpButton` elements; the help topics test
+(`tests/GalactiLog.Core.Tests/Help/HelpTopicsTests.cs`) pins the topic count. The Source column says where the paragraph came from: a web file means the paragraph is that file's `HelpPopover` text, edited only for this
 port's vocabulary, for the surfaces the port does not ship, and for MAD units in place of sigma;
 `port-authored` means the web has no matching popover and the paragraph was written from this
 document's own section for that surface.
@@ -11544,7 +11548,8 @@ folder (`SaveDialogStart`). It writes the composite's bytes, byte for byte the i
 new file at the path the dialog returned, through `AppWriter.BeginExport` (section 2.1.1) from
 `CompositeLightboxViewModel`. A cancelled dialog writes nothing; a failed write shows "The file
 could not be written." under the image, as Export panels does. The dialog seam is the detail page's
-`ExportDestinationPicker` shape, a delegate the view sets.
+`ExportDestinationPicker` shape, a delegate the view sets; the dialog itself is one shared helper,
+`SaveDialogStart.PickPathAsync`, which the detail view and the lightbox window both call.
 
 **Accessibility.** The image's automation name is "Composite of <mosaic name>, <filter>". The
 spinner's caption and the error are live text, announced when they change. The buttons carry their
@@ -13108,8 +13113,9 @@ Export panels (CSV), one new file at a path a save dialog returned, through
 `AppWriter.BeginExport` (section 2.1.1). No user file is read for it beyond the headers a scan
 already read, and none is written, moved, renamed or deleted (section 2.1). The panel arranger
 shipped in Phase 19A (section 12.17), the read-only tile preview of the suggestion row with it. The
-composite image is the one part of the plan not built yet, and arrives in Phase 19B: the detail
-page's Composite button is disabled until then.
+composite image shipped in Phase 19B: the detail page's Composite button opens the composite
+lightbox (section 12.17) over 11.6's build, whose one write is Download, one new file at a path a
+save dialog returned, through `AppWriter.BeginExport` (section 2.1.1).
 
 **What the port does not take from it.** The web's `needs_review` flag, its Needs Review pill,
 Clear All Reviews and the Session Review banner (ruling R11). `images.panel_id` and
