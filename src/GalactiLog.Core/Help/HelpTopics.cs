@@ -846,6 +846,14 @@ public static class HelpTopics
             + "Positions, rotation, flip and the group rotation are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not, and the layout is for the eye only and "
             + "changes no figure and no composite."),
 
+        // Phase 19B Task 5: the composite lightbox's glyph (spec 12.12, 12.17).
+        new("mosaic.composite", "Composite",
+            "The composite places every panel's best frame in the chosen filter by its recorded sky position and camera angle, not by the arranger's layout, so it shows how the panels fit together on the sky. "
+            + "A panel with no frame in the filter, or with no recorded position, is left out and named under the image. "
+            + "The composite builds once and is kept while the application runs, so reopening it is instant. "
+            + "Download saves the image shown as a JPEG at a path you choose and writes nothing else. "
+            + "The build runs in the status bar's job list, and closing the window cancels it."),
+
         new("mosaic.sessions", "Panels and nights",
             "Each panel counts a night as Included, and lists the other nights of its targets as "
             + "Available. A night is one target, one date and one frame label, and that triple counts "

@@ -7816,7 +7816,7 @@ list produces the six `export.*` step ids (section 12.13). The census resolves a
 its markup file rather than by restating either list, so a bound site in a file the map does not
 know carries its binding text into the failure instead of borrowing another site's ids.
 
-**The topic table.** 113 topics, placed by 97 `HelpButton` elements across 41 markup files: 93
+**The topic table.** 114 topics, placed by 98 `HelpButton` elements across 42 markup files: 93
 literal ids and the four bound sites above, which expand to the remaining 20. Phase 15A added one
 topic, `settings.equipment.phd2-profiles`, beside one literal placement; Phase 15B added two more,
 `target.guiding` and `stats.guiding`, each beside one literal placement (Phase 24 R3 moved
@@ -7845,7 +7845,9 @@ three new markup files, `MosaicsView.axaml`, `MosaicDetailView.axaml` and
 `CreateMosaicWindow.axaml`, which brings the table to 112 topics placed by 96 `HelpButton`
 elements. Phase 19A adds one, `mosaic.arranger`, beside one literal placement in the one new markup
 file `ArrangerView.axaml`, the forty-first, which brings the table to 113 topics placed by 97
-`HelpButton` elements; the census test pins the new figures. The Source column
+`HelpButton` elements. Phase 19B adds one, `mosaic.composite`, beside one literal placement in the one new
+markup file `CompositeLightboxWindow.axaml`, the forty-second, which brings the table to 114 topics
+placed by 98 `HelpButton` elements; the census test pins the new figures. The Source column
 says where the paragraph came
 from: a web file means the paragraph is that file's `HelpPopover` text, edited only for this
 port's vocabulary, for the surfaces the port does not ship, and for MAD units in place of sigma;
@@ -7961,6 +7963,7 @@ document's own section for that surface.
 | `mosaic.sessions` | Panels and nights | The sessions region's header row (`MosaicDetailView.axaml`) | port-authored, 12.17 |
 | `mosaic.create` | Create mosaic | The dialog's heading (`CreateMosaicWindow.axaml`) | port-authored, 12.17 |
 | `mosaic.arranger` | Panels | The arranger toolbar's "Panels" caption (`ArrangerView.axaml`) | port-authored, 12.17 |
+| `mosaic.composite` | Composite | The lightbox title row (`CompositeLightboxWindow.axaml`) | port-authored, 12.17 |
 
 **The paragraph texts.** Seed `HelpTopics` from this sub-table verbatim. A paragraph is one to
 five sentences of plain text with no markup; where the web's original used bold or italic runs for
@@ -8079,6 +8082,7 @@ Line breaks inside a paragraph are not significant.
 | `mosaic.sessions` | Each panel counts a night as Included, and lists the other nights of its targets as Available. A night is one target, one date and one frame label, and that triple counts in only one panel of a mosaic. Include and Remove move a night between the two lists. As new panel moves an available night into a panel of its own, and Add nights from any target makes another target's nights available to include (it writes Available rows; Include still takes them). Delete panel asks twice and is enabled once the panel has no included night. |
 | `mosaic.create` | Makes a new mosaic, or adds to an existing one, from the nights checked on this target. Rows given the same panel label combine into one panel, and the label starts as the frame label when the frames carry one. The name starts as the target's base name with the date range and stays until you edit it. Nothing is written until you press Create, and a refusal writes nothing. |
 | `mosaic.arranger` | Each tile is one panel's best frame in the chosen filter, with its label, its integration and, when it trails the leading panel, a deficit badge in the success colour under 20 percent behind, warning from 20 to 60, error at 60 or more. A panel with no frame in the filter reads, for example, No Ha frames. Drag a tile to place it, or select one and use Rotate CW or Flip H, or right-click it. Fit, zoom and the wheel change the view, the Rotation slider turns the whole group, and Reset all clears every tile's rotation and flip and the group rotation, leaving positions as they are. Positions, rotation, flip and the group rotation are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not, and the layout is for the eye only and changes no figure and no composite. |
+| `mosaic.composite` | The composite places every panel's best frame in the chosen filter by its recorded sky position and camera angle, not by the arranger's layout, so it shows how the panels fit together on the sky. A panel with no frame in the filter, or with no recorded position, is left out and named under the image. The composite builds once and is kept while the application runs, so reopening it is instant. Download saves the image shown as a JPEG at a path you choose and writes nothing else. The build runs in the status bar's job list, and closing the window cancels it. |
 
 The nine stacking export rows above are transcribed from `HelpTopics.cs` character for character,
 the four wizard rows and the corrected `page.export-stacking` and `export.settings` sentences

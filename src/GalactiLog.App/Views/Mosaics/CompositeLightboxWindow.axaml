@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls"
         xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
         x:Class="GalactiLog.App.Views.Mosaics.CompositeLightboxWindow"
         x:DataType="mos:CompositeLightboxViewModel"
@@ -31,6 +32,7 @@
                    FontWeight="SemiBold"
                    TextTrimming="CharacterEllipsis"
                    Foreground="{DynamicResource ColorTextPrimary}" />
+        <controls:HelpButton Topic="mosaic.composite" />
       </StackPanel>
     </Border>
 
