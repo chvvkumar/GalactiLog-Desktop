@@ -57,6 +57,7 @@ public class HelpTopicsTests
     [InlineData("mosaic.labels")]
     [InlineData("mosaic.sessions")]
     [InlineData("mosaic.create")]
+    [InlineData("mosaic.arranger")]
     public void TheMosaicParagraphs_AreTwoToFiveSentences(string id)
     {
         var paragraph = HelpTopics.Get(id).Paragraph;
