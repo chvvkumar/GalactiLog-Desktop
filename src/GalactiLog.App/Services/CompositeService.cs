@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using GalactiLog.Core.Mosaics;
@@ -58,13 +59,24 @@ public sealed class CompositeService(
             panel.PanelId, panel.Label,
             Best(request, panel.PanelId) is { } best ? request.Geometry.GetValueOrDefault(best.ImageId) ?? NoGeometry : null))]);
 
-    /// <summary>Spec 11.6's cache key, the port of <c>_compute_cache_key</c>: the SHA-256, as
-    /// lowercase hexadecimal, of the UTF-8 <c>&lt;mosaic id&gt;:&lt;filter&gt;:&lt;ids&gt;</c>, the
-    /// ids lowercase hyphenated, sorted ordinally and joined by commas.</summary>
-    public static string CacheKey(Guid mosaicId, string filter, IEnumerable<Guid> includedBestFrameIds)
+    /// <summary>Spec 11.6's cache key, the port of <c>_compute_cache_key</c> widened by ruling R16a:
+    /// the SHA-256, as lowercase hexadecimal, of the UTF-8 <c>&lt;mosaic id&gt;:&lt;filter&gt;:&lt;frames&gt;</c>.
+    /// Each frame is its id, lowercase hyphenated, then its six geometry values (<c>ra_deg</c>,
+    /// <c>dec_deg</c>, <c>width_px</c>, <c>arcsec_per_pixel</c>, <c>rotator_position</c>,
+    /// <c>pier_side</c>), each joined by <c>|</c>, numbers invariant and round-trip, null empty; the
+    /// frames sorted ordinally by id and joined by commas. A changed best frame changes the key.</summary>
+    public static string CacheKey(Guid mosaicId, string filter, IEnumerable<(Guid Id, PanelGeometry Geometry)> includedBestFrames)
     {
-        var ids = string.Join(",", includedBestFrameIds.Select(id => id.ToString("D")).Order(StringComparer.Ordinal));
-        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{mosaicId:D}:{filter}:{ids}")));
+        var frames = string.Join(",", includedBestFrames
+            .Select(frame => (Id: frame.Id.ToString("D"), frame.Geometry))
+            .OrderBy(frame => frame.Id, StringComparer.Ordinal)
+            .Select(frame => string.Join("|",
+                frame.Id, Round(frame.Geometry.RaDeg), Round(frame.Geometry.DecDeg),
+                frame.Geometry.WidthPx?.ToString(CultureInfo.InvariantCulture), Round(frame.Geometry.ArcsecPerPixel),
+                Round(frame.Geometry.RotatorPosition), frame.Geometry.PierSide)));
+        return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes($"{mosaicId:D}:{filter}:{frames}")));
+
+        static string? Round(double? value) => value?.ToString("R", CultureInfo.InvariantCulture);
     }
 
     /// <summary>The cached composite for the request, if any (spec 11.6: a hit shows at once).</summary>
@@ -109,6 +121,8 @@ public sealed class CompositeService(
                 }, cancel.Token),
                 cancel.Token).ConfigureAwait(false);
 
+            // A cancel that arrived during the draw or the encode still abandons the build.
+            cancel.Token.ThrowIfCancellationRequested();
             Store(key, result);
             job.Finish(JobResult.Succeeded, $"{result.Width} by {result.Height} pixels");
             Emit("info", "mosaic_composite_built",
@@ -135,7 +149,8 @@ public sealed class CompositeService(
             ? best : null;
 
     private static string KeyOf(CompositeRequest request, CompositeSelection selection)
-        => CacheKey(request.MosaicId, request.Filter, selection.Included.Select(panel => Best(request, panel.PanelId)!.ImageId));
+        => CacheKey(request.MosaicId, request.Filter,
+            selection.Included.Select(panel => (Best(request, panel.PanelId)!.ImageId, panel.Frame!)));
 
     private bool TryGet(string key, out CompositeResult result)
     {

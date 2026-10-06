@@ -364,15 +364,16 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IZoomPanSu
     /// whole image is on screen and there is nothing to pan to. The view calls this from its
     /// pointer handler; spec 18.3 asserts it here and never synthesizes a gesture.</summary>
     public void Pan(double deltaX, double deltaY)
-    {
-        if (Scale <= 1d)
-        {
-            return;
-        }
+        => (OffsetX, OffsetY) = PanStep(Scale, OffsetX, OffsetY, deltaX, deltaY);
 
-        OffsetX += deltaX;
-        OffsetY += deltaY;
-    }
+    /// <summary>Spec 11.5's drag pan as a pure step: the offsets moved by the deltas, or unchanged
+    /// at fit and below. The preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static (double X, double Y) PanStep(double scale, double offsetX, double offsetY, double deltaX, double deltaY)
+        => scale <= 1d ? (offsetX, offsetY) : (offsetX + deltaX, offsetY + deltaY);
+
+    /// <summary>Spec 11.5's fit, the web's <c>resetTransform()</c>: scale 1, both offsets 0. The
+    /// preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static readonly (double Scale, double OffsetX, double OffsetY) FitTransform = (1d, 0d, 0d);
 
     /// <summary>Disposes both slots, which disposes their bitmaps and withdraws anything still in
     /// flight, and cancels the lifetime the header panel's read is bound to. Idempotent.</summary>
@@ -428,12 +429,7 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IZoomPanSu
     /// <summary>Spec 11.5's fit, on double-click and on <c>0</c>. The web's
     /// <c>resetTransform()</c>: scale 1, both offsets 0.</summary>
     [RelayCommand]
-    private void Fit()
-    {
-        Scale = 1d;
-        OffsetX = 0d;
-        OffsetY = 0d;
-    }
+    private void Fit() => (Scale, OffsetX, OffsetY) = FitTransform;
 
     void IZoomPanSurface.ResetFit() => Fit();
 

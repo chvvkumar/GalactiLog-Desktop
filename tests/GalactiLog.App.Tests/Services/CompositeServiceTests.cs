@@ -100,16 +100,56 @@ public class CompositeServiceTests
     }
 
     [Fact]
-    public void CacheKey_IsTheSha256OfTheWebShape()
+    public void CacheKey_IsTheSha256OfTheIdsAndTheirGeometry()
     {
-        // Computed independently with Python:
-        // hashlib.sha256(b"11111111-1111-1111-1111-111111111111:Ha:aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa,bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb").hexdigest()
-        // The ids go in unsorted and upper case and come out sorted and lower case.
+        // Ruling R16a: the web's shape with each id followed by its six geometry values, invariant
+        // and round-trip, null empty, joined by "|". The ids go in unsorted and upper case and come
+        // out sorted and lower case, each keeping its own geometry. The hashed string is:
+        const string hashed = "11111111-1111-1111-1111-111111111111:Ha:"
+            + "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa|10.25|-44.3||1.5||,"
+            + "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb|0.1|44.3|6000|15|90.5|West";
         var key = CompositeService.CacheKey(
             Mosaic, "Ha",
-            [Guid.Parse("BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB"), Guid.Parse("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA")]);
+            [
+                (Guid.Parse("BBBBBBBB-BBBB-BBBB-BBBB-BBBBBBBBBBBB"), new PanelGeometry(0.1, 44.3, 6000, 15.0, 90.5, "West")),
+                (Guid.Parse("AAAAAAAA-AAAA-AAAA-AAAA-AAAAAAAAAAAA"), new PanelGeometry(10.25, -44.3, null, 1.5, null, null)),
+            ]);
 
-        Assert.Equal("0b58ff38a8ee346d0a303860dbb405cfbfce2dc215f280cd9830d4a681e1bcc5", key);
+        Assert.Equal(
+            Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(hashed))), key);
+    }
+
+    [Fact]
+    public async Task TheSameFramesWithOneGeometryValueChanged_IsAMiss()
+    {
+        var service = Service();
+        await service.BuildAsync(Request(), CancellationToken.None);
+        var request = Request();
+
+        var flipped = request with
+        {
+            Geometry = new Dictionary<Guid, PanelGeometry>(request.Geometry) { [Frame2] = Positioned(10.3) with { PierSide = "East" } },
+        };
+
+        Assert.True(service.TryGetCached(request, out _));
+        Assert.False(service.TryGetCached(flipped, out _));
+    }
+
+    [Fact]
+    public async Task ACancelArrivingDuringACompletedDraw_CachesNothing_WritesNoRow()
+    {
+        using var cancel = new CancellationTokenSource();
+        var draw = Service((_, _, _, _) =>
+        {
+            cancel.Cancel();
+            return new CompositeResult([1], 1, 1);
+        });
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => draw.BuildAsync(Request(), cancel.Token));
+
+        Assert.Equal(JobResult.Cancelled, Assert.Single(_jobs.Recent).Result);
+        Assert.Empty(_rows);
+        Assert.False(draw.TryGetCached(Request(), out _));
     }
 
     [Fact]

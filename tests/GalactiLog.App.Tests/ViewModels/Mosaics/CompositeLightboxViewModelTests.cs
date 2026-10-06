@@ -131,24 +131,36 @@ public sealed class CompositeLightboxViewModelTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void Ready_DecodesTheResultsBytesFromMemory()
+    public async Task Ready_DecodesTheResultsBytesFromMemory_OffTheUiThread_BeforeThePost()
     {
         var jpeg = Jpeg(7, 5);
         var service = Service();
         _gate.SetResult(new CompositeResult(jpeg, 7, 5));
         service.BuildAsync(Request(), CancellationToken.None).Wait(Budget);
         byte[]? decoded = null;
+        var decodedOnPool = false;
+        List<string> order = [];
 
-        var page = new CompositeLightboxViewModel(Request(), service, new AppWriter(_root), post: action => action(),
-            decode: bytes => { decoded = bytes; return new Avalonia.Media.Imaging.Bitmap(new MemoryStream(bytes)); });
+        var page = new CompositeLightboxViewModel(Request(), service, new AppWriter(_root),
+            post: action => { lock (order) order.Add("post"); action(); },
+            decode: bytes =>
+            {
+                decoded = bytes;
+                decodedOnPool = Thread.CurrentThread.IsThreadPoolThread;
+                lock (order) order.Add("decode");
+                return new Avalonia.Media.Imaging.Bitmap(new MemoryStream(bytes));
+            });
         _pages.Add(page);
+        await page.PendingBuild.WaitAsync(Budget);
 
         Assert.Same(jpeg, decoded);
+        Assert.True(decodedOnPool, "the decode must run off the UI thread");
+        Assert.Equal(["decode", "post"], order);
         Assert.NotNull(page.Image);
     }
 
     [AvaloniaFact]
-    public void ACacheHit_OpensReady_WithNoBuildAndNoJob()
+    public async Task ACacheHit_OpensReady_WithNoBuildAndNoJob()
     {
         var service = Service();
         _gate.SetResult(new CompositeResult(Jpeg(4, 4), 4, 4));
@@ -156,6 +168,7 @@ public sealed class CompositeLightboxViewModelTests : IDisposable
         var jobsBefore = _jobs.Recent.Count;
 
         var page = Open(service);
+        await page.PendingBuild.WaitAsync(Budget);
 
         Assert.Equal(1, _builds);
         Assert.Equal(jobsBefore, _jobs.Recent.Count);

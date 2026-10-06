@@ -14,7 +14,7 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// Spec 12.17's composite lightbox (Phase 19B), the port of the web's
 /// <c>MosaicCompositeModal.tsx</c>: Building, then Ready or Failed with Retry, over spec 11.6's
 /// <see cref="CompositeService"/>. Zoom and pan are spec 11.5's preview rules through
-/// <see cref="PreviewModalViewModel.ZoomAbout"/>.
+/// <see cref="PreviewModalViewModel.ZoomAbout"/> and <see cref="PreviewModalViewModel.PanStep"/>.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -78,7 +78,7 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
 
         if (service.TryGetCached(request, out var hit))
         {
-            ShowReady(hit);
+            PendingBuild = ShowReadyAsync(null, hit);
         }
         else
         {
@@ -176,7 +176,7 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
         {
             var result = await _service.BuildAsync(Request, token, message => Show(build, () => ProgressText = message))
                 .ConfigureAwait(false);
-            Show(build, () => ShowReady(result));
+            await ShowReadyAsync(build, result).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (token.IsCancellationRequested)
         {
@@ -195,7 +195,7 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
     }
 
     // A late message from a build this lightbox no longer shows is dropped.
-    private void Show(CancellationTokenSource build, Action apply)
+    private void Show(CancellationTokenSource? build, Action apply)
         => _post(() =>
         {
             if (!_disposed && ReferenceEquals(build, _build))
@@ -204,23 +204,36 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
             }
         });
 
-    private void ShowReady(CompositeResult result)
+    // Decodes off the UI thread and posts the finished bitmap; one the lightbox no longer shows is
+    // disposed. A null build is the cache hit, shown while no build has started.
+    private async Task ShowReadyAsync(CancellationTokenSource? build, CompositeResult result)
     {
+        Bitmap image;
         try
         {
-            Image = _decode(result.Jpeg);
+            image = await Task.Run(() => _decode(result.Jpeg)).ConfigureAwait(false);
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Decoding the mosaic composite failed");
-            Fail(ex.Message);
+            Show(build, () => Fail(ex.Message));
             return;
         }
 
-        _result = result;
-        IsBuilding = false;
-        ProgressText = null;
-        LeftOutText = _leftOut;
+        _post(() =>
+        {
+            if (_disposed || !ReferenceEquals(build, _build))
+            {
+                image.Dispose();
+                return;
+            }
+
+            Image = image;
+            _result = result;
+            IsBuilding = false;
+            ProgressText = null;
+            LeftOutText = _leftOut;
+        });
     }
 
     private void Fail(string reason)
@@ -287,24 +300,11 @@ public sealed partial class CompositeLightboxViewModel : ObservableObject, IZoom
 
     /// <summary>Drag pan, refused at fit and below.</summary>
     public void Pan(double deltaX, double deltaY)
-    {
-        if (Scale <= 1d)
-        {
-            return;
-        }
-
-        OffsetX += deltaX;
-        OffsetY += deltaY;
-    }
+        => (OffsetX, OffsetY) = PreviewModalViewModel.PanStep(Scale, OffsetX, OffsetY, deltaX, deltaY);
 
     /// <summary>Double-click and the <c>0</c> key: back to fit.</summary>
     [RelayCommand]
-    public void ResetFit()
-    {
-        Scale = 1d;
-        OffsetX = 0d;
-        OffsetY = 0d;
-    }
+    public void ResetFit() => (Scale, OffsetX, OffsetY) = PreviewModalViewModel.FitTransform;
 
     /// <summary>Escape and the Close button.</summary>
     [RelayCommand]
