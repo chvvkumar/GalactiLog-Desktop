@@ -156,11 +156,11 @@ jobs:
               | tail -n +$((keep + 1)) \
               | xargs -r -n1 gh release delete --yes --cleanup-tag
           }
-          prune_prerelease alpha 2
-          prune_prerelease rc 2
+          prune_prerelease alpha 1
+          prune_prerelease rc 1
 
           gh release list --repo "${{ github.repository }}" --limit 200 --json tagName,isPrerelease \
             -q '.[] | select(.isPrerelease == false) | .tagName' \
             | sort -V -r \
-            | tail -n +6 \
+            | tail -n +11 \
             | xargs -r -n1 gh release delete --yes --cleanup-tag
