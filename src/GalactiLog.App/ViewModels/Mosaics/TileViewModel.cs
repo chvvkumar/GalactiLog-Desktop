@@ -30,18 +30,20 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
     public const string NoThumbnailText = "No thumbnail";
 
     private readonly Action _loadingChanged;
+    private readonly Action _heightChanged;
     private string? _framePath;
 
     // False until the arranger first says which frame the tile shows, so a tile does not read as
     // the empty tile while the frame set is still being read.
     private bool _resolved;
 
-    internal TileViewModel(Guid panelId, string label, Action loadingChanged)
+    internal TileViewModel(Guid panelId, string label, Action loadingChanged, Action heightChanged)
     {
         PanelId = panelId;
         Label = label;
         IntegrationText = "";
         _loadingChanged = loadingChanged;
+        _heightChanged = heightChanged;
     }
 
     /// <summary>The panel's id; a preview tile has an id of its own.</summary>
@@ -60,6 +62,13 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
     /// <inheritdoc cref="X"/>
     [ObservableProperty]
     public partial double Y { get; private set; }
+
+    /// <summary>The tile's height in canvas pixels at zoom 1 (spec 12.17's tiles): 250 times the
+    /// thumbnail's pixel height over its pixel width once the image is known, else
+    /// <see cref="ArrangerViewModel.TileHeight"/>. The width is always
+    /// <see cref="ArrangerViewModel.TileWidth"/>.</summary>
+    [ObservableProperty]
+    public partial double Height { get; private set; } = ArrangerViewModel.TileHeight;
 
     /// <summary>False while the panel has no stored position and follows the auto layout.</summary>
     public bool IsPlaced { get; private set; }
@@ -246,6 +255,15 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(EmptyText));
         OnPropertyChanged(nameof(AutomationName));
         _loadingChanged();
+
+        var height = Thumbnail?.Image?.PixelSize is { Width: > 0, Height: > 0 } size
+            ? ArrangerViewModel.TileWidth * size.Height / size.Width
+            : ArrangerViewModel.TileHeight;
+        if (height != Height)
+        {
+            Height = height;
+            _heightChanged();
+        }
     }
 
     public void Dispose()

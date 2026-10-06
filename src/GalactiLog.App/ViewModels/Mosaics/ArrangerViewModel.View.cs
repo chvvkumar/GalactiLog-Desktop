@@ -9,6 +9,10 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 public sealed partial class ArrangerViewModel
 {
     private bool _fitted;
+
+    // Set by the reader's first zoom, pan or drag, never by Fit: until then a tile's height change
+    // refits (spec 12.17's zoom and pan).
+    private bool _readerMoved;
     private double _viewportWidth;
     private double _viewportHeight;
 
@@ -63,6 +67,7 @@ public sealed partial class ArrangerViewModel
     /// <summary>A drag on empty canvas, in viewport pixels.</summary>
     public void Pan(double deltaX, double deltaY)
     {
+        _readerMoved = true;
         OffsetX += deltaX;
         OffsetY += deltaY;
     }
@@ -98,6 +103,7 @@ public sealed partial class ArrangerViewModel
     // clamp leaves unchanged moves nothing.
     private void StepZoom(double step, double pointerX, double pointerY)
     {
+        _readerMoved = true;
         var old = Zoom;
         var next = Math.Clamp(old + step, MinZoom, MaxZoom);
         if (next == old)
@@ -109,7 +115,7 @@ public sealed partial class ArrangerViewModel
         Zoom = next;
     }
 
-    // Every tile's 250 by 160 box; the rotated footprint is not considered.
+    // Every tile's box, 250 wide by its own height; the rotated footprint is not considered.
     private Rect? Bounds()
     {
         if (Tiles.Count == 0)
@@ -119,6 +125,6 @@ public sealed partial class ArrangerViewModel
 
         var left = Tiles.Min(tile => tile.X);
         var top = Tiles.Min(tile => tile.Y);
-        return new Rect(left, top, Tiles.Max(tile => tile.X) + TileWidth - left, Tiles.Max(tile => tile.Y) + TileHeight - top);
+        return new Rect(left, top, Tiles.Max(tile => tile.X) + TileWidth - left, Tiles.Max(tile => tile.Y + tile.Height) - top);
     }
 }

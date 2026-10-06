@@ -13,6 +13,7 @@ using Avalonia.Styling;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.Tests.Views.TargetDetail.Parts;
 using GalactiLog.App.Tests.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.Views.Mosaics;
@@ -56,7 +57,7 @@ public sealed class ArrangerViewTests
 
     // The page's reads and the arranger's frame read post to the UI thread, so nothing a bound
     // control watches changes on the pool.
-    private static async Task<Mounted> Mount(FakeMosaic mosaic, int panels = 4)
+    private static async Task<Mounted> Mount(FakeMosaic mosaic, int panels = 4, Func<MosaicsBackend, MosaicsBackend>? backend = null)
     {
         for (var index = 0; index < panels; index++)
         {
@@ -64,7 +65,7 @@ public sealed class ArrangerViewTests
         }
 
         var page = new MosaicDetailViewModel(
-            mosaic.Id, mosaic.Backend(), new AppWriter(Path.GetTempPath()), post: action => Dispatcher.UIThread.Post(action));
+            mosaic.Id, backend is null ? mosaic.Backend() : backend(mosaic.Backend()), new AppWriter(Path.GetTempPath()), post: action => Dispatcher.UIThread.Post(action));
         await page.PendingLoad;
         Dispatcher.UIThread.RunJobs();
         await page.Arranger.PendingFrames;
@@ -126,6 +127,46 @@ public sealed class ArrangerViewTests
         var peer = ControlAutomationPeer.CreatePeerForElement(tileRoot);
         Assert.Equal("Panel 1, no thumbnail", peer.GetName());
         Assert.True(peer.IsControlElement());
+    }
+
+    // Follow-up 1: the tile follows its thumbnail. A tile with an image is the image's aspect at
+    // 250 wide with no surface band behind it; the empty tile keeps 160 and the surface ink; both
+    // carry the 1 pixel border inside their footprint.
+    [AvaloniaFact]
+    public async Task ATileWithAnImage_IsItsAspect_OverNoSurface_AndEveryTileHasAThinBorder()
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
+        var mosaic = new FakeMosaic();
+        var first = mosaic.AddPanel("Panel 1");
+        mosaic.AddPanel("Panel 2");
+        mosaic.Frames = new PanelFrameSet(
+            ["Ha"], "Ha",
+            new Dictionary<Guid, IReadOnlyDictionary<string, BestFrame>>
+            {
+                [first] = new Dictionary<string, BestFrame>(StringComparer.OrdinalIgnoreCase) { ["Ha"] = new(Guid.NewGuid(), "a.fits", "Ha", 1) },
+            });
+        using var mounted = await Mount(mosaic, panels: 0, backend: backend => backend with { ThumbnailFor = thumbs.Create });
+        thumbs.PumpUntil(() => mounted.Arranger.Tiles[0].HasImage);
+
+        Control Part(int index, string name) => mounted.Container(index).GetVisualDescendants().OfType<Control>().First(control => control.Name == name);
+        Assert.True(mounted.View.TryFindResource("ColorBgSurface", mounted.View.ActualThemeVariant, out var surface));
+        Assert.True(mounted.View.TryFindResource("ColorBorderDefault", mounted.View.ActualThemeVariant, out var border));
+
+        Assert.Equal(250, Part(0, "Tile").Bounds.Height, 3);
+        Assert.Equal(ArrangerViewModel.TileHeight, Part(1, "Tile").Bounds.Height, 3);
+        for (var index = 0; index < 2; index++)
+        {
+            var content = (Border)Part(index, "TileContent");
+            Assert.Equal(new Thickness(1), content.BorderThickness);
+            Assert.Same(border, content.BorderBrush);
+            Assert.Equal(0, Assert.IsAssignableFrom<ISolidColorBrush>(content.Background).Color.A);
+        }
+
+        // The surface ink sits behind the empty tile only.
+        Assert.False(Part(0, "TileSurface").IsVisible);
+        var empty = (Border)Part(1, "TileSurface");
+        Assert.True(empty.IsVisible);
+        Assert.Same(surface, empty.Background);
     }
 
     [AvaloniaFact]

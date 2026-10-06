@@ -183,7 +183,7 @@
                  the tile and its name in it. -->
             <Panel x:Name="Tile"
                    Width="{x:Static mos:ArrangerViewModel.TileWidth}"
-                   Height="{x:Static mos:ArrangerViewModel.TileHeight}"
+                   Height="{Binding Height}"
                    AutomationProperties.Name="{Binding AutomationName}"
                    AutomationProperties.AccessibilityView="Control">
               <!-- A right press selects the tile (code-behind); the menu acts on this tile. -->
@@ -194,13 +194,22 @@
                 </ContextMenu>
               </Panel.ContextMenu>
 
-              <!-- The tile opacity fades the image, the overlays and the empty caption, never the outline. -->
+              <!-- The tile is its thumbnail's aspect (the view-model's Height), so the image fills
+                   it: no surface band covers the neighbouring tile. The 1 pixel border is drawn by
+                   this Border inside the tile's footprint. Its Background is Transparent so the
+                   whole tile still takes a press where a turned image leaves a margin; the surface
+                   ink sits behind the empty and the loading tile only. The tile opacity fades the
+                   image, the overlays and the empty caption, never the outline. -->
               <Border x:Name="TileContent"
                       CornerRadius="4"
                       ClipToBounds="True"
-                      Background="{DynamicResource ColorBgSurface}"
+                      Background="Transparent"
+                      BorderThickness="1"
+                      BorderBrush="{DynamicResource ColorBorderDefault}"
                       Opacity="{Binding Opacity}">
                 <Panel>
+                  <Border x:Name="TileSurface" Background="{DynamicResource ColorBgSurface}" IsVisible="{Binding !HasImage}" />
+
                   <!-- Rotation and flip turn the image only, refitted inside the tile. -->
                   <LayoutTransformControl>
                     <LayoutTransformControl.LayoutTransform>
@@ -218,9 +227,10 @@
                              VerticalAlignment="Center"
                              Foreground="{DynamicResource ColorTextTertiary}" />
 
-                  <!-- The four overlays, upright, 4 pixels in, each on a scrim in the elevated ink
-                       at 0.85 so it reads over a photograph; the text itself stays at full strength. -->
-                  <Panel Margin="4" IsVisible="{Binding $parent[ItemsControl].((mos:ArrangerViewModel)DataContext).ShowLabels}">
+                  <!-- The four overlays, upright, 4 pixels in from the tile's edges (3 inside the
+                       1 pixel border), so on the image, each on a scrim in the elevated ink at 0.85
+                       so it reads over a photograph; the text itself stays at full strength. -->
+                  <Panel Margin="3" IsVisible="{Binding $parent[ItemsControl].((mos:ArrangerViewModel)DataContext).ShowLabels}">
                     <Panel HorizontalAlignment="Left" VerticalAlignment="Bottom">
                       <Border Background="{DynamicResource ColorBgElevated}" Opacity="0.85" CornerRadius="3" />
                       <TextBlock Classes="t-caption" Margin="3" Text="{Binding Label}" Foreground="{DynamicResource ColorTextPrimary}" />

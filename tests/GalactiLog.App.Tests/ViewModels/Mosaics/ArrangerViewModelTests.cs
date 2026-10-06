@@ -1,5 +1,7 @@
 using Avalonia;
+using Avalonia.Headless.XUnit;
 using GalactiLog.App.Services;
+using GalactiLog.App.Tests.Views.TargetDetail.Parts;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -623,6 +625,95 @@ public sealed class ArrangerViewModelTests : IDisposable
         arranger.Apply(Detail(panels, rotation: 45));
 
         Assert.Equal(-20, arranger.GlobalRotation);
+    }
+
+    // ---- the tile follows its thumbnail (follow-up 1) -----------------------------------------
+
+    // Every panel shows "<label>.fits" in Ha, unless it is listed in without.
+    private static PanelFrameSet HaFrames(IReadOnlyList<PanelDetail> panels, params int[] without)
+        => Frames(["Ha"], "Ha", [.. panels.Where((_, index) => !without.Contains(index)).Select(panel => (panel.Id, "Ha", panel.Label + ".fits"))]);
+
+    [AvaloniaFact]
+    public async Task SquareThumbnails_MakeSquareTiles_AndTheAutoLayoutPitchIs254Both_Ways()
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
+        var panels = Panels(4);
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => HaFrames(panels), ThumbnailFor = thumbs.Create });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        thumbs.PumpUntil(() => arranger.Tiles.All(tile => tile.HasImage));
+
+        Assert.All(arranger.Tiles, tile => Assert.Equal(250, tile.Height, 9));
+        Assert.Equal(new[] { (0d, 0d), (254d, 0d), (0d, 254d), (254d, 254d) }, arranger.Tiles.Select(tile => (tile.X, tile.Y)));
+    }
+
+    [AvaloniaFact]
+    public async Task AWideThumbnail_SetsItsAspect_TheEmptyTileKeeps160_AndTheRowPitchIsTheTallest()
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(300, 200));
+        var panels = Panels(3);
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => HaFrames(panels, 2), ThumbnailFor = thumbs.Create });
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        var raised = new List<string?>();
+        arranger.Tiles[0].PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        // Until the image is known the tile keeps the placeholder height.
+        Assert.All(arranger.Tiles, tile => Assert.Equal(ArrangerViewModel.TileHeight, tile.Height));
+        Assert.Equal((0d, 164d), (arranger.Tiles[2].X, arranger.Tiles[2].Y));
+
+        thumbs.PumpUntil(() => arranger.Tiles[0].HasImage && arranger.Tiles[1].HasImage);
+
+        Assert.Equal(250 * 200 / 300d, arranger.Tiles[0].Height, 9);
+        Assert.Equal(166.67, arranger.Tiles[1].Height, 2);
+        Assert.Equal(ArrangerViewModel.TileHeight, arranger.Tiles[2].Height);
+        Assert.Contains(nameof(TileViewModel.Height), raised);
+        Assert.Equal((0d, 250 * 200 / 300d + 4), (arranger.Tiles[2].X, arranger.Tiles[2].Y));
+    }
+
+    // Fit lands at min(520 / 250, 320 / 160) = 2 on the placeholder, then at min(520 / 250,
+    // 320 / 250) = 1.28 once the square image is known, unless the reader has moved the view.
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AHeightChange_RefitsUntilTheFirstGesture(bool dragged)
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
+        var panels = Panels(1);
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => HaFrames(panels), ThumbnailFor = thumbs.Create }, delay: new ManualDelay().Wait);
+        arranger.SetViewportSize(600, 400);
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        Assert.Equal(2, arranger.Zoom, 9);
+        if (dragged)
+        {
+            var tile = arranger.Tiles[0];
+            arranger.BeginDrag(tile, 10, 10);
+            arranger.Drag(tile, 10, 10);
+            arranger.EndDrag(tile);
+        }
+
+        thumbs.PumpUntil(() => arranger.Tiles[0].HasImage);
+
+        Assert.Equal(dragged ? 2 : 1.28, arranger.Zoom, 9);
+        Assert.Equal((125d, 125d), (arranger.RotationCentreX, arranger.RotationCentreY));
+    }
+
+    [AvaloniaFact]
+    public async Task TheBoundingBox_UsesEachTilesOwnHeight()
+    {
+        using var thumbs = new ThumbnailKit.Thumbnails(_ => ThumbnailKit.Synthetic(100, 100));
+        var panels = new List<PanelDetail> { Panel("Panel 1", 0, x: 0, y: 0), Panel("Panel 2", 1, x: 300, y: 0) };
+        var arranger = Arranger(new MosaicsBackend { PanelFrames = _ => HaFrames(panels, 1), ThumbnailFor = thumbs.Create });
+        arranger.SetViewportSize(1000, 600);
+        arranger.Apply(Detail(panels));
+        await arranger.PendingFrames.WaitAsync(Budget);
+        thumbs.PumpUntil(() => arranger.Tiles[0].HasImage);
+
+        // A box 550 by 250: the square tile is the taller one; positions are unchanged.
+        Assert.Equal((275d, 125d), (arranger.RotationCentreX, arranger.RotationCentreY));
+        Assert.Equal(Math.Min(920 / 550d, 520 / 250d), arranger.Zoom, 9);
+        Assert.Equal(new[] { (0d, 0d), (300d, 0d) }, arranger.Tiles.Select(tile => (tile.X, tile.Y)));
     }
 
     // ---- selection and opacity ----------------------------------------------------------------

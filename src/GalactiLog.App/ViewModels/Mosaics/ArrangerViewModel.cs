@@ -42,10 +42,12 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     /// <summary>A tile's width at zoom 1, in canvas pixels.</summary>
     public const double TileWidth = 250;
 
-    /// <summary>A tile's height at zoom 1, in canvas pixels.</summary>
+    /// <summary>A tile's height at zoom 1, in canvas pixels, until its thumbnail is known and for
+    /// the empty tile; a tile with an image takes the image's aspect (<see cref="TileViewModel.Height"/>).</summary>
     public const double TileHeight = 160;
 
-    /// <summary>The gap between auto layout cells: the pitch is 254 by 164.</summary>
+    /// <summary>The gap between auto layout cells: the pitch is 254 across and the tallest
+    /// unplaced tile plus 4 down.</summary>
     public const double AutoLayoutGap = 4;
 
     /// <summary>The zoom range (the web's MIN_ZOOM and MAX_ZOOM).</summary>
@@ -294,6 +296,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     /// grab offset from the pointer's canvas position. The view selects it first.</summary>
     public void BeginDrag(TileViewModel tile, double canvasX, double canvasY)
     {
+        _readerMoved = true;
         tile.RaiseTo(++_topZ);
         _dragging = tile;
         _dragMoved = false;
@@ -346,7 +349,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         {
             if (!_byPanel.TryGetValue(panel.Id, out var tile))
             {
-                tile = new TileViewModel(panel.Id, panel.Label, NotifyLoading);
+                tile = new TileViewModel(panel.Id, panel.Label, NotifyLoading, OnTileHeightChanged);
                 if (panel.CanvasX is { } x && panel.CanvasY is { } y)
                 {
                     tile.SetPosition(x, y, placed: true);
@@ -405,7 +408,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         {
             if (!existing.Remove(entry.Label, out var tile))
             {
-                tile = new TileViewModel(Guid.NewGuid(), entry.Label, NotifyLoading);
+                tile = new TileViewModel(Guid.NewGuid(), entry.Label, NotifyLoading, OnTileHeightChanged);
                 added.Add((tile, entry.BestFrame));
             }
 
@@ -440,18 +443,44 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         tile.Dispose();
     }
 
-    // Spec 12.17's auto layout: the unplaced tiles, in sort_order, fill ceil(sqrt(n)) columns at a
-    // pitch of 254 by 164 from the origin.
+    // Spec 12.17's auto layout: the unplaced tiles, in sort_order, fill ceil(sqrt(n)) columns from
+    // the origin at a pitch of 254 across and the tallest unplaced tile plus 4 down.
     private void AutoLayout()
     {
         var unplaced = Tiles.Where(tile => !tile.IsPlaced).ToList();
+        if (unplaced.Count == 0)
+        {
+            return;
+        }
+
         var columns = (int)Math.Ceiling(Math.Sqrt(unplaced.Count));
+        var pitch = unplaced.Max(tile => tile.Height) + AutoLayoutGap;
         for (var index = 0; index < unplaced.Count; index++)
         {
-            unplaced[index].SetPosition(
-                index % columns * (TileWidth + AutoLayoutGap),
-                index / columns * (TileHeight + AutoLayoutGap),
-                placed: false);
+            unplaced[index].SetPosition(index % columns * (TileWidth + AutoLayoutGap), index / columns * pitch, placed: false);
+        }
+    }
+
+    // A thumbnail arrived or went: the unplaced tiles reflow to the new row pitch, the rotation
+    // centre is retaken (not mid-drag, so the group does not swing under the pointer), and until
+    // the reader's first gesture the view refits, so the first frame of a mosaic of square
+    // thumbnails is not cut off.
+    private void OnTileHeightChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        AutoLayout();
+        if (_dragging is null)
+        {
+            TakeRotationCentre();
+        }
+
+        if (!_readerMoved)
+        {
+            Fit();
         }
     }
 

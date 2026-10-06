@@ -11103,11 +11103,17 @@ of section 12.12.
 **Tiles.** One tile per panel, in `sort_order`. The view binds each tile's position and stacking
 order in its code-behind when the `ItemsControl` prepares the tile's container, because
 `ControlStyleScanTest` bans a `ControlTheme` in a view. Stacking is a `ZIndex` that the view-model
-raises when a drag starts, so `Tiles` stays in `sort_order`. A tile is 250 by 160 pixels at zoom 1,
-a `Border` in the surface ink with a 4 pixel corner radius, clipped, holding the thumbnail `Image`
-with `Stretch="Uniform"` and four overlays drawn over it. The size is the mockup's; the web's 300
-pixel square, resized to each thumbnail's aspect once it loads, was sized for its own panel
-thumbnails, and a fixed tile keeps the auto layout and Fit independent of when thumbnails arrive.
+raises when a drag starts, so `Tiles` stays in `sort_order`. A tile is 250 pixels wide at zoom 1
+and follows its thumbnail, as the web's does: once the image is known its height is 250 times the
+thumbnail's pixel height over its pixel width (a square thumbnail makes a 250 pixel square, a 300
+by 200 one a tile 166.67 high); until the image loads, and for the empty tile, it is 160. The tile
+is a clipped `Border` with a 4 pixel corner radius and a 1 pixel `ColorBorderDefault` border drawn
+inside the tile's footprint, holding the thumbnail `Image` with `Stretch="Uniform"` and four
+overlays drawn over it. Its background is transparent while it has an image, so nothing but the
+image fills it; the surface ink sits behind the empty tile and a tile still loading. The reason:
+a fixed 250 by 160 box letterboxed a square thumbnail between two opaque bands of the surface ink,
+about 45 pixels wide each, which covered the neighbouring tile's image, and left the overlays at
+the box's corners outside the image.
 The tile's rotation and flip apply to the image only, through a `LayoutTransformControl` holding a
 `RotateTransform` by the tile's rotation and a `ScaleTransform` with `ScaleX` -1 while `flip_h` is
 set, so a quarter turn refits the image inside the tile rather than overflowing it; the overlays
@@ -11122,7 +11128,8 @@ stay upright, as on the web.
 
 Each overlay is a `TextBlock.t-caption` on a scrim `Border` in the elevated surface ink
 (`ColorBgElevated`) at 0.85 opacity with a 3 pixel corner radius and 3 pixels of padding, 4 pixels
-in from the tile's edges, so it reads over a photograph. The label, the integration and the state
+in from the tile's edges, which with the tile equal to the image puts it on the image, so it reads
+over a photograph. The label, the integration and the state
 badge are in the primary ink (`ColorTextPrimary`) rather than the caption tier's tertiary ink; the
 deficit badge is in its band's ink. The web's 11 pixel overlay text becomes the caption tier, 0.714
 of the root size, so the overlays follow the reader's text size. No new token (section 14.1). Over
@@ -11167,9 +11174,11 @@ band follow every re-read of the page.
 coordinates, in canvas pixels at zoom 1, as its tile's top left corner. A panel with either null
 is **unplaced** and takes the auto layout: the unplaced panels, in `sort_order`, fill a near-square
 grid of `ceil(sqrt(n))` columns, n being the unplaced count, row by row from the canvas origin,
-the cell pitch being the tile size plus 4 pixels, 254 across and 164 down. This is the web's
-`buildTiles` grid with `TILE_SIZE + SNAP`, the gap widened from 1 pixel to 4 so tiles do not
-touch. Nothing snaps: a tile stays where it is dropped. The web's `pixel_coords` flag and its
+the cell pitch being 254 across (the tile width plus 4 pixels) and, down, the tallest unplaced
+tile's height plus 4 pixels: one uniform grid, 164 down while every tile is 160 high and 254 down
+once the thumbnails are square. As thumbnails arrive and a tile's height changes, the tiles still
+unplaced reflow to the new pitch; a placed tile never moves. This is the web's `buildTiles` grid
+with `TILE_SIZE + SNAP`, the gap widened from 1 pixel to 4 so tiles do not touch. Nothing snaps: a tile stays where it is dropped. The web's `pixel_coords` flag and its
 legacy grid conversion (`LEGACY_CELL_PX`) are not ported, because the port has never stored grid
 cells. The auto layout is not written until the first save, which writes every tile (the save
 rule, below), so a mosaic the reader never touched keeps null coordinates and follows
@@ -11201,7 +11210,8 @@ is not a target, and a tile dropped over another simply overlaps it.
 plus step it by 0.1 about the viewport centre; the wheel steps it by 0.1 about the pointer. A step
 is clamped to the range, and a step the clamp leaves unchanged moves nothing. **Fit** scales the
 tiles' bounding box, in canvas pixels at zoom 1, into the viewport less 40 pixels of padding a side
-(the web's `FIT_PADDING`), clamped to the range, and centres it. The viewport transforms the
+(the web's `FIT_PADDING`), clamped to the range, and centres it. The bounding box takes each tile
+at 250 pixels wide by its own height. The viewport transforms the
 `Canvas` with a `TransformGroup`: first a `RotateTransform` by the global rotation about the
 bounding box centre (the web's `mosaicGroup.rotation`), then one `MatrixTransform` of scale and
 translation that `ArrangerViewModel` computes. Three conventions hold the arithmetic together.
@@ -11215,16 +11225,19 @@ less the bounding box centre times s; and stepping the zoom about a point is the
 scale, then each offset becomes the pointer minus (the pointer minus the offset) times the ratio
 of the new scale to the old. Minus and plus use the viewport centre as the pointer. Fit runs
 once, when the control first has both a size and at least one tile, and again on each press of
-Fit; a re-read of the page, a panel coming or going and a splitter drag do not refit. Zoom and pan
-are view state.
+Fit; a re-read of the page, a panel coming or going and a splitter drag do not refit. Until the
+reader's first gesture (a zoom, a pan or a press on a tile) since the page opened, a tile's height
+changing as its thumbnail arrives refits too, so the first frame of a mosaic of square thumbnails
+is not cut off; after that gesture the view stays where the reader put it. A height change also
+retakes the rotation centre. Zoom and pan are view state.
 
 **No panel.** A mosaic with no panel draws nothing in the viewport: Fit does nothing, and the
 Filter selector is hidden. The toolbar stays, its tile controls disabled as with no selection.
 
 **Global rotation.** The Rotation slider turns every tile as one group about the tiles' bounding
 box centre, for the reader's eye only (ruling R9: display state; the composite never reads it). The
-centre is taken when the page opens, when the rotation changes and whenever a panel is added or
-removed, never while a tile is dragged, so the group does not swing under the pointer. The value is
+centre is taken when the page opens, when the rotation changes, whenever a panel is added or
+removed and whenever a tile's height changes, never while a tile is dragged, so the group does not swing under the pointer. The value is
 written as `mosaics.rotation_angle` by the save rule; a slider change schedules a save. The "0"
 button sets it to 0.
 
@@ -11377,8 +11390,8 @@ file at the dialog's path and nothing else (section 2.1).
     web's Detail button is the row's own click.
 15. **A right click opens a context menu** with Rotate CW and Flip H, rather than rotating the tile
     at once (ruling R18).
-16. **A tile is 250 by 160 pixels** with the image fitted inside it, rather than a 300 pixel
-    square resized to the thumbnail's aspect.
+16. **A tile is 250 pixels wide**, not the web's 300. It is resized to its thumbnail's aspect
+    once the image loads, as the web does, and is 160 high until then and for the empty tile.
 17. **The auto layout leaves a 4 pixel gap** between cells, not 1, and nothing snaps (ruling R8).
 18. **Tiles show frame thumbnails**, each panel's best frame's existing `frames/<key>.jpg`, rather
     than panel thumbnails rendered and cached per filter (ruling R14).
@@ -11390,7 +11403,8 @@ file at the dialog's path and nothing else (section 2.1).
 21. **The Filter selector stays enabled while thumbnails load**; the web disables it. The latest
     choice wins.
 22. **No refit after a structural change.** Adding or removing a panel and dragging the splitter
-    keep the zoom and pan; the web refits after every rebuild and every resize of its grip.
+    keep the zoom and pan; the web refits after every rebuild and every resize of its grip. A
+    thumbnail arriving refits only until the reader's first zoom, pan or press on a tile.
 23. **Positions are stored unrounded**, as REAL; the web rounds them to whole pixels.
 24. **The deficit badge's minus is an ASCII hyphen-minus**, not the web's Unicode minus sign.
 25. **The state badge is words**, "90° · flipped", not the web's "R90 FH".
