@@ -57,6 +57,9 @@ namespace GalactiLog.App.Tests.Services;
 // Phase 18 Task 4 added the Mosaics page's four kinds (spec 12.17), members sixteen to nineteen,
 // proved by pressing Run Detection, Accept all, Dismiss all and Delete selected on a real page.
 // Detection has a second entry point, a scan's pass, proved by its own case below.
+//
+// Phase 19B Task 3 added the mosaic composite build (spec 11.6) as member twenty, proved by
+// building a composite through a real CompositeService over a stub drawing.
 public class JobRegistryCensusTest
 {
     // snake_case, the same shape spec 10.9's action tokens already have. There is no second token
@@ -124,6 +127,9 @@ public class JobRegistryCensusTest
         MosaicsPageViewModel.DeleteJobKind,
     ];
 
+    /// <summary>Spec 11.6's composite build, census member twenty.</summary>
+    private const string TheMosaicComposite = CompositeService.BuildJobKind;
+
     private static string[] TheCensusSet =>
         [
             TheScan,
@@ -135,6 +141,7 @@ public class JobRegistryCensusTest
             TheStackingCopy,
             .. TheMaintenanceActions,
             .. TheMosaicActions,
+            TheMosaicComposite,
         ];
 
     [Fact]
@@ -404,6 +411,23 @@ public class JobRegistryCensusTest
             await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
             await page.PendingLoad;
         }
+
+        Collect();
+
+        // The composite build, on a miss, which is the only path that opens a job.
+        var panel = Guid.NewGuid();
+        var frame = Guid.NewGuid();
+        await new CompositeService(
+            registry, (_, _, _, _) => { }, (_, _, _, _) => new GalactiLog.Core.Mosaics.CompositeResult([], 1, 1))
+            .BuildAsync(
+                new CompositeRequest(
+                    Guid.NewGuid(), "M 31", "Ha", [(panel, "Panel 1")],
+                    new GalactiLog.Data.Queries.PanelFrameSet(["Ha"], "Ha", new Dictionary<Guid, IReadOnlyDictionary<string, GalactiLog.Data.Queries.BestFrame>>
+                    {
+                        [panel] = new Dictionary<string, GalactiLog.Data.Queries.BestFrame> { ["Ha"] = new(frame, "a.fits", "Ha", 1) },
+                    }),
+                    new Dictionary<Guid, GalactiLog.Core.Mosaics.PanelGeometry> { [frame] = new(10, 20, 64, 15, null, null) }),
+                CancellationToken.None);
 
         Collect();
 

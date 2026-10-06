@@ -2493,6 +2493,7 @@ public static class AppHost
                 MosaicValues = ids => columns.ValuesForMosaics(ids),
                 WriteValue = columns.SetValue,
                 PanelFrames = frames.ForMosaic,
+                FrameGeometry = frames.Geometry,
                 SuggestionBestFrame = frames.ForSuggestionEntry,
                 UpdateLayout = repository.UpdateLayout,
 
@@ -2509,6 +2510,15 @@ public static class AppHost
                     .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),
             };
         });
+
+        // Spec 11.6's composite build and its in-memory cache (Phase 19B): one for the process, so
+        // the cache outlives every lightbox.
+        builder.Services.AddSingleton(serviceProvider => new CompositeService(
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            (severity, eventType, message, details) => serviceProvider
+                .GetRequiredService<ActivityRepository>()
+                .EmitStandalone("user_action", severity, eventType, message, details),
+            logger: serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<CompositeService>()));
 
         // Spec 12.17's Mosaics page (Phase 18). A singleton for the reason the Analysis page is one:
         // the filter text and the sort are session state.

@@ -1,3 +1,4 @@
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Data.Queries;
 using GalactiLog.Data.Repositories;
 using Xunit;
@@ -197,5 +198,39 @@ public class PanelFrameQueryTests : IDisposable
         Assert.Equal((best, "OIII"), (frame!.ImageId, frame.Filter));
         Assert.Null(_query.ForSuggestionEntry(target, "Panel 9", [Night(1)]));
         Assert.Null(_query.ForSuggestionEntry(target, "Panel 1", []));
+    }
+
+    // Phase 19B Task 3. Spec 11.6's geometry read: the six images columns by image id, one read.
+    [Fact]
+    public void Geometry_ReadsTheSixColumnsById_NullsKept_UnknownIdsAbsent()
+    {
+        var target = NewTarget("NGC 7000");
+        var full = LibrarySeeder.AddFrame(_db.ConnectionString, target, Night(1), image =>
+        {
+            image.RaDeg = 314.75;
+            image.DecDeg = 44.5;
+            image.WidthPx = 6248;
+            image.ArcsecPerPixel = 1.51;
+            image.RotatorPosition = 92.5;
+            image.PierSide = "East";
+        }).Id;
+        var bare = LibrarySeeder.AddFrame(_db.ConnectionString, target, Night(1), image =>
+        {
+            image.RaDeg = null;
+            image.DecDeg = null;
+            image.WidthPx = null;
+            image.ArcsecPerPixel = null;
+            image.RotatorPosition = null;
+            image.PierSide = null;
+        }).Id;
+        var unknown = Guid.NewGuid();
+
+        var geometry = _query.Geometry([full, bare, unknown]);
+
+        Assert.Equal(2, geometry.Count);
+        Assert.Equal(new PanelGeometry(314.75, 44.5, 6248, 1.51, 92.5, "East"), geometry[full]);
+        Assert.Equal(new PanelGeometry(null, null, null, null, null, null), geometry[bare]);
+        Assert.False(geometry.ContainsKey(unknown));
+        Assert.Empty(_query.Geometry([]));
     }
 }

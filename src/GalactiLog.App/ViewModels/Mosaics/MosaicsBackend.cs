@@ -1,3 +1,4 @@
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Queries;
@@ -111,6 +112,12 @@ public sealed record MosaicsBackend
     /// (spec 11.4). Normally <c>PanelFrameQuery.ForMosaic</c>.</summary>
     public Func<Guid, PanelFrameSet> PanelFrames { get; init; }
         = _ => new PanelFrameSet([], null, new Dictionary<Guid, IReadOnlyDictionary<string, BestFrame>>());
+
+    /// <summary>The geometry of the given best frames by image id, ids not found absent (spec 11.6:
+    /// one read per frame-set load, shared by the Composite button and the build). Normally
+    /// <c>PanelFrameQuery.Geometry</c>.</summary>
+    public Func<IReadOnlyCollection<Guid>, IReadOnlyDictionary<Guid, PanelGeometry>> FrameGeometry { get; init; }
+        = _ => new Dictionary<Guid, PanelGeometry>();
 
     /// <summary>(target, label, nights): the best frame of one suggestion entry, for the read-only
     /// preview. Normally <c>PanelFrameQuery.ForSuggestionEntry</c>.</summary>

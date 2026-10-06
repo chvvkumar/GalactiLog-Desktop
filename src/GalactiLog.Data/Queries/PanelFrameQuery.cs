@@ -94,6 +94,27 @@ public sealed class PanelFrameQuery(DatabaseConnectionString connectionString, A
             .Select(row => new Candidate(row.Frame, row.Filter!)));
     }
 
+    /// <summary>Spec 11.6's geometry read (ruling R10): the six <c>images</c> columns
+    /// <c>ra_deg</c>, <c>dec_deg</c>, <c>width_px</c>, <c>arcsec_per_pixel</c>,
+    /// <c>rotator_position</c> and <c>pier_side</c> of the given images, one read, never from
+    /// <c>raw_headers</c>. An id with no row is absent from the result. The web reads these from
+    /// the FITS header in <c>build_mosaic_composite</c>.</summary>
+    public IReadOnlyDictionary<Guid, PanelGeometry> Geometry(IReadOnlyCollection<Guid> imageIds)
+    {
+        if (imageIds.Count == 0)
+        {
+            return new Dictionary<Guid, PanelGeometry>();
+        }
+
+        using var context = Open();
+        return context.Images.Where(image => imageIds.Contains(image.Id))
+            .Select(image => new { image.Id, image.RaDeg, image.DecDeg, image.WidthPx, image.ArcsecPerPixel, image.RotatorPosition, image.PierSide })
+            .AsEnumerable()
+            .ToDictionary(
+                row => row.Id,
+                row => new PanelGeometry(row.RaDeg, row.DecDeg, row.WidthPx, row.ArcsecPerPixel, row.RotatorPosition, row.PierSide));
+    }
+
     /// <summary>The top of one pool by <see cref="FrameScore.Score"/>, ties to the most recent
     /// <c>capture_date</c> (null last), then the ordinally first <c>file_path</c>; null for an
     /// empty pool.</summary>
