@@ -116,6 +116,25 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>Spec 12.2's mosaic link (Phase 18, ruling R19): the first of the target's mosaics
+    /// by name, which the link opens, or null when no mosaic includes a night of it.</summary>
+    public Guid? MosaicId => Row.Mosaics.Count > 0 ? Row.Mosaics[0].MosaicId : null;
+
+    /// <summary>The name of the mosaic <see cref="MosaicId"/> names, or null.</summary>
+    public string? MosaicName => Row.Mosaics.Count > 0 ? Row.Mosaics[0].Name : null;
+
+    /// <summary>Whether the Name cell draws the mosaic link.</summary>
+    public bool HasMosaic => Row.Mosaics.Count > 0;
+
+    /// <summary>The link's tooltip: "Mosaic: &lt;name&gt;", or "Mosaics: &lt;name&gt;, &lt;name&gt;"
+    /// for a target in several (spec 12.2).</summary>
+    public string? MosaicTooltip => Row.Mosaics.Count switch
+    {
+        0 => null,
+        1 => $"Mosaic: {Row.Mosaics[0].Name}",
+        _ => $"Mosaics: {string.Join(", ", Row.Mosaics.Select(link => link.Name))}",
+    };
+
     /// <summary>Spec 12.2's Designation column, rendered monospace by the view.</summary>
     public string Designation => Row.CatalogId ?? "";
 

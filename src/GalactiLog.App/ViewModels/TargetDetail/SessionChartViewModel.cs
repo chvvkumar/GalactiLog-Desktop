@@ -362,6 +362,8 @@ public sealed class SessionChartViewModel : MetricChartViewModel
                 Stroke = new SolidColorPaint(ChartTheme.Palette.Outlier) { StrokeThickness = 1.5f },
                 Fill = null,
                 ScalesYAt = scalesYAt,
+                XToolTipLabelFormatter = _ => LiveCharts.IgnoreToolTipLabel,
+                YToolTipLabelFormatter = ThreeDecimals,
             };
     }
 

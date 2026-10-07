@@ -6,9 +6,8 @@ namespace GalactiLog.Core.Settings;
 /// <summary>Spec 12.15's three column types. The stored value is the lower-case member name.</summary>
 public enum CustomColumnType { Boolean, Text, Dropdown }
 
-/// <summary>Spec 12.15's three offered scopes plus the reserved fourth (U1). `Mosaic` is declared
-/// so the repository's refusal has something to compare against; no surface offers it and no
-/// fixture creates one.</summary>
+/// <summary>Spec 12.15's four scopes. `Mosaic` arrived with Phase 18 (ruling R2): its values are
+/// keyed by the mosaic alone.</summary>
 public enum CustomColumnScope { Target, Session, Rig, Mosaic }
 
 /// <summary>

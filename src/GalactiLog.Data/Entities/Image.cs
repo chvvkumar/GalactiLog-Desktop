@@ -26,6 +26,13 @@ public class Image
     [Column("eccentricity_source")] public string? EccentricitySource { get; set; }
     [Column("altitude_deg")] public double? AltitudeDeg { get; set; }
     [Column("arcsec_per_pixel")] public double? ArcsecPerPixel { get; set; }
+
+    // Phase 18 (spec 5.2): written at ingest, backfilled by mosaic detection step 0 (spec 7.7).
+    [Column("ra_deg")] public double? RaDeg { get; set; }
+    [Column("dec_deg")] public double? DecDeg { get; set; }
+    [Column("width_px")] public int? WidthPx { get; set; }
+    [Column("panel_label")] public string? PanelLabel { get; set; }
+
     [Column("hfr_stdev")] public double? HfrStdev { get; set; }
     [Column("fwhm")] public double? Fwhm { get; set; }
     [Column("detected_stars")] public int? DetectedStars { get; set; }

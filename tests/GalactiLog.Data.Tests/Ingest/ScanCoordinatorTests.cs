@@ -153,17 +153,18 @@ public class ScanCoordinatorTests : IDisposable
     // ---- task vocabulary (spec 10.4) -----------------------------------------------
 
     [Fact]
-    public void TaskVocabulary_IsExactlyTheNineNames_InOrder()
+    public void TaskVocabulary_IsExactlyTheTenNames_InOrder()
     {
         // Spec 10.4's closed set, in the spec table's own order. Phase 15A inserted
         // `phd2_ingest` and `phd2_correlate` between `prune_orphans` and `dedup`, which is
         // where spec 10.3's numbered list puts the guide-log pass: after the header pass and
-        // its orphan prune, before duplicate detection.
+        // its orphan prune, before duplicate detection. Phase 18 inserted `mosaic_detection`
+        // after `dedup` (spec 10.3 step 6).
         Assert.Equal(
             new[]
             {
                 "discovery", "classify", "ingest", "prune_orphans", "phd2_ingest", "phd2_correlate",
-                "dedup", "ref_thumbnails", "prune_activity",
+                "dedup", "mosaic_detection", "ref_thumbnails", "prune_activity",
             },
             ScanTaskNames.All);
     }
@@ -612,6 +613,7 @@ public class ScanCoordinatorTests : IDisposable
         {
             Assert.DoesNotContain(ScanTaskNames.PruneOrphans, tasks);
             Assert.DoesNotContain(ScanTaskNames.Dedup, tasks);
+            Assert.DoesNotContain(ScanTaskNames.MosaicDetection, tasks);
             Assert.DoesNotContain(ScanTaskNames.RefThumbnails, tasks);
             Assert.DoesNotContain(ScanTaskNames.PruneActivity, tasks);
         }
@@ -1641,6 +1643,106 @@ public class ScanCoordinatorTests : IDisposable
             tasks.IndexOf(ScanTaskNames.Dedup),
             tasks.IndexOf(ScanTaskNames.PruneOrphans) + 1,
             tasks.IndexOf(ScanTaskNames.RefThumbnails) - 1);
+    }
+
+    // ---- mosaic detection (spec 7.7, Phase 18) ---------------------------------------
+
+    // A lone first panel catalogued before Phase 18 (no panel_label), outside the scan root so
+    // orphan pruning leaves it alone: the pass relabels it and writes its one-panel suggestion.
+    private void SeedLonePanel()
+    {
+        var target = LibrarySeeder.AddTarget(_db.ConnectionString, "IC 1396");
+        LibrarySeeder.AddFrame(_db.ConnectionString, target.Id, new DateOnly(2025, 3, 15),
+            image => image.RawHeaders = LibrarySeeder.RawHeadersWithObject("IC 1396 P1"));
+    }
+
+    [Fact]
+    public async Task Scan_RunsMosaicDetection_BetweenDedupAndRefThumbnails_AndRecordsIt()
+    {
+        WriteFrame("a.fits");
+        SeedLonePanel();
+
+        var seen = await RecordProgress(MakeCoordinator());
+
+        var tasks = seen.Select(p => p.Task).ToList();
+        Assert.InRange(
+            tasks.IndexOf(ScanTaskNames.MosaicDetection),
+            tasks.LastIndexOf(ScanTaskNames.Dedup) + 1,
+            tasks.IndexOf(ScanTaskNames.RefThumbnails) - 1);
+        Assert.Equal("1 suggestion", seen.Last(p => p.Task == ScanTaskNames.MosaicDetection).Message);
+
+        using var context = OpenRead();
+        Assert.Equal("IC 1396", context.MosaicSuggestions.Single().SuggestedName);
+        var started = context.ActivityEvents.Single(a => a.EventType == "scan_started");
+        var detected = context.ActivityEvents.Single(a => a.EventType == "mosaic_detection_complete");
+        Assert.Equal(started.Id, detected.ParentId);
+        using var details = JsonDocument.Parse(detected.Details!);
+        Assert.Equal("scan", details.RootElement.GetProperty("trigger").GetString());
+        Assert.Equal(1, details.RootElement.GetProperty("suggestions").GetInt32());
+        Assert.Equal(1, details.RootElement.GetProperty("relabelled").GetInt32());
+    }
+
+    [Fact]
+    public async Task Scan_Cancelled_DoesNotRunMosaicDetection()
+    {
+        WriteFrame("a.fits");
+        SeedLonePanel();
+        var coordinator = MakeCoordinator();
+        coordinator.ProgressChanged += (_, p) =>
+        {
+            if (p.Task == ScanTaskNames.Dedup) coordinator.Cancel();
+        };
+
+        var outcome = await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
+
+        Assert.Equal("cancelled", outcome.State);
+        using var context = OpenRead();
+        Assert.Empty(context.MosaicSuggestions);
+        Assert.DoesNotContain(context.ActivityEvents, a => a.EventType.StartsWith("mosaic_detection", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task RunMosaicDetectionAsync_RunsThePassWithTheManualTrigger()
+    {
+        SeedLonePanel();
+        var steps = new List<string>();
+
+        var result = await MakeCoordinator().RunMosaicDetectionAsync((_, _, message) => steps.Add(message), CancellationToken.None);
+
+        Assert.Equal(1, result!.SuggestionsWritten);
+        Assert.Equal(["Relabelling frames", "Filling positions", "Grouping candidates", "Writing suggestions", "1 suggestion"], steps);
+        using var context = OpenRead();
+        var detected = context.ActivityEvents.Single(a => a.EventType == "mosaic_detection_complete");
+        Assert.Null(detected.ParentId);
+        Assert.Contains("\"trigger\":\"manual\"", detected.Details!, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task RunMosaicDetectionAsync_WhileTheLeaseIsHeld_ReturnsNull()
+    {
+        var coordinator = MakeCoordinator();
+        using var lease = coordinator.TryBeginResolution();
+
+        Assert.Null(await coordinator.RunMosaicDetectionAsync((_, _, _) => { }, CancellationToken.None));
+    }
+
+    // A pass that throws does not fail the scan: it reports a negative-total terminal envelope
+    // and writes mosaic_detection_failed.
+    [Fact]
+    public async Task Scan_AMosaicDetectionFailure_DoesNotFailTheScan()
+    {
+        WriteFrame("a.fits");
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString, tracking: true)))
+        {
+            context.Database.ExecuteSqlRaw("DROP TABLE mosaic_suggestions");
+        }
+
+        var seen = await RecordProgress(MakeCoordinator());
+
+        Assert.Equal("complete", OpenRead().ScanRuns.Single().State);
+        Assert.Equal(-1, seen.Last(p => p.Task == ScanTaskNames.MosaicDetection).TotalSteps);
+        using var read = OpenRead();
+        Assert.Single(read.ActivityEvents, a => a.EventType == "mosaic_detection_failed");
     }
 
     // ---- the reference thumbnail pass (spec 11.4, Phase 8 Task 6) -------------------

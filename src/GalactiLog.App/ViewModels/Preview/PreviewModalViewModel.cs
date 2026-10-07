@@ -29,7 +29,7 @@ namespace GalactiLog.App.ViewModels.Preview;
 /// view-model only asks for a preview.
 /// </para>
 /// </remarks>
-public sealed partial class PreviewModalViewModel : ObservableObject, IDisposable
+public sealed partial class PreviewModalViewModel : ObservableObject, IZoomPanSurface, IDisposable
 {
     /// <summary>Spec 11.5's zoom range, as a multiple of fit. The web application clamps to
     /// [1, 20]; the spec's range is the port's, so zooming out below fit is allowed.</summary>
@@ -310,6 +310,12 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
     private void OnGeneralChanged(object? sender, GeneralSettings general)
         => OnPropertyChanged(nameof(RenderOnNavigate));
 
+    /// <summary>The offsets after scaling by <paramref name="ratio"/> about the pointer, so the
+    /// point under the pointer stays under it. <see cref="Zoom"/> and the mosaic arranger's zoom
+    /// share it; both measure the offsets and the pointer in the same viewport frame.</summary>
+    public static (double X, double Y) ScaleAbout(double offsetX, double offsetY, double pointerX, double pointerY, double ratio)
+        => (pointerX - (pointerX - offsetX) * ratio, pointerY - (pointerY - offsetY) * ratio);
+
     /// <summary>Pointer-centred wheel zoom, the web's transform ported exactly: it is what makes
     /// the point under the cursor stay under the cursor.</summary>
     /// <param name="delta">The raw wheel delta in the web's <c>e.deltaY</c> sign convention:
@@ -319,15 +325,22 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
     /// <param name="pointerX">The pointer's offset from the viewport centre, in pixels.</param>
     /// <param name="pointerY">The pointer's offset from the viewport centre, in pixels.</param>
     public void Zoom(double delta, double pointerX, double pointerY)
+        => (Scale, OffsetX, OffsetY) = ZoomAbout(Scale, OffsetX, OffsetY, delta, pointerX, pointerY);
+
+    /// <summary>Spec 11.5's wheel zoom as a pure step: the scale after one wheel
+    /// <paramref name="delta"/>, clamped to <see cref="MinZoom"/> and <see cref="MaxZoom"/> of fit,
+    /// and the offsets after <see cref="ScaleAbout"/>. At or below fit the offsets are 0. The
+    /// preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static (double Scale, double OffsetX, double OffsetY) ZoomAbout(
+        double scale, double offsetX, double offsetY, double delta, double pointerX, double pointerY)
     {
-        var old = Scale;
-        var next = Math.Clamp(old * Math.Exp(-delta * WheelZoomRate), MinZoom, MaxZoom);
+        var next = Math.Clamp(scale * Math.Exp(-delta * WheelZoomRate), MinZoom, MaxZoom);
 
         // The web's `if (newScale === oldScale) return`: at either clamp a further notch must not
         // move the offsets either, or the image drifts while the scale stands still.
-        if (next == old)
+        if (next == scale)
         {
-            return;
+            return (scale, offsetX, offsetY);
         }
 
         if (Math.Abs(next - 1d) < FitTolerance)
@@ -335,34 +348,32 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
             next = 1d;
         }
 
-        var ratio = next / old;
-        OffsetX = pointerX - (pointerX - OffsetX) * ratio;
-        OffsetY = pointerY - (pointerY - OffsetY) * ratio;
-        Scale = next;
-
         // At or below fit the image is centred and cannot be panned (coordinator ruling on the
         // zoom-out range): the web snaps to centre on return to fit, and below fit there is
         // nothing off screen to pan to. Double-click or 0 restores fit.
         if (next <= 1d)
         {
-            OffsetX = 0d;
-            OffsetY = 0d;
+            return (next, 0d, 0d);
         }
+
+        var (x, y) = ScaleAbout(offsetX, offsetY, pointerX, pointerY, next / scale);
+        return (next, x, y);
     }
 
     /// <summary>Drag pan. A no-op unless <see cref="Scale"/> is above 1: at fit and below it, the
     /// whole image is on screen and there is nothing to pan to. The view calls this from its
     /// pointer handler; spec 18.3 asserts it here and never synthesizes a gesture.</summary>
     public void Pan(double deltaX, double deltaY)
-    {
-        if (Scale <= 1d)
-        {
-            return;
-        }
+        => (OffsetX, OffsetY) = PanStep(Scale, OffsetX, OffsetY, deltaX, deltaY);
 
-        OffsetX += deltaX;
-        OffsetY += deltaY;
-    }
+    /// <summary>Spec 11.5's drag pan as a pure step: the offsets moved by the deltas, or unchanged
+    /// at fit and below. The preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static (double X, double Y) PanStep(double scale, double offsetX, double offsetY, double deltaX, double deltaY)
+        => scale <= 1d ? (offsetX, offsetY) : (offsetX + deltaX, offsetY + deltaY);
+
+    /// <summary>Spec 11.5's fit, the web's <c>resetTransform()</c>: scale 1, both offsets 0. The
+    /// preview and the composite lightbox (spec 12.17) share it.</summary>
+    public static readonly (double Scale, double OffsetX, double OffsetY) FitTransform = (1d, 0d, 0d);
 
     /// <summary>Disposes both slots, which disposes their bitmaps and withdraws anything still in
     /// flight, and cancels the lifetime the header panel's read is bound to. Idempotent.</summary>
@@ -418,12 +429,9 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
     /// <summary>Spec 11.5's fit, on double-click and on <c>0</c>. The web's
     /// <c>resetTransform()</c>: scale 1, both offsets 0.</summary>
     [RelayCommand]
-    private void Fit()
-    {
-        Scale = 1d;
-        OffsetX = 0d;
-        OffsetY = 0d;
-    }
+    private void Fit() => (Scale, OffsetX, OffsetY) = FitTransform;
+
+    void IZoomPanSurface.ResetFit() => Fit();
 
     /// <summary><c>H</c>. The panel is built on its first show for a frame and kept while the
     /// frame is on screen, so hiding and showing it again issues no second query.</summary>
@@ -621,4 +629,19 @@ public sealed partial class PreviewModalViewModel : ObservableObject, IDisposabl
             lifetime: _lifetimeToken);
         Headers.Load();
     }
+}
+
+/// <summary>Spec 11.5's zoom and pan, as the shared image gestures (<c>Views/ZoomPanGestures</c>)
+/// drive them: the preview modal and the composite lightbox (spec 12.17) implement it.</summary>
+public interface IZoomPanSurface
+{
+    /// <summary>A wheel step in the web's <c>deltaY</c> sign, at the pointer's offset from the
+    /// viewport centre.</summary>
+    void Zoom(double delta, double pointerX, double pointerY);
+
+    /// <summary>A drag step; refused at fit and below.</summary>
+    void Pan(double deltaX, double deltaY);
+
+    /// <summary>Back to fit: double-click and the <c>0</c> key.</summary>
+    void ResetFit();
 }

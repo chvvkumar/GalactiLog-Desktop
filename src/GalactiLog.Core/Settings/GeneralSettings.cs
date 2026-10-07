@@ -242,6 +242,31 @@ public sealed record GeneralSettings
     /// <see cref="Survey.Surveys.Resolve"/>.</summary>
     [JsonPropertyName("sky_view_survey")] public string SurveyViewSurvey { get; init; } = Survey.Surveys.DefaultId;
 
+    /// <summary>Spec 5.8.1 and 7.7. The words that introduce a panel number in <c>OBJECT</c>. Read
+    /// through <c>SettingsStore.GetGeneral</c>, which trims each entry and drops a blank or a case
+    /// insensitive repeat.</summary>
+    [JsonPropertyName("mosaic_keywords")] public string[] MosaicKeywords { get; init; } = DefaultMosaicKeywords;
+
+    // One shared default instance: the record compares arrays by reference, so two reads of a
+    // document without the key must hand back the same array to compare equal. Never mutated.
+    private static readonly string[] DefaultMosaicKeywords = ["Panel", "P"];
+
+    /// <summary>Spec 7.7 and 9.1. The default mosaic keywords, which target resolution's
+    /// <c>NameNormalizer.StripPanel</c> strips whatever the stored list says.</summary>
+    public static IReadOnlyList<string> DefaultPanelKeywords => DefaultMosaicKeywords;
+
+    /// <summary>Spec 5.8.1 and 7.7. Nights further apart than this split a suggestion into
+    /// campaigns; 0 means no grouping. A stored value outside <see cref="MosaicCampaignGapChoices"/>
+    /// reads as 0.</summary>
+    [JsonPropertyName("mosaic_campaign_gap_days")] public int MosaicCampaignGapDays { get; init; }
+
+    /// <summary>Spec 5.8.1 and 7.7. The position tolerance in arcminutes, 0 to 600; 0 derives it
+    /// from the field of view. Clamped on read.</summary>
+    [JsonPropertyName("mosaic_position_tolerance_arcmin")] public double MosaicPositionToleranceArcmin { get; init; }
+
+    /// <summary>Spec 5.8.1's seven legal campaign gaps, declared once for the store and the page.</summary>
+    public static IReadOnlyList<int> MosaicCampaignGapChoices { get; } = [0, 7, 14, 30, 90, 180, 365];
+
     // Preserves any key this version of GalactiLog does not recognize, so a read-modify-write
     // cycle never drops a future key (design-spec 5.8: "an unrecognized key is preserved").
     [JsonExtensionData]

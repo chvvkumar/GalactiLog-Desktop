@@ -245,6 +245,64 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
         return picker;
     }
 
+    /// <summary>The built-in titles of spec 12.17's mosaics table, by key.</summary>
+    internal static readonly IReadOnlyDictionary<string, string> MosaicColumnTitles = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["name"] = "Name",
+        ["panels"] = "Panels",
+        ["integration"] = "Integration",
+        ["frames"] = "Frames",
+        ["date_range"] = "Date range",
+    };
+
+    /// <summary>
+    /// Spec 12.17's mosaics table gear (Phase 18): the five built-in columns with Name ticked and
+    /// disabled, then the mosaic-scope custom columns under "Custom". Writes
+    /// <c>display.columns.mosaics</c> through the shared writer, the shape <see cref="ForLedger"/>
+    /// has, so a column deleted since the picker was built has no row and drops out of the next list.
+    /// </summary>
+    public static ColumnPickerViewModel ForMosaics(
+        DisplaySettings display, DisplayColumnWriter writer, IReadOnlyList<CustomColumnDefinition> all)
+    {
+        var visible = writer.LastWritten(DisplaySettings.MosaicsTableId)
+            ?? display.ColumnsFor(DisplaySettings.MosaicsTableId);
+
+        var columns = DisplaySettings.MosaicColumnKeys
+            .Select(key => new ColumnViewModel(
+                key,
+                MosaicColumnTitles[key],
+                visible.Contains(key, StringComparer.Ordinal),
+                canHide: key != "name",
+                isNumeric: key is "panels" or "integration" or "frames"))
+            .Concat(CustomColumnSet.MosaicRow(all).Select(column => new ColumnViewModel(
+                column.Slug,
+                column.Name,
+                visible.Contains(column.Slug, StringComparer.Ordinal))))
+            .ToArray();
+
+        ColumnPickerViewModel? picker = null;
+        picker = new ColumnPickerViewModel(
+            DisplaySettings.MosaicsTableId,
+            "Mosaics columns",
+            columns,
+            column =>
+            {
+                if (!column.CanHide)
+                {
+                    return;
+                }
+
+                column.IsVisible = !column.IsVisible;
+                writer.Write(
+                    DisplaySettings.MosaicsTableId,
+                    [.. picker!.Columns.Where(entry => entry.IsVisible).Select(entry => entry.Key)]);
+            },
+            subscribeChanged: handler => writer.Changed += handler,
+            unsubscribeChanged: handler => writer.Changed -= handler);
+
+        return picker;
+    }
+
     // Split by the slug prefix alone (design lesson 1: no second definition list, no lookup). At
     // most two non-empty groups, "Built-in" first: ForLedger's rows are all custom, so it never
     // produces a "Built-in" group at all, and ForFrames's are all built-in today, so it never

@@ -28,6 +28,7 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
         [ScanTaskNames.Phd2Ingest] = "Reading guide logs",
         [ScanTaskNames.Phd2Correlate] = "Matching guiding",
         [ScanTaskNames.Dedup] = "Finding duplicates",
+        [ScanTaskNames.MosaicDetection] = "Detecting mosaics",
         [ScanTaskNames.RefThumbnails] = "Building thumbnails",
         [ScanTaskNames.PruneActivity] = "Pruning activity",
     };

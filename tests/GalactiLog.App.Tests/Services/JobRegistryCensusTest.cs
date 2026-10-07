@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.Tests.ViewModels.Wbpp;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -52,6 +53,13 @@ namespace GalactiLog.App.Tests.Services;
 //
 // The export wizard added the staging copy as member fifteen, proved by committing a copy over a
 // fake disk.
+//
+// Phase 18 Task 4 added the Mosaics page's four kinds (spec 12.17), members sixteen to nineteen,
+// proved by pressing Run Detection, Accept all, Dismiss all and Delete selected on a real page.
+// Detection has a second entry point, a scan's pass, proved by its own case below.
+//
+// Phase 19B Task 3 added the mosaic composite build (spec 11.6) as member twenty, proved by
+// building a composite through a real CompositeService over a stub drawing.
 public class JobRegistryCensusTest
 {
     // snake_case, the same shape spec 10.9's action tokens already have. There is no second token
@@ -110,6 +118,18 @@ public class JobRegistryCensusTest
     /// <summary>The export wizard's staging copy (wizard ruling R10), census member fifteen.</summary>
     private const string TheStackingCopy = WbppExportWizardViewModel.CopyJobKind;
 
+    /// <summary>Spec 12.17's four Mosaics page kinds, census members sixteen to nineteen.</summary>
+    private static readonly string[] TheMosaicActions =
+    [
+        MosaicsPageViewModel.DetectionJobKind,
+        MosaicsPageViewModel.AcceptJobKind,
+        MosaicsPageViewModel.DismissJobKind,
+        MosaicsPageViewModel.DeleteJobKind,
+    ];
+
+    /// <summary>Spec 11.6's composite build, census member twenty.</summary>
+    private const string TheMosaicComposite = CompositeService.BuildJobKind;
+
     private static string[] TheCensusSet =>
         [
             TheScan,
@@ -120,6 +140,8 @@ public class JobRegistryCensusTest
             TheSurveyFetch,
             TheStackingCopy,
             .. TheMaintenanceActions,
+            .. TheMosaicActions,
+            TheMosaicComposite,
         ];
 
     [Fact]
@@ -220,6 +242,41 @@ public class JobRegistryCensusTest
         var job = Assert.Single(registry.Recent);
         Assert.Equal(ThePhd2Correlate, job.Kind);
         Assert.Matches(SnakeCase, job.Kind);
+    }
+
+    // Phase 18 Task 4. Member sixteen's second entry point: a scan's detection pass, through the
+    // envelope seam ScanStatusService wraps, the way the PHD2 phases are proved.
+    [Fact]
+    public void TheMosaicDetection_RegistersFromAScanToo()
+    {
+        var registry = new JobRegistry(action => action());
+        var coordinator = ScanCoordinatorTestFactory.CreateBare();
+        using var status = new ScanStatusService(coordinator, action => action(), jobs: registry);
+
+        coordinator.RaiseProgress(ScanTaskNames.MosaicDetection, 1, 4, "Relabelling frames", force: true);
+        coordinator.RaiseProgress(ScanTaskNames.MosaicDetection, 4, 4, "2 suggestions", force: true);
+        coordinator.RaiseProgress(ScanTaskNames.RefThumbnails, 0, 1, "Reference thumbnails", force: true);
+
+        var job = Assert.Single(registry.Recent, candidate => candidate.Kind == MosaicsPageViewModel.DetectionJobKind);
+        Assert.Equal("2 suggestions", job.Summary);
+        Assert.Equal(JobResult.Succeeded, job.Result);
+    }
+
+    // And a failed pass ends its job failed, from the -1 terminal envelope.
+    [Fact]
+    public void AFailedScanDetectionPass_EndsItsJobFailed()
+    {
+        var registry = new JobRegistry(action => action());
+        var coordinator = ScanCoordinatorTestFactory.CreateBare();
+        using var status = new ScanStatusService(coordinator, action => action(), jobs: registry);
+
+        coordinator.RaiseProgress(ScanTaskNames.MosaicDetection, 1, 4, "Relabelling frames", force: true);
+        coordinator.RaiseProgress(
+            ScanTaskNames.MosaicDetection, 0, MosaicDetectionPass.FailedEnvelopeTotalSteps, "Mosaic detection failed: boom", force: true);
+
+        var job = Assert.Single(registry.Recent, candidate => candidate.Kind == MosaicsPageViewModel.DetectionJobKind);
+        Assert.Equal(JobResult.Failed, job.Result);
+        Assert.Equal("Mosaic detection failed: boom", job.Summary);
     }
 
     private sealed class NotFoundHandler : HttpMessageHandler
@@ -325,6 +382,52 @@ public class JobRegistryCensusTest
 
             await wizard.CommitCommand.ExecuteAsync(null);
         }
+
+        Collect();
+
+        // The Mosaics page's four kinds, by pressing each on a real page over delegate stubs.
+        using (var mosaics = new MosaicsPageHarness(
+                   new MosaicsBackend
+                   {
+                       RunDetection = (_, _) => Task.FromResult<MosaicDetectionResult?>(new MosaicDetectionResult(0, 0, 0, 0, 0)),
+                       ListPending = () => [new GalactiLog.Data.Repositories.MosaicSuggestionRow(
+                           Guid.NewGuid(), "M 31", "M 31", [], "high", "name", null, [], "sig", DateTime.UtcNow)],
+                       ListMosaics = () => [new GalactiLog.Data.Queries.MosaicListRow(Guid.NewGuid(), "M 33", 0, 0, 0, null, null, [])],
+                   },
+                   jobs: registry))
+        {
+            var page = mosaics.Page;
+            await page.PendingLoad;
+            await page.RunDetectionCommand.ExecuteAsync(null);
+            await page.PendingLoad;
+            await page.AcceptAllCommand.ExecuteAsync(null);
+            await page.PendingLoad;
+            Collect();
+            await page.DismissAllCommand.ExecuteAsync(null);
+            await page.DismissAllCommand.ExecuteAsync(null);
+            await page.PendingLoad;
+            page.Table.Mosaics[0].IsSelected = true;
+            await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
+            await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
+            await page.PendingLoad;
+        }
+
+        Collect();
+
+        // The composite build, on a miss, which is the only path that opens a job.
+        var panel = Guid.NewGuid();
+        var frame = Guid.NewGuid();
+        await new CompositeService(
+            registry, (_, _, _, _) => { }, (_, _, _, _) => new GalactiLog.Core.Mosaics.CompositeResult([], 1, 1))
+            .BuildAsync(
+                new CompositeRequest(
+                    Guid.NewGuid(), "M 31", "Ha", [(panel, "Panel 1")],
+                    new GalactiLog.Data.Queries.PanelFrameSet(["Ha"], "Ha", new Dictionary<Guid, IReadOnlyDictionary<string, GalactiLog.Data.Queries.BestFrame>>
+                    {
+                        [panel] = new Dictionary<string, GalactiLog.Data.Queries.BestFrame> { ["Ha"] = new(frame, "a.fits", "Ha", 1) },
+                    }),
+                    new Dictionary<Guid, GalactiLog.Core.Mosaics.PanelGeometry> { [frame] = new(10, 20, 64, 15, null, null) }),
+                CancellationToken.None);
 
         Collect();
 

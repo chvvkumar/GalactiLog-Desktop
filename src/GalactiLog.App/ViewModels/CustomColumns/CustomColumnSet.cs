@@ -48,6 +48,13 @@ public static class CustomColumnSet
         IReadOnlyList<CustomColumnDefinition> all)
         => Ordered(all.Where(column => column.Scope is CustomColumnScope.Rig));
 
+    /// <summary>Spec 12.17's mosaics table and the mosaic detail header (Phase 18): every
+    /// mosaic-scope column in display order. The table filters this by the stored visible list; the
+    /// detail header shows them all.</summary>
+    public static IReadOnlyList<CustomColumnDefinition> MosaicRow(
+        IReadOnlyList<CustomColumnDefinition> all)
+        => Ordered(all.Where(column => column.Scope is CustomColumnScope.Mosaic));
+
     /// <summary>True while any <c>rig</c>-scope column exists. What makes the session pane draw a
     /// rig label row on a single-rig night (user choice 7, spec 12.15, spec 12.4 item 2 as
     /// amended), and therefore what keeps every existing session pane pin unmoved on a library

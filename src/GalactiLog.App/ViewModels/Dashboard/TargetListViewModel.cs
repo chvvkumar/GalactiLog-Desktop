@@ -479,6 +479,10 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
     /// only in whether <see cref="TargetOpenRequest.SessionDate"/> is set.</summary>
     public event EventHandler<TargetOpenRequest>? TargetOpened;
 
+    /// <summary>A row's mosaic link was clicked (spec 12.2, Phase 18): the id of the mosaic to open
+    /// on the shell's detail overlay.</summary>
+    public event EventHandler<Guid>? MosaicOpened;
+
     /// <summary>Projects sort and paging onto the criteria the filter panel built. The dashboard
     /// owns the single query call site; this is called from inside it.</summary>
     public TargetListingCriteria ApplyTo(TargetListingCriteria criteria) => criteria with
@@ -768,6 +772,17 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
         if (row is not null && !IsRefetching)
         {
             TargetOpened?.Invoke(this, new TargetOpenRequest(row.GroupKey, null));
+        }
+    }
+
+    /// <summary>Spec 12.2's mosaic link: opens the first of the row's mosaics by name and never
+    /// the row's Target detail. Guarded on a flight the way <see cref="OpenTarget"/> is.</summary>
+    [RelayCommand]
+    private void OpenMosaic(TargetRowViewModel? row)
+    {
+        if (row?.MosaicId is { } mosaicId && !IsRefetching)
+        {
+            MosaicOpened?.Invoke(this, mosaicId);
         }
     }
 

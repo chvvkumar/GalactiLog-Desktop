@@ -15,6 +15,8 @@
              xmlns:settingsviews="using:GalactiLog.App.Views.Settings"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
              xmlns:analysisviews="using:GalactiLog.App.Views.Analysis"
+             xmlns:mosaics="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:mosaicviews="using:GalactiLog.App.Views.Mosaics"
              x:Class="GalactiLog.App.App"
              RequestedThemeVariant="Dark">
   <!-- Dark is the default and the only shipped variant (TRACKING hard rule 4). Pinned here so
@@ -182,6 +184,15 @@
          ViewModels.Settings and Views.Settings. -->
     <DataTemplate DataType="settings:ExternalToolsTabViewModel">
       <settingsviews:ExternalToolsTabView />
+    </DataTemplate>
+    <!-- Spec 12.17's Mosaics page (Phase 18), the second rail destination. -->
+    <DataTemplate DataType="mosaics:MosaicsPageViewModel">
+      <mosaicviews:MosaicsView />
+    </DataTemplate>
+    <!-- Spec 12.17's mosaic detail page (Phase 18 Task 5), the detail overlay's second kind of
+         page beside the Target detail page, through MainWindowViewModel.Detail. -->
+    <DataTemplate DataType="mosaics:MosaicDetailViewModel">
+      <mosaicviews:MosaicDetailView />
     </DataTemplate>
     <!-- Spec 12.14's Analysis page (Phase 17 Task 4), the sixth rail destination, plus the five
          tab bodies it hosts and the one stats card two of those tabs draw. All seven land here at

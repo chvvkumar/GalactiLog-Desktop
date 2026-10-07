@@ -2,7 +2,9 @@ using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
+using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
+using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
@@ -170,6 +172,87 @@ public class TargetListViewTests
         Assert.Contains("Collapse", texts);
     }
 
+    // Phase 18 Task 6, spec 12.2: the mosaic link sits in the Name cell of a row whose target has
+    // an included night in some mosaic and nowhere else; it opens the first mosaic by name and
+    // never the row's Target detail.
+    [AvaloniaFact]
+    public void TheMosaicLink_IsDrawnOnlyForATargetInAMosaic_AndOpensTheFirstByName()
+    {
+        var alpha = new MosaicLink(Guid.NewGuid(), "Alpha");
+        var beta = new MosaicLink(Guid.NewGuid(), "beta");
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([SampleRow with { Mosaics = [alpha, beta] }, WideRow], 120, 44_640d, 148, 1, 50));
+        var opened = new List<Guid>();
+        var targets = new List<TargetOpenRequest>();
+        list.MosaicOpened += (_, id) => opened.Add(id);
+        list.TargetOpened += (_, request) => targets.Add(request);
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view);
+
+        var links = view.GetVisualDescendants().OfType<Button>().Where(button => button.Name == "MosaicLink").ToList();
+        Assert.Equal(2, links.Count);
+        var shown = Assert.Single(links, link => link.IsEffectivelyVisible);
+        Assert.Same(list.Rows[0], shown.DataContext);
+        Assert.Equal("Mosaics: Alpha, beta", ToolTip.GetTip(shown));
+        Assert.Null(list.Rows[1].MosaicId);
+        Assert.Equal("Alpha", list.Rows[0].MosaicName);
+
+        // A real pointer press, so the row's own click target behind the cells gets its chance to
+        // take it: the link must, and the row must not.
+        Click(window, shown);
+
+        Assert.Equal([alpha.MosaicId], opened);
+        Assert.Empty(targets);
+
+        // The falsifying half: a press on the name itself reaches the row and opens the target.
+        Click(window, NamedCells(view, "NameCell")[0].GetVisualDescendants().OfType<TextBlock>().First());
+        Assert.Single(targets);
+        Assert.Equal([alpha.MosaicId], opened);
+
+        list.Load(new TargetListingPage([SampleRow with { Mosaics = [beta] }], 1, 44_640d, 148, 1, 50));
+        Assert.Equal("Mosaic: beta", list.Rows[0].MosaicTooltip);
+    }
+
+    // Fix round 1: the Name cell clips at NameCellMaxWidth, so a name as wide as the cell used to
+    // arrange the link past the clip edge, invisible and unclickable. The link is measured first
+    // and the name trims into what is left.
+    [AvaloniaFact]
+    public void TheMosaicLink_StaysInsideTheNameCell_OnALongName()
+    {
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        var longName = WideRow with
+        {
+            Name = "NGC 6960 - Veil Nebula, Filamentary Nebula, Western Veil, Witch's Broom, Caldwell 34",
+            Mosaics = [new MosaicLink(Guid.NewGuid(), "Veil")],
+        };
+        list.Load(new TargetListingPage([longName], 1, 44_640d, 148, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        var cell = Assert.Single(NamedCells(view, "NameCell"));
+        var link = cell.GetVisualDescendants().OfType<Button>().Single(button => button.Name == "MosaicLink");
+        Assert.True(link.IsEffectivelyVisible);
+        Assert.True(link.Bounds.Width > 0);
+
+        var topLeft = link.TranslatePoint(new Point(0, 0), cell);
+        var bottomRight = link.TranslatePoint(new Point(link.Bounds.Width, link.Bounds.Height), cell);
+        Assert.NotNull(topLeft);
+        Assert.NotNull(bottomRight);
+        Assert.True(topLeft.Value.X >= 0 && bottomRight.Value.X <= cell.Bounds.Width + 0.5d,
+            $"link spans {topLeft.Value.X:F1} to {bottomRight.Value.X:F1} in a cell {cell.Bounds.Width:F1} wide");
+    }
+
+    private static void Click(Window window, Control control)
+    {
+        var point = control.TranslatePoint(new Point(control.Bounds.Width / 2, control.Bounds.Height / 2), window);
+        Assert.NotNull(point);
+        window.MouseDown(point.Value, MouseButton.Left);
+        window.MouseUp(point.Value, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+    }
+
     [AvaloniaFact]
     public void TargetListView_EveryTextBlock_RendersAtAReadableSize()
     {
@@ -211,9 +294,10 @@ public class TargetListViewTests
 
         // The expander's own toggle inherits the row's DataContext too; the row button is the one
         // that passes the row as its command parameter.
+        // Phase 18: the mosaic link carries the row too, so it is excluded by name.
         var rowButton = Assert.Single(
             view.GetVisualDescendants().OfType<Button>(),
-            button => button.CommandParameter is TargetRowViewModel);
+            button => button.CommandParameter is TargetRowViewModel && button.Name != "MosaicLink");
 
         Assert.NotNull(rowButton.Command);
         Assert.IsType<TargetRowViewModel>(rowButton.CommandParameter);
@@ -412,7 +496,9 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = CreatePopulatedList() };
         ShowList(view);
 
-        Assert.Single(view.GetVisualDescendants().OfType<Button>(), button => button.CommandParameter is TargetRowViewModel);
+        Assert.Single(
+            view.GetVisualDescendants().OfType<Button>(),
+            button => button.CommandParameter is TargetRowViewModel && button.Name != "MosaicLink");
     }
 
     [AvaloniaFact]

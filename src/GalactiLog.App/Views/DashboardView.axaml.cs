@@ -8,12 +8,6 @@ namespace GalactiLog.App.Views;
 
 public partial class DashboardView : UserControl
 {
-    /// <summary>The splitter's own column while the panel is expanded. The markup declares the
-    /// GridSplitter 4 wide and the platform control theme floors it at 6, which is what the column
-    /// measures; the column is zero while the panel is the strip, and the bound below is only
-    /// consulted in the expanded branch.</summary>
-    private const double SplitterColumnWidth = 6d;
-
     /// <summary>The target list column's leading margin, declared 8,0,0,0 in the markup.</summary>
     private const double ListColumnMargin = 8d;
 
@@ -51,6 +45,13 @@ public partial class DashboardView : UserControl
         // The write below re-enters this handler once, with a figure that is already clamped and a
         // column that now agrees, so the second pass returns at the equality test.
         var root = this.GetControl<Grid>("DashboardRoot");
+
+        // The splitter's own Auto column while the panel is expanded. Its Width is the
+        // GridSplitter style's (Theme/Controls.axaml, spec 14), read here rather than restated, so
+        // the bound below cannot drift from the handle the user sees. It is the style value and
+        // not Bounds because the splitter is hidden while the panel is the strip and is not
+        // arranged then; the bound is only consulted in the expanded branch.
+        var splitter = this.GetControl<GridSplitter>("FilterPanelSplitter");
         var column = root.ColumnDefinitions[0];
 
         column.PropertyChanged += (sender, args) =>
@@ -108,7 +109,7 @@ public partial class DashboardView : UserControl
             if (args.Property == Visual.BoundsProperty && DataContext is DashboardViewModel page)
             {
                 page.MaxRenderedPanelWidth = root.Bounds.Width
-                    - SplitterColumnWidth - ListColumnMargin - ListRegionChrome - TargetListView.ListMinWidth;
+                    - splitter.Width - ListColumnMargin - ListRegionChrome - TargetListView.ListMinWidth;
             }
         };
     }

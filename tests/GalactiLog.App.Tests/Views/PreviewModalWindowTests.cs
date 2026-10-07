@@ -464,4 +464,28 @@ public class PreviewModalWindowTests
         // every colour is a token, and a scan that read them would find what it forbids.
         return Regex.Replace(File.ReadAllText(path), "<!--.*?-->", "", RegexOptions.Singleline);
     }
+
+    // Phase 19B Task 4 fix round 1: the gestures moved into the shared ZoomPanGestures, and the
+    // preview still zooms on the wheel over its viewport and fits on a double-click.
+    [AvaloniaFact]
+    public void Window_TheWheelOverTheViewportZooms_AndADoubleClickFits()
+    {
+        using var harness = Factory.Create();
+        var window = Show(harness.ViewModel);
+        var viewport = window.GetControl<Border>("Viewport");
+        var centre = viewport.TranslatePoint(new Point(viewport.Bounds.Width / 2, viewport.Bounds.Height / 2), window)!.Value;
+
+        window.MouseWheel(centre, new Vector(0, 1));
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(harness.ViewModel.Scale > 1d);
+
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        window.MouseDown(centre, MouseButton.Left);
+        window.MouseUp(centre, MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(1d, harness.ViewModel.Scale);
+
+        window.Close();
+    }
 }

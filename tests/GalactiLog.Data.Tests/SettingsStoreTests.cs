@@ -325,6 +325,38 @@ public class SettingsStoreTests
         Assert.Equal(1000, value.AppLogMaxRows);
     }
 
+    // Spec 5.8.1's three Phase 18 keys: keywords trimmed with blanks and case-insensitive repeats
+    // dropped, a gap outside the seven choices read as 0, the tolerance clamped to 0 to 600.
+    [Fact]
+    public void TheMosaicKeys_AreNormalizedOnRead_AndDefaultWhenAbsent()
+    {
+        using var db = TestDatabaseFactory.CreateMigratedDatabase();
+        var repository = new SettingsRepository(db.ConnectionString);
+        var store = new SettingsStore(repository);
+        Assert.Equal(["Panel", "P"], store.GetGeneral().MosaicKeywords);
+        Assert.Equal((0, 0d), (store.GetGeneral().MosaicCampaignGapDays, store.GetGeneral().MosaicPositionToleranceArcmin));
+
+        var row = repository.Load();
+        row.General = """{"mosaic_keywords":[" Panel ","","panel","Tile"],"mosaic_campaign_gap_days":10,"mosaic_position_tolerance_arcmin":900}""";
+        repository.Save(row);
+
+        var value = store.GetGeneral();
+        Assert.Equal(["Panel", "Tile"], value.MosaicKeywords);
+        Assert.Equal((0, 600d), (value.MosaicCampaignGapDays, value.MosaicPositionToleranceArcmin));
+    }
+
+    [Fact]
+    public void SaveGeneral_AMosaicGapOrToleranceOutOfRange_Throws()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        Assert.Throws<SettingsValidationException>(() => store.SaveGeneral(new GeneralSettings { MosaicCampaignGapDays = 10 }));
+        Assert.Throws<SettingsValidationException>(() => store.SaveGeneral(new GeneralSettings { MosaicPositionToleranceArcmin = -1 }));
+        store.SaveGeneral(new GeneralSettings { MosaicCampaignGapDays = 30, MosaicPositionToleranceArcmin = 12.5 });
+        Assert.Equal((30, 12.5), (store.GetGeneral().MosaicCampaignGapDays, store.GetGeneral().MosaicPositionToleranceArcmin));
+    }
+
     [Fact]
     public void AStoredValueAboveTheRange_IsClampedOnRead()
     {
@@ -387,6 +419,55 @@ public class SettingsStoreTests
         Assert.Equal(
             new[] { "time", "file_name", "filter_used", "exposure_time", "median_hfr", "eccentricity", "fwhm", "detected_stars" },
             display.Columns["frames"]);
+    }
+
+    // Phase 18 Task 4, spec 5.8.2: the mosaics table's column list and sort.
+    [Fact]
+    public void GetDisplay_OnFreshDatabase_HasTheMosaicsColumnsAndSortDefaults()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        var display = store.GetDisplay();
+
+        Assert.Equal(
+            new[] { "name", "panels", "integration", "frames", "date_range" },
+            display.ColumnsFor(DisplaySettings.MosaicsTableId));
+        Assert.Equal(new TableSort { Key = "name", Ascending = true }, display.MosaicsSort);
+    }
+
+    [Fact]
+    public void SaveDisplay_TheMosaicsSortAndColumns_RoundTrip()
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+
+        var display = store.GetDisplay().WithSort(DisplaySettings.MosaicsTableId, new TableSort { Key = "frames", Ascending = false });
+        store.SaveDisplay(display with
+        {
+            Columns = new Dictionary<string, string[]>(display.Columns) { ["mosaics"] = ["name", "frames", "custom_owner"] },
+        });
+
+        Assert.Contains("\"sort\":{\"mosaics\":{\"key\":\"frames\",\"ascending\":false}}", StoredDisplayDocument(db), StringComparison.Ordinal);
+        var reloaded = store.GetDisplay();
+        Assert.Equal(new TableSort { Key = "frames", Ascending = false }, reloaded.MosaicsSort);
+        Assert.Equal(new[] { "name", "frames", "custom_owner" }, reloaded.ColumnsFor(DisplaySettings.MosaicsTableId));
+    }
+
+    // Spec 5.8.2: a stored key outside the five, a custom slug included, reads as the default; a
+    // document with no sort object takes the default too, so no migration is needed.
+    [Theory]
+    [InlineData("""{"sort":{"mosaics":{"key":"custom_owner","ascending":false}}}""")]
+    [InlineData("""{"sort":{"mosaics":{"key":"nonsense"}}}""")]
+    [InlineData("""{"sort":{}}""")]
+    [InlineData("""{}""")]
+    public void GetDisplay_AnUnknownMosaicsSortKey_ReadsAsTheDefault(string stored)
+    {
+        var (store, db) = CreateStore();
+        using var _ = db;
+        SeedDisplayDocument(db, stored);
+
+        Assert.Equal(new TableSort(), store.GetDisplay().MosaicsSort);
     }
 
     [Fact]

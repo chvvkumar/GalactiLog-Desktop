@@ -167,6 +167,8 @@
     <!-- Polish wave 1 ruling 6: the two collapsed 48 px strips draw these instead of text. Rail
          first, then the dashboard filter sections; Settings reuses IconGear. -->
     <StreamGeometry x:Key="IconDashboard">M2,2 h5 v5 h-5 z M9,2 h5 v5 h-5 z M2,9 h5 v5 h-5 z M9,9 h5 v5 h-5 z</StreamGeometry>
+    <!-- Spec 12.17's Mosaics rail entry: two overlapping panels. -->
+    <StreamGeometry x:Key="IconMosaics">M1.5,2.5 h8 v6 h-8 z M6.5,7.5 h8 v6 h-8 z</StreamGeometry>
     <StreamGeometry x:Key="IconStatistics">M2,9 h3 v5 h-3 z M6.5,2 h3 v12 h-3 z M11,5.5 h3 v8.5 h-3 z</StreamGeometry>
     <StreamGeometry x:Key="IconAnalysis">M2,2 V14 H14 M4.5,11 C6.5,11 7,5 9.5,6 S12.5,3.5 14,3</StreamGeometry>
     <StreamGeometry x:Key="IconActivity">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 M8,4.5 V8 L10.5,9.5</StreamGeometry>
@@ -831,5 +833,53 @@
   <Style Selector="TextBox.refused, CheckBox.refused, ComboBox.refused">
     <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorError}" />
+  </Style>
+
+  <!-- The splitter handle (spec 14): every GridSplitter in the application, the dashboard's filter
+       panel splitter and the mosaic page's arranger splitter, draws here and nowhere else, so a
+       view sets neither its size nor its background. An 8 pixel grab zone, bare at rest, with three
+       3 pixel grip dots centred along it in the tertiary ink: stacked for a column splitter, in a
+       row for a row splitter. The whole zone tints ColorBgHover and the dots take the primary ink
+       while the pointer is over it or a drag holds it (Thumb's :pressed). One dot panel whose
+       Orientation the attribute selector flips, rather than two panels or two templates. The
+       dots' Fill is a style setter, not a template attribute, so the state blocks can replace it.
+       No transition: nothing in this file animates a brush. The cursor is the platform's own,
+       which follows ResizeDirection. -->
+  <Style Selector="GridSplitter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}">
+          <StackPanel x:Name="PART_Grip"
+                      Spacing="3"
+                      HorizontalAlignment="Center"
+                      VerticalAlignment="Center"
+                      IsHitTestVisible="False">
+            <Ellipse Width="3" Height="3" />
+            <Ellipse Width="3" Height="3" />
+            <Ellipse Width="3" Height="3" />
+          </StackPanel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="GridSplitter[ResizeDirection=Columns]">
+    <Setter Property="Width" Value="8" />
+  </Style>
+  <Style Selector="GridSplitter[ResizeDirection=Rows]">
+    <Setter Property="Height" Value="8" />
+  </Style>
+  <Style Selector="GridSplitter[ResizeDirection=Rows] /template/ StackPanel#PART_Grip">
+    <Setter Property="Orientation" Value="Horizontal" />
+  </Style>
+  <Style Selector="GridSplitter /template/ Ellipse">
+    <Setter Property="Fill" Value="{DynamicResource ColorTextTertiary}" />
+    <Setter Property="IsHitTestVisible" Value="False" />
+  </Style>
+  <Style Selector="GridSplitter:pointerover, GridSplitter:pressed">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+  <Style Selector="GridSplitter:pointerover /template/ Ellipse, GridSplitter:pressed /template/ Ellipse">
+    <Setter Property="Fill" Value="{DynamicResource ColorTextPrimary}" />
   </Style>
 </Styles>

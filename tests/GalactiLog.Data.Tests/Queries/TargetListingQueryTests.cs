@@ -841,6 +841,36 @@ public class TargetListingQueryTests(ITestOutputHelper output)
         Assert.True(facets < 500, $"facets took {facets:F1} ms");
     }
 
+    // ---- the mosaic link (spec 12.2, Phase 18) ---------------------------------------------
+
+    [Fact]
+    public void List_JoinsTheIncludedMosaics_OneRowPerTarget_NamesInCaseInsensitiveOrder()
+    {
+        using var library = Library.Empty();
+        var both = library.AddGroup("NGC 7000", _ => { }, _ => { });
+        var availableOnly = library.AddGroup("M 31", _ => { });
+        library.AddFrame(null, Day, frame => frame.RawHeaders = LibrarySeeder.RawHeadersWithObject("Mystery"));
+
+        var mosaics = new MosaicRepository(new DatabaseConnectionString(library.ConnectionString));
+        var beta = mosaics.Create("beta");
+        var alpha = mosaics.Create("Alpha");
+        mosaics.IncludeNight(mosaics.AddPanel(beta, "Panel 1"), both, Day, null);
+        mosaics.IncludeNight(mosaics.AddPanel(alpha, "Panel 1"), both, Day, null);
+        var gamma = mosaics.Create("Gamma");
+        var gammaPanel = mosaics.AddPanel(gamma, "Panel 1");
+        mosaics.IncludeNight(gammaPanel, availableOnly, Day, null);
+        mosaics.RemoveNight(gammaPanel, availableOnly, Day, null);
+
+        var rows = library.Query.List(Unsorted()).Rows;
+
+        Assert.Equal(3, rows.Count);
+        var linked = Assert.Single(rows, row => row.TargetId == both);
+        Assert.Equal([alpha, beta], linked.Mosaics.Select(link => link.MosaicId));
+        Assert.Equal(["Alpha", "beta"], linked.Mosaics.Select(link => link.Name));
+        Assert.Empty(Assert.Single(rows, row => row.TargetId == availableOnly).Mosaics);
+        Assert.Empty(Assert.Single(rows, row => row.TargetId is null).Mosaics);
+    }
+
     private static double Measure(Action action)
     {
         var best = double.MaxValue;

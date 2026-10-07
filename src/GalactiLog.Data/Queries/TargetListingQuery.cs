@@ -193,8 +193,8 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
     {
         CustomColumnScope.Session => "AND cv.session_date IS NOT NULL",
         CustomColumnScope.Rig => "AND cv.rig_label IS NOT NULL",
-        // target, and the reserved mosaic scope (U1), which no surface can create: the repository
-        // refuses it, and a mosaic row's null target_id matches no group in any case.
+        // target, and the mosaic scope, which the dashboard filter never lists (spec 12.15): a
+        // mosaic row's null target_id matches no group in any case.
         _ => "AND cv.session_date IS NULL AND cv.rig_label IS NULL",
     };
 
@@ -475,9 +475,11 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
     {
         var keyList = string.Join(", ", rows.Select(row => parameters.Add(row.GroupKey)));
         var targetIds = rows.Where(row => row.TargetId is not null).Select(row => row.TargetId!.Value).ToList();
-        var targetIdClause = targetIds.Count == 0
-            ? "1 = 0"
-            : $"id IN ({string.Join(", ", targetIds.Select(id => parameters.Add(id)))})";
+        var targetIdList = targetIds.Count == 0
+            ? null
+            : string.Join(", ", targetIds.Select(id => parameters.Add(id)));
+        var targetIdClause = targetIdList is null ? "1 = 0" : $"id IN ({targetIdList})";
+        var mosaicTargetClause = targetIdList is null ? "1 = 0" : $"s.target_id IN ({targetIdList})";
 
         // The same base filter as the page query, so palette, equipment and sessions describe the
         // filtered set rather than the whole group. The metric HAVING is not repeated: the key
@@ -517,6 +519,12 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
             {scope}
               AND i.session_date IS NOT NULL
             GROUP BY gk, i.session_date, i.filter_used;
+
+            SELECT DISTINCT s.target_id, m.id, m.name
+            FROM mosaic_panel_sessions s
+            JOIN mosaic_panels p ON p.id = s.panel_id
+            JOIN mosaics m ON m.id = p.mosaic_id
+            WHERE s.status = 'included' AND {mosaicTargetClause};
             """;
         parameters.ApplyTo(command);
 
@@ -635,6 +643,22 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
             accumulator.IntegrationSeconds += SqlReaders.ReadDouble(reader, 4);
         }
 
+        // The sixth result set: spec 12.2's mosaic link, Phase 18. Included rows only, because Add
+        // nights from any target writes available rows for every target it searches.
+        reader.NextResult();
+        var mosaicRows = new List<(Guid TargetId, MosaicLink Link)>();
+        while (reader.Read())
+        {
+            mosaicRows.Add((reader.GetGuid(0), new MosaicLink(reader.GetGuid(1), reader.GetString(2))));
+        }
+
+        var mosaics = mosaicRows.GroupBy(row => row.TargetId).ToDictionary(
+            group => group.Key,
+            group => (IReadOnlyList<MosaicLink>)[.. group
+                .Select(row => row.Link)
+                .OrderBy(link => link.Name, StringComparer.OrdinalIgnoreCase)
+                .ThenBy(link => link.MosaicId)]);
+
         // Sessions are finished only now that the fifth set has been read, so each SessionSummary
         // can carry its own night's filters at construction rather than being patched afterward.
         var sessions = new Dictionary<string, List<SessionSummary>>(StringComparer.Ordinal);
@@ -653,7 +677,7 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
             sessions[key] = summaries;
         }
 
-        return new Enrichment(palette, equipment, sessions, aliasesByTarget);
+        return new Enrichment(palette, equipment, sessions, aliasesByTarget, mosaics);
     }
 
     // Spec 12.2: "in the order the Filters tab stores them", which is AliasMap.ConfiguredFilters'
@@ -730,7 +754,12 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
             badges,
             rigs,
             aliases,
-            sessions);
+            sessions)
+        {
+            Mosaics = row.TargetId is { } mosaicTarget && enrichment.Mosaics.TryGetValue(mosaicTarget, out var links)
+                ? links
+                : [],
+        };
     }
 
     private sealed record RawRow(
@@ -750,7 +779,8 @@ public sealed class TargetListingQuery(DatabaseConnectionString connectionString
         Dictionary<string, Dictionary<string, FilterBadgeAccumulator>> Palette,
         Dictionary<string, SortedSet<string>> Equipment,
         Dictionary<string, List<SessionSummary>> Sessions,
-        Dictionary<Guid, IReadOnlyList<string>> Aliases);
+        Dictionary<Guid, IReadOnlyList<string>> Aliases,
+        Dictionary<Guid, IReadOnlyList<MosaicLink>> Mosaics);
 
     private sealed class FilterBadgeAccumulator(string canonicalName)
     {

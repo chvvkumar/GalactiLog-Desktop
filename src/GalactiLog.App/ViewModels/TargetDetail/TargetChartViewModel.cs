@@ -382,6 +382,7 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
             GeometrySize = DotSize,
             Fill = new SolidColorPaint(colour),
             Stroke = null,
+            YToolTipLabelFormatter = ThreeDecimals,
         };
 
     // One short level line per night across its band; a null point between nights breaks the line.

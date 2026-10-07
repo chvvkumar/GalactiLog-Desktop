@@ -20,11 +20,52 @@ public class HelpTopicsTests
     // taking the count to 97. Phase 22 unit B added `settings.general.survey-downloads`, taking
     // the count to 98. Unit D added `page.sky-view`, taking the count to 99.
     // The export wizard added `export.destination`, `export.method`, `export.review` and `export.result`, taking it to 103.
+    // Phase 18 Task 4 added the Mosaics page's four `mosaics.*` ids, taking it to 107.
+    // Phase 18 Task 5 added the mosaic detail page's four `mosaic.*` ids, taking it to 111.
+    // Phase 18 Task 6 added `mosaic.create`, the Create mosaic dialog's heading, taking it to 112.
+    // Phase 19A Task 4 added `mosaic.arranger`, the arranger's caption, taking it to 113.
+    // Phase 19B Task 5 added `mosaic.composite`, the composite lightbox's glyph, taking it to 114.
     [Fact]
-    public void All_Holds103Topics()
+    public void All_Holds114Topics()
     {
-        Assert.Equal(103, HelpTopics.All.Count);
-        Assert.Equal(103, HelpTopics.Ids.Count);
+        Assert.Equal(114, HelpTopics.All.Count);
+        Assert.Equal(114, HelpTopics.Ids.Count);
+    }
+
+    // Phase 18 Task 4. The four ids carry spec 12.12's titles.
+    [Theory]
+    [InlineData("mosaics.about", "Mosaics")]
+    [InlineData("mosaics.keywords", "Detection keywords")]
+    [InlineData("mosaics.suggestions", "Suggestions")]
+    [InlineData("mosaics.table", "Mosaics table")]
+    [InlineData("mosaic.about", "Mosaic")]
+    [InlineData("mosaic.notes", "Notes")]
+    [InlineData("mosaic.labels", "New panel labels")]
+    [InlineData("mosaic.sessions", "Panels and nights")]
+    [InlineData("mosaic.create", "Create mosaic")]
+    public void TheMosaicTopics_ExistAndCarryTheirTitles(string id, string title)
+        => Assert.Equal(title, HelpTopics.Get(id).Title);
+
+    // Phase 18 Task 7. Each mosaic paragraph is two to five sentences, and none grows into the
+    // five longest, which would make it spec text under TheLongestParagraphs_MatchTheSpecTextExactly.
+    [Theory]
+    [InlineData("mosaics.about")]
+    [InlineData("mosaics.keywords")]
+    [InlineData("mosaics.suggestions")]
+    [InlineData("mosaics.table")]
+    [InlineData("mosaic.about")]
+    [InlineData("mosaic.notes")]
+    [InlineData("mosaic.labels")]
+    [InlineData("mosaic.sessions")]
+    [InlineData("mosaic.create")]
+    [InlineData("mosaic.arranger")]
+    public void TheMosaicParagraphs_AreTwoToFiveSentences(string id)
+    {
+        var paragraph = HelpTopics.Get(id).Paragraph;
+        var sentences = paragraph.Split(". ", StringSplitOptions.RemoveEmptyEntries).Length;
+
+        Assert.InRange(sentences, 2, 5);
+        Assert.DoesNotContain(id, FiveLongest().Select(topic => topic.Id));
     }
 
     // A typo in the id or a paragraph that names no host would still leave the count at 103 (the

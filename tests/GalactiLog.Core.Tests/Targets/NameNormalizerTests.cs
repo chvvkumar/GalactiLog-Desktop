@@ -50,6 +50,24 @@ public class NameNormalizerTests
         Assert.Equal("NGC 7000", NameNormalizer.StripPanel("  NGC 7000  "));
     }
 
+    // Task 6c: any default mosaic keyword, token-bounded at the end, case-insensitive; a name
+    // with no number after the keyword, or no keyword, is returned trimmed.
+    [Theory]
+    [InlineData("IC 1396 P1", "IC 1396")]
+    [InlineData("M 31 Panel 2", "M 31")]
+    [InlineData("NGC 7000 panel 3", "NGC 7000")]
+    [InlineData("Sh2-155 p 2", "Sh2-155")]
+    [InlineData("PK 164+31.1", "PK 164+31.1")]
+    [InlineData("NGC 7000 P", "NGC 7000 P")]
+    [InlineData("Abell 2-1", "Abell 2-1")]
+    [InlineData("HIP 12345", "HIP 12345")]
+    [InlineData("C/2023 P1", "C/2023 P1")]
+    [InlineData("M31_Panel_2", "M31")]
+    public void StripPanel_StripsEveryDefaultKeyword(string name, string expected)
+    {
+        Assert.Equal(expected, NameNormalizer.StripPanel(name));
+    }
+
     [Theory]
     [InlineData("SH 2-129", "SH2129")]
     [InlineData("ngc_7000", "NGC7000")]

@@ -141,7 +141,7 @@ public class ExportFlyoutViewTests
     }
 
     [AvaloniaFact]
-    public void TheOverflowFlyout_HoldsItsThreeStandingItems_ThenTheSeparatorAndTwoSubmenus()
+    public void TheOverflowFlyout_HoldsItsFourStandingItems_ThenTheSeparatorAndTwoSubmenus()
     {
         using var harness = Factory.Create().Settle();
         var view = new TargetDetailView { DataContext = harness.ViewModel };
@@ -153,7 +153,7 @@ public class ExportFlyoutViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(
-            ["RenameButton", "MergeButton", "ReResolveButton", "SendToNinaMenuItem", "SlewStellariumMenuItem"],
+            ["RenameButton", "MergeButton", "ReResolveButton", "CreateMosaicMenuItem", "SendToNinaMenuItem", "SlewStellariumMenuItem"],
             flyout.Items.OfType<MenuItem>().Select(item => item.Name));
     }
 

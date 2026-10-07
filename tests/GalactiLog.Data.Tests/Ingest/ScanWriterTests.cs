@@ -106,6 +106,50 @@ public class ScanWriterTests : IDisposable
     private ScanWriter MakeWriter(GalactiLogContext context, TargetResolver? resolver = null, int? parentId = null)
         => new(context, resolver ?? MakeResolver(), parentId, _warnings.Add);
 
+    // ---- Phase 18 frame fields (spec 5.2, 10.3 step 3) -------------------------------
+
+    [Fact]
+    public async Task RunAsync_WritesTheGeometryColumns_AndThePanelLabelFromObject()
+    {
+        using var context = OpenWriterContext();
+        var writer = MakeWriter(context);
+        var metadata = Meta("M 31 Panel 2") with { RaDeg = 10.684, DecDeg = 41.269, WidthPx = 6248 };
+
+        // "M 31" first, so the panel name resolves offline through the target it creates.
+        await writer.RunAsync(Filled([Ingest(@"C:\frames\m31.fits"), Ingest(@"C:\frames\m31-p2.fits", metadata: metadata)]),
+            null, CancellationToken.None);
+
+        using var read = OpenReadContext();
+        var image = read.Images.Single(row => row.FileName == "m31-p2.fits");
+        Assert.Equal((10.684, 41.269, 6248, "Panel 2"), (image.RaDeg!.Value, image.DecDeg!.Value, image.WidthPx!.Value, image.PanelLabel));
+    }
+
+    // The keywords are the run's own, and a frame that is not LIGHT carries no label.
+    [Fact]
+    public async Task RunAsync_PanelLabel_IsNullOffLight_AndFollowsTheRunsKeywords()
+    {
+        using (var context = OpenWriterContext())
+        {
+            await MakeWriter(context).RunAsync(Filled(
+            [
+                Ingest(@"C:\frames\0.fits"),
+                Ingest(@"C:\frames\a.fits", metadata: Meta("M 31 Panel 3")),
+                Ingest(@"C:\frames\b.fits", metadata: Meta("M 31 Panel 3") with { ImageType = "FLAT" }),
+            ]), null, CancellationToken.None);
+        }
+
+        using (var context = OpenWriterContext())
+        {
+            await new ScanWriter(context, MakeResolver(), null, _warnings.Add, mosaicKeywords: [])
+                .RunAsync(Filled([Ingest(@"C:\frames\c.fits", metadata: Meta("M 31 Panel 3"))]), null, CancellationToken.None);
+        }
+
+        using var read = OpenReadContext();
+        Assert.Equal(
+            new[] { null, (string?)"Panel 3", null, null },
+            read.Images.OrderBy(image => image.FileName).Select(image => image.PanelLabel));
+    }
+
     // ---- volume and identity ------------------------------------------------------
 
     [Fact]
