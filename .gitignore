@@ -32,3 +32,6 @@ repomix-output.*
 repomix.config.json
 .repomixignore
 *.repomix.xml
+docs/design-spec.md
+docs/packaging.md
+docs/release-checklist.md
