@@ -38,15 +38,15 @@
 
   <!-- Ruling Q11's shortcuts. Escape is not here: it closes the drawer when the drawer is open
        and goes back otherwise, and a KeyBinding cannot express that order, so it lives in
-       OnKeyDown.
+       OnKeyDown. Alt+Left is not here either: MainWindow owns Back and Forward for every page
+       (mouse XButton1 and XButton2, Alt+Left and Alt+Right, BrowserBack and BrowserForward).
 
-       These three carry no text-editor guard and cannot be given one from this control, which is
+       These two carry no text-editor guard and cannot be given one from this control, which is
        the phase review's P3-6 left open: F2 while the drawer's notes box has focus begins a rename
        over the user's typing. The code-behind's remarks record what was measured. -->
   <UserControl.KeyBindings>
     <KeyBinding Gesture="Ctrl+D" Command="{Binding ToggleDetailsCommand}" />
     <KeyBinding Gesture="F2" Command="{Binding BeginRenameCommand}" />
-    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
   </UserControl.KeyBindings>
 
   <UserControl.Styles>
@@ -269,11 +269,10 @@
                      MinHeight="90"
                      Text="{Binding Notes.Text, Mode=TwoWay}" />
             <TextBlock Classes="disclosure" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
-            <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+            <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
               <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
-                         TextWrapping="Wrap"
-                         Foreground="{DynamicResource ColorWarning}" />
-            </Border>
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
 
           <!-- Session notes: the lit night's own box (one per member night on a merged card), under

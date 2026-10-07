@@ -250,11 +250,11 @@
 
         <!-- Row 1: the six status lines, which are absent on a healthy page. -->
         <StackPanel Grid.Row="1" Spacing="6" Margin="0,10,0,0">
-          <Border Classes="callout error"
+          <ContentControl Classes="callout error"
                   x:Name="RenameErrorCallout"
                   IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <TextBlock Text="{Binding RenameError}" TextWrapping="Wrap" Foreground="{DynamicResource ColorError}" />
-          </Border>
+            <TextBlock Text="{Binding RenameError}" TextWrapping="Wrap" />
+          </ContentControl>
 
           <TextBlock x:Name="ReResolveStatus"
                      Classes="disclosure"
@@ -270,22 +270,21 @@
 
           <!-- Ruling Q4: a stale group key renders a one-line callout naming the key plus the
                Back button above, never a blank page and never a UI-thread exception. -->
-          <Border Classes="callout warn" x:Name="MissingCallout" IsVisible="{Binding ShowStaleKeyCallout}">
-            <TextBlock Text="{Binding MissingText}" TextWrapping="Wrap" Foreground="{DynamicResource ColorWarning}" />
-          </Border>
+          <ContentControl Classes="callout warn" x:Name="MissingCallout" IsVisible="{Binding ShowStaleKeyCallout}">
+            <TextBlock Text="{Binding MissingText}" TextWrapping="Wrap" />
+          </ContentControl>
 
           <!-- FIXER LIST item 14, ruling Q12: a merged-away target says so and offers the winner.
                A Grid, not a horizontal StackPanel: a StackPanel gives its child infinite width, so
                TextWrapping never fires and a long winner name clips instead of wrapping. -->
-          <Border Classes="callout warn" x:Name="MergedAwayCallout" IsVisible="{Binding IsMergedAway}">
+          <ContentControl Classes="callout warn" x:Name="MergedAwayCallout" IsVisible="{Binding IsMergedAway}">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Grid.Column="0"
                          x:Name="MergedAwayText"
                          Text="{Binding MergedAwayText}"
                          TextWrapping="Wrap"
                          VerticalAlignment="Center"
-                         Margin="0,0,12,0"
-                         Foreground="{DynamicResource ColorWarning}" />
+                         Margin="0,0,12,0" />
               <Button Grid.Column="1"
                       x:Name="OpenMergedIntoButton"
                       Classes="sm"
@@ -293,15 +292,14 @@
                       VerticalAlignment="Center"
                       Command="{Binding OpenMergedIntoCommand}" />
             </Grid>
-          </Border>
+          </ContentControl>
 
-          <Border Classes="callout error"
+          <ContentControl Classes="callout error"
                   x:Name="LoadFailureCallout"
                   IsVisible="{Binding LastFailure, Converter={x:Static ObjectConverters.IsNotNull}}">
             <TextBlock Text="This page could not be loaded. See the log for details."
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorError}" />
-          </Border>
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
       </Grid>
 </UserControl>

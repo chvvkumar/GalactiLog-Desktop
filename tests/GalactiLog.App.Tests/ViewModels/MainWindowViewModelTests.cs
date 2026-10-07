@@ -1248,4 +1248,272 @@ public class MainWindowViewModelTests : IDisposable
         Assert.True(tabs.Library.ConsumeNameRulesInViewRequest());
         shell.Dispose();
     }
+
+    // ---- Mouse back and forward (.planning/mouse-navigation.md) -------------------------------
+    //
+    // The history is a list and a cursor behind BackCommand and ForwardCommand. Every path that
+    // moves the user pushes one entry; applying an entry from Back or Forward pushes nothing.
+
+    [Fact]
+    public void AFreshShell_HasNothingToGoBackOrForwardTo()
+    {
+        var shell = Create();
+
+        Assert.False(shell.CanGoBack);
+        Assert.False(shell.CanGoForward);
+        Assert.False(shell.BackCommand.CanExecute(null));
+        Assert.False(shell.ForwardCommand.CanExecute(null));
+        Assert.Equal(new NavigationEntry("dashboard", DetailKind.None, null, null), shell.CurrentEntry);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void RailClicks_PushEntries_AndBackAndForwardWalkThem()
+    {
+        var shell = Create();
+        var raised = new List<string>();
+        shell.PropertyChanged += (_, e) => raised.Add(e.PropertyName!);
+
+        shell.Selected = shell.Items[2];
+        shell.Selected = shell.Items[4];
+        Assert.True(shell.CanGoBack);
+        Assert.False(shell.CanGoForward);
+        Assert.Contains(nameof(MainWindowViewModel.CanGoBack), raised);
+
+        shell.BackCommand.Execute(null);
+        Assert.Same(shell.Items[2], shell.Selected);
+        Assert.True(shell.CanGoForward);
+
+        shell.BackCommand.Execute(null);
+        Assert.Same(shell.Items[0], shell.Selected);
+        Assert.False(shell.CanGoBack);
+
+        shell.ForwardCommand.Execute(null);
+        Assert.Same(shell.Items[2], shell.Selected);
+        shell.ForwardCommand.Execute(null);
+        Assert.Same(shell.Items[4], shell.Selected);
+        Assert.False(shell.CanGoForward);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void SelectingTheCurrentDestination_PushesNothing()
+    {
+        var shell = Create();
+
+        shell.Selected = shell.Items[0];
+
+        Assert.False(shell.CanGoBack);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void NavigatingAfterBack_DiscardsTheForwardSide()
+    {
+        var shell = Create();
+        shell.Selected = shell.Items[2];
+        shell.BackCommand.Execute(null);
+        Assert.True(shell.CanGoForward);
+
+        shell.Selected = shell.Items[4];
+
+        Assert.False(shell.CanGoForward);
+        shell.BackCommand.Execute(null);
+        Assert.Same(shell.Items[0], shell.Selected);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void Back_FromADetailPage_ClosesIt_AndForwardReopensItFresh()
+    {
+        var (shell, dashboard, built) = CreateRouted();
+        ClickRow(dashboard);
+        Assert.Equal(new NavigationEntry("dashboard", DetailKind.Target, DetailFactory.ResolvedGroupKey, null), shell.CurrentEntry);
+
+        shell.BackCommand.Execute(null);
+        Assert.Null(shell.Detail);
+        Assert.True(built[0].IsDisposed);
+        Assert.Same(shell.Items[0].Page, shell.CurrentPage);
+
+        // Decision 5: a fresh page through the factory, not the disposed one.
+        shell.ForwardCommand.Execute(null);
+        Assert.Equal(2, built.Count);
+        Assert.Same(built[1], shell.Detail);
+        Assert.Equal(DetailFactory.ResolvedGroupKey, built[1].GroupKey);
+        Assert.False(built[1].IsDisposed);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void ThePagesOwnBack_PushesAnEntry_LikeAnyOtherNavigation()
+    {
+        var (shell, dashboard, built) = CreateRouted();
+        ClickRow(dashboard);
+
+        built[0].BackCommand.Execute(null);
+
+        Assert.Null(shell.Detail);
+        Assert.True(shell.CanGoBack);
+        Assert.False(shell.CanGoForward);
+        shell.BackCommand.Execute(null);
+        Assert.IsType<TargetDetailViewModel>(shell.Detail);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void OpeningASecondTarget_IsOneEntry_SoBackReturnsToTheFirst()
+    {
+        var (shell, dashboard, built) = CreateMergedAwayRoute();
+        ClickRow(dashboard);
+        built[0].OpenMergedIntoCommand.Execute(null);
+        Assert.Equal(WinnerKey, built[1].GroupKey);
+
+        shell.BackCommand.Execute(null);
+
+        Assert.Equal(3, built.Count);
+        Assert.Equal(DetailFactory.ResolvedGroupKey, built[2].GroupKey);
+        Assert.Same(built[2], shell.Detail);
+        Assert.True(built[1].IsDisposed);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void ARailClickOverADetail_IsOneEntry_AndBackReopensTheDetail()
+    {
+        var (shell, dashboard, built) = CreateRouted();
+        ClickRow(dashboard);
+
+        shell.Selected = shell.Items[2];
+        shell.BackCommand.Execute(null);
+
+        Assert.Same(shell.Items[0], shell.Selected);
+        Assert.Equal(2, built.Count);
+        Assert.Same(built[1], shell.Detail);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void TargetPageModeSwitch_PushesAnEntry_AndBackRestoresTheModeOnTheSamePage()
+    {
+        var (shell, dashboard, built) = CreateRouted();
+        ClickRow(dashboard);
+
+        built[0].Mode = "CompareNights";
+        Assert.Equal("CompareNights", shell.CurrentEntry!.TabKey);
+
+        shell.BackCommand.Execute(null);
+
+        // The entry names the page already open, so the mode moves and nothing reloads.
+        Assert.Single(built);
+        Assert.Same(built[0], shell.Detail);
+        Assert.Null(built[0].Mode);
+        shell.ForwardCommand.Execute(null);
+        Assert.Equal("CompareNights", built[0].Mode);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void SettingsTabSwitch_PushesAnEntry_AndBackRestoresTheTab()
+    {
+        var settings = TabFactory.CreateSettingsPage();
+        var shell = new MainWindowViewModel(
+            new GeneralSettings(), DashboardViewModelTestFactory.Create(), CreateStatusBar(), settings,
+            CreateStatistics, CreateAnalysis, CreateActivity);
+        shell.Selected = shell.Items[6];
+        Assert.Equal(new NavigationEntry("settings", DetailKind.None, null, settings.Tabs[0].Key), shell.CurrentEntry);
+
+        settings.Selected = settings.Tabs[1];
+        Assert.Equal(settings.Tabs[1].Key, shell.CurrentEntry!.TabKey);
+
+        shell.BackCommand.Execute(null);
+        Assert.Same(settings.Tabs[0], settings.Selected);
+        Assert.Same(shell.Items[6], shell.Selected);
+
+        shell.BackCommand.Execute(null);
+        Assert.Same(shell.Items[0], shell.Selected);
+
+        // A tab moving while Settings is not showing is not a move the user made on screen.
+        settings.Selected = settings.Tabs[2];
+        Assert.True(shell.CanGoForward);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void AnalysisTabSwitch_PushesAnEntry_AndBackRestoresTheTab()
+    {
+        var shell = Create();
+        shell.Selected = shell.Items[3];
+        var page = Assert.IsType<AnalysisViewModel>(shell.CurrentPage);
+        Assert.Equal(page.SelectedTab.Key, shell.CurrentEntry!.TabKey);
+
+        page.SelectedTab = page.Tabs[2];
+        Assert.Equal(page.Tabs[2].Key, shell.CurrentEntry!.TabKey);
+
+        shell.BackCommand.Execute(null);
+        Assert.Same(page.Tabs[0], page.SelectedTab);
+        shell.ForwardCommand.Execute(null);
+        Assert.Same(page.Tabs[2], page.SelectedTab);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public async Task ATargetOpenedFromAMosaic_KeepsTheMosaicInHistory_AndBackReopensItFresh()
+    {
+        var mosaicId = Guid.NewGuid();
+        var target = Guid.NewGuid();
+        var backend = new MosaicsBackend
+        {
+            ListMosaics = () => [new MosaicListRow(mosaicId, "M 31", 0, 0, 0, null, null, [])],
+            Detail = id => new MosaicDetail(id, "M 31", null, 0, 0, 0, null, null, [], [], []),
+        };
+        using var mosaics = new MosaicsPageHarness(backend);
+        var built = new List<MosaicDetailViewModel>();
+        var shell = new MainWindowViewModel(
+            new GeneralSettings(),
+            DashboardViewModelTestFactory.Create(),
+            CreateStatusBar(),
+            TabFactory.CreateSettingsPage(),
+            CreateStatistics,
+            CreateAnalysis,
+            CreateActivity,
+            openDetail: (groupKey, sessionDate) => DetailFactory.Create(groupKey: groupKey, initialSessionDate: sessionDate).Settle().ViewModel,
+            mosaics: () => mosaics.Page,
+            openMosaic: id =>
+            {
+                var page = new MosaicDetailViewModel(id, backend, new GalactiLog.Core.Io.AppWriter(Path.GetTempPath()), post: action => action());
+                built.Add(page);
+                return page;
+            });
+        shell.Selected = shell.Items[1];
+        await mosaics.Page.PendingLoad;
+        shell.OpenMosaic(mosaicId);
+        Assert.Equal(new NavigationEntry("mosaics", DetailKind.Mosaic, mosaicId.ToString(), null), shell.CurrentEntry);
+
+        built[0].RequestOpenTarget(target);
+        Assert.IsType<TargetDetailViewModel>(shell.Detail);
+        Assert.Equal(new NavigationEntry("mosaics", DetailKind.Target, target.ToString(), null), shell.CurrentEntry);
+
+        shell.BackCommand.Execute(null);
+
+        Assert.Equal(2, built.Count);
+        Assert.Same(built[1], shell.Detail);
+        Assert.Equal(mosaicId, built[1].Id);
+        Assert.NotSame(built[0], built[1]);
+        shell.BackCommand.Execute(null);
+        Assert.Null(shell.Detail);
+        Assert.Same(mosaics.Page, shell.CurrentPage);
+        shell.Dispose();
+    }
+
+    [Fact]
+    public void AfterDispose_BackAndForwardMoveNothing()
+    {
+        var shell = Create();
+        shell.Selected = shell.Items[2];
+        shell.Dispose();
+
+        shell.BackCommand.Execute(null);
+
+        Assert.Same(shell.Items[2], shell.Selected);
+    }
 }

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
+using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
@@ -12,6 +13,29 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+
+        // Mouse back and forward (.planning/mouse-navigation.md). Tunnelled so the press reaches
+        // the shell before any page control can take it; only this window listens, so the modal
+        // windows ignore the two buttons. Alt+Left, Alt+Right, BrowserBack and BrowserForward are
+        // the window KeyBindings in the markup.
+        AddHandler(PointerPressedEvent, OnPointerPressedTunnel, RoutingStrategies.Tunnel);
+    }
+
+    private void OnPointerPressedTunnel(object? sender, PointerPressedEventArgs e)
+    {
+        var shell = DataContext as MainWindowViewModel;
+        var command = e.GetCurrentPoint(this).Properties.PointerUpdateKind switch
+        {
+            PointerUpdateKind.XButton1Pressed => shell?.BackCommand,
+            PointerUpdateKind.XButton2Pressed => shell?.ForwardCommand,
+            _ => null,
+        };
+
+        if (command?.CanExecute(null) == true)
+        {
+            command.Execute(null);
+            e.Handled = true;
+        }
     }
 
     /// <summary>

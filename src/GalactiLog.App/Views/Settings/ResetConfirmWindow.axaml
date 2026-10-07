@@ -24,16 +24,11 @@
                  FontWeight="SemiBold"
                  Foreground="{DynamicResource ColorTextPrimary}" />
 
-      <Border x:Name="ClearedPanel"
-              Background="{DynamicResource ColorWarningCalloutFill}"
-              BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="12">
+      <ContentControl x:Name="ClearedPanel"
+                      Classes="callout warn">
         <StackPanel Spacing="6">
           <TextBlock Text="This deletes, permanently:"
-                     FontWeight="SemiBold"
-                     Foreground="{DynamicResource ColorWarning}" />
+                     FontWeight="SemiBold" />
           <ItemsControl x:Name="ClearedList" ItemsSource="{Binding ClearedItems}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="sys:String">
@@ -44,7 +39,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-      </Border>
+      </ContentControl>
 
       <Border x:Name="KeptPanel"
               Background="{DynamicResource ColorBgSurface}"

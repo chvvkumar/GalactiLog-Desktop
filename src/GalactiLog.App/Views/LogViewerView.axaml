@@ -155,15 +155,10 @@
             <StackPanel>
               <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="{Binding Timestamp}" Classes="t-caption" />
-                <!-- The level reads as a token-coloured word rather than a brush on the
-                     view-model, so the colours resolve on the UI thread (TRACKING item 24). The
-                     two classes are bound to the row's own predicates, so Warning, Error and
-                     Fatal are distinguishable at a glance and everything else reads in the
-                     secondary token (review finding M2). -->
+                <!-- The level word names its own severity, so every level reads in the
+                     secondary token and the word alone tells Warning from Information. -->
                 <TextBlock Text="{Binding Level}"
                            Classes="level"
-                           Classes.warn="{Binding IsWarning}"
-                           Classes.error="{Binding IsError}"
                            Width="88" />
                 <TextBlock Text="{Binding SourceContext}" Classes="t-caption" />
               </StackPanel>
@@ -176,22 +171,16 @@
                          TextWrapping="Wrap"
                          Margin="12,2,0,0"
                          IsVisible="{Binding HasException}"
-                         Foreground="{DynamicResource ColorError}" />
+                         Foreground="{DynamicResource ColorTextSecondary}" />
             </StackPanel>
           </DataTemplate>
         </ListBox.ItemTemplate>
         <ListBox.Styles>
-          <!-- Every level colour is a theme token resolved here on the UI thread and never a brush
+          <!-- The level ink is a theme token resolved here on the UI thread and never a brush
                built on a background thread (TRACKING item 24). -->
           <Style Selector="TextBlock.level">
             <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
             <Setter Property="FontWeight" Value="SemiBold" />
-          </Style>
-          <Style Selector="TextBlock.level.warn">
-            <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
-          </Style>
-          <Style Selector="TextBlock.level.error">
-            <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
           </Style>
         </ListBox.Styles>
       </ListBox>

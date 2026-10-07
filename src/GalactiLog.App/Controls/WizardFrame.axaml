@@ -43,13 +43,13 @@
     </ScrollViewer>
 
     <StackPanel Grid.Row="2" Spacing="10" Margin="0,12,0,0">
-      <Border x:Name="StepErrorPanel"
+      <ContentControl x:Name="StepErrorPanel"
               IsVisible="{Binding HasStepError}"
               Classes="callout warn">
         <TextBlock x:Name="StepErrorText"
                    Text="{Binding StepError}"
                    TextWrapping="Wrap" />
-      </Border>
+      </ContentControl>
 
       <!-- Back and Next sit in columns 2 and 3; FooterExtra adds the host's buttons to this grid. -->
       <Grid x:Name="Footer" ColumnDefinitions="Auto,*,Auto,Auto" ColumnSpacing="8">

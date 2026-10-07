@@ -546,6 +546,40 @@ public class ShellNavigationTests : IDisposable
         viewModel.Dispose();
     }
 
+    // Mouse-navigation decision 3: the mouse back button (XButton1) goes back one history entry.
+    // Through the real input stack on the window, which owns the tunnelled handler, so the press
+    // lands on whatever page control is under the pointer first and the shell still gets it.
+    [AvaloniaFact]
+    public void MouseBackButton_ClosesAnOpenDetailPage()
+    {
+        var (window, viewModel, dashboard) = ShowRoutedShell();
+        var contentRegion = window.GetControl<ContentControl>("ContentRegion");
+        dashboard.Targets.OpenTargetCommand.Execute(dashboard.Targets.Rows[0]);
+        Dispatcher.UIThread.RunJobs();
+        Assert.NotNull(viewModel.Detail);
+        // Avalonia.Headless 11.3's MouseDown maps only the left, right and middle buttons and
+        // drops the two side buttons (and its raw input pipeline is internal), so the press is
+        // raised as the routed event the backend would produce. The window's tunnel handler
+        // reads the same PointerUpdateKind either way.
+        var point = contentRegion.TranslatePoint(
+            new Point(contentRegion.Bounds.Width / 2, contentRegion.Bounds.Height / 2), window)!.Value;
+        var pointer = new Pointer(Pointer.GetNextFreeId(), PointerType.Mouse, true);
+        window.RaiseEvent(new PointerPressedEventArgs(
+            window,
+            pointer,
+            window,
+            point,
+            0,
+            new PointerPointProperties(RawInputModifiers.XButton1MouseButton, PointerUpdateKind.XButton1Pressed),
+            KeyModifiers.None));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Null(viewModel.Detail);
+        Assert.Same(viewModel.Items[0].Page, contentRegion.Content);
+
+        viewModel.Dispose();
+    }
+
     [AvaloniaFact]
     public void NavigationColumn_OpensAsANarrowStrip_ExpandsOnRequest_AndKeepsEveryDestination()
     {

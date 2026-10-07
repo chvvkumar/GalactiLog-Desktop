@@ -420,12 +420,12 @@ public sealed class ArrangerViewTests
         saveError.SetValue(mounted.Arranger, ArrangerViewModel.SaveFailedText);
         Settled("failed");
         Assert.Equal(0, mounted.View.FindControl<TextBlock>("SavingCaption")!.Opacity);
-        Assert.Equal(1, mounted.View.FindControl<TextBlock>("SaveFailure")!.Opacity);
-        Assert.Equal(AccessibilityView.Default, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<TextBlock>("SaveFailure")!));
+        Assert.Equal(1, mounted.View.FindControl<ContentControl>("SaveFailureCallout")!.Opacity);
+        Assert.Equal(AccessibilityView.Default, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<ContentControl>("SaveFailureCallout")!));
         saveError.SetValue(mounted.Arranger, null);
         Settled("saved");
-        Assert.Equal(0, mounted.View.FindControl<TextBlock>("SaveFailure")!.Opacity);
-        Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<TextBlock>("SaveFailure")!));
+        Assert.Equal(0, mounted.View.FindControl<ContentControl>("SaveFailureCallout")!.Opacity);
+        Assert.Equal(AccessibilityView.Raw, AutomationProperties.GetAccessibilityView(mounted.View.FindControl<ContentControl>("SaveFailureCallout")!));
         mounted.Arranger.Select(mounted.Arranger.Tiles[0]);
         Settled("selected");
         mounted.Arranger.Select(null);

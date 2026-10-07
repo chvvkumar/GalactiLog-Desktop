@@ -102,7 +102,7 @@ public class DashboardEmptyStateViewTests
         var view = new DashboardView { DataContext = dashboard };
         Show(view);
 
-        var banner = view.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "UnreachableRootBanner");
+        var banner = view.GetVisualDescendants().OfType<ContentControl>().Single(control => control.Name == "UnreachableRootBanner");
         Assert.True(banner.IsEffectivelyVisible);
         Assert.Contains(root, TextsOf(banner));
         Assert.Contains("Library folder not reachable", TextsOf(banner));
@@ -114,7 +114,7 @@ public class DashboardEmptyStateViewTests
         var view = new DashboardView { DataContext = DashboardViewModelTestFactory.Create() };
         Show(view);
 
-        var banner = view.GetVisualDescendants().OfType<Border>().Single(border => border.Name == "UnreachableRootBanner");
+        var banner = view.GetVisualDescendants().OfType<ContentControl>().Single(control => control.Name == "UnreachableRootBanner");
         Assert.False(banner.IsEffectivelyVisible);
     }
 }

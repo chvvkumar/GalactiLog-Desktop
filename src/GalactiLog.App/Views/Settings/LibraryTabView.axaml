@@ -34,7 +34,7 @@
       <!-- The stored document and the on-screen edit differ (review finding I3, and FIXER LIST
            F13 for the first-read case). The edit is not overwritten and not discarded; Revert
            takes the stored values, and the notice says which of the two happened. -->
-      <Border x:Name="StoredValuesNoticeBanner"
+      <ContentControl x:Name="StoredValuesNoticeBanner"
               Classes="callout warn"
               IsVisible="{Binding StoredValuesNotShown}">
         <StackPanel Spacing="4">
@@ -46,7 +46,7 @@
                   HorizontalAlignment="Left"
                   Command="{Binding DismissStoredValuesNoticeCommand}" />
         </StackPanel>
-      </Border>
+      </ContentControl>
 
       <!-- Scan roots (spec 10.1). Port-only: the web has one environment-supplied root. -->
       <Border x:Name="ScanRootsSection"
@@ -81,11 +81,14 @@
                           Padding="10,3"
                           Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveScanRootCommand}"
                           CommandParameter="{Binding}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                             Text="{Binding ErrorText}"
-                             IsVisible="{Binding HasError}"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource ColorError}" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="2"
+                                  IsVisible="{Binding HasError}">
+                    <TextBlock Text="{Binding ErrorText}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -151,11 +154,14 @@
                           Padding="10,3"
                           Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveFilterPathCommand}"
                           CommandParameter="{Binding}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                             Text="{Binding ErrorText}"
-                             IsVisible="{Binding HasError}"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource ColorError}" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="2"
+                                  IsVisible="{Binding HasError}">
+                    <TextBlock Text="{Binding ErrorText}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -220,11 +226,14 @@
                           Padding="10,3"
                           Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveFilterPathCommand}"
                           CommandParameter="{Binding}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                             Text="{Binding ErrorText}"
-                             IsVisible="{Binding HasError}"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource ColorError}" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="2"
+                                  IsVisible="{Binding HasError}">
+                    <TextBlock Text="{Binding ErrorText}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -261,10 +270,8 @@
            condition the Dashboard's copy reads too. It informs and never blocks: nothing here is
            disabled by it and a scan runs with it showing. Review scrolls to the rule editor rather
            than navigating (spec 12.7), which is the code-behind's BringIntoView. -->
-      <Border x:Name="ScanFilterNoticeBanner"
+      <ContentControl x:Name="ScanFilterNoticeBanner"
               Classes="callout"
-              Background="{DynamicResource ColorBgElevated}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
               IsVisible="{Binding ShowScanFilterNotice}">
         <Grid ColumnDefinitions="*,Auto">
           <TextBlock Grid.Column="0"
@@ -279,7 +286,7 @@
                   Padding="10,3"
                   Click="OnReviewScanFilters" />
         </Grid>
-      </Border>
+      </ContentControl>
 
       <!-- Name rules (spec 10.2), the web's six-column editor. -->
       <Border x:Name="NameRulesSection"
@@ -349,11 +356,14 @@
                           Padding="10,3"
                           Command="{Binding #Root.((settings:LibraryTabViewModel)DataContext).RemoveNameRuleCommand}"
                           CommandParameter="{Binding}" />
-                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="6"
-                             Text="{Binding ErrorText}"
-                             IsVisible="{Binding HasError}"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource ColorError}" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="6"
+                                  IsVisible="{Binding HasError}">
+                    <TextBlock Text="{Binding ErrorText}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
                 </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -378,15 +388,15 @@
             <TextBlock x:Name="UnsavedFiltersText"
                        Text="Unsaved"
                        VerticalAlignment="Center"
-                       IsVisible="{Binding IsDirty}"
-                       Foreground="{DynamicResource ColorWarning}" />
+                       IsVisible="{Binding IsDirty}" />
           </StackPanel>
 
-          <TextBlock x:Name="FilterErrorText"
-                     Text="{Binding ErrorMessage}"
-                     IsVisible="{Binding HasErrorMessage}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasErrorMessage}">
+            <TextBlock x:Name="FilterErrorText"
+                       Text="{Binding ErrorMessage}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
           <TextBlock x:Name="FilterStatusText"
                      Text="{Binding StatusMessage}"
                      IsVisible="{Binding HasStatusMessage}"
@@ -452,8 +462,7 @@
             <TextBlock x:Name="VerdictLabelErrorText"
                        Classes="section"
                        Text="{Binding VerdictLabel}"
-                       IsVisible="{Binding !IsIncluded}"
-                       Foreground="{DynamicResource ColorError}" />
+                       IsVisible="{Binding !IsIncluded}" />
             <TextBlock x:Name="VerdictHintText"
                        Text="{Binding VerdictHint}"
                        TextWrapping="Wrap"

@@ -86,11 +86,12 @@
                     IsChecked="{Binding StartWithWindows, Mode=TwoWay}"
                     Foreground="{DynamicResource ColorTextPrimary}" />
           <!-- Spec 12.10: a disabled control says why, rather than greying silently. -->
-          <TextBlock x:Name="StartWithWindowsUnavailableText"
-                     Text="{Binding StartWithWindowsUnavailableReason}"
-                     IsVisible="{Binding HasStartWithWindowsUnavailableReason}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorWarning}" />
+          <ContentControl Classes="callout warn inline"
+                          IsVisible="{Binding HasStartWithWindowsUnavailableReason}">
+            <TextBlock x:Name="StartWithWindowsUnavailableText"
+                       Text="{Binding StartWithWindowsUnavailableReason}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
 
           <CheckBox x:Name="StartMinimizedBox"
                     Content="Start in the notification area"
@@ -162,11 +163,12 @@
         </StackPanel>
       </Border>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorMessage}"
-                 IsVisible="{Binding HasErrorMessage}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding HasErrorMessage}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
       <TextBlock x:Name="StatusText"
                  Text="{Binding StatusMessage}"
                  IsVisible="{Binding HasStatusMessage}"

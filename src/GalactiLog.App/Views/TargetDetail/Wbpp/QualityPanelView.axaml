@@ -117,17 +117,12 @@
       <Setter Property="FontWeight" Value="Medium" />
     </Style>
 
-    <!-- Spec 12.13's verdict word, in the success, warning and error ink. Three classes rather
-         than the band ones, because a verdict is not a deviation and the two must stay separable
-         if either changes. -->
+    <!-- Spec 12.13's verdict word. Only the copy verdict takes an ink (success): the word itself
+         already says "Unmeasured" or "Exclude", so those two carry the inherited ink and no amber
+         or red. A class of its own rather than the band ones, because a verdict is not a deviation
+         and the two must stay separable if either changes. -->
     <Style Selector="TextBlock.verdict-copy">
       <Setter Property="Foreground" Value="{DynamicResource ColorSuccess}" />
-    </Style>
-    <Style Selector="TextBlock.verdict-unmeasured">
-      <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
-    </Style>
-    <Style Selector="TextBlock.verdict-exclude">
-      <Setter Property="Foreground" Value="{DynamicResource ColorError}" />
     </Style>
   </UserControl.Styles>
 
@@ -328,8 +323,6 @@
                            x:Name="VerdictCell"
                            Classes="qcell"
                            Classes.verdict-copy="{Binding IsVerdictCopy}"
-                           Classes.verdict-unmeasured="{Binding IsVerdictUnmeasured}"
-                           Classes.verdict-exclude="{Binding IsVerdictExclude}"
                            Margin="4,0"
                            ToolTip.Tip="{Binding VerdictTooltip}"
                            Text="{Binding VerdictText}" />

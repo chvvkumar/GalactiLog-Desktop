@@ -142,12 +142,10 @@
 
            Shared vocabulary only (questions.md Q2): Border.callout from Theme/Controls.axaml, with
            no style declared here. -->
-      <Border Grid.Row="0"
+      <ContentControl Grid.Row="0"
               x:Name="ScanFilterNoticeBanner"
               Classes="callout"
               Margin="0,0,0,8"
-              Background="{DynamicResource ColorBgElevated}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
               IsVisible="{Binding ShowScanFilterNotice}">
         <StackPanel Spacing="4">
           <TextBlock x:Name="ScanFilterNoticeText"
@@ -159,7 +157,7 @@
                   HorizontalAlignment="Left"
                   Command="{Binding ReviewScanFiltersCommand}" />
         </StackPanel>
-      </Border>
+      </ContentControl>
 
       <!-- Banners, above the list region and never in place of it: spec 12.10 says an unreachable
            root renders as a warning banner "not as a silent empty list", so whatever rows the
@@ -167,18 +165,14 @@
       <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,8">
         <!-- Phase 20: the Border.callout composite DESIGN.md section 4 names for exactly this
              pair, the same one the scan filter notice above and the session pane's status lines
-             already use. The warning tokens stay where they are and the padding is unchanged; the
-             radius and the local thickness come from the class. -->
-        <Border x:Name="UnreachableRootBanner"
-                Classes="callout"
+             already use. The warn and error arms carry the label; the padding is this view's own. -->
+        <ContentControl x:Name="UnreachableRootBanner"
+                Classes="callout warn"
                 IsVisible="{Binding HasUnreachableRoots}"
-                Padding="12,8"
-                Background="{DynamicResource ColorWarningCalloutFill}"
-                BorderBrush="{DynamicResource ColorWarningCalloutBorder}">
+                Padding="12,8">
           <StackPanel Spacing="4">
             <TextBlock Text="Library folder not reachable"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource ColorWarning}" />
+                       FontWeight="SemiBold" />
             <ItemsControl ItemsSource="{Binding UnreachableRoots}">
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="sys:String">
@@ -195,25 +189,22 @@
                     HorizontalAlignment="Left"
                     Command="{Binding DismissUnreachableRootsCommand}" />
           </StackPanel>
-        </Border>
+        </ContentControl>
 
-        <Border x:Name="QueryFailureBanner"
-                Classes="callout"
+        <ContentControl x:Name="QueryFailureBanner"
+                Classes="callout error"
                 IsVisible="{Binding HasFailure}"
-                Padding="12,8"
-                Background="{DynamicResource ColorErrorCalloutFill}"
-                BorderBrush="{DynamicResource ColorErrorCalloutBorder}">
+                Padding="12,8">
           <StackPanel Spacing="4">
             <TextBlock Text="{Binding FailureText}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorError}" />
+                       TextWrapping="Wrap" />
             <Button x:Name="FailureDismissButton"
                     Content="Dismiss"
                     Padding="10,3"
                     HorizontalAlignment="Left"
                     Command="{Binding DismissFailureCommand}" />
           </StackPanel>
-        </Border>
+        </ContentControl>
       </StackPanel>
 
       <!-- The target list (Task 7) and, in its place, spec 12.10's empty states (Task 8).

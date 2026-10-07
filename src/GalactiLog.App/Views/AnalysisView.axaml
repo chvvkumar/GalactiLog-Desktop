@@ -47,10 +47,10 @@
         <!-- Spec 12.14's mixed plate scale warning: the warning callout composite of the control
              vocabulary, above the chart and inside the tab body. Not a caption and not tertiary
              ink. The sentence is the base's one constant and is never respelled here. -->
-        <Border Classes="callout warn" IsVisible="{Binding PlateScaleWarningVisible}">
+        <ContentControl Classes="callout warn" IsVisible="{Binding PlateScaleWarningVisible}">
           <TextBlock Text="{x:Static analysis:AnalysisTabViewModel.PlateScaleWarningText}"
                      TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
         <StackPanel Orientation="Horizontal"
                     Spacing="8"
                     IsVisible="{Binding StatusLine, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -189,13 +189,12 @@
           <!-- Spec 12.14's reversed range: the sentence UNDER the two fields, both fields in the
                error ink, and no query on any tab. The refusal to query is SharedFilterViewModel's
                own rule and not this markup's; this is only the half the reader sees. -->
-          <Border x:Name="DateRangeError"
+          <ContentControl x:Name="DateRangeError"
                   Classes="callout error"
                   IsVisible="{Binding SharedFilter.HasError}">
             <TextBlock Text="{x:Static analysis:SharedFilterViewModel.RangeErrorText}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorError}" />
-          </Border>
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
 
         <!-- The tab strip, its own part below the filter card. Five plain Button.sm, and the

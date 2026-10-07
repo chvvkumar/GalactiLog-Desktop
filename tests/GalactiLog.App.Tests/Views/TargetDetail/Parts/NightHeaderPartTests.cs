@@ -84,7 +84,7 @@ public class NightHeaderPartTests
 
         // The failure is on the part, not swallowed and not a blank page: the night header still
         // renders because it never needed the query.
-        Assert.True(part.Named<Border>("FailureCallout").IsVisible);
+        Assert.True(part.Named<ContentControl>("FailureCallout").IsVisible);
         Assert.Contains("Night of 2025-12-07", VisibleTexts(part));
     }
 

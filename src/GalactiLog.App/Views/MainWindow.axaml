@@ -16,6 +16,14 @@
        control in the window inherits it and every relative size scales. Scales.axaml's FontSize*
        keys stay ratios and nothing binds one to a FontSize; a control that needs a tier
        multiplies the inherited size by the ratio (questions.md Q24). -->
+  <!-- Browser-style history (.planning/mouse-navigation.md): the one owner of Back and Forward
+       for every page, beside the code-behind's mouse XButton1 and XButton2 handler. -->
+  <Window.KeyBindings>
+    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
+    <KeyBinding Gesture="BrowserBack" Command="{Binding BackCommand}" />
+    <KeyBinding Gesture="Alt+Right" Command="{Binding ForwardCommand}" />
+    <KeyBinding Gesture="BrowserForward" Command="{Binding ForwardCommand}" />
+  </Window.KeyBindings>
   <Grid RowDefinitions="*,Auto" ColumnDefinitions="Auto,*">
     <!-- The rail collapses to a 48px strip on the chevron: the item labels hide and each
          destination shows its icon with its title as a tooltip. Width is bound rather than

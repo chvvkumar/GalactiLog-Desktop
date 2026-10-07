@@ -164,17 +164,13 @@
                      TextWrapping="Wrap"
                      Foreground="{DynamicResource ColorTextTertiary}" />
 
-          <Border x:Name="GroupsChangedElsewhereBanner"
+          <ContentControl x:Name="GroupsChangedElsewhereBanner"
+                  Classes="callout warn"
                   IsVisible="{Binding GroupsChangedElsewhere}"
-                  Background="{DynamicResource ColorWarningCalloutFill}"
-                  BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
-                  BorderThickness="1"
-                  CornerRadius="{StaticResource RadiusSm}"
                   Padding="12,8">
             <TextBlock Text="The stored metric visibility changed elsewhere. Revert to load it; saving now keeps what is on screen."
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorWarning}" />
-          </Border>
+                       TextWrapping="Wrap" />
+          </ContentControl>
 
           <ItemsControl x:Name="GroupList" ItemsSource="{Binding Groups}">
             <ItemsControl.ItemTemplate>
@@ -360,11 +356,12 @@
         </StackPanel>
       </Border>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorMessage}"
-                 IsVisible="{Binding HasErrorMessage}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding HasErrorMessage}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
       <TextBlock x:Name="StatusText"
                  Text="{Binding StatusMessage}"
                  IsVisible="{Binding HasStatusMessage}"

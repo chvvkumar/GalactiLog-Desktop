@@ -70,4 +70,31 @@ public class MosaicDetailViewTests
         Assert.Equal(MosaicDetailViewModel.NoFramesTooltip, ToolTip.GetTip(composite));
         window.Close();
     }
+
+    // Mouse-navigation decision 4: a history Back reopening a deleted mosaic shows the not-found
+    // callout and Back, with the notes, the arranger, the splitter and the sessions region hidden.
+    [AvaloniaFact]
+    public async Task ADeletedMosaic_ShowsTheNotFoundCallout_AndHidesTheRegions()
+    {
+        var mosaic = new FakeMosaic { Deleted = true };
+        using var page = new MosaicDetailViewModel(
+            mosaic.Id, mosaic.Backend(), new AppWriter(Path.GetTempPath()), post: action => action());
+        await page.PendingLoad;
+
+        var view = new MosaicDetailView { DataContext = page };
+        var window = new Window { Width = 1280, Height = 720, Content = view };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(page.IsNotFound);
+        var callout = view.FindControl<ContentControl>("NotFoundCallout")!;
+        Assert.True(callout.IsEffectivelyVisible);
+        Assert.Contains(MosaicDetailViewModel.NotFoundText,
+            callout.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+        Assert.False(Assert.Single(view.GetVisualDescendants().OfType<ArrangerView>()).IsEffectivelyVisible);
+        Assert.False(view.FindControl<GridSplitter>("ArrangerSplitter")!.IsEffectivelyVisible);
+        Assert.False(view.FindControl<ScrollViewer>("SessionsScroller")!.IsEffectivelyVisible);
+        Assert.False(view.FindControl<TextBox>("NotesBox")!.IsEffectivelyVisible);
+        window.Close();
+    }
 }

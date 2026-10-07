@@ -182,27 +182,23 @@
           </StackPanel>
 
           <!-- A failed render leaves a message and a Retry, the port of preview.py's 500. -->
-          <Border x:Name="ErrorPanel"
+          <ContentControl x:Name="ErrorPanel"
+                  Classes="callout error"
                   IsVisible="{Binding HasError}"
                   HorizontalAlignment="Center"
                   VerticalAlignment="Center"
-                  Background="{DynamicResource ColorErrorCalloutFill}"
-                  BorderBrush="{DynamicResource ColorErrorCalloutBorder}"
-                  BorderThickness="1"
-                  CornerRadius="{StaticResource RadiusMd}"
                   Padding="16">
             <StackPanel Spacing="8">
               <TextBlock x:Name="ErrorText"
                          Text="{Binding ErrorText}"
-                         TextWrapping="Wrap"
-                         Foreground="{DynamicResource ColorError}" />
+                         TextWrapping="Wrap" />
               <Button x:Name="RetryButton"
                       Content="Retry"
                       HorizontalAlignment="Center"
                       Padding="14,4"
                       Command="{Binding RetryCommand}" />
             </StackPanel>
-          </Border>
+          </ContentControl>
         </Panel>
       </Border>
 

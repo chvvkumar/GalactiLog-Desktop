@@ -1,6 +1,3 @@
-using Avalonia.Headless.XUnit;
-using Avalonia.Media.Immutable;
-using GalactiLog.App.Theme;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Activity;
@@ -586,7 +583,7 @@ public class ActivityViewModelTests
     }
 
     [Fact]
-    public void Row_SeverityBrushes_AreImmutableSolidColorBrushes()
+    public void Row_SeverityGlyphs_AreDistinct_AndTitledByTheRawSeverity()
     {
         using var page = Factory.Create(page: (_, _, _) => Factory.Page(
         [
@@ -595,9 +592,7 @@ public class ActivityViewModelTests
             Factory.Row(3, severity: "error"),
         ]));
 
-        Assert.All(page.Rows, row => Assert.IsType<ImmutableSolidColorBrush>(row.SeverityBrush));
-
-        // Three distinct glyphs, and the icon's tooltip is the raw severity string.
+        // The glyph and its tooltip carry the severity on their own: the row holds no brush.
         Assert.Equal(3, page.Rows.Select(row => row.SeverityGlyph).Distinct().Count());
         Assert.Equal(["info", "warning", "error"], page.Rows.Select(row => row.SeverityTitle));
     }
@@ -918,46 +913,6 @@ public class ActivityViewModelTests
         Assert.False(row.IsExpandable);
         Assert.Null(row.Details);
         Assert.False(row.IsDetailsExpanded);
-    }
-
-    // Review finding 4: every other theme-brush holder in the application rebuilds on
-    // ChartTheme.Changed, so the severity glyphs repaint with the text around them.
-    [AvaloniaFact]
-    public void ThemeChange_RebuildsTheSeverityBrushes_AndRaisesOnTheRows()
-    {
-        ChartTheme.Apply();
-        using var page = Factory.Create(page: (_, _, _) => Factory.WithChildren(
-            Factory.Row(2, "A file was rejected", severity: "warning", parentId: 1)));
-        var row = page.Rows.Single();
-        row.ToggleChildrenCommand.Execute(null);
-        var child = row.Children.Single();
-
-        var raised = new List<string?>();
-        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
-        var childRaised = new List<string?>();
-        child.PropertyChanged += (_, e) => childRaised.Add(e.PropertyName);
-
-        ChartTheme.Apply();
-
-        Assert.Contains(nameof(ActivityRowViewModel.SeverityBrush), raised);
-        Assert.Contains(nameof(ActivityRowViewModel.ChildAlertBrush), raised);
-        Assert.Contains(nameof(ActivityRowViewModel.SeverityBrush), childRaised);
-        Assert.IsType<ImmutableSolidColorBrush>(row.SeverityBrush);
-    }
-
-    [AvaloniaFact]
-    public void Dispose_UnsubscribesFromTheThemeChange()
-    {
-        ChartTheme.Apply();
-        var page = Factory.Create();
-        var row = page.Rows.Single();
-        var raised = 0;
-        row.PropertyChanged += (_, _) => raised++;
-
-        page.Dispose();
-        ChartTheme.Apply();
-
-        Assert.Equal(0, raised);
     }
 
     // Review finding 13: a slow load landing after a filter change must not overwrite the newer
