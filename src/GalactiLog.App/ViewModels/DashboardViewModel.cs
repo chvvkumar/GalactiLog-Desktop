@@ -215,6 +215,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
             aliases: aliases);
         Targets.Changed += OnTargetsChanged;
         Targets.TargetOpened += OnTargetOpened;
+        Targets.MosaicOpened += OnMosaicOpened;
 
         // Spec 12.2's list must reflect what a scan just ingested. ScanStatusService has already
         // marshalled this onto the UI thread (Task 5) -- do not post again.
@@ -290,7 +291,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// would otherwise render the strip. The bound governs what the application decides by itself,
     /// on load and on resize; a gesture the user makes in the window in front of them wins, because
     /// the alternative is a chevron that toggles a stored flag and changes nothing on screen, which
-    /// reads as a broken button, with the filters unreachable at every window below about 1196
+    /// reads as a broken button, with the filters unreachable at every window below about 1198
     /// pixels, the shipped 1024 minimum included.</summary>
     /// <remarks>
     /// A view flag and nothing else: it is never read from the document, never written to it, and
@@ -657,6 +658,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
     private void OnTargetOpened(object? sender, TargetOpenRequest request) => TargetOpened?.Invoke(this, request);
 
+    /// <summary>Re-raises the target list's mosaic link click (spec 12.2, Phase 18) for the shell,
+    /// on the same terms as <see cref="TargetOpened"/>.</summary>
+    public event EventHandler<Guid>? MosaicOpened;
+
+    private void OnMosaicOpened(object? sender, Guid mosaicId) => MosaicOpened?.Invoke(this, mosaicId);
+
     /// <summary>
     /// Spec 12.10's Run Scan button, on the "No frames catalogued yet" state. Progress is already
     /// rendered by the status bar (Task 5); this button shows none of its own.
@@ -858,6 +865,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         RequestQuery();
     }
 
+    /// <summary>A mosaic write committed somewhere else in the application (accept, delete, the
+    /// Create mosaic dialog, a removed night or panel). The listing query carries spec 12.2's
+    /// mosaic links, so the page re-runs it, debounced, as it does after a scan. Called on the UI
+    /// thread by the composition root's own route.</summary>
+    internal void RefreshMosaicLinks() => RequestQuery();
+
     private void OnScanFinished(object? sender, EventArgs e)
     {
         // A root that came back (or went away) since the last scan is picked up here, which is
@@ -947,6 +960,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Filters.SearchTextChanged -= OnSearchTextChanged;
         Targets.Changed -= OnTargetsChanged;
         Targets.TargetOpened -= OnTargetOpened;
+        Targets.MosaicOpened -= OnMosaicOpened;
         if (_scanStatus is not null)
         {
             _scanStatus.ScanFinished -= OnScanFinished;

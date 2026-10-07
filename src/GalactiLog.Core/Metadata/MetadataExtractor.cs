@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using System.Text.RegularExpressions;
 using GalactiLog.Core.Fits;
+using GalactiLog.Core.Mosaics;
 using GalactiLog.Core.Xisf;
 
 namespace GalactiLog.Core.Metadata;
@@ -263,6 +264,31 @@ public static class MetadataExtractor
         var arcsecPerPixel = Units.ArcsecPerPixel(xpixsz, focallen);
         if (arcsecPerPixel is not null) provenance.Set("arcsec_per_pixel", "XPIXSZ+FOCALLEN");
 
+        // 14a. ra_deg, dec_deg and width_px (Phase 18, spec 7.1): the coordinate rule lives in
+        // SkyCoordinates so the detection backfill (spec 7.7 step 0) applies the same one.
+        string? CardText(string kw) => lookup(kw) switch
+        {
+            string str => str,
+            long l => l.ToString(CultureInfo.InvariantCulture),
+            double d => d.ToString(CultureInfo.InvariantCulture),
+            _ => null,
+        };
+        var position = SkyCoordinates.FramePosition(CardText("RA"), CardText("DEC"), CardText("OBJCTRA"), CardText("OBJCTDEC"));
+        if (position is { } pos)
+        {
+            provenance.Set("ra_deg", pos.RaSource);
+            provenance.Set("dec_deg", pos.DecSource);
+        }
+        // NAXIS1 only, as a base-10 integer greater than zero; no NAXIS2 fallback (ruling R10).
+        var naxis1 = lookup("NAXIS1");
+        int? widthPx = naxis1 switch
+        {
+            long l when l is > 0 and <= int.MaxValue => (int)l,
+            string str when int.TryParse(str.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var w) && w > 0 => w,
+            _ => null,
+        };
+        if (widthPx is not null) provenance.Set("width_px", "NAXIS1");
+
         // 15. capture_date, spec 7.1.2. An empty/whitespace-only value is treated as
         // absent, matching Python's `if date_obs:` truthiness check - no warning.
         string? captureDate = null;
@@ -300,6 +326,9 @@ public static class MetadataExtractor
             EccentricitySource = eccentricitySource,
             AltitudeDeg = altitudeDeg,
             ArcsecPerPixel = arcsecPerPixel,
+            RaDeg = position?.RaDeg,
+            DecDeg = position?.DecDeg,
+            WidthPx = widthPx,
             CaptureDate = captureDate,
             RawHeaders = rawHeaders,
             Provenance = provenance.Snapshot(),

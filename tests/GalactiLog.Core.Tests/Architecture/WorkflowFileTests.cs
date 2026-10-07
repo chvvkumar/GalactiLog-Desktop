@@ -18,6 +18,7 @@ public class WorkflowFileTests
     private const string BuildTestFile = "build-test.yml";
     private const string ReleaseFile = "release.yml";
     private const string BranchPolicyFile = "branch-merge-policy.yml";
+    private const string PrDescriptionFile = "pr-description.yml";
     private const string SelfHostedRunner = "runs-on: [self-hosted, Windows, X64]";
     private const string GitBashPathStep = "name: Put Git Bash on the path\n shell: cmd";
 
@@ -159,8 +160,8 @@ public class WorkflowFileTests
         AssertAscendingOrder(
             content,
             "release.yml step order (spec 17.5): checkout, fetch tags, setup-dotnet, derive " +
-            "version, test, publish, install vpk, download previous release, pack, tag, upload, " +
-            "notes, prune",
+            "version, test, publish, install vpk, download previous release, write release notes, " +
+            "pack, tag, upload, generate notes, prune",
             "actions/checkout@v4",
             "name: Fetch tags",
             "actions/setup-dotnet@v4",
@@ -169,6 +170,7 @@ public class WorkflowFileTests
             "name: Publish",
             "name: Install vpk",
             "name: Download previous release",
+            "name: Write release notes",
             "name: Pack",
             "name: Tag release",
             "name: Upload to GitHub Releases",
@@ -208,7 +210,7 @@ public class WorkflowFileTests
         var content = ReadNormalized(ReleaseFile);
         AssertAscendingOrder(
             content,
-            "release.yml spec 17.5 step 9: the tag is pushed only after a successful pack",
+            "release.yml spec 17.5 step 10: the tag is pushed only after a successful pack",
             "name: Pack",
             "name: Tag release");
     }
@@ -223,10 +225,10 @@ public class WorkflowFileTests
     [Fact]
     public void Release_HasNoGhReleaseCreate()
     {
-        // spec 17.5: "There is no gh release create anywhere in the workflow." Scans all three
+        // spec 17.5: "There is no gh release create anywhere in the workflow." Scans all four
         // files, not just release.yml: a stray gh release create in any of them would create a
         // second, competing release for the same tag.
-        foreach (var file in new[] { BuildTestFile, ReleaseFile, BranchPolicyFile })
+        foreach (var file in new[] { BuildTestFile, ReleaseFile, BranchPolicyFile, PrDescriptionFile })
         {
             var content = ReadNormalized(file);
             Assert.True(
@@ -246,29 +248,53 @@ public class WorkflowFileTests
     [Fact]
     public void Release_GeneratesNotesByEditingTheVpkCreatedRelease()
     {
-        // Inverts the former Release_HasNoGenerateNotesFlag (CI review 2026-09-25 item 8). That
-        // pin guarded against gh release create, whose --generate-notes flag would have made a
-        // second release; gh release edit runs against the release vpk already created, so notes
-        // are generated without a second create. The runner's gh has no --generate-notes on edit,
-        // so the body comes from the generate-notes API endpoint through --notes-file -.
+        // spec 17.5 step 12: gh release edit runs against the release vpk upload already created,
+        // so nothing here creates a second one. The body is the file the Write release notes step
+        // wrote and vpk pack embedded, so the GitHub release and the About tab show the same
+        // text. GitHub's generated notes are gone: neither the generate-notes endpoint nor the
+        // --generate-notes flag may come back, or the two would drift apart.
         var raw = ReadRaw(ReleaseFile);
         var block = NormalizeContent(ExtractStepBlock(raw, "name: Generate release notes"));
-        Assert.Contains("releases/generate-notes", block);
         Assert.Contains("gh release edit \"${{ steps.version.outputs.version }}\"", block);
-        Assert.Contains("--notes-file -", block);
+        Assert.Contains("--notes-file \"${{ runner.temp }}/release-notes.md\"", block);
+        Assert.DoesNotContain("releases/generate-notes", block);
         Assert.DoesNotContain("--generate-notes", block);
     }
 
     [Fact]
-    public void Release_PruneKeepsTwoAlphaTwoRcAndFiveStable()
+    public void Release_WritesNotesBeforePack_AndPackEmbedsTheSameFile()
+    {
+        // spec 17.5 steps 8 and 9: vpk pack --releaseNotes is what fills VelopackAsset.NotesMarkdown,
+        // which the About tab shows, so the notes file must exist before the pack and the pack
+        // must read the path the script wrote. Step-scoped: the key and the file path must sit
+        // in the Write release notes block, and the --releaseNotes flag in the Pack block.
+        var raw = ReadRaw(ReleaseFile);
+        var writeBlock = NormalizeContent(ExtractStepBlock(raw, "name: Write release notes"));
+        Assert.Contains("actions/github-script@v7", writeBlock);
+        Assert.Contains("release-notes.js", writeBlock);
+        Assert.Contains("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}", writeBlock);
+        Assert.Contains("NOTES_FILE: ${{ runner.temp }}/release-notes.md", writeBlock);
+
+        var packBlock = NormalizeContent(ExtractStepBlock(raw, "name: Pack"));
+        Assert.Contains("--releaseNotes \"${{ runner.temp }}/release-notes.md\"", packBlock);
+
+        AssertAscendingOrder(
+            NormalizeContent(raw),
+            "release.yml spec 17.5 step 8 precedes step 9: the notes file must exist before vpk pack embeds it",
+            "name: Write release notes",
+            "name: Pack");
+    }
+
+    [Fact]
+    public void Release_PruneKeepsOneAlphaOneRcAndTenStable()
     {
         var content = ReadNormalized(ReleaseFile);
-        // The full call, not the bare "alpha 2" / "rc 2" substrings: a bare substring would also
+        // The full call, not the bare "alpha 1" / "rc 1" substrings: a bare substring would also
         // be satisfied by a comment containing those words while the actual invocation carried
         // different numbers.
-        Assert.Contains("prune_prerelease alpha 2", content);
-        Assert.Contains("prune_prerelease rc 2", content);
-        Assert.Contains("tail -n +6", content);
+        Assert.Contains("prune_prerelease alpha 1", content);
+        Assert.Contains("prune_prerelease rc 1", content);
+        Assert.Contains("tail -n +11", content);
     }
 
     [Fact]
@@ -387,23 +413,65 @@ public class WorkflowFileTests
     }
 
     // ---------------------------------------------------------------------------------------
-    // All three files
+    // pr-description.yml
     // ---------------------------------------------------------------------------------------
 
     [Fact]
-    public void Workflows_AreExactlyTheThreeSpecFiles()
+    public void PrDescription_TriggersOnPullRequestEventsToDevAndMain_AndNotOnPush()
+    {
+        // spec 17.5: the description is rewritten when the PR opens or its head moves; a push
+        // trigger would run it with no pull request in the payload.
+        var content = ReadNormalized(PrDescriptionFile);
+        Assert.Contains("pull_request:\n types: [opened, synchronize, reopened]\n branches: [dev, main]", content);
+        Assert.DoesNotContain("push:", content);
+    }
+
+    [Fact]
+    public void PrDescription_PermissionsAreContentsReadAndPullRequestsWrite()
+    {
+        // The job edits the PR title and body and nothing else; contents stays read-only.
+        var content = ReadNormalized(PrDescriptionFile);
+        Assert.Contains("permissions:\n contents: read\n pull-requests: write", content);
+    }
+
+    [Fact]
+    public void PrDescription_ConcurrencyIsPerPullRequest_AndCancelsInProgress()
+    {
+        // Only the newest push's description is worth writing, so the older run is cancelled.
+        var content = ReadNormalized(PrDescriptionFile);
+        Assert.Contains("concurrency:\n group: pr-description-${{ github.event.pull_request.number }}\n cancel-in-progress: true", content);
+    }
+
+    [Fact]
+    public void PrDescription_JobIsASingleGithubScriptStep_WithNoShellStep()
+    {
+        // The runner's bundled node runs the script, so there is no bash, cmd or powershell step
+        // and the Git Bash path step is not needed here.
+        var content = ReadNormalized(PrDescriptionFile);
+        Assert.Contains("actions/github-script@v7", content);
+        Assert.Contains("pr-description.js", content);
+        Assert.Contains("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}", content);
+        Assert.DoesNotContain("shell:", content);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // All four files
+    // ---------------------------------------------------------------------------------------
+
+    [Fact]
+    public void Workflows_AreExactlyTheFourSpecFiles()
     {
         var repoRoot = FindRepoRoot();
         var workflowsDir = Path.Combine(repoRoot, ".github", "workflows");
         // The full directory listing, not just "*.yml": GitHub Actions also runs a ".yaml"
-        // workflow, so a *.yml-only enumeration would let a fourth file with that extension
+        // workflow, so a *.yml-only enumeration would let a fifth file with that extension
         // appear silently, defeating the point of this test.
         var actual = Directory.EnumerateFiles(workflowsDir)
             .Select(Path.GetFileName)
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
-        var expected = new[] { BranchPolicyFile, BuildTestFile, ReleaseFile }
+        var expected = new[] { BranchPolicyFile, BuildTestFile, ReleaseFile, PrDescriptionFile }
             .OrderBy(name => name, StringComparer.Ordinal)
             .ToArray();
 
@@ -413,7 +481,7 @@ public class WorkflowFileTests
     [Fact]
     public void Workflows_EveryJobRunsOnTheSelfHostedWindowsRunner()
     {
-        foreach (var file in new[] { BuildTestFile, ReleaseFile, BranchPolicyFile })
+        foreach (var file in new[] { BuildTestFile, ReleaseFile, BranchPolicyFile, PrDescriptionFile })
         {
             var content = ReadNormalized(file);
             var jobs = Regex.Matches(content, "runs-on:").Count;
@@ -440,6 +508,23 @@ public class WorkflowFileTests
                 $"{file}: the Git Bash path step must precede the first bash step",
                 GitBashPathStep,
                 "shell: bash");
+        }
+    }
+
+    [Fact]
+    public void GeminiScripts_ExistAndCarryNoDashPunctuationOrEmoji()
+    {
+        // The project rule is no em dashes, no en dashes and no emojis in anything shipped, and
+        // these files carry the prompts that say so. A character above U+FFFF is a surrogate pair
+        // in .NET strings, which is where every emoji lives.
+        var scriptsDir = Path.Combine(FindRepoRoot(), ".github", "scripts");
+        foreach (var name in new[] { "gemini.js", "pr-description.js", "release-notes.js" })
+        {
+            var path = Path.Combine(scriptsDir, name);
+            Assert.True(File.Exists(path), $"script not found: {path}");
+            var text = File.ReadAllText(path);
+            Assert.True(!text.Contains('\u2013') && !text.Contains('\u2014'), $"{name} contains an en dash or em dash");
+            Assert.True(!text.Any(char.IsSurrogate), $"{name} contains a character above U+FFFF (an emoji)");
         }
     }
 

@@ -788,6 +788,87 @@ public static class HelpTopics
             + "by path. A cancelled or stopped copy lists the files it left part written. Running "
             + "the same export again fills in only what is missing. Save report writes these lists "
             + "to a text file."),
+
+        // Phase 18 Task 4: the Mosaics page's four glyphs (spec 12.12, 12.17).
+        new("mosaics.about", "Mosaics",
+            "A mosaic collects the panels of one large field, each panel a set of nights from any "
+            + "target. It totals the integration of each panel so you can see which one needs more "
+            + "time. Suggestions come from Run Detection and from every scan, and Create mosaic makes "
+            + "one by hand. Only light frames are counted."),
+
+        new("mosaics.keywords", "Detection keywords",
+            "A keyword is a word that introduces a panel number in a target's name, such as Panel "
+            + "in \"M 31 Panel 2\" or P in \"NGC 7000 P3\". Detection reads these tokens to group targets "
+            + "into suggested mosaics, and the position tolerance sets how close two panels must sit "
+            + "on the sky. A change applies to your frames at the next Run Detection or scan, not at "
+            + "once."),
+
+        new("mosaics.suggestions", "Suggestions",
+            "Each suggestion is a group of targets that look like panels of one mosaic, found by "
+            + "name, by sky position or by both. High confidence means name and position agree; low "
+            + "means review the notes before accepting. The source badge says which signal found it. "
+            + "Accept creates the mosaic from the checked panels. Dismiss asks twice, and a dismissed "
+            + "suggestion comes back only when new nights of its panels are catalogued."),
+
+        new("mosaics.table", "Mosaics table",
+            "Every mosaic with its panel count, integration, frames and date range, counting light "
+            + "frames only. A header click on a built-in column sorts by it and a second click reverses it, "
+            + "and the choice is kept for your next visit; a custom column's header does not sort. The column picker chooses which columns show, "
+            + "including your own mosaic columns. Expand renames the mosaic and edits its panels, and "
+            + "Delete asks twice before it removes the mosaic and its panels. No frame is ever "
+            + "touched."),
+
+        // Phase 18 Task 5: the mosaic detail page's four glyphs (spec 12.12, 12.17).
+        new("mosaic.about", "Mosaic",
+            "This mosaic's panels and the nights that count toward each. The summary line gives the "
+            + "panel count, the total integration and the total frames, and each panel row shows its "
+            + "own figures. The Deficit column shows how far a panel's integration is behind the "
+            + "leading panel, the one with the most, as a time such as 2h 10m behind. The figures "
+            + "count only included nights."),
+
+        new("mosaic.notes", "Notes",
+            "Free-form notes about this mosaic. They are saved a second after you stop typing, and "
+            + "an emptied box clears the note. They are yours, and no figure on "
+            + "this page is derived from them."),
+
+        new("mosaic.labels", "New panel labels",
+            "A panel label is the label carried by a target's frames, such as Panel 2. This banner "
+            + "lists labels found on this mosaic's targets that no panel of the mosaic has yet. Their "
+            + "frames count nowhere until you add a panel for the label. "
+            + "Add panel creates it and includes the nights that carry "
+            + "the label."),
+
+        // Phase 19A Task 5: the arranger's glyph (spec 12.12, 12.17).
+        new("mosaic.arranger", "Panels",
+            "Each tile is one panel's best frame in the chosen filter, with its label, its integration and, when it trails the leading panel, a deficit badge in the success colour under 20 percent behind, warning from 20 to 60, error at 60 or more. A panel with no frame in the filter reads, for example, No Ha frames. "
+            + "Drag a tile to place it, or select one and use Rotate CW or Flip H, or right-click it. "
+            + "Fit, zoom and the wheel change the view, the Rotation slider turns the whole group, and Reset all clears every tile's rotation and flip and the group rotation, leaving positions as they are. "
+            + "Positions, rotation, flip and the group rotation are saved a moment after your last change, with Saving shown, and tile opacity, zoom, Labels and the filter are not, and the layout is for the eye only and "
+            + "changes no figure and no composite."),
+
+        // Phase 19B Task 5: the composite lightbox's glyph (spec 12.12, 12.17).
+        new("mosaic.composite", "Composite",
+            "The composite places every panel's best frame in the chosen filter by its recorded sky position and camera angle, not by the arranger's layout, so it shows how the panels fit together on the sky. "
+            + "A panel with no frame in the filter, or with no recorded position, is left out and named under the image. "
+            + "The composite builds once and is kept while the application runs, so reopening it is instant. "
+            + "Download saves the image shown as a JPEG at a path you choose and writes nothing else. "
+            + "The build runs in the status bar's job list, and closing the window cancels it."),
+
+        new("mosaic.sessions", "Panels and nights",
+            "Each panel counts a night as Included, and lists the other nights of its targets as "
+            + "Available. A night is one target, one date and one frame label, and that triple counts "
+            + "in only one panel of a mosaic. Include and Remove move a night between the two lists. "
+            + "As new panel moves an available night into a panel of its own, and Add nights from any "
+            + "target makes another target's nights available to include (it writes Available rows; "
+            + "Include still takes them). Delete panel asks twice and is enabled "
+            + "once the panel has no included night."),
+
+        new("mosaic.create", "Create mosaic",
+            "Makes a new mosaic, or adds to an existing one, from the nights checked on this "
+            + "target. Rows given the same panel label combine into one panel, and the label starts "
+            + "as the frame label when the frames carry one. The name starts as the target's base "
+            + "name with the date range and stays until you edit it. Nothing is written until you "
+            + "press Create, and a refusal writes nothing."),
     ];
 
     /// <summary>The table indexed by id, ordinal. Built with <c>ToDictionary</c> on purpose: a

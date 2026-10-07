@@ -105,6 +105,31 @@ public class TargetHeaderPartTests
         Assert.Equal("Re-resolve", MenuItemFromOverflow(view, "ReResolveButton").Header);
     }
 
+    // Phase 18 Task 6, spec 12.4: the fourth standing entry, after Re-resolve, disabled with the
+    // Export flyout's sentence until a night is checked.
+    [AvaloniaFact]
+    public void TheOverflow_CarriesCreateMosaic_AfterReResolve_DisabledUntilANightIsChecked()
+    {
+        using var harness = Factory.Create().Settle();
+        var view = new TargetHeaderPart { DataContext = harness.ViewModel };
+        Show(view);
+
+        var item = MenuItemFromOverflow(view, "CreateMosaicMenuItem");
+        Assert.Equal("Create mosaic from selected nights", item.Header);
+        Assert.True(item.IsVisible);
+        Assert.False(item.IsEffectivelyEnabled);
+        Assert.Equal("Select one or more nights first", ToolTip.GetTip(item));
+        var menu = Assert.IsAssignableFrom<MenuFlyout>(view.Named<Button>("OverflowButton").Flyout);
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        Assert.Equal(items.IndexOf(MenuItemFromOverflow(view, "ReResolveButton")) + 1, items.IndexOf(item));
+
+        harness.ViewModel.Sessions[0].IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(item.IsEffectivelyEnabled);
+        Assert.Null(ToolTip.GetTip(item));
+    }
+
     [AvaloniaFact]
     public void TargetDetailView_LogLine_CarriesBothSpecDisclosures()
     {

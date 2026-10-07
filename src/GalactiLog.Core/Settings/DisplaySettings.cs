@@ -376,6 +376,13 @@ public sealed record DisplaySettings
     /// columns are not hideable and are not in it (spec 5.8.2's Phase 20 note).</summary>
     public const string LedgerTableId = "ledger";
 
+    /// <summary>The table id of the Mosaics page's table (spec 12.17, 5.8.2, Phase 18).</summary>
+    public const string MosaicsTableId = "mosaics";
+
+    /// <summary>Spec 5.8.2's five built-in keys of the mosaics table, in order. <c>name</c> is
+    /// locked on; the five are also the only keys <see cref="MosaicsSort"/> accepts.</summary>
+    public static readonly ImmutableArray<string> MosaicColumnKeys = ["name", "panels", "integration", "frames", "date_range"];
+
     /// <summary>design-spec 5.8.2's per-table default visible column lists, in order. The one
     /// place the defaults exist: <see cref="Columns"/>'s initializer is built from this, and
     /// <see cref="ColumnsFor"/> falls back to it. Phase 6's frame table reads the same table.</summary>
@@ -384,6 +391,7 @@ public sealed record DisplaySettings
         [DashboardTableId] = ["name", "designation", "palette", "integration", "equipment", "last_session"],
         [FramesTableId] = ["time", "file_name", "filter_used", "exposure_time", "median_hfr", "eccentricity", "fwhm", "detected_stars"],
         [LedgerTableId] = [],
+        [MosaicsTableId] = MosaicColumnKeys,
     };
 
     // A map from table id to the ordered list of visible column keys (design-spec 5.8.2). Fresh
@@ -450,6 +458,25 @@ public sealed record DisplaySettings
         return this with { ColumnWidths = widths };
     }
 
+    /// <summary>Spec 5.8.2's <c>sort</c> object (Phase 18): a map from table id to its stored sort.
+    /// <c>mosaics</c> is its only member. Read through <see cref="MosaicsSort"/>, which applies the
+    /// read rule.</summary>
+    [JsonPropertyName("sort")]
+    public Dictionary<string, TableSort> Sort { get; init; } = new() { [MosaicsTableId] = new() };
+
+    /// <summary>The mosaics table's sort (spec 5.8.2): the stored entry when its key is one of
+    /// <see cref="MosaicColumnKeys"/>, otherwise the default, name ascending. A custom slug reads
+    /// as the default, because a custom column carries no ordering this table sorts by.</summary>
+    [JsonIgnore]
+    public TableSort MosaicsSort
+        => Sort.TryGetValue(MosaicsTableId, out var stored) && stored?.Key is { } key && MosaicColumnKeys.Contains(key)
+            ? stored
+            : new TableSort();
+
+    /// <summary>This document with one table's sort replaced, every other member as stored.</summary>
+    public DisplaySettings WithSort(string tableId, TableSort sort)
+        => this with { Sort = new Dictionary<string, TableSort>(Sort, StringComparer.Ordinal) { [tableId] = sort } };
+
     /// <summary>Spec 12.2's Dashboard filter panel (Phase 14C). Never null: a document with no
     /// <c>dashboard</c> key takes <see cref="DashboardDisplaySettings"/>'s own defaults. Declared
     /// between <see cref="Columns"/> and <see cref="TargetPage"/> so the written document matches
@@ -471,4 +498,13 @@ public sealed record DisplaySettings
 
     [JsonExtensionData]
     public Dictionary<string, JsonElement>? ExtensionData { get; set; }
+}
+
+/// <summary>One entry of spec 5.8.2's <c>sort</c> map: the column key and the direction. The
+/// defaults are the mosaics table's, name ascending.</summary>
+public sealed record TableSort
+{
+    [JsonPropertyName("key")] public string Key { get; init; } = "name";
+
+    [JsonPropertyName("ascending")] public bool Ascending { get; init; } = true;
 }

@@ -75,16 +75,15 @@ public class CustomColumnRepositoryTests : IDisposable
         Assert.Equal(2L, Scalar<long>("SELECT count(*) FROM custom_column_values"));
     }
 
-    // Case 3. Red against a migration that added a mosaic_id foreign key (which would also fail to
-    // create at all, there being no mosaics table) and against a SetValue that wrote anything into
-    // that column. U1: the column exists and nothing this phase can run puts a value in it.
+    // Case 3, Phase 18 (ruling R2). The mosaic foreign key exists, and the three target-keyed
+    // scopes still leave mosaic_id null.
     [Fact]
-    public void MosaicId_HasNoForeignKeyAndEveryWrittenRowLeavesItNull()
+    public void MosaicId_CarriesItsForeignKey_AndTheTargetScopesLeaveItNull()
     {
         // Asked of SQLite directly rather than by parsing CREATE TABLE text, so a change in how EF
         // formats that statement cannot turn this case green by accident (review P3-2).
         var keyed = ForeignKeyColumns("custom_column_values");
-        Assert.DoesNotContain("mosaic_id", keyed);
+        Assert.Contains("mosaic_id", keyed);
         Assert.Contains("column_id", keyed);
         Assert.Contains("target_id", keyed);
 
@@ -171,17 +170,15 @@ public class CustomColumnRepositoryTests : IDisposable
         Assert.Equal(new[] { "High", "Low" }, result.Column!.Options);
     }
 
-    // Case 8. The one unreachable refusal, and it is the line a later mosaics phase removes. Red
-    // against a repository that accepts every enum member: with no mosaics table, the row would be
-    // written under a scope nothing can read (U1).
+    // Case 8, Phase 18 (ruling R2): the mosaic scope is the fourth legal applies_to.
     [Fact]
-    public void Create_AMosaicScope_IsRefusedWithTheSentence()
+    public void Create_AMosaicScope_IsWritten()
     {
-        var result = _repository.Create("Panel", CustomColumnType.Text, CustomColumnScope.Mosaic, []);
+        var result = _repository.Create("Framing", CustomColumnType.Text, CustomColumnScope.Mosaic, []);
 
-        Assert.Equal(CustomWriteStatus.ScopeNotAvailable, result.Status);
-        Assert.Equal("This column scope is not available yet.", result.Message);
-        Assert.Empty(_repository.List());
+        Written(result);
+        Assert.Equal(CustomColumnScope.Mosaic, Assert.Single(_repository.List()).Scope);
+        Assert.Equal("mosaic", Scalar<string>("SELECT applies_to FROM custom_columns"));
     }
 
     [Fact]
@@ -719,16 +716,61 @@ public class CustomColumnRepositoryTests : IDisposable
         Assert.Equal("kept", Scalar<string>("SELECT value FROM custom_column_values"));
     }
 
-    // The scope refusal on the value path, the SetValue twin of case 8.
+    // ---- the mosaic scope (Phase 18, spec 5.20 and 12.15) ------------------------------------
+
+    private Guid NewMosaic(string name)
+        => new MosaicRepository(new DatabaseConnectionString(_db.ConnectionString)).Create(name);
+
     [Fact]
-    public void SetValue_OnAMosaicScopeColumn_IsRefused()
+    public void SetValue_TheMosaicScope_RoundTripsThroughBothReaders_AndClears()
     {
-        var column = Column("Panel", CustomColumnType.Text, CustomColumnScope.Mosaic);
+        var column = Column("Framing", CustomColumnType.Text, CustomColumnScope.Mosaic);
+        var mosaic = NewMosaic("NGC 7000");
+        var other = NewMosaic("IC 1396");
 
-        var result = _repository.SetValue(column.Id, CustomValueKey.ForTarget(NewTarget("A")), "one");
+        Written(_repository.SetValue(column.Id, CustomValueKey.ForMosaic(mosaic), " 0 degrees "));
+        Written(_repository.SetValue(column.Id, CustomValueKey.ForMosaic(other), "90 degrees"));
 
-        Assert.Equal(CustomWriteStatus.ScopeNotAvailable, result.Status);
-        Assert.Equal("This column scope is not available yet.", result.Message);
+        var row = Assert.Single(_repository.ValuesForMosaic(mosaic));
+        Assert.Equal((column.Id, CustomValueKey.ForMosaic(mosaic), "0 degrees"), (row.ColumnId, row.Key, row.Value));
+        Assert.Equal(2, _repository.ValuesForMosaics([mosaic, other]).Count);
+        Assert.Empty(_repository.ValuesForMosaics([]));
+        Assert.Equal(1L, Scalar<long>("SELECT count(*) FROM custom_column_values WHERE target_id IS NULL AND session_date IS NULL AND rig_label IS NULL AND mosaic_id IS NOT NULL AND value = '90 degrees'"));
+
+        Assert.Equal(CustomWriteStatus.Deleted, _repository.SetValue(column.Id, CustomValueKey.ForMosaic(mosaic), "").Status);
+        Assert.Empty(_repository.ValuesForMosaic(mosaic));
+    }
+
+    // Spec 5.20's key rule for the fourth scope: a mosaic key carries a mosaic id and nothing
+    // else, and a target-keyed scope refuses a key that names a mosaic.
+    [Fact]
+    public void SetValue_AMosaicKeyCarryingATargetANightOrNoMosaic_IsRefused()
+    {
+        var column = Column("Framing", CustomColumnType.Text, CustomColumnScope.Mosaic);
+        var mosaic = NewMosaic("NGC 7000");
+        var target = NewTarget("A");
+
+        Refuses(column.Id, new CustomValueKey(target, mosaic, SessionDate: null, RigLabel: null), "one");
+        Refuses(column.Id, new CustomValueKey(null, mosaic, Date(4), RigLabel: null), "one");
+        Refuses(column.Id, new CustomValueKey(null, mosaic, SessionDate: null, "Askar 120 / ASI2600MC"), "one");
+        Refuses(column.Id, CustomValueKey.ForTarget(target), "one");
+        Refuses(column.Id, default, "one");
+        Refuses(Column("T", CustomColumnType.Text, CustomColumnScope.Target).Id, CustomValueKey.ForMosaic(mosaic), "one");
+    }
+
+    // The readers are scoped by the owning column, so a mosaic reader never returns a target row
+    // and the target readers never return a mosaic row.
+    [Fact]
+    public void TheMosaicAndTargetReaders_DoNotSeeEachOthersRows()
+    {
+        var target = NewTarget("A");
+        var mosaic = NewMosaic("NGC 7000");
+        Written(_repository.SetValue(Column("T", CustomColumnType.Text, CustomColumnScope.Target).Id, CustomValueKey.ForTarget(target), "t"));
+        Written(_repository.SetValue(Column("M", CustomColumnType.Text, CustomColumnScope.Mosaic).Id, CustomValueKey.ForMosaic(mosaic), "m"));
+
+        Assert.Equal("m", Assert.Single(_repository.ValuesForMosaics([mosaic])).Value);
+        Assert.Equal("t", Assert.Single(_repository.TargetValues([target])).Value);
+        Assert.Empty(_repository.ValuesForTarget(target));
     }
 
     // ---- the two reads ---------------------------------------------------------------------

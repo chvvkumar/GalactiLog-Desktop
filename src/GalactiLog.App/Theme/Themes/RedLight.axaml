@@ -131,6 +131,28 @@
   <StaticResource x:Key="DatePickerButtonForegroundDisabled" ResourceKey="ColorTextTertiary" />
   <StaticResource x:Key="TextControlPlaceholderForeground" ResourceKey="ColorTextTertiary" />
 
+  <!-- The platform Fluent Slider theme's own ink keys, aliased by the same mechanism, and for the
+       same reason, as the ScrollBar and ComboBox aliases above (spec 12.17's arranger, Phase 19A:
+       the first Slider the application shows). Additional resources, not counted among the 41
+       tokens. Without them the thumb and the filled track paint FluentTheme's SystemAccentColor
+       and the unfilled track its own neutral grey, colours no dictionary here declares. The
+       twelve names are Avalonia 11.3.21's, the ink keys src/Avalonia.Themes.Fluent/Controls/Slider.xaml
+       declares, listed from that version's compiled Avalonia.Themes.Fluent assembly: the thumb and the filled
+       (value) track take the accent token and its hover and pressed states, the unfilled track
+       the emphasis border token in every live state, and every disabled state the tertiary ink. -->
+  <StaticResource x:Key="SliderThumbBackground" ResourceKey="ColorAccent" />
+  <StaticResource x:Key="SliderThumbBackgroundPointerOver" ResourceKey="ColorAccentHover" />
+  <StaticResource x:Key="SliderThumbBackgroundPressed" ResourceKey="ColorAccentPressed" />
+  <StaticResource x:Key="SliderThumbBackgroundDisabled" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="SliderTrackValueFill" ResourceKey="ColorAccent" />
+  <StaticResource x:Key="SliderTrackValueFillPointerOver" ResourceKey="ColorAccentHover" />
+  <StaticResource x:Key="SliderTrackValueFillPressed" ResourceKey="ColorAccentPressed" />
+  <StaticResource x:Key="SliderTrackValueFillDisabled" ResourceKey="ColorTextTertiary" />
+  <StaticResource x:Key="SliderTrackFill" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="SliderTrackFillPointerOver" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="SliderTrackFillPressed" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="SliderTrackFillDisabled" ResourceKey="ColorTextTertiary" />
+
   <!-- Callout composites (spec 14.5): the semantic colour at 20 percent as fill and 50 percent as
        border, with full-strength text supplied by the semantic token itself. Additional
        resources, not counted among the 41 tokens. -->

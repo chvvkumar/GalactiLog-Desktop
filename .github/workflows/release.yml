@@ -87,6 +87,20 @@ jobs:
           vpk download github --repoUrl "${{ github.server_url }}/${{ github.repository }}" \
             --token "${{ github.token }}" --channel "${{ steps.version.outputs.channel }}" $PRE_FLAG
 
+      # Sits after the tests pass and before Pack: vpk pack embeds the file, which is how the
+      # About tab shows the notes. The step never fails the release; without a key or on a
+      # Gemini error the file is the raw commit list.
+      - name: Write release notes
+        uses: actions/github-script@v7
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          CHANNEL: ${{ steps.version.outputs.channel }}
+          REPOSITORY: ${{ github.repository }}
+          NOTES_FILE: ${{ runner.temp }}/release-notes.md
+        with:
+          script: await require('./.github/scripts/release-notes.js')({ core, exec })
+
       - name: Pack
         shell: bash
         run: >
@@ -94,6 +108,7 @@ jobs:
           --packDir publish/win-x64
           --icon src/GalactiLog.App/Assets/GalactiLog.ico
           --mainExe GalactiLog.exe --channel ${{ steps.version.outputs.channel }}
+          --releaseNotes "${{ runner.temp }}/release-notes.md"
 
       - name: Tag release
         shell: bash
@@ -112,18 +127,16 @@ jobs:
             --tag "${{ steps.version.outputs.version }}" \
             --channel "${{ steps.version.outputs.channel }}" $PRE_FLAG
 
-      # The release exists by now (the upload step created it), so this is an edit, not a
-      # second create. gh release edit has no --generate-notes flag; the generate-notes API
-      # endpoint returns the same body that flag would, and GitHub picks the previous tag itself.
+      # The release exists by now (vpk upload created it), so this is an edit, not a second
+      # create. The file is the one vpk pack embedded, so the GitHub release and the About tab
+      # show identical notes.
       - name: Generate release notes
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh api "repos/${{ github.repository }}/releases/generate-notes" \
-            -f tag_name="${{ steps.version.outputs.version }}" -q .body \
-            | gh release edit "${{ steps.version.outputs.version }}" \
-                --repo "${{ github.repository }}" --notes-file -
+          gh release edit "${{ steps.version.outputs.version }}" \
+            --repo "${{ github.repository }}" --notes-file "${{ runner.temp }}/release-notes.md"
 
       - name: Prune old prereleases
         shell: bash
@@ -143,11 +156,11 @@ jobs:
               | tail -n +$((keep + 1)) \
               | xargs -r -n1 gh release delete --yes --cleanup-tag
           }
-          prune_prerelease alpha 2
-          prune_prerelease rc 2
+          prune_prerelease alpha 1
+          prune_prerelease rc 1
 
           gh release list --repo "${{ github.repository }}" --limit 200 --json tagName,isPrerelease \
             -q '.[] | select(.isPrerelease == false) | .tagName' \
             | sort -V -r \
-            | tail -n +6 \
+            | tail -n +11 \
             | xargs -r -n1 gh release delete --yes --cleanup-tag

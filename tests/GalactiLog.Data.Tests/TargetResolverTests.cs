@@ -73,6 +73,24 @@ public class TargetResolverTests : IDisposable
         Assert.Single(context.Targets);
     }
 
+    // Task 6c (spec 9.3): the panel token is stripped before every lookup, so a panel name
+    // resolves offline to its base on a fresh catalogue, with no target to match against.
+    [Theory]
+    [InlineData("NGC 7000 Panel 1", "NGC 7000")]
+    [InlineData("IC 1396 P1", "IC 1396")]
+    public void Resolve_PanelName_OnAFreshCatalogue_ResolvesOfflineToItsBase(string objectName, string catalogId)
+    {
+        var handler = ThrowingHandler();
+
+        var result = MakeResolver(handler).Resolve(objectName);
+
+        Assert.Equal(TargetResolver.ResolutionStage.Offline, result.Stage);
+        Assert.NotNull(result.TargetId);
+        Assert.Equal(0, handler.CallCount);
+        using var context = OpenContext();
+        Assert.Equal(catalogId, Assert.Single(context.Targets).CatalogId);
+    }
+
     [Fact]
     public void Resolve_SameNameTwice_CreatesOnlyOneTarget()
     {

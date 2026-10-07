@@ -4,6 +4,7 @@ using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -12,7 +13,7 @@ using GalactiLog.Core.Settings;
 namespace GalactiLog.App.ViewModels;
 
 /// <summary>
-/// The shell (design-spec 12): the six rail destinations, which one is selected, the page the
+/// The shell (design-spec 12): the seven rail destinations, which one is selected, the page the
 /// content region shows, and how wide that region may grow.
 /// </summary>
 /// <remarks>
@@ -29,6 +30,8 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     private readonly Func<ActivityViewModel> _activityFactory;
     private readonly Func<DiagnosticsViewModel>? _diagnosticsFactory;
     private readonly Func<string, DateOnly?, TargetDetailViewModel>? _openDetail;
+    private readonly Func<MosaicsPageViewModel>? _mosaicsFactory;
+    private readonly Func<Guid, MosaicDetailViewModel>? _openMosaic;
 
     // Held for spec 12.2's Review route, which selects this page's Library tab. The same
     // instance the rail's "settings" entry carries.
@@ -68,6 +71,13 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// lets a test construct a shell with no queries. The date is null on every route that exists
     /// today; spec 12.4's "Opening the page" block says what a non-null one does, and Phase 14B's
     /// dashboard session rows are the first caller to pass one.</param>
+    /// <param name="mosaics">Builds spec 12.17's Mosaics page (Phase 18) on the first read of its
+    /// rail entry, lazy for the reason <paramref name="statistics"/> is. Optional for the reason
+    /// <paramref name="diagnostics"/> is: null leaves the entry a placeholder, so a shell still
+    /// constructs in a unit test with no queries. <c>AppHost</c> always supplies it.</param>
+    /// <param name="openMosaic">Builds spec 12.17's mosaic detail page for a mosaic id (Phase 18
+    /// Task 5), the overlay's second kind of page. Null leaves <see cref="OpenMosaic"/> inert, for
+    /// the reason <paramref name="openDetail"/> may be null.</param>
     public MainWindowViewModel(
         GeneralSettings general,
         DashboardViewModel dashboard,
@@ -77,8 +87,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Func<AnalysisViewModel> analysis,
         Func<ActivityViewModel> activity,
         Func<DiagnosticsViewModel>? diagnostics = null,
-        Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null)
+        Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null,
+        Func<MosaicsPageViewModel>? mosaics = null,
+        Func<Guid, MosaicDetailViewModel>? openMosaic = null)
     {
+        _mosaicsFactory = mosaics;
+        _openMosaic = openMosaic;
         StatusBar = statusBar;
         _dashboard = dashboard;
         _statisticsFactory = statistics;
@@ -88,6 +102,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _openDetail = openDetail;
         _settings = settings;
         dashboard.TargetOpened += OnTargetOpened;
+        dashboard.MosaicOpened += OnMosaicOpenRequested;
 
         // Phase 14B Task 5. Spec 12.2's scan filter notice carries one action, Review, which
         // "opens Settings on the Library tab with the rule editor in view". Two pages, so the
@@ -102,6 +117,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Items =
         [
             new NavigationItem("dashboard", "Dashboard", dashboard, "IconDashboard"),
+
+            // Spec 12.17, ruling R3: Mosaics is second on the rail, after Dashboard.
+            mosaics is null
+                ? new NavigationItem("mosaics", "Mosaics", new PlaceholderPageViewModel(
+                    "Mosaics", "The mosaics page is not available on this surface."), "IconMosaics")
+                : new NavigationItem("mosaics", "Mosaics", BuildMosaics, "IconMosaics"),
             new NavigationItem("statistics", "Statistics", BuildStatistics, "IconStatistics"),
 
             // Spec 12.14, ruling A3: the sixth destination, placed after Statistics and before
@@ -192,6 +213,45 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     // the moment a routing event does.
     private object BuildAnalysis() => _analysisFactory();
 
+    // Spec 12.17's Mosaics page (Phase 18). Its two routing events are the shell's, for the reason
+    // the Statistics page's are: the shell owns the content region and the detail overlay.
+    private object BuildMosaics()
+    {
+        var page = _mosaicsFactory!();
+        page.MosaicOpenRequested += OnMosaicOpenRequested;
+        page.TargetOpenRequested += OnMosaicTargetOpenRequested;
+        _mosaics = page;
+        return page;
+    }
+
+    // The Mosaics page once built, so Dispose can drop the two handlers above.
+    private MosaicsPageViewModel? _mosaics;
+
+    private void OnMosaicTargetOpenRequested(object? sender, Guid targetId) => OpenDetail(targetId.ToString());
+
+    private void OnMosaicOpenRequested(object? sender, Guid mosaicId) => OpenMosaic(mosaicId);
+
+    /// <summary>
+    /// Spec 12.17's route to the mosaic detail page: a Mosaics table row click, a dashboard mosaic
+    /// link and a completed Create mosaic dialog all land here. The page opens on this shell's one
+    /// detail overlay, closing whatever detail page was open (spec 12 shell: one detail page at a
+    /// time, of either kind). Its Back and a confirmed Delete mosaic close it; a target link on it
+    /// opens that target, which closes it.
+    /// </summary>
+    public void OpenMosaic(Guid mosaicId)
+    {
+        if (_openMosaic is null || _disposed)
+        {
+            return;
+        }
+
+        CloseDetailCore();
+        var page = _openMosaic(mosaicId);
+        page.BackRequested += OnDetailBackRequested;
+        page.OpenTargetRequested += OnMosaicTargetOpenRequested;
+        Detail = page;
+    }
+
     private object BuildActivity()
     {
         var page = _activityFactory();
@@ -277,13 +337,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// The pushed detail page, or null when the rail's own destination is showing. One nullable
-    /// overlay rather than a navigation stack: spec 12 has exactly one page that is not a rail
-    /// destination, and a stack for a depth of one is machinery with no user (ruling Q9).
+    /// The pushed detail page, or null when the rail's own destination is showing: a
+    /// <see cref="TargetDetailViewModel"/> or, from Phase 18, a <see cref="MosaicDetailViewModel"/>
+    /// (spec 12 shell). One nullable overlay rather than a navigation stack: a stack for a depth of
+    /// one is machinery with no user (ruling Q9).
     /// </summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(CurrentPage))]
-    public partial TargetDetailViewModel? Detail { get; private set; }
+    public partial object? Detail { get; private set; }
 
     /// <summary>What the content region shows: the detail page when one is open, otherwise the
     /// rail destination. Raised whenever either changes.</summary>
@@ -444,16 +505,31 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     // CurrentPage, so nothing here raises either by hand.
     private void CloseDetailCore()
     {
-        if (Detail is not { } page)
+        switch (Detail)
         {
-            return;
-        }
+            case TargetDetailViewModel page:
+                page.BackRequested -= OnDetailBackRequested;
+                page.TargetRenamed -= OnDetailTargetRenamed;
+                page.OpenTargetRequested -= OnDetailOpenTargetRequested;
+                Detail = null;
+                page.Dispose();
+                break;
+            case MosaicDetailViewModel mosaic:
+                mosaic.BackRequested -= OnDetailBackRequested;
+                mosaic.OpenTargetRequested -= OnMosaicTargetOpenRequested;
+                Detail = null;
+                mosaic.Dispose();
 
-        page.BackRequested -= OnDetailBackRequested;
-        page.TargetRenamed -= OnDetailTargetRenamed;
-        page.OpenTargetRequested -= OnDetailOpenTargetRequested;
-        Detail = null;
-        page.Dispose();
+                // The mosaic page renames, edits and deletes the mosaic the Mosaics table shows
+                // under it, and that table reloads only on a job's end (ruling R5), so closing
+                // re-reads the table.
+                if (!_disposed)
+                {
+                    _ = _mosaics?.ReloadAsync(suggestions: false);
+                }
+
+                break;
+        }
     }
 
     /// <summary>
@@ -470,6 +546,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _dashboard.TargetOpened -= OnTargetOpened;
+        _dashboard.MosaicOpened -= OnMosaicOpenRequested;
         _dashboard.ReviewScanFiltersRequested -= OnOpenSettingsRequested;
 
         // Null when nobody ever opened Statistics, which is the case F21 exists to make cheap.
@@ -477,6 +554,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         {
             statistics.DateRangeRequested -= OnDateRangeRequested;
             statistics.OpenSettingsRequested -= OnOpenSettingsRequested;
+        }
+
+        if (_mosaics is { } mosaicsPage)
+        {
+            mosaicsPage.MosaicOpenRequested -= OnMosaicOpenRequested;
+            mosaicsPage.TargetOpenRequested -= OnMosaicTargetOpenRequested;
         }
 
         // The same, for the Activity page's rail-badge forwarding (fixer list item 48).

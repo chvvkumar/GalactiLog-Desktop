@@ -682,7 +682,33 @@ public sealed class SettingsStore
         ActivityRetentionDays = Math.Clamp(g.ActivityRetentionDays, 1, 3650),
         AppLogRetentionDays = Math.Clamp(g.AppLogRetentionDays, 1, 3650),
         AppLogMaxRows = Math.Clamp(g.AppLogMaxRows, 1000, 500_000),
+        MosaicKeywords = NormalizeKeywords(g.MosaicKeywords),
+        MosaicCampaignGapDays = GeneralSettings.MosaicCampaignGapChoices.Contains(g.MosaicCampaignGapDays)
+            ? g.MosaicCampaignGapDays
+            : 0,
+        MosaicPositionToleranceArcmin = double.IsFinite(g.MosaicPositionToleranceArcmin)
+            ? Math.Clamp(g.MosaicPositionToleranceArcmin, 0, 600)
+            : 0,
     };
+
+    /// <summary>Spec 5.8.1: each stored keyword trimmed, a blank or a case insensitive repeat of an
+    /// earlier entry dropped, so the token rule never matches an empty keyword.</summary>
+    private static string[] NormalizeKeywords(string[]? keywords)
+    {
+        var kept = new List<string>();
+        foreach (var keyword in keywords ?? [])
+        {
+            var trimmed = keyword?.Trim() ?? "";
+            if (trimmed.Length > 0 && !kept.Contains(trimmed, StringComparer.OrdinalIgnoreCase))
+            {
+                kept.Add(trimmed);
+            }
+        }
+
+        // The stored array itself when nothing was dropped, so a read keeps record equality with
+        // the document it came from (GeneralSettings compares arrays by reference).
+        return keywords is not null && kept.SequenceEqual(keywords, StringComparer.Ordinal) ? keywords : [.. kept];
+    }
 
     private static void ValidateGeneral(GeneralSettings g)
     {
@@ -698,6 +724,10 @@ public sealed class SettingsStore
             throw new SettingsValidationException($"general.observer_longitude must be -180 to 180, got {g.ObserverLongitude}.");
         if (g.AutoScanIntervalMinutes <= 0)
             throw new SettingsValidationException("general.auto_scan_interval_minutes must be positive.");
+        if (!GeneralSettings.MosaicCampaignGapChoices.Contains(g.MosaicCampaignGapDays))
+            throw new SettingsValidationException($"general.mosaic_campaign_gap_days must be one of 0, 7, 14, 30, 90, 180, 365, got {g.MosaicCampaignGapDays}.");
+        if (g.MosaicPositionToleranceArcmin is < 0 or > 600 || double.IsNaN(g.MosaicPositionToleranceArcmin))
+            throw new SettingsValidationException($"general.mosaic_position_tolerance_arcmin must be 0-600, got {g.MosaicPositionToleranceArcmin}.");
         if (g.DefaultPageSize <= 0)
             throw new SettingsValidationException("general.default_page_size must be positive.");
         if (g.ThumbnailWidth <= 0)

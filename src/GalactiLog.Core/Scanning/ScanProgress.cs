@@ -33,12 +33,17 @@ public static class ScanTaskNames
     public const string Phd2Correlate = "phd2_correlate";
 
     public const string Dedup = "dedup";
+
+    /// <summary>Mosaic detection (spec 7.7), after duplicate detection and only on a scan that
+    /// completed. <c>TotalSteps</c> is the pass's four steps; a negative total on the terminal
+    /// envelope reports a pass that threw.</summary>
+    public const string MosaicDetection = "mosaic_detection";
     public const string RefThumbnails = "ref_thumbnails";
     public const string PruneActivity = "prune_activity";
 
     public static readonly IReadOnlyList<string> All =
     [
         Discovery, Classify, Ingest, PruneOrphans, Phd2Ingest, Phd2Correlate, Dedup,
-        RefThumbnails, PruneActivity,
+        MosaicDetection, RefThumbnails, PruneActivity,
     ];
 }

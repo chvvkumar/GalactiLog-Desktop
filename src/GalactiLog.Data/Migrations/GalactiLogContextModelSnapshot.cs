@@ -265,6 +265,10 @@ namespace GalactiLog.Data.Migrations
                         .HasColumnType("REAL")
                         .HasColumnName("cloud_cover");
 
+                    b.Property<double?>("DecDeg")
+                        .HasColumnType("REAL")
+                        .HasColumnName("dec_deg");
+
                     b.Property<int?>("DetectedStars")
                         .HasColumnType("INTEGER")
                         .HasColumnName("detected_stars");
@@ -356,6 +360,10 @@ namespace GalactiLog.Data.Migrations
                         .HasColumnType("REAL")
                         .HasColumnName("median_hfr");
 
+                    b.Property<string>("PanelLabel")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("panel_label");
+
                     b.Property<string>("PierSide")
                         .HasColumnType("TEXT")
                         .HasColumnName("pier_side");
@@ -367,6 +375,10 @@ namespace GalactiLog.Data.Migrations
                     b.Property<string>("Provenance")
                         .HasColumnType("TEXT")
                         .HasColumnName("provenance");
+
+                    b.Property<double?>("RaDeg")
+                        .HasColumnType("REAL")
+                        .HasColumnName("ra_deg");
 
                     b.Property<string>("RawHeaders")
                         .HasColumnType("TEXT")
@@ -399,6 +411,10 @@ namespace GalactiLog.Data.Migrations
                     b.Property<string>("ThumbnailPath")
                         .HasColumnType("TEXT")
                         .HasColumnName("thumbnail_path");
+
+                    b.Property<int?>("WidthPx")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("width_px");
 
                     b.Property<double?>("WindDirection")
                         .HasColumnType("REAL")
@@ -442,6 +458,9 @@ namespace GalactiLog.Data.Migrations
                     b.HasIndex("ImageType");
 
                     b.HasIndex("MedianHfr");
+
+                    b.HasIndex("PanelLabel")
+                        .HasDatabaseName("ix_images_panel_label");
 
                     b.HasIndex("ResolvedTargetId");
 
@@ -540,6 +559,224 @@ namespace GalactiLog.Data.Migrations
                     b.HasIndex("WinnerId");
 
                     b.ToTable("merge_manifests");
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.Mosaic", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("name")
+                        .UseCollation("NOCASE");
+
+                    b.Property<string>("Notes")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("notes");
+
+                    b.Property<double>("RotationAngle")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("REAL")
+                        .HasDefaultValue(0.0)
+                        .HasColumnName("rotation_angle");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mosaics_name");
+
+                    b.ToTable("mosaics");
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.MosaicPanel", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<double?>("CanvasX")
+                        .HasColumnType("REAL")
+                        .HasColumnName("canvas_x");
+
+                    b.Property<double?>("CanvasY")
+                        .HasColumnType("REAL")
+                        .HasColumnName("canvas_y");
+
+                    b.Property<bool>("FlipH")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false)
+                        .HasColumnName("flip_h");
+
+                    b.Property<Guid>("MosaicId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("mosaic_id");
+
+                    b.Property<string>("PanelLabel")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("panel_label")
+                        .UseCollation("NOCASE");
+
+                    b.Property<int>("Rotation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(0)
+                        .HasColumnName("rotation");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("INTEGER")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MosaicId", "PanelLabel")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mosaic_panels_mosaic_label");
+
+                    b.ToTable("mosaic_panels", t =>
+                        {
+                            t.HasCheckConstraint("CK_mosaic_panels_rotation", "rotation IN (0, 90, 180, 270)");
+                        });
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.MosaicPanelSession", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("FrameLabel")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("frame_label")
+                        .UseCollation("NOCASE");
+
+                    b.Property<Guid>("PanelId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("panel_id");
+
+                    b.Property<DateOnly>("SessionDate")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("session_date");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<Guid>("TargetId")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TargetId", "SessionDate")
+                        .HasDatabaseName("ix_mosaic_panel_sessions_target_date");
+
+                    b.HasIndex("PanelId", "TargetId", "SessionDate", "FrameLabel")
+                        .IsUnique()
+                        .HasDatabaseName("ux_mosaic_panel_sessions_panel_target_date_label");
+
+                    b.ToTable("mosaic_panel_sessions", t =>
+                        {
+                            t.HasCheckConstraint("CK_mosaic_panel_sessions_status", "status IN ('included', 'available')");
+                        });
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.MosaicSuggestion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseName")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("base_name");
+
+                    b.Property<string>("Confidence")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("confidence");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DedupSignature")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("dedup_signature");
+
+                    b.Property<string>("DiscoverySource")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("discovery_source");
+
+                    b.Property<string>("Flags")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("flags");
+
+                    b.Property<string>("Geometry")
+                        .HasColumnType("TEXT")
+                        .HasColumnName("geometry");
+
+                    b.Property<string>("PanelLabels")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("panel_labels");
+
+                    b.Property<string>("PanelPatterns")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("panel_patterns");
+
+                    b.Property<string>("SessionDates")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("session_dates");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("status");
+
+                    b.Property<string>("SuggestedName")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("suggested_name");
+
+                    b.Property<string>("TargetIds")
+                        .IsRequired()
+                        .HasColumnType("TEXT")
+                        .HasColumnName("target_ids");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DedupSignature")
+                        .HasDatabaseName("ix_mosaic_suggestions_dedup_signature");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("ix_mosaic_suggestions_status");
+
+                    b.ToTable("mosaic_suggestions");
                 });
 
             modelBuilder.Entity("GalactiLog.Data.Entities.OpenNgcCatalogEntry", b =>
@@ -1521,6 +1758,11 @@ namespace GalactiLog.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("GalactiLog.Data.Entities.Mosaic", null)
+                        .WithMany()
+                        .HasForeignKey("MosaicId")
+                        .OnDelete(DeleteBehavior.Cascade);
+
                     b.HasOne("GalactiLog.Data.Entities.Target", null)
                         .WithMany()
                         .HasForeignKey("TargetId")
@@ -1553,6 +1795,30 @@ namespace GalactiLog.Data.Migrations
                     b.HasOne("GalactiLog.Data.Entities.Target", null)
                         .WithMany()
                         .HasForeignKey("WinnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.MosaicPanel", b =>
+                {
+                    b.HasOne("GalactiLog.Data.Entities.Mosaic", null)
+                        .WithMany()
+                        .HasForeignKey("MosaicId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("GalactiLog.Data.Entities.MosaicPanelSession", b =>
+                {
+                    b.HasOne("GalactiLog.Data.Entities.MosaicPanel", null)
+                        .WithMany()
+                        .HasForeignKey("PanelId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("GalactiLog.Data.Entities.Target", null)
+                        .WithMany()
+                        .HasForeignKey("TargetId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

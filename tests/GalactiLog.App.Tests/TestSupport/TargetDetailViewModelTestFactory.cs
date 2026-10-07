@@ -231,6 +231,10 @@ internal static class TargetDetailViewModelTestFactory
         /// the page had already loaded for it.</summary>
         public List<(string GroupKey, IReadOnlyList<FrameListNight> Nights)> OpenedFrameLists { get; } = [];
 
+        /// <summary>Every opening of spec 12.17's Create mosaic dialog (Phase 18 Task 6), with the
+        /// target id, its primary name and the checked nights.</summary>
+        public List<(Guid TargetId, string TargetName, IReadOnlyList<DateOnly> Nights)> OpenedCreateMosaics { get; } = [];
+
         /// <summary>Every opening of spec 12.13's Export for stacking page (Phase 16 Task 5b),
         /// with the group key, the target's primary name and the checked nights the page handed
         /// over, in the ledger's own order.</summary>
@@ -688,7 +692,12 @@ internal static class TargetDetailViewModelTestFactory
             getSessionDetail: ReadNight,
             subscribeGeneralChanged: handler => harness.GeneralFollowers.Add(handler),
             unsubscribeGeneralChanged: handler => harness.GeneralFollowers.Remove(handler),
-            openSurveyView: openSurveyView);
+            openSurveyView: openSurveyView,
+            openCreateMosaic: (targetId, targetName, nights) =>
+            {
+                harness.OpenedCreateMosaics.Add((targetId, targetName, nights));
+                return Task.CompletedTask;
+            });
 
         return harness;
     }

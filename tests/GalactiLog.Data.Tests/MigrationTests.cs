@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using GalactiLog.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Xunit;
 
 namespace GalactiLog.Data.Tests;
@@ -32,6 +34,11 @@ public class MigrationTests
         "custom_column_values",
         // Migration 0007 (SkippedFiles), spec 5.21.
         "skipped_files",
+        // Migration 0008 (Mosaics), spec 5.22 to 5.25.
+        "mosaics",
+        "mosaic_panels",
+        "mosaic_panel_sessions",
+        "mosaic_suggestions",
         "__EFMigrationsHistory",
         // EF Core 10 adds this internal table to serialize concurrent migration runs.
         // Not part of design-spec 5; a runtime detail of the migrations infrastructure.
@@ -115,6 +122,189 @@ public class MigrationTests
         var tableSql = TableSql(db.ConnectionString, "skipped_files");
         Assert.NotNull(tableSql);
         Assert.Contains("\"file_path\" TEXT COLLATE NOCASE", tableSql, System.StringComparison.OrdinalIgnoreCase);
+    }
+
+    // Migration 0008 (Mosaics, spec 5.22 to 5.25). The custom_column_values rebuild that adds the
+    // mosaic foreign key must not lose the raw SQL index of migration 0006, and the session
+    // index must fold a null frame label so two null-label rows of one triple collide.
+    [Fact]
+    public void Migrate_Mosaics_KeepsTheCustomValueIndex_AndCreatesTheMosaicIndexes()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+
+        var indexes = QueryNames(db.ConnectionString, "index");
+        foreach (var name in new[]
+        {
+            "uq_custom_column_value", "ix_custom_column_values_mosaic", "ux_mosaics_name",
+            "ux_mosaic_panels_mosaic_label", "ux_mosaic_panel_sessions_panel_target_date_label",
+            "ix_mosaic_panel_sessions_target_date", "ix_mosaic_suggestions_status",
+            "ix_mosaic_suggestions_dedup_signature", "ix_images_panel_label",
+        })
+        {
+            Assert.Contains(name, indexes);
+        }
+
+        AssertIndexSqlContains(db.ConnectionString, "uq_custom_column_value", "coalesce(\"mosaic_id\", '')");
+        AssertIndexSqlContains(db.ConnectionString, "ux_mosaic_panel_sessions_panel_target_date_label",
+            "coalesce(\"frame_label\", '') COLLATE NOCASE");
+        Assert.Contains("REFERENCES \"mosaics\"", TableSql(db.ConnectionString, "custom_column_values"),
+            System.StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Migrate_Mosaics_RollsBackAndReapplies()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.GetService<IMigrator>().Migrate("20261005022536_SkippedFiles");
+        }
+
+        var tables = QueryNames(db.ConnectionString, "table");
+        Assert.DoesNotContain("mosaics", tables);
+        Assert.DoesNotContain("mosaic_panel_sessions", tables);
+        Assert.Contains("uq_custom_column_value", QueryNames(db.ConnectionString, "index"));
+        Assert.DoesNotContain("panel_label", TableSql(db.ConnectionString, "images"), System.StringComparison.Ordinal);
+        Assert.DoesNotContain("mosaics", TableSql(db.ConnectionString, "custom_column_values"), System.StringComparison.Ordinal);
+
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.Database.Migrate();
+        }
+
+        Assert.Equal(ExpectedTables, QueryNames(db.ConnectionString, "table"));
+        Assert.Contains("uq_custom_column_value", QueryNames(db.ConnectionString, "index"));
+    }
+
+    // Review fix 2: the hand-written custom_column_values rebuild keeps every existing value, in
+    // all three target-keyed scopes, and the coalescing unique index still refuses a duplicate,
+    // going up and coming back down.
+    [Fact]
+    public void Migrate_Mosaics_KeepsExistingCustomValues_UpAndDown()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        Migrator(db.ConnectionString, "20261005022536_SkippedFiles");
+
+        LibrarySeeder.AddTarget(db.ConnectionString, "NGC 7000");
+        Execute(db.ConnectionString, """
+            INSERT INTO custom_columns (id, name, slug, column_type, applies_to, dropdown_options, display_order, created_at)
+              VALUES ('C1', 'Status', 'custom_status', 'text', 'target', NULL, 0, '2026-01-01 00:00:00');
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V1', 'C1', id, NULL, NULL, NULL, 'target', '2026-01-01 00:00:00' FROM targets;
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V2', 'C1', id, NULL, '2026-03-01', NULL, 'session', '2026-01-01 00:00:00' FROM targets;
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              SELECT 'V3', 'C1', id, NULL, '2026-03-01', 'Askar 120 / ASI2600MC', 'rig', '2026-01-01 00:00:00' FROM targets;
+            """);
+        var before = ValueRows(db.ConnectionString);
+        Assert.Equal(3, before.Count);
+
+        Migrator(db.ConnectionString, null);
+        Assert.Equal(before, ValueRows(db.ConnectionString));
+        AssertDuplicateRefused(db.ConnectionString);
+
+        // A mosaic-scope value has no key to keep once Down drops mosaic_id, so Down deletes it
+        // rather than leaving a row that names no target.
+        Execute(db.ConnectionString, """
+            INSERT INTO mosaics (id, name, rotation_angle, created_at, updated_at)
+              VALUES ('M1', 'North America', 0, '2026-01-01 00:00:00', '2026-01-01 00:00:00');
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+              VALUES ('V4', 'C1', NULL, 'M1', NULL, NULL, 'mosaic', '2026-01-01 00:00:00');
+            """);
+        Assert.Equal(4, ValueRows(db.ConnectionString).Count);
+
+        Migrator(db.ConnectionString, "20261005022536_SkippedFiles");
+        Assert.Equal(before, ValueRows(db.ConnectionString));
+        AssertDuplicateRefused(db.ConnectionString);
+    }
+
+    private static void Migrator(string connectionString, string? migration)
+    {
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+        context.GetService<IMigrator>().Migrate(migration);
+    }
+
+    private static List<string> ValueRows(string connectionString)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT id || '|' || column_id || '|' || coalesce(target_id, '-') || '|' || coalesce(mosaic_id, '-') || '|'
+                   || coalesce(session_date, '-') || '|' || coalesce(rig_label, '-') || '|' || value || '|' || updated_at
+            FROM custom_column_values ORDER BY id
+            """;
+        var rows = new List<string>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            rows.Add(reader.GetString(0));
+        }
+
+        return rows;
+    }
+
+    private static void AssertDuplicateRefused(string connectionString)
+    {
+        var failure = Record.Exception(() => Execute(connectionString, """
+            INSERT INTO custom_column_values (id, column_id, target_id, mosaic_id, session_date, rig_label, value, updated_at)
+            SELECT 'DUP', column_id, target_id, mosaic_id, session_date, rig_label, 'again', updated_at
+            FROM custom_column_values WHERE id = 'V2'
+            """));
+        Assert.Contains("uq_custom_column_value", Assert.IsType<SqliteException>(failure).Message, System.StringComparison.Ordinal);
+    }
+
+    // Spec 5.22: deleting a mosaic cascades to its panels, through them to their nights, and to
+    // its mosaic-scope custom values.
+    [Fact]
+    public void DeletingAMosaic_CascadesToPanelsSessionsAndCustomValues()
+    {
+        using var db = TestDatabaseFactory.CreateFreshMigratedDatabase();
+        var target = LibrarySeeder.AddTarget(db.ConnectionString, "NGC 7000");
+        var mosaic = System.Guid.NewGuid();
+        var panel = System.Guid.NewGuid();
+        var column = System.Guid.NewGuid();
+        using (var context = new GalactiLogContext(GalactiLogContextOptions.Create(db.ConnectionString, tracking: true)))
+        {
+            context.Mosaics.Add(new Entities.Mosaic { Id = mosaic, Name = "NGC 7000" });
+            context.MosaicPanels.Add(new Entities.MosaicPanel { Id = panel, MosaicId = mosaic, PanelLabel = "Panel 1" });
+            context.MosaicPanelSessions.Add(new Entities.MosaicPanelSession
+            {
+                Id = System.Guid.NewGuid(), PanelId = panel, TargetId = target.Id,
+                SessionDate = new System.DateOnly(2026, 3, 1), Status = "included",
+            });
+            context.CustomColumns.Add(new Entities.CustomColumn
+            {
+                Id = column, Name = "Status", Slug = "custom_status", ColumnType = "text", AppliesTo = "mosaic",
+            });
+            context.CustomColumnValues.Add(new Entities.CustomColumnValue
+            {
+                Id = System.Guid.NewGuid(), ColumnId = column, MosaicId = mosaic, Value = "framing",
+            });
+            context.SaveChanges();
+        }
+
+        Execute(db.ConnectionString, "DELETE FROM mosaics");
+
+        Assert.Equal(0L, Count(db.ConnectionString, "mosaic_panels"));
+        Assert.Equal(0L, Count(db.ConnectionString, "mosaic_panel_sessions"));
+        Assert.Equal(0L, Count(db.ConnectionString, "custom_column_values"));
+        Assert.Equal(1L, Count(db.ConnectionString, "custom_columns"));
+    }
+
+    private static void Execute(string connectionString, string sql)
+    {
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true));
+        context.Database.ExecuteSqlRaw(sql);
+    }
+
+    private static long Count(string connectionString, string table)
+    {
+        using var connection = new SqliteConnection(connectionString);
+        connection.Open();
+        using var command = connection.CreateCommand();
+        command.CommandText = $"SELECT count(*) FROM {table}";
+        return (long)command.ExecuteScalar()!;
     }
 
     private static string? TableSql(string connectionString, string tableName)

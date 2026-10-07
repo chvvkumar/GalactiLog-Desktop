@@ -8,6 +8,7 @@ using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Diagnostics;
 using GalactiLog.App.ViewModels.Merge;
+using GalactiLog.App.ViewModels.Mosaics;
 using GalactiLog.App.ViewModels.Preview;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.App.ViewModels.Setup;
@@ -16,6 +17,8 @@ using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.App.ViewModels.Update;
+using GalactiLog.App.Views.Mosaics;
+using GalactiLog.App.Views.TargetDetail;
 using GalactiLog.Core.Catalogs;
 using GalactiLog.Core.Diagnostics;
 using GalactiLog.Core.Imaging;
@@ -179,14 +182,6 @@ public static class AppHost
         var connectionString = DatabasePaths.BuildConnectionString(
             appWriter.ResolveAppDataPath(DatabasePaths.DatabaseFileName));
 
-        // Migration runs before any window is shown (design-spec 17.2). A failure here
-        // propagates out of Build() uncaught; Serilog has already been configured above so
-        // whatever it can log about the failure is captured.
-        using (var migrationContext = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString, tracking: true)))
-        {
-            migrationContext.Database.Migrate();
-        }
-
         var settingsRepository = new SettingsRepository(connectionString);
         // Fix-wave review P2-4: SettingsStore's repair of a hand-edited display document
         // (SettingsStore.cs ReadDisplay/RepairDisplay) logs through the optional trailing
@@ -200,6 +195,16 @@ public static class AppHost
         // method reaches, ring buffer sink included.
         var settingsStore = new SettingsStore(
             settingsRepository, new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger<SettingsStore>());
+
+        // Migration runs before any window is shown (design-spec 17.2). A failure here
+        // propagates out of Build() uncaught; Serilog has already been configured above so
+        // whatever it can log about the failure is captured. The startup that applies the
+        // Mosaics migration also runs detection step 0 once (spec 7.7, 10.3), for the GUI and the
+        // CLI alike; the settings store is constructed above but read only after the migration.
+        MosaicDetectionPass.MigrateAndUpgrade(
+            connectionString,
+            () => MosaicDetectionPass.SettingsFrom(settingsStore.GetGeneral()),
+            new Serilog.Extensions.Logging.SerilogLoggerFactory(Log.Logger).CreateLogger<MosaicDetectionPass>());
 
         // Empty thumbnail_cache_dir means the default location under the app data root;
         // any other value is used as given (design-spec 5.8.1, 17.2). Shared between the
@@ -824,6 +829,12 @@ public static class AppHost
                 UiPost.Default(() =>
                     serviceProvider.GetRequiredService<DashboardViewModel>().RefreshCustomColumns());
 
+            // Spec 12.2's mosaic links: every committed mosaic write, whichever page made it, is
+            // one route to the dashboard's listing query, posted for the same reason as above.
+            serviceProvider.GetRequiredService<MosaicRepository>().Changed += (_, _) =>
+                UiPost.Default(() =>
+                    serviceProvider.GetRequiredService<DashboardViewModel>().RefreshMosaicLinks());
+
             // Spec 12.7's re-run (Phase 15A Task 6). THE ONE TRIGGER PATH: the store's own event,
             // which fires at most once per save and only when the normalised profile map, the
             // observer timezone, the observer latitude or the observer longitude really moved.
@@ -1123,6 +1134,16 @@ public static class AppHost
         // validated by default.
         builder.Services.AddSingleton(serviceProvider => new CustomColumnRepository(
             serviceProvider.GetRequiredService<DatabaseConnectionString>()));
+        // Spec 12.17's one mosaic write path and its read side (Phase 18).
+        builder.Services.AddSingleton(serviceProvider => new MosaicRepository(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>()));
+        builder.Services.AddSingleton(serviceProvider => new MosaicQueries(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>(),
+            serviceProvider.GetRequiredService<AliasMapCache>()));
+        // Spec 11.4's best frame per panel and filter, the arranger's read (Phase 19A).
+        builder.Services.AddSingleton(serviceProvider => new PanelFrameQuery(
+            serviceProvider.GetRequiredService<DatabaseConnectionString>(),
+            serviceProvider.GetRequiredService<AliasMapCache>()));
         // The catalog re-enrichment writer (Phase 7 Task 7, FIXER LIST item 13). The third named
         // sibling, and with the two above the complete list of App-callable writers of targets
         // rows: rename and notes, merge and unmerge, catalog columns.
@@ -1567,7 +1588,31 @@ public static class AppHost
                 getSessionDetail: serviceProvider.GetRequiredService<SessionDetailQuery>().Get,
                 subscribeGeneralChanged: handler => settingsStore.GeneralChanged += handler,
                 unsubscribeGeneralChanged: handler => settingsStore.GeneralChanged -= handler,
-                openSurveyView: target => serviceProvider.GetRequiredService<SurveyViewModalService>().ShowAsync(target)));
+                openSurveyView: target => serviceProvider.GetRequiredService<SurveyViewModalService>().ShowAsync(target),
+                // Spec 12.17's Create mosaic dialog (Phase 18 Task 6, ruling R12). Its two reads run
+                // off the UI thread before the modal opens, so the dialog is built over plain data;
+                // its one write is the repository's single transaction, and its success path is the
+                // shell's one route to the mosaic detail page.
+                openCreateMosaic: async (targetId, targetName, nights) =>
+                {
+                    var queries = serviceProvider.GetRequiredService<MosaicQueries>();
+                    var (frames, existing) = await Task.Run(() =>
+                        (queries.NightFrames(targetId, nights), queries.MosaicsIncludingTarget(targetId))).ConfigureAwait(true);
+                    var keywords = serviceProvider.GetRequiredService<SettingsStore>().GetGeneral().MosaicKeywords;
+                    var repository = serviceProvider.GetRequiredService<MosaicRepository>();
+                    await serviceProvider.GetRequiredService<ModalHost>().ShowAsync<bool>(() => new CreateMosaicWindow
+                    {
+                        DataContext = new CreateMosaicViewModel(
+                            targetName,
+                            nights,
+                            frames,
+                            existing,
+                            keywords,
+                            (name, existingId, rows) => repository.CreateFromNights(name, existingId, targetId, rows),
+                            mosaicId => serviceProvider.GetRequiredService<MainWindowViewModel>().OpenMosaic(mosaicId),
+                            serviceProvider.GetRequiredService<ILogger<CreateMosaicViewModel>>()),
+                    }).ConfigureAwait(true);
+                }));
 
         // Spec 12.4's Copy Frame List page (Phase 14A Task 4). Per opening, so a factory keyed on
         // the group key and the checked nights, the same shape the merge dialog uses. Every
@@ -2410,6 +2455,105 @@ public static class AppHost
                 });
         });
 
+        // Spec 12.17's mosaic collaborators (Phase 18), one record the Mosaics page and every mosaic
+        // detail page share. Every collaborator is a delegate (spec 18.3), bound here and nowhere
+        // else.
+        builder.Services.AddSingleton(serviceProvider =>
+        {
+            var repository = serviceProvider.GetRequiredService<MosaicRepository>();
+            var queries = serviceProvider.GetRequiredService<MosaicQueries>();
+            var columns = serviceProvider.GetRequiredService<CustomColumnRepository>();
+            var frames = serviceProvider.GetRequiredService<PanelFrameQuery>();
+            return new MosaicsBackend
+            {
+                General = settingsStore.GetGeneral,
+                MutateGeneral = settingsStore.MutateGeneral,
+                RunDetection = serviceProvider.GetRequiredService<ScanCoordinator>().RunMosaicDetectionAsync,
+                ListPending = repository.ListPending,
+                SuggestionSessions = queries.SuggestionSessions,
+                TargetNames = queries.TargetNames,
+                Accept = repository.Accept,
+                Dismiss = repository.Dismiss,
+                ListMosaics = queries.List,
+                Detail = queries.Detail,
+                Create = repository.Create,
+                Rename = repository.Rename,
+                Delete = repository.Delete,
+                RemovePanel = repository.RemovePanel,
+                AddPanelWithTarget = repository.AddPanelWithTarget,
+                SetNotes = repository.SetNotes,
+                IncludeNight = repository.IncludeNight,
+                RemoveNight = repository.RemoveNight,
+                IncludeAll = repository.IncludeAll,
+                IncludeAllAvailable = repository.IncludeAllAvailable,
+                IncludeAsNewPanel = repository.IncludeAsNewPanel,
+                AddTargetNights = repository.AddTargetNights,
+                DeletePanel = repository.DeletePanel,
+                SearchTargets = term => serviceProvider.GetRequiredService<TargetSearchQuery>().Search(term),
+                CustomColumns = columns.List,
+                MosaicValues = ids => columns.ValuesForMosaics(ids),
+                WriteValue = columns.SetValue,
+                PanelFrames = frames.ForMosaic,
+                FrameGeometry = frames.Geometry,
+                SuggestionBestFrame = frames.ForSuggestionEntry,
+                UpdateLayout = repository.UpdateLayout,
+
+                // Spec 12.17: a tile decodes its frame thumbnail at the cached width (spec 11.3,
+                // 800 by default), not its 250 pixel footprint, because the viewport scales a tile
+                // up to 3.0 times and the display scale multiplies again; a 250 pixel decode drawn
+                // at 875 physical pixels was visibly soft. From bytes the cache read (never a
+                // filename, spec 2.1.2).
+                ThumbnailFor = framePath => new ThumbnailSlotViewModel(
+                    framePath,
+                    serviceProvider.GetRequiredService<ThumbnailWorker>(),
+                    serviceProvider.GetRequiredService<ThumbnailCache>().ReadBytes,
+                    decode: bytes => new Avalonia.Media.Imaging.Bitmap(new MemoryStream(bytes)),
+                    logger: serviceProvider.GetRequiredService<ILogger<ThumbnailSlotViewModel>>()),
+                EmitActionFailed = (message, details) => serviceProvider
+                    .GetRequiredService<ActivityRepository>()
+                    .EmitStandalone("user_action", "warning", "mosaic_action_failed", message, details),
+            };
+        });
+
+        // Spec 11.6's composite build and its in-memory cache (Phase 19B): one for the process, so
+        // the cache outlives every lightbox.
+        builder.Services.AddSingleton(serviceProvider => new CompositeService(
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            (severity, eventType, message, details) => serviceProvider
+                .GetRequiredService<ActivityRepository>()
+                .EmitStandalone("user_action", severity, eventType, message, details),
+            logger: serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<CompositeService>()));
+
+        // Spec 12.17's Mosaics page (Phase 18). A singleton for the reason the Analysis page is one:
+        // the filter text and the sort are session state.
+        builder.Services.AddSingleton(serviceProvider => new MosaicsPageViewModel(
+            serviceProvider.GetRequiredService<MosaicsBackend>(),
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            settingsStore.GetDisplay(),
+            serviceProvider.GetRequiredService<DisplayColumnWriter>(),
+            serviceProvider.GetRequiredService<ScanStatusService>(),
+            post: null,
+            delay: null,
+            logger: serviceProvider.GetRequiredService<ILogger<MosaicsPageViewModel>>()));
+
+        // Spec 12.17's mosaic detail page (Phase 18 Task 5): one page per open, on the shell's detail
+        // overlay, disposed by the shell when it closes. The page is the Phase 18 BeginExport caller
+        // (spec 2.1.1), so it takes the application's one AppWriter.
+        builder.Services.AddSingleton<Func<Guid, MosaicDetailViewModel>>(serviceProvider => mosaicId => new MosaicDetailViewModel(
+            mosaicId,
+            serviceProvider.GetRequiredService<MosaicsBackend>(),
+            appWriter,
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            post: null,
+            delay: null,
+            logger: serviceProvider.GetRequiredService<ILogger<MosaicDetailViewModel>>(),
+            // Spec 12.17's Composite: the composite lightbox on the modal host, the
+            // PreviewModalService shape, disposed when it closes, which cancels a build in flight.
+            composite: serviceProvider.GetRequiredService<CompositeService>(),
+            openComposite: lightbox => serviceProvider.GetRequiredService<ModalHost>().ShowAsync<bool>(
+                () => new CompositeLightboxWindow { DataContext = lightbox },
+                () => lightbox.Dispose())));
+
         // Spec 12.6's Activity page (Phase 9 Task 4). A singleton for the reason DashboardViewModel
         // is one: the filter pills, the search term and the pages already loaded are session state,
         // so navigating away and back keeps them.
@@ -2591,7 +2735,11 @@ public static class AppHost
             serviceProvider.GetRequiredService<Func<DiagnosticsViewModel>>(),
             // Spec 12.2's row click navigation. The shell holds one nullable detail overlay and
             // builds its page through this delegate (ruling Q9).
-            serviceProvider.GetRequiredService<Func<string, DateOnly?, TargetDetailViewModel>>());
+            serviceProvider.GetRequiredService<Func<string, DateOnly?, TargetDetailViewModel>>(),
+            // Spec 12.17's Mosaics page, second on the rail (ruling R3), lazy like the others.
+            serviceProvider.GetRequiredService<MosaicsPageViewModel>,
+            // Spec 12.17's mosaic detail page, the overlay's second kind of page.
+            serviceProvider.GetRequiredService<Func<Guid, MosaicDetailViewModel>>());
 
             // Phase 9 FIXER item 2 and spec 5.8.1's content_width. The Settings Display tab writes
             // both keys while this shell is alive, so the window's root font size and the content

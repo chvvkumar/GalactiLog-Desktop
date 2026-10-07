@@ -85,7 +85,7 @@ public class ExportWriterContainmentTests : IDisposable
     }
 
     [Fact]
-    public void SaveFilePicker_HasExactlyThreeExportPathSources()
+    public void SaveFilePicker_HasExactlyFourExportPathSources()
     {
         // Phase 14B Task 7 (PAR-016) adds a second, equally sanctioned save dialog: spec 12.8 step
         // 1 names the platform save dialog as the source of an export path, and it says that once
@@ -98,11 +98,14 @@ public class ExportWriterContainmentTests : IDisposable
         // resolves the start location to the committed staging folder, which the page's own
         // confinement rule can never let be a scan root. The set stays EXACT and NAMED: a fourth
         // save dialog fails this rather than shipping without a start location, which is how five
-        // default-named log files landed in a fixture library.
+        // default-named log files landed in a fixture library. Phase 18 Task 5 adds a fourth by
+        // ruling: spec 12.17's Export panels (CSV), on the same start-location spine. Phase 19B
+        // Task 4 moves that dialog into SaveDialogStart.PickPathAsync, which the composite
+        // lightbox's Download shares, so the fourth source is now the spine's own file.
         var files = SourceScan.FilesMatching(@"SaveFilePickerAsync", RegexOptions.None);
 
         Assert.Equal(
-            new[] { "DiagnosticsView.axaml.cs", "LogViewerView.axaml.cs", "WbppExportWindow.axaml.cs" },
+            new[] { "DiagnosticsView.axaml.cs", "LogViewerView.axaml.cs", "SaveDialogStart.cs", "WbppExportWindow.axaml.cs" },
             files);
 
         // Verification E2, ruled over both seams. A save dialog with no SuggestedStartLocation
@@ -158,6 +161,8 @@ public class ExportWriterContainmentTests : IDisposable
                 Files: new[] { "WbppExportWindow.axaml.cs" }),
             (Needle: @"StagingFolderPicker\s*=",
                 Files: new[] { "WbppExportWindow.axaml.cs" }),
+            (Needle: @"ExportDestinationPicker\s*=",
+                Files: new[] { "CompositeLightboxWindow.axaml.cs", "MosaicDetailView.axaml.cs" }),
         };
 
         // Compared as one value rather than four assertions in a row, so a further file assigning

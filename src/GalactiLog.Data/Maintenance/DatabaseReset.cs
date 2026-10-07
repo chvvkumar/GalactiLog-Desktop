@@ -94,6 +94,14 @@ public sealed class DatabaseReset(
         // definitions go with them: a column whose every value is gone is not a setting.
         "custom_column_values",
         "custom_columns",
+        // The four mosaic tables of spec 5.22 to 5.25 (Phase 18), children first: nights reference
+        // panels and targets, panels reference mosaics, and the custom values that reference
+        // mosaics are already gone. Mosaics are built from catalogued nights, so a reset that left
+        // them would keep panels naming targets that no longer exist.
+        "mosaic_panel_sessions",
+        "mosaic_panels",
+        "mosaics",
+        "mosaic_suggestions",
         "merge_manifests",
         "merge_candidates",
         "session_notes",

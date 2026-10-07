@@ -834,7 +834,7 @@ public class FilterPanelViewModelTests
         dashboard.Filters.ObjectTypes[5].IsSelected = true;
         dashboard.IsFilterPanelCollapsed = true;
 
-        shell.Selected = shell.Items[1];
+        shell.Selected = shell.Items[2];
         shell.Selected = shell.Items[0];
 
         var restored = Assert.IsType<DashboardViewModel>(shell.CurrentPage);

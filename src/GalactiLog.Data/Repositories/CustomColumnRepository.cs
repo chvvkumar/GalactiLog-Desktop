@@ -117,10 +117,11 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
             return Refused(CustomWriteStatus.DuplicateName, CustomColumnMessages.DuplicateName(trimmed));
         }
 
-        if (scope is not (CustomColumnScope.Target or CustomColumnScope.Session or CustomColumnScope.Rig))
+        if (!IsOffered(scope))
         {
-            // Unreachable from any surface this phase ships, and it still has a case: it is the
-            // line a later mosaics phase removes (U1, design lesson 2).
+            // Unreachable from any surface: every scope the picker offers is accepted. It stays
+            // because this is the choke point a scope this build does not know is refused at
+            // (spec 12.15, design lesson 2).
             return Refused(CustomWriteStatus.ScopeNotAvailable, CustomColumnMessages.ScopeNotAvailable);
         }
 
@@ -345,7 +346,7 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
         }
 
         var scope = CustomColumnSlug.ParseScope(column.AppliesTo);
-        if (scope is not (CustomColumnScope.Target or CustomColumnScope.Session or CustomColumnScope.Rig))
+        if (scope is not { } known || !IsOffered(known))
         {
             return Refused(CustomWriteStatus.ScopeNotAvailable, CustomColumnMessages.ScopeNotAvailable);
         }
@@ -356,7 +357,7 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
         // Update's option census, so it would show the user a number they cannot account for and
         // could refuse an option removal they have no way to resolve. Six surfaces land on this one
         // method; the rule lives here and in no surface (design lesson 2).
-        if (!KeyMatchesScope(scope.Value, key))
+        if (!KeyMatchesScope(known, key))
         {
             return KeyDoesNotMatchScope();
         }
@@ -424,8 +425,7 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
                 Id = Guid.NewGuid(),
                 ColumnId = columnId,
                 TargetId = key.TargetId,
-                // Always null (U1). No surface offers the mosaic scope and no reader reads it.
-                MosaicId = null,
+                MosaicId = key.MosaicId,
                 SessionDate = key.SessionDate,
                 RigLabel = key.RigLabel,
                 Value = trimmed,
@@ -483,6 +483,35 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
 
         return Read(rows);
     }
+
+    /// <summary>Every mosaic-scope value for a set of mosaics, for the Mosaics table's rows
+    /// (spec 12.15's mosaic scope). One round trip; an empty id set returns an empty list without
+    /// issuing a command.</summary>
+    public IReadOnlyList<CustomValueRow> ValuesForMosaics(IEnumerable<Guid> mosaicIds)
+    {
+        var ids = mosaicIds.ToList();
+        if (ids.Count == 0)
+        {
+            return [];
+        }
+
+        using var context = Open();
+        var mosaicWord = CustomColumnSlug.Word(CustomColumnScope.Mosaic);
+
+        // Joined on the owning column's scope, as TargetValues is, so a row written under another
+        // scope never reaches a mosaic cell.
+        var rows = from value in context.CustomColumnValues
+                   join column in context.CustomColumns on value.ColumnId equals column.Id
+                   where column.AppliesTo == mosaicWord
+                       && value.MosaicId != null
+                       && ids.Contains(value.MosaicId.Value)
+                   select value;
+
+        return Read(rows);
+    }
+
+    /// <summary>Every mosaic-scope value of one mosaic, for the mosaic detail page's header.</summary>
+    public IReadOnlyList<CustomValueRow> ValuesForMosaic(Guid mosaicId) => ValuesForMosaics([mosaicId]);
 
     // ---- maintenance -------------------------------------------------------------------
 
@@ -607,7 +636,8 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
     /// file. A conflicting value stays on the loser (user choice 21, and the web's own rule at
     /// <c>target_merge.py</c> lines 77 to 99), which is what makes the winner's own value never
     /// overwritten and what makes the unmerge exact. The slot is not the four-part key:
-    /// <c>target_id</c> is what is changing and <c>mosaic_id</c> is always null.</remarks>
+    /// <c>target_id</c> is what is changing, and a mosaic-scope value has a null <c>target_id</c>,
+    /// so it never moves (spec 12.15: it names no target).</remarks>
     public static IReadOnlyList<Guid> MoveValuesOnMerge(
         GalactiLogContext context, Guid winnerId, Guid loserId)
     {
@@ -673,14 +703,23 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
     private static bool HasOptions(IReadOnlyList<string> options)
         => options.Any(option => !string.IsNullOrWhiteSpace(option));
 
+    /// <summary>The four scopes spec 12.15 offers. A stored word outside them parses to null and
+    /// is refused before this is asked.</summary>
+    private static bool IsOffered(CustomColumnScope scope)
+        => scope is CustomColumnScope.Target or CustomColumnScope.Session or CustomColumnScope.Rig or CustomColumnScope.Mosaic;
+
     /// <summary>Spec 5.20's key table, read as a rule and failing closed: a part the scope does not
-    /// name must be null, and a part it names must be set. <c>MosaicId</c> is null on all three
-    /// offered scopes (U1), which is also what keeps the slot lookup's <c>MosaicId</c> comparison
-    /// and the insert's hard-coded null from ever disagreeing. A rig label is judged set or unset
-    /// and is never trimmed into shape: the label is composed by <c>SessionDetailQuery</c>, and a
-    /// caller that sends a blank one has a defect of its own.</summary>
+    /// name must be null, and a part it names must be set. The mosaic scope names the mosaic id
+    /// alone; the other three name the target and never a mosaic. A rig label is judged set or
+    /// unset and is never trimmed into shape: the label is composed by <c>SessionDetailQuery</c>,
+    /// and a caller that sends a blank one has a defect of its own.</summary>
     private static bool KeyMatchesScope(CustomColumnScope scope, CustomValueKey key)
     {
+        if (scope == CustomColumnScope.Mosaic)
+        {
+            return key.MosaicId is not null && key.TargetId is null && key.SessionDate is null && key.RigLabel is null;
+        }
+
         if (key.MosaicId is not null || key.TargetId is null)
         {
             return false;
@@ -822,7 +861,7 @@ public sealed class CustomColumnRepository(DatabaseConnectionString connectionSt
         => new(CustomWriteStatus.ColumnNotFound, Message: null);
 
     /// <summary>Also a programming error and also without a sentence: a surface that builds its key
-    /// through the three factories cannot reach it.</summary>
+    /// through the four factories cannot reach it.</summary>
     private static CustomWriteResult KeyDoesNotMatchScope()
         => new(CustomWriteStatus.KeyDoesNotMatchScope, Message: null);
 

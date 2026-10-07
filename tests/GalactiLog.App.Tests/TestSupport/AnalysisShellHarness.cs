@@ -112,7 +112,7 @@ internal static class AnalysisShellHarness
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        shell.Selected = shell.Items[2];
+        shell.Selected = shell.Items[3];
         Dispatcher.UIThread.RunJobs();
 
         if (tab is not null)

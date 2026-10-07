@@ -1,0 +1,461 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:mos="using:GalactiLog.App.ViewModels.Mosaics"
+             xmlns:mosaics="using:GalactiLog.App.Views.Mosaics"
+             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+             x:Class="GalactiLog.App.Views.Mosaics.MosaicDetailView"
+             x:Name="Root"
+             x:DataType="mos:MosaicDetailViewModel">
+  <!-- Spec 12.17's mosaic detail page (Phase 18 Task 5), on the shell's detail overlay. A
+       workbench with no page scroller (ruling R7): the header and notes, the labels banner, the
+       arranger (Phase 19A), a splitter that trades height between the arranger and the
+       sessions region, and the sessions region in its own ScrollViewer. Every colour is a theme
+       token, nothing sets FontSize, and no button is filled. -->
+  <!-- The target page's Back shortcuts (spec 12.4), so the overlay's two pages behave alike:
+       Alt+Left here, Escape in the code-behind because a text box owns Escape while it has focus. -->
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
+  </UserControl.KeyBindings>
+
+  <Grid RowDefinitions="Auto,Auto,*,Auto,*" Margin="16">
+
+    <!-- ===== Row 0: the header and the notes ===== -->
+    <StackPanel Grid.Row="0" Spacing="6">
+      <Grid ColumnDefinitions="*,Auto">
+        <DockPanel Grid.Column="0" LastChildFill="False" VerticalAlignment="Center">
+          <Button Classes="quiet" Command="{Binding BackCommand}" VerticalAlignment="Center" Margin="0,0,12,0">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <Path Data="{StaticResource IconChevronLeft}"
+                    Stroke="{DynamicResource ColorTextSecondary}"
+                    StrokeThickness="1.6"
+                    StrokeLineCap="Round"
+                    StrokeJoin="Round"
+                    Width="16"
+                    Height="16" />
+              <TextBlock Text="Back" VerticalAlignment="Center" />
+            </StackPanel>
+          </Button>
+
+          <TextBlock x:Name="MosaicName"
+                     Classes="t-hero"
+                     Text="{Binding Name}"
+                     IsVisible="{Binding !IsRenaming}"
+                     VerticalAlignment="Center"
+                     Margin="0,0,4,0"
+                     TextTrimming="CharacterEllipsis" />
+          <Button Classes="quiet"
+                  IsVisible="{Binding !IsRenaming}"
+                  Command="{Binding BeginRenameCommand}"
+                  AutomationProperties.Name="Rename"
+                  ToolTip.Tip="Rename"
+                  VerticalAlignment="Center"
+                  Margin="0,0,8,0">
+            <!-- A pencil, drawn: no Unicode glyph and no icon resource carries one. -->
+            <Path Data="M3,13 L3,10.5 L10.5,3 L13,5.5 L5.5,13 Z M9,4.5 L11.5,7"
+                  Stroke="{DynamicResource ColorTextSecondary}"
+                  StrokeThickness="1.4"
+                  StrokeLineCap="Round"
+                  StrokeJoin="Round"
+                  Width="16"
+                  Height="16" />
+          </Button>
+          <StackPanel Orientation="Horizontal" Spacing="6" IsVisible="{Binding IsRenaming}" VerticalAlignment="Center" Margin="0,0,8,0">
+            <TextBox x:Name="RenameBox" Width="260" Text="{Binding RenameText}">
+              <TextBox.KeyBindings>
+                <KeyBinding Gesture="Enter" Command="{Binding SaveRenameCommand}" />
+                <KeyBinding Gesture="Escape" Command="{Binding CancelRenameCommand}" />
+              </TextBox.KeyBindings>
+            </TextBox>
+            <Button Classes="sm" Content="Save" Command="{Binding SaveRenameCommand}" />
+            <Button Classes="sm" Content="Cancel" Command="{Binding CancelRenameCommand}" />
+          </StackPanel>
+          <controls:HelpButton Topic="mosaic.about" Margin="0,0,12,0" />
+
+          <!-- Every mosaic-scope custom column, ungated by any picker, its name as a caption. -->
+          <ItemsControl x:Name="CustomCells" ItemsSource="{Binding CustomCells}" VerticalAlignment="Center">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="12" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="cc:CustomValueViewModel">
+                <StackPanel Width="140" Spacing="2">
+                  <TextBlock Classes="t-caption" Text="{Binding Label}" TextTrimming="CharacterEllipsis" />
+                  <controls:CustomCellEditor />
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </DockPanel>
+
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+          <Button x:Name="CompositeButton"
+                  Content="Composite"
+                  Command="{Binding CompositeCommand}"
+                  ToolTip.Tip="{Binding CompositeTooltip}"
+                  ToolTip.ShowOnDisabled="True" />
+          <Button x:Name="OverflowButton" Classes="quiet" Padding="9,0" AutomationProperties.Name="More">
+            <Path Width="16"
+                  Height="16"
+                  Fill="{DynamicResource ColorTextSecondary}"
+                  Data="M3,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0
+                        M8,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0
+                        M13,8 m-1.2,0 a1.2,1.2 0 1,0 2.4,0 a1.2,1.2 0 1,0 -2.4,0" />
+            <Button.Flyout>
+              <MenuFlyout>
+                <MenuItem Header="Export panels (CSV)" Command="{Binding ExportPanelsCommand}" />
+                <MenuItem Header="Delete mosaic" Command="{Binding ArmDeleteMosaicCommand}" />
+              </MenuFlyout>
+            </Button.Flyout>
+          </Button>
+        </StackPanel>
+      </Grid>
+
+      <TextBlock Text="{Binding RenameError}"
+                 IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 Foreground="{DynamicResource ColorError}" />
+
+      <Border Classes="callout warn" IsVisible="{Binding DeletePending}">
+        <StackPanel Spacing="6">
+          <TextBlock Text="{x:Static mos:MosaicDetailViewModel.DeleteConfirmText}" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Classes="sm" Content="Confirm" Command="{Binding DeleteMosaicCommand}" />
+            <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteCommand}" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
+
+      <TextBlock Text="{Binding Error}"
+                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorError}" />
+
+      <TextBlock x:Name="SummaryLine" Text="{Binding SummaryText}" Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LoadFailed}">
+        <TextBlock Text="{x:Static mos:MosaicDetailViewModel.LoadFailedText}" VerticalAlignment="Center"
+                   Foreground="{DynamicResource ColorError}" />
+        <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetryCommand}" />
+      </StackPanel>
+
+      <StackPanel Spacing="4" Margin="0,4,0,0">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="Notes" Classes="section" VerticalAlignment="Center" />
+          <controls:HelpButton Topic="mosaic.notes" />
+        </StackPanel>
+        <TextBox x:Name="NotesBox"
+                 AcceptsReturn="True"
+                 TextWrapping="Wrap"
+                 MinHeight="50"
+                 MaxHeight="120"
+                 Text="{Binding Notes.Text, Mode=TwoWay}" />
+        <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
+        <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+          <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
+                     TextWrapping="Wrap" />
+        </Border>
+      </StackPanel>
+    </StackPanel>
+
+    <!-- ===== Row 1: the available labels banner, nothing when there is no label ===== -->
+    <Border Grid.Row="1" Classes="callout" Margin="0,10,0,0" IsVisible="{Binding HasAvailableLabels}">
+      <StackPanel Spacing="6">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <TextBlock Text="New panel labels available" FontWeight="SemiBold" VerticalAlignment="Center" />
+          <controls:HelpButton Topic="mosaic.labels" />
+        </StackPanel>
+        <ItemsControl x:Name="LabelChips" ItemsSource="{Binding AvailableLabels}">
+          <ItemsControl.ItemsPanel>
+            <ItemsPanelTemplate>
+              <WrapPanel Orientation="Horizontal" />
+            </ItemsPanelTemplate>
+          </ItemsControl.ItemsPanel>
+          <ItemsControl.ItemTemplate>
+            <DataTemplate x:DataType="mos:AvailableLabelViewModel">
+              <StackPanel Margin="0,0,10,6" Spacing="2">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                  <Border Classes="tag">
+                    <TextBlock Text="{Binding Text}" />
+                  </Border>
+                  <Button Classes="sm" Content="Add panel" Command="{Binding AddPanelCommand}" />
+                </StackPanel>
+                <TextBlock Text="{Binding Error}"
+                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                           TextWrapping="Wrap"
+                           MaxWidth="360"
+                           Foreground="{DynamicResource ColorError}" />
+              </StackPanel>
+            </DataTemplate>
+          </ItemsControl.ItemTemplate>
+        </ItemsControl>
+      </StackPanel>
+    </Border>
+
+    <!-- ===== Row 2: the arranger (Phase 19A), filling the starred row; the splitter below trades
+         its height with the sessions region (ruling R7) ===== -->
+    <mosaics:ArrangerView Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding Arranger}" />
+
+    <!-- ===== Row 3: the splitter; its position is not stored. Its height and look are the
+         GridSplitter style's in Theme/Controls.axaml (spec 14) ===== -->
+    <GridSplitter Grid.Row="3"
+                  x:Name="ArrangerSplitter"
+                  ResizeDirection="Rows" />
+
+    <!-- ===== Row 4: the sessions region ===== -->
+    <ScrollViewer Grid.Row="4" x:Name="SessionsScroller">
+      <StackPanel Spacing="8" Margin="0,0,12,0">
+        <Grid ColumnDefinitions="*,Auto">
+          <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+            <TextBlock Text="Panels and nights" Classes="section" VerticalAlignment="Center" />
+            <controls:HelpButton Topic="mosaic.sessions" />
+          </StackPanel>
+          <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6">
+            <Button Classes="sm" Content="Include all available" Command="{Binding IncludeAllAvailableCommand}" />
+            <Button Classes="sm" Content="Add panel" Command="{Binding ToggleAddPanelCommand}" />
+          </StackPanel>
+        </Grid>
+        <TextBlock Text="{Binding SessionsError}"
+                   IsVisible="{Binding SessionsError, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorError}" />
+
+        <!-- The add panel form (AddPanelViewModel), shared with the Mosaics table row. -->
+        <Panel IsVisible="{Binding IsAddPanelOpen}">
+        <StackPanel x:Name="AddPanelForm" Spacing="4" DataContext="{Binding AddPanel}" x:DataType="mos:AddPanelViewModel">
+          <TextBox Watermark="Search targets" Text="{Binding SearchText}" />
+          <ItemsControl ItemsSource="{Binding SearchResults}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="dash:SearchResultViewModel">
+                <Button Classes="quiet"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Content="{Binding DisplayName}"
+                        Command="{Binding $parent[ItemsControl].((mos:AddPanelViewModel)DataContext).ChooseCommand}"
+                        CommandParameter="{Binding}" />
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+          <TextBlock Text="{Binding Chosen.DisplayName, StringFormat='Target: {0}'}"
+                     IsVisible="{Binding Chosen, Converter={x:Static ObjectConverters.IsNotNull}}" />
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBox Watermark="Panel label" Text="{Binding Label}" />
+            <Button Grid.Column="1" Classes="sm" Content="Add" Margin="8,0,0,0" Command="{Binding AddCommand}" />
+          </Grid>
+          <TextBlock Text="{Binding Caption}"
+                     IsVisible="{Binding Caption, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Text="{Binding Error}"
+                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorError}" />
+        </StackPanel>
+        </Panel>
+
+        <!-- The panel table: a header row, then one row per panel in sort_order. -->
+        <StackPanel Grid.IsSharedSizeScope="True">
+          <Border Classes="rule">
+            <Grid MinHeight="26" TextElement.Foreground="{DynamicResource ColorTextSecondary}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelChevron" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelLabel" />
+                <ColumnDefinition Width="*" MinWidth="120" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelIntegration" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelFrames" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelNights" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelDeficit" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelAvailable" />
+                <ColumnDefinition Width="Auto" SharedSizeGroup="PanelActions" />
+              </Grid.ColumnDefinitions>
+              <TextBlock Grid.Column="1" Text="Label" Padding="8,0" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="Targets" Padding="8,0" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="3" Text="Integration" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="4" Text="Frames" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="5" Text="Nights" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="6" Text="Deficit" Padding="8,0" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+
+          <ItemsControl x:Name="PanelRows" ItemsSource="{Binding Panels}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="mos:PanelViewModel">
+                <Border Classes="rule">
+                  <StackPanel>
+                    <Grid MinHeight="34">
+                      <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelChevron" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelLabel" />
+                        <ColumnDefinition Width="*" MinWidth="120" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelIntegration" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelFrames" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelNights" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelDeficit" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelAvailable" />
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="PanelActions" />
+                      </Grid.ColumnDefinitions>
+                      <Button Grid.Column="0" Classes="chevron" Command="{Binding ToggleExpandCommand}"
+                              AutomationProperties.Name="Expand" VerticalAlignment="Center">
+                        <Panel>
+                          <Path Data="{StaticResource IconChevronRight}" Stroke="{DynamicResource ColorTextTertiary}"
+                                StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14"
+                                IsVisible="{Binding !IsExpanded}" />
+                          <Path Data="{StaticResource IconChevronDown}" Stroke="{DynamicResource ColorTextTertiary}"
+                                StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round" Width="14" Height="14"
+                                IsVisible="{Binding IsExpanded}" />
+                        </Panel>
+                      </Button>
+                      <TextBlock Grid.Column="1" Text="{Binding Label}" Padding="8,0" FontWeight="SemiBold" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="2" Text="{Binding TargetsText}" Padding="8,0" VerticalAlignment="Center"
+                                 TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
+                      <TextBlock Grid.Column="3" Text="{Binding IntegrationText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="4" Text="{Binding FramesText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="5" Text="{Binding NightsText}" Padding="8,0" TextAlignment="Right" VerticalAlignment="Center" />
+                      <TextBlock Grid.Column="6" Text="{Binding DeficitText}" Padding="8,0" VerticalAlignment="Center"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+                      <Border Grid.Column="7" Classes="tag" Margin="8,0" IsVisible="{Binding HasAvailable}">
+                        <TextBlock Text="{Binding AvailableText}" Foreground="{DynamicResource ColorWarning}" />
+                      </Border>
+                      <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Center">
+                        <Button Classes="sm" Content="Include all" Command="{Binding IncludeAllCommand}" />
+                        <Button Classes="sm" Content="Delete panel" Command="{Binding DeletePanelCommand}"
+                                ToolTip.Tip="{Binding DeleteTooltip}" ToolTip.ShowOnDisabled="True" />
+                      </StackPanel>
+                    </Grid>
+
+                    <Border Classes="callout warn" IsVisible="{Binding DeletePending}" Margin="0,4">
+                      <StackPanel Spacing="6">
+                        <TextBlock Text="{Binding DeleteConfirmText}" TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                          <Button Classes="sm" Content="Confirm" Command="{Binding DeletePanelCommand}" />
+                          <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeletePanelCommand}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Border>
+                    <TextBlock Text="{Binding Error}"
+                               IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                               TextWrapping="Wrap"
+                               Foreground="{DynamicResource ColorError}" />
+
+                    <!-- Expanded: Included and Available side by side. -->
+                    <Grid ColumnDefinitions="*,*" Margin="28,6,0,10" IsVisible="{Binding IsExpanded}">
+                      <StackPanel Grid.Column="0" Spacing="4" Margin="0,0,8,0" Grid.IsSharedSizeScope="True">
+                        <TextBlock Text="Included" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding Included}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="mos:PanelSessionViewModel">
+                              <StackPanel Spacing="2">
+                                <Grid MinHeight="30">
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncNight" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncTarget" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncLabel" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncFrames" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncIntegration" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="IncActions" />
+                                  </Grid.ColumnDefinitions>
+                                  <TextBlock Grid.Column="0" Text="{Binding NightText}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                  <Button Grid.Column="1" Classes="quiet" Content="{Binding TargetName}" Foreground="{DynamicResource ColorAccent}"
+                                          Command="{Binding OpenTargetCommand}" Padding="0" Margin="0,0,10,0" />
+                                  <TextBlock Grid.Column="2" Text="{Binding LabelText}" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource ColorTextSecondary}" />
+                                  <TextBlock Grid.Column="3" Text="{Binding FiltersText}" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
+                                  <TextBlock Grid.Column="4" Text="{Binding FramesText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
+                                  <TextBlock Grid.Column="5" Text="{Binding IntegrationText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
+                                  <Button Grid.Column="6" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
+                                </Grid>
+                                <TextBlock Text="{Binding Error}"
+                                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource ColorError}" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+
+                      <StackPanel Grid.Column="1" Spacing="4" Margin="8,0,0,0" Grid.IsSharedSizeScope="True">
+                        <TextBlock Text="Available" FontWeight="SemiBold" />
+                        <ItemsControl ItemsSource="{Binding Available}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="mos:PanelSessionViewModel">
+                              <StackPanel Spacing="2">
+                                <Grid MinHeight="30">
+                                  <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailNight" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailTarget" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailLabel" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailFrames" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailIntegration" />
+                                    <ColumnDefinition Width="Auto" SharedSizeGroup="AvailActions" />
+                                  </Grid.ColumnDefinitions>
+                                  <TextBlock Grid.Column="0" Text="{Binding NightText}" Margin="0,0,10,0" VerticalAlignment="Center" />
+                                  <Button Grid.Column="1" Classes="quiet" Content="{Binding TargetName}" Foreground="{DynamicResource ColorAccent}"
+                                          Command="{Binding OpenTargetCommand}" Padding="0" Margin="0,0,10,0" />
+                                  <TextBlock Grid.Column="2" Text="{Binding LabelText}" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             Foreground="{DynamicResource ColorTextSecondary}" />
+                                  <TextBlock Grid.Column="3" Text="{Binding FiltersText}" Margin="0,0,10,0" VerticalAlignment="Center"
+                                             TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
+                                  <TextBlock Grid.Column="4" Text="{Binding FramesText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
+                                  <TextBlock Grid.Column="5" Text="{Binding IntegrationText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
+                                  <StackPanel Grid.Column="6" Orientation="Horizontal" Spacing="6">
+                                    <Button Classes="sm" Content="Include" Command="{Binding IncludeCommand}" />
+                                    <Button Classes="sm" Content="As new panel" Command="{Binding BeginNewPanelCommand}" />
+                                  </StackPanel>
+                                </Grid>
+                                <Grid ColumnDefinitions="*,Auto,Auto" IsVisible="{Binding IsNamingNewPanel}">
+                                  <TextBox Watermark="Panel label" Text="{Binding NewPanelLabel}">
+                                    <TextBox.KeyBindings>
+                                      <KeyBinding Gesture="Enter" Command="{Binding CreateNewPanelCommand}" />
+                                      <KeyBinding Gesture="Escape" Command="{Binding CancelNewPanelCommand}" />
+                                    </TextBox.KeyBindings>
+                                  </TextBox>
+                                  <Button Grid.Column="1" Classes="sm" Content="Create" Margin="8,0,0,0" Command="{Binding CreateNewPanelCommand}" />
+                                  <Button Grid.Column="2" Classes="sm" Content="Cancel" Margin="8,0,0,0" Command="{Binding CancelNewPanelCommand}" />
+                                </Grid>
+                                <TextBlock Text="{Binding Error}"
+                                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource ColorError}" />
+                              </StackPanel>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <!-- Add nights from any target (ruling R19). -->
+                        <StackPanel Spacing="4" Margin="0,6,0,0" DataContext="{Binding AddNights}" x:DataType="mos:AddNightsViewModel">
+                          <TextBlock Text="Add nights from any target" Foreground="{DynamicResource ColorTextSecondary}" />
+                          <TextBox Watermark="Search targets" Text="{Binding SearchText}" />
+                          <ItemsControl ItemsSource="{Binding SearchResults}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="dash:SearchResultViewModel">
+                                <Button Classes="quiet"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Content="{Binding DisplayName}"
+                                        Command="{Binding $parent[ItemsControl].((mos:AddNightsViewModel)DataContext).ChooseCommand}"
+                                        CommandParameter="{Binding}" />
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                          <TextBlock Text="{Binding Error}"
+                                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
+                                     TextWrapping="Wrap"
+                                     Foreground="{DynamicResource ColorError}" />
+                        </StackPanel>
+                      </StackPanel>
+                    </Grid>
+                  </StackPanel>
+                </Border>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

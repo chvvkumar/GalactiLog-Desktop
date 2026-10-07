@@ -123,6 +123,9 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     // Spec 12.4, normally SurveyViewModalService.ShowAsync.
     private readonly Func<SurveyTarget, Task>? _openSurveyView;
 
+    // Spec 12.4 and 12.17 (Phase 18, ruling R12): the Create mosaic dialog over the checked nights.
+    private readonly Func<Guid, string, IReadOnlyList<DateOnly>, Task>? _openCreateMosaic;
+
     // (severity, eventType, message, details, targetId), normally ActivityRepository.EmitStandalone
     // pinned to category "user_action" (spec 5.12 amendment 2b). A delegate rather than the
     // repository itself, the rule every collaborator here follows.
@@ -279,6 +282,10 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// failed.</param>
     /// <param name="openSurveyView">Normally <c>SurveyViewModalService.ShowAsync</c>; null leaves
     /// <see cref="OpenSurveyViewCommand"/> unable to execute.</param>
+    /// <param name="openCreateMosaic">Spec 12.17's Create mosaic dialog (Phase 18, ruling R12):
+    /// the target id, its primary name and the checked nights in the ledger's own order. Normally
+    /// a lambda that reads the dialog's rows and opens it on <c>ModalHost</c>. Optional and
+    /// trailing; null makes the command a no-op.</param>
     public TargetDetailViewModel(
         string groupKey,
         Func<string, Queries.TargetDetail?> get,
@@ -317,7 +324,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         Func<string, DateOnly, SessionDetail?>? getSessionDetail = null,
         Action<EventHandler<GeneralSettings>>? subscribeGeneralChanged = null,
         Action<EventHandler<GeneralSettings>>? unsubscribeGeneralChanged = null,
-        Func<SurveyTarget, Task>? openSurveyView = null)
+        Func<SurveyTarget, Task>? openSurveyView = null,
+        Func<Guid, string, IReadOnlyList<DateOnly>, Task>? openCreateMosaic = null)
     {
         GroupKey = groupKey;
         _setObjectType = setObjectType;
@@ -421,6 +429,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         _getAliasMap = getAliasMap;
         _getSessionDetail = getSessionDetail;
         _openSurveyView = openSurveyView;
+        _openCreateMosaic = openCreateMosaic;
 
         // An instance saved, disabled or deleted on the External Tools tab, and a timezone or
         // clock change on the Location tab, reach an open page here.
@@ -439,7 +448,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// <summary>Spec 12.4's header block. Null until the first load completes, and while
     /// <see cref="IsMissing"/> is true.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CanEditNotes), nameof(Title), nameof(ShowsSurveyViewButton))]
+    [NotifyPropertyChangedFor(nameof(CanEditNotes), nameof(IsResolved), nameof(Title), nameof(ShowsSurveyViewButton))]
     [NotifyCanExecuteChangedFor(nameof(OpenSurveyViewCommand))]
     public partial TargetHeaderViewModel? Header { get; private set; }
 
@@ -570,6 +579,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         CopyFrameListCommand.NotifyCanExecuteChanged();
         ExportForStackingCommand.NotifyCanExecuteChanged();
         AstroBinCsvCommand.NotifyCanExecuteChanged();
+        CreateMosaicCommand.NotifyCanExecuteChanged();
     }
 
     /// <summary>Spec 12.4 and 12.13: the sentence both Export flyout entries carry while nothing is
@@ -687,6 +697,11 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// <summary>An <c>obj:</c> group has no targets row to key a note on, so the box is disabled
     /// rather than silently discarding what is typed into it.</summary>
     public bool CanEditNotes => Header?.TargetId is not null;
+
+    /// <summary>Whether the page is a resolved target. Spec 12.4 draws the Create mosaic entry for
+    /// one only, because an unresolved <c>obj:</c> group has no target id for a panel night to
+    /// name.</summary>
+    public bool IsResolved => Header?.TargetId is not null;
 
     /// <summary>Spec 12.4's collapsible notes box. Kept because the notes field's own state reads
     /// it; the redesigned page puts the box in the Details drawer, where the drawer is the
@@ -1655,6 +1670,48 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     private bool CanOpenSurveyView() => ShowsSurveyViewButton && SurveyDownloadsEnabled && _openSurveyView is not null;
 
     private bool CanRename() => Header?.TargetId is not null;
+
+    // Spec 12.4: disabled while nothing is checked, the rule CanCopyFrameList states.
+    private bool CanCreateMosaic() => SelectedNights.Count > 0;
+
+    /// <summary>
+    /// Spec 12.4's "Create mosaic from selected nights" (Phase 18, ruling R12): opens spec 12.17's
+    /// dialog over the checked nights. On success the dialog itself routes to the mosaic detail
+    /// page, so the page has nothing to reload.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanCreateMosaic))]
+    private async Task CreateMosaicAsync()
+    {
+        if (SelectedNights.Count == 0 || _openCreateMosaic is null || Header?.Block is not { TargetId: { } targetId } block)
+        {
+            return;
+        }
+
+        try
+        {
+            await _openCreateMosaic(targetId, block.PrimaryName, [.. SelectedNights]).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            // The dialog's own reads failed before it could open, so nothing appeared: the
+            // Activity feed is where the reader learns why (spec 10.9's mosaic_action_failed).
+            _logger.LogWarning(ex, "The Create mosaic dialog for target {TargetId} failed", targetId);
+            var name = block.PrimaryName;
+            try
+            {
+                _emitActivity?.Invoke(
+                    "warning",
+                    "mosaic_action_failed",
+                    $"Could not create a mosaic from {name}: {ex.Message}",
+                    new { action = "create", name, reason = ex.Message },
+                    targetId);
+            }
+            catch (Exception emitFailure)
+            {
+                _logger.LogWarning(emitFailure, "The mosaic_action_failed event could not be written");
+            }
+        }
+    }
 
     private bool CanCommitRename() => IsRenaming && Header?.TargetId is not null && RenameText.Trim().Length > 0;
 
