@@ -205,24 +205,25 @@ precondition at the start of section 3).
 
 | Channel | Kept | Deleted |
 | --- | --- | --- |
-| `alpha` | the newest 2 prereleases | every older alpha release and its tag (`--cleanup-tag`) |
-| `rc` | the newest 2 prereleases | every older rc release and its tag |
-| `stable` | the newest 5 releases | every older stable release and its tag |
+| `alpha` | the newest prerelease | every older alpha release and its tag (`--cleanup-tag`) |
+| `rc` | the newest prerelease | every older rc release and its tag |
+| `stable` | the newest 10 releases | every older stable release and its tag |
 
-These numbers are the `prune_prerelease alpha 2` and `prune_prerelease rc 2` calls and the
-`tail -n +6` selection for stable in the "Prune old prereleases" step of
+These numbers are the `prune_prerelease alpha 1` and `prune_prerelease rc 1` calls and the
+`tail -n +11` selection for stable in the "Prune old prereleases" step of
 `.github/workflows/release.yml`, asserted to match by
-`Release_PruneKeepsTwoAlphaTwoRcAndFiveStable`
+`Release_PruneKeepsOneAlphaOneRcAndTenStable`
 (`tests/GalactiLog.Core.Tests/Architecture/WorkflowFileTests.cs`).
 
 Three consequences:
 
 - **The tag is deleted with the release, not only the release.** A deleted alpha tag can change a
   later derivation, because the prerelease counter is `highest existing + 1`: deleting the highest
-  alpha tag would let the next alpha reuse its number. In practice the pruner keeps the newest
-  two releases on each prerelease channel, so the highest tag on that channel is always kept. This
-  is why the retention number cannot safely be dropped to 1: keeping only the newest release would
-  delete the tag the next derivation depends on.
+  alpha tag would let the next alpha reuse its number. The pruner runs after the new release and
+  its tag exist and keeps the newest release on each prerelease channel, so the highest tag on
+  that channel is always kept. The retention number must stay at 1 or more: a count of 0 would
+  delete the tag the next derivation depends on. The delta package is unaffected by keeping one:
+  the "Download previous release" step runs before Pack, while the previous release still exists.
 - **An installed alpha whose release has been pruned loses its delta-update source.** The
   installed application's `UpdateManager` reads the channel manifest to find available releases
   (`design-spec.md` 17.1). The application still runs. It cannot delta-update from that specific

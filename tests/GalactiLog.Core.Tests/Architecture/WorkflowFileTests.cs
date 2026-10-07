@@ -286,15 +286,15 @@ public class WorkflowFileTests
     }
 
     [Fact]
-    public void Release_PruneKeepsTwoAlphaTwoRcAndFiveStable()
+    public void Release_PruneKeepsOneAlphaOneRcAndTenStable()
     {
         var content = ReadNormalized(ReleaseFile);
-        // The full call, not the bare "alpha 2" / "rc 2" substrings: a bare substring would also
+        // The full call, not the bare "alpha 1" / "rc 1" substrings: a bare substring would also
         // be satisfied by a comment containing those words while the actual invocation carried
         // different numbers.
-        Assert.Contains("prune_prerelease alpha 2", content);
-        Assert.Contains("prune_prerelease rc 2", content);
-        Assert.Contains("tail -n +6", content);
+        Assert.Contains("prune_prerelease alpha 1", content);
+        Assert.Contains("prune_prerelease rc 1", content);
+        Assert.Contains("tail -n +11", content);
     }
 
     [Fact]
