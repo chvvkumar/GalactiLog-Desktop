@@ -750,7 +750,7 @@ public static class HelpTopics
         new("target.night", "The night",
             "This night's own facts: the gain, the exposure lengths present, the first and last "
             + "frame times, and the median airmass, ambient temperature and humidity. Under it, "
-            + "the Night metrics section holds the per-filter table, the ranges, the comparison "
+            + "the Session metrics section holds the per-filter table, the ranges, the comparison "
             + "line and the sharpest frame, and keeps its open state; then come the timeline, the "
             + "chart and the frames. Session notes are in the Details panel. When several nights "
             + "are checked they show here as one night, laid end to end on one time axis with a "

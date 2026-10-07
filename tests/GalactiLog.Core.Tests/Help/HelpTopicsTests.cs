@@ -304,7 +304,7 @@ public class HelpTopicsTests
     {
         var paragraph = HelpTopics.Get("target.night").Paragraph;
 
-        Assert.Contains("the Night metrics section holds the per-filter table, the ranges, the comparison line and the sharpest frame", paragraph, StringComparison.Ordinal);
+        Assert.Contains("the Session metrics section holds the per-filter table, the ranges, the comparison line and the sharpest frame", paragraph, StringComparison.Ordinal);
         Assert.Contains("Session notes are in the Details panel", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("bottom of the lanes", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("Night notes", paragraph, StringComparison.Ordinal);

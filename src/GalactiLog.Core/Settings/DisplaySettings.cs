@@ -89,7 +89,7 @@ public sealed record TargetLayoutState
 
     [JsonPropertyName("sidebar_collapsed")] public bool SidebarCollapsed { get; init; }
 
-    /// <summary>The Night metrics section's disclosure; null is open.</summary>
+    /// <summary>The Session metrics section's disclosure; null is open.</summary>
     [JsonPropertyName("night_metrics_open")] public bool? NightMetricsOpen { get; init; }
 
     /// <summary>The retired Session notes section's disclosure. No longer read: the notes are in

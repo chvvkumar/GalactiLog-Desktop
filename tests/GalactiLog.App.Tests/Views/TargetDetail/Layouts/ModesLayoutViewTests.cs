@@ -360,7 +360,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         }
     }
 
-    // R15: the chart is whole at rest and the rows give way before it. The Night metrics header line
+    // R15: the chart is whole at rest and the rows give way before it. The Session metrics header line
     // costs the seventh row at 852 (6.9 rows measure); at 720 one row measures at 1280 (1.67) and 20 px
     // of a row at 1232, whose narrower right region wraps the frames toolbar.
     [AvaloniaTheory]
@@ -930,7 +930,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
 
     private static bool IsCollapsed(NightsLedgerPart ledger) => ledger.Classes.Contains(":collapsed");
 
-    // The at-rest pins describe the lanes with the Night metrics section closed: open, the section
+    // The at-rest pins describe the lanes with the Session metrics section closed: open, the section
     // scrolls above the timeline rather than taking frame rows (R2).
     private static void CloseNightMetrics(Mounted mounted)
     {
