@@ -111,7 +111,7 @@ public sealed class LanesHandleTests
     private static TargetPageSettings Stored(string key, double height)
         => new() { Layouts = new() { [key] = new TargetLayoutState { LanesHeight = height } } };
 
-    // The Night metrics section closed, so the chart is in the lanes viewport at rest.
+    // The Session metrics section closed, so the chart is in the lanes viewport at rest.
     private static TargetPageSettings StoredClosed(string key, double? lanes = null, double? chart = null)
         => new() { Layouts = new() { [key] = new TargetLayoutState { ChartHeight = chart, LanesHeight = lanes, NightMetricsOpen = false } } };
 
@@ -362,7 +362,7 @@ public sealed class LanesHandleTests
         using var harness = Page(Stored(key, 1));
         using var mounted = Mount(harness, key);
 
-        // The Night metrics section's open body is left out of the least: it scrolls (Phase 24 R2).
+        // The Session metrics section's open body is left out of the least: it scrolls (Phase 24 R2).
         var section = mounted.View.Named<Expander>("NightMetricsSection");
         var body = section.Bounds.Height - section.GetVisualDescendants().OfType<ToggleButton>().First().Bounds.Height;
         var least = mounted.Timeline.Bounds.Bottom - body + mounted.Chart.Margin.Top + ModesLayoutView.ChartFloor;
@@ -500,7 +500,7 @@ public sealed class LanesHandleTests
     [InlineData("modes")]
     public void TheLanesScroll_WhenTheMetricsSectionOpensPastTheirStoredHeight(string key)
     {
-        // A failure looks like the Night metrics section's open body charged to the chart (the chart
+        // A failure looks like the Session metrics section's open body charged to the chart (the chart
         // shrinks) or to the cap (the lanes grow) instead of scrolling (Phase 24 R2 and R15).
         using var harness = Page(Stored(key, 330));
         using var mounted = Mount(harness, key, 1600, 900);

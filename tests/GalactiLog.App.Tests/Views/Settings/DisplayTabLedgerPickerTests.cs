@@ -79,7 +79,7 @@ public class DisplayTabLedgerPickerTests
         var texts = VisibleTexts(view).ToList();
         var dashboard = texts.IndexOf("Dashboard columns");
         var frames = texts.IndexOf("Frame table columns");
-        var ledger = texts.IndexOf("Nights ledger columns");
+        var ledger = texts.IndexOf("Nights list columns");
 
         Assert.True(dashboard >= 0 && frames >= 0 && ledger >= 0);
         Assert.True(dashboard < frames);

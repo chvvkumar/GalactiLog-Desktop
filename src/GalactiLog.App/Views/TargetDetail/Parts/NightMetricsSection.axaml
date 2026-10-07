@@ -8,7 +8,7 @@
           HorizontalAlignment="Stretch"
           IsExpanded="True">
   <Expander.Header>
-    <TextBlock Classes="t-label section" Text="Night metrics" />
+    <TextBlock Classes="t-label section" Text="Session metrics" />
   </Expander.Header>
   <!-- Spec 12.4's night tables and the thumbnail, side by side and wrapping when the region is
        narrow. The comparison sentence is capped at the row's width so it wraps inside its line

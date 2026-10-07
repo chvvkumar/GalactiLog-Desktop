@@ -128,7 +128,7 @@ public partial class ModesLayoutView : TargetLayoutView
 
     protected override void OnReleasing() => SidebarHandle.Flush();
 
-    // What sits above the chart, as a sum of heights rather than a bottom edge: the Night metrics
+    // What sits above the chart, as a sum of heights rather than a bottom edge: the Session metrics
     // section's open body is never charged to the lanes (it scrolls, R2 and R15), and a sum does
     // not move while the body rewraps mid-drag, which a bottom edge did.
     private double AboveTheChart

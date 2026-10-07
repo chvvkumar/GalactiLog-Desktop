@@ -357,18 +357,14 @@
            unchanged (user choice 19).
 
            Its header reuses the shared SectionHeader template through the same ContentControl
-           idiom the other seven use, with the help glyph beside it: the one section that carries
-           a glyph of its own (dashboard.custom) needs no second copy of the dot and the title. -->
+           idiom the other seven use. -->
       <ItemsControl x:Name="CustomFilterSectionSlot" ItemsSource="{Binding CustomSectionSlot}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="dash:FilterSectionViewModel">
             <Expander HorizontalAlignment="Stretch"
                       IsExpanded="{Binding IsExpanded, Mode=TwoWay}">
               <Expander.Header>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                  <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SectionHeader}" />
-                  <controls:HelpButton Topic="dashboard.custom" />
-                </StackPanel>
+                <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SectionHeader}" />
               </Expander.Header>
               <ItemsControl ItemsSource="{Binding $parent[ItemsControl].((dash:FilterPanelViewModel)DataContext).CustomFilterGroups}"
                             ItemTemplate="{StaticResource CustomColumnFilterGroup}" />
@@ -395,9 +391,7 @@
        one is a request to expand the panel on a section, where any number of sections can be
        active at once and none of them is "selected".
 
-       No help glyph. HelpPlacementCensusTest counts placements in markup text rather than at
-       runtime, so dashboard.filters appearing in both states would read as a doubled id; the
-       expanded panel's heading keeps the one glyph, in one place. -->
+       No help glyph: the dashboard carries none. -->
   <Grid x:Name="FilterStrip"
         RowDefinitions="Auto,*"
         IsVisible="{Binding IsPanelCollapsed}">
