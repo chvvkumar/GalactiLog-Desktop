@@ -336,14 +336,12 @@
                    Text="{Binding Guiding.SettleText, FallbackValue=''}"
                    Margin="0,0,6,0"
                    VerticalAlignment="Center" />
-        <!-- The failed run is the only part of this line that carries its own ink, because it
-             is the only part that reports a fault. -->
+        <!-- "N failed" says what it is, so it carries no ink of its own. -->
         <TextBlock Classes="t-label"
                    x:Name="GuidingSettleFailed"
                    Text="{Binding Guiding.SettleFailedText, FallbackValue=''}"
                    IsVisible="{Binding Guiding.HasSettleFailed, FallbackValue=False}"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource ColorWarning}" />
+                   VerticalAlignment="Center" />
       </WrapPanel>
       <TextBlock x:Name="GuidingLoading"
                  Classes="t-label"
@@ -356,13 +354,15 @@
                  Foreground="{DynamicResource ColorTextTertiary}"
                  IsVisible="{Binding Guiding.HasPlotNotice, FallbackValue=False}"
                  TextWrapping="Wrap" />
-      <!-- A guide-log failure never takes the night down: it is one line here. -->
-      <TextBlock x:Name="GuidingFailure"
-                 Classes="t-label"
-                 Text="This night's guiding could not be loaded. See the log for details."
-                 Foreground="{DynamicResource ColorWarning}"
-                 IsVisible="{Binding Guiding.HasFailure, FallbackValue=False}"
-                 TextWrapping="Wrap" />
+      <!-- A guide-log failure never takes the night down: it is one line here, marked by the
+           inline callout's label rather than by its own ink. -->
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding Guiding.HasFailure, FallbackValue=False}">
+        <TextBlock x:Name="GuidingFailure"
+                   Classes="t-label"
+                   Text="This night's guiding could not be loaded. See the log for details."
+                   TextWrapping="Wrap" />
+      </ContentControl>
     </StackPanel>
 
     <TextBlock Grid.Row="2"

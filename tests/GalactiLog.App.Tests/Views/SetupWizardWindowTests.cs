@@ -360,7 +360,7 @@ public class SetupWizardWindowTests(ITestOutputHelper output)
         using var harness = SetupWizardViewModelTestFactory.Create();
         var window = Show(harness);
 
-        var panel = window.Named<Border>("StepErrorPanel");
+        var panel = window.Named<ContentControl>("StepErrorPanel");
         Assert.Contains("callout", panel.Classes);
         Assert.Contains("warn", panel.Classes);
 

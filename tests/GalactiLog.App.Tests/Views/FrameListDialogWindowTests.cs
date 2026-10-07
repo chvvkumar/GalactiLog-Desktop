@@ -92,13 +92,13 @@ public class FrameListDialogWindowTests
         Assert.NotNull(window.GetControl<ToggleButton>("BadModeToggle"));
         Assert.NotNull(window.GetControl<CheckBox>("IncludeUnmeasuredBox"));
         Assert.NotNull(window.GetControl<ComboBox>("FormatSelector"));
-        Assert.NotNull(window.GetControl<Border>("PartialLoadWarning"));
+        Assert.NotNull(window.GetControl<ContentControl>("PartialLoadWarning"));
         Assert.NotNull(window.GetControl<Button>("CopyButton"));
         Assert.NotNull(window.GetControl<Button>("CancelButton"));
         Assert.Equal(page.TallyText, window.GetControl<TextBlock>("TallyText").Text);
 
         // The warning is silent on a fully loaded selection.
-        Assert.False(window.GetControl<Border>("PartialLoadWarning").IsVisible);
+        Assert.False(window.GetControl<ContentControl>("PartialLoadWarning").IsVisible);
 
         window.Close();
     }

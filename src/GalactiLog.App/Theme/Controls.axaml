@@ -34,6 +34,11 @@
     <StreamGeometry x:Key="IconHelpRing">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0</StreamGeometry>
     <StreamGeometry x:Key="IconHelpMark">M8,14 v-5 M8,5.5 v-0.5</StreamGeometry>
 
+    <!-- The callout label glyphs: a triangle with a mark for the warn arm, a ring with a mark for
+         the error arm. Same 16 px box and stroke as the help glyph. -->
+    <StreamGeometry x:Key="IconWarning">M8,2 L14.5,13.5 H1.5 Z M8,6.5 V9.5 M8,11.5 v-0.5</StreamGeometry>
+    <StreamGeometry x:Key="IconError">M1,8 a7,7 0 1,0 14,0 a7,7 0 1,0 -14,0 M8,4.5 V8.5 M8,11 v-0.5</StreamGeometry>
+
     <!-- The help flyout's body, over one HelpTopic. It is a keyed template rather than a Setter on
          the Flyout property because a Setter's Template builds a Control and a Flyout is not one,
          and because a Flyout instance written straight into a Setter would be one object shared by
@@ -601,29 +606,82 @@
     <Setter Property="HorizontalContentAlignment" Value="Right" />
   </Style>
 
-  <!-- Spec 14.5's 20 and 50 percent callout composite. Lifted here from the two views that each
-       carried their own copy, which is design lesson 1's second-occurrence rule and the same
-       breach the three Button.pill copies above were. No left edge: the direction refuses a
-       coloured edge above 1 px and a callout's whole border is that 1 px.
-
-       The warn arm carries the warning ink for its text as well, because the pane's callouts
-       relied on that descendant rule while the page's set it inline on each TextBlock; an inline
-       value is a LocalValue and still wins, so both readings survive the lift. -->
-  <Style Selector="Border.callout">
+  <!-- The callout composite, lifted here from the two views that each carried their own copy
+       (design lesson 1's second-occurrence rule). It is a ContentControl rather than a Border
+       because the warn and error arms draw a label row the Border could not: a glyph and the word
+       "Warning" or "Error" above the content. That row is what marks the callout. No arm tints its
+       fill, border or text: every callout is the elevated surface, the default hairline and
+       primary ink, so attention comes from the label and not from an amber or red wash. No left
+       edge either: the direction refuses a coloured edge above 1 px. -->
+  <Style Selector="ContentControl.callout">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="3" />
     <Setter Property="Padding" Value="8,4" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <DockPanel>
+            <StackPanel Name="PART_Label"
+                        DockPanel.Dock="Top"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        Margin="0,0,0,4"
+                        IsVisible="False">
+              <Path Name="PART_Glyph"
+                    Width="16"
+                    Height="16"
+                    Stroke="{DynamicResource ColorTextPrimary}"
+                    StrokeThickness="1.4"
+                    StrokeLineCap="Round"
+                    StrokeJoin="Round" />
+              <TextBlock Name="PART_LabelText"
+                         Classes="t-caption"
+                         FontWeight="SemiBold"
+                         Foreground="{DynamicResource ColorTextPrimary}"
+                         VerticalAlignment="Center" />
+            </StackPanel>
+            <ContentPresenter Content="{TemplateBinding Content}"
+                              ContentTemplate="{TemplateBinding ContentTemplate}"
+                              HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}" />
+          </DockPanel>
+        </Border>
+      </ControlTemplate>
+    </Setter>
   </Style>
-  <Style Selector="Border.callout.warn">
-    <Setter Property="Background" Value="{DynamicResource ColorWarningCalloutFill}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource ColorWarningCalloutBorder}" />
+  <Style Selector="ContentControl.callout.warn /template/ StackPanel#PART_Label, ContentControl.callout.error /template/ StackPanel#PART_Label">
+    <Setter Property="IsVisible" Value="True" />
   </Style>
-  <Style Selector="Border.callout.warn TextBlock">
-    <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
+  <Style Selector="ContentControl.callout.warn /template/ Path#PART_Glyph">
+    <Setter Property="Data" Value="{StaticResource IconWarning}" />
   </Style>
-  <Style Selector="Border.callout.error">
-    <Setter Property="Background" Value="{DynamicResource ColorErrorCalloutFill}" />
-    <Setter Property="BorderBrush" Value="{DynamicResource ColorErrorCalloutBorder}" />
+  <Style Selector="ContentControl.callout.warn /template/ TextBlock#PART_LabelText">
+    <Setter Property="Text" Value="Warning" />
+  </Style>
+  <Style Selector="ContentControl.callout.error /template/ Path#PART_Glyph">
+    <Setter Property="Data" Value="{StaticResource IconError}" />
+  </Style>
+  <Style Selector="ContentControl.callout.error /template/ TextBlock#PART_LabelText">
+    <Setter Property="Text" Value="Error" />
+  </Style>
+  <!-- The inline arm: the same label and glyph for a one-line message that sits in running text
+       or under a field, where a box would be too much. No surface, no border, no padding, and the
+       label docks left of the sentence instead of above it, so the sentence still wraps. -->
+  <Style Selector="ContentControl.callout.inline">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="ContentControl.callout.inline /template/ StackPanel#PART_Label">
+    <Setter Property="DockPanel.Dock" Value="Left" />
+    <Setter Property="Margin" Value="0,0,6,0" />
+    <Setter Property="VerticalAlignment" Value="Top" />
   </Style>
 
   <!-- Phase 14A Task 2 appends everything below, and nothing above it changed.

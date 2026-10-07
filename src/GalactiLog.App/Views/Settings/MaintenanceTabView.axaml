@@ -61,8 +61,7 @@
                                  Foreground="{DynamicResource ColorTextSecondary}" />
                       <TextBlock Text="{Binding RiskText}"
                                  IsVisible="{Binding IsDestructive}"
-                                 FontWeight="SemiBold"
-                                 Foreground="{DynamicResource ColorError}" />
+                                 FontWeight="SemiBold" />
                     </Panel>
                   </Border>
                 </Grid>
@@ -101,39 +100,35 @@
 
                 <!-- The web's inline two-click confirm, used by rebuild targets. The reset action
                      uses a typed confirmation in a modal instead, which is a stronger gate. -->
-                <Border IsVisible="{Binding ConfirmPending}"
-                        Background="{DynamicResource ColorWarningCalloutFill}"
-                        BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
-                        BorderThickness="1"
-                        CornerRadius="{StaticResource RadiusSm}"
-                        Padding="12,8">
+                <ContentControl Classes="callout warn"
+                                IsVisible="{Binding ConfirmPending}">
                   <StackPanel Spacing="8">
                     <TextBlock Text="This rewrites every frame assignment. Press the button above again to confirm."
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource ColorWarning}" />
+                               TextWrapping="Wrap" />
                     <Button Content="Cancel"
                             Padding="12,3"
                             HorizontalAlignment="Left"
                             Command="{Binding CancelConfirmCommand}" />
                   </StackPanel>
-                </Border>
+                </ContentControl>
 
                 <TextBlock Text="{Binding Progress}"
                            TextWrapping="Wrap"
                            IsVisible="{Binding IsRunning}"
                            Foreground="{DynamicResource ColorTextSecondary}" />
 
-                <!-- Spec 12.10's failure line is coloured, so it does not read as an outcome.
+                <!-- Spec 12.10's failure line carries the error label, so it does not read as an outcome.
                      Two blocks rather than a converter, the shape the risk chip above uses. -->
                 <Panel IsVisible="{Binding HasSummary}">
                   <TextBlock Text="{Binding Summary}"
                              TextWrapping="Wrap"
                              IsVisible="{Binding !Failed}"
                              Foreground="{DynamicResource ColorTextPrimary}" />
-                  <TextBlock Text="{Binding Summary}"
-                             TextWrapping="Wrap"
-                             IsVisible="{Binding Failed}"
-                             Foreground="{DynamicResource ColorError}" />
+                  <ContentControl Classes="callout error inline"
+                                  IsVisible="{Binding Failed}">
+                    <TextBlock Text="{Binding Summary}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
                 </Panel>
 
               </StackPanel>

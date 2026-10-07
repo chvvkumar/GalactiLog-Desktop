@@ -135,12 +135,15 @@
                    AutomationProperties.AccessibilityView="{Binding !IsSaving, Converter={x:Static mosaics:ArrangerView.RawWhen}}"
                    Foreground="{DynamicResource ColorTextSecondary}" />
         <Panel Opacity="{Binding IsSaving, Converter={x:Static mosaics:ArrangerView.HiddenWhen}}">
-          <TextBlock x:Name="SaveFailure"
-                     Text="{x:Static mos:ArrangerViewModel.SaveFailedText}"
-                     VerticalAlignment="Center"
-                     Opacity="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.ShownWhenSet}}"
-                     AutomationProperties.AccessibilityView="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.RawWhenUnset}}"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl x:Name="SaveFailureCallout"
+                          Classes="callout error inline"
+                          VerticalAlignment="Center"
+                          Opacity="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.ShownWhenSet}}"
+                          AutomationProperties.AccessibilityView="{Binding SaveError, Converter={x:Static mosaics:ArrangerView.RawWhenUnset}}">
+            <TextBlock x:Name="SaveFailure"
+                       Text="{x:Static mos:ArrangerViewModel.SaveFailedText}"
+                       VerticalAlignment="Center" />
+          </ContentControl>
         </Panel>
       </Panel>
     </WrapPanel>

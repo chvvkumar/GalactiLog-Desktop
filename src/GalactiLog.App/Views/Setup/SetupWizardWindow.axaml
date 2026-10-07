@@ -75,11 +75,12 @@
                    TextWrapping="Wrap"
                    Classes="t-label" />
 
-        <TextBlock x:Name="FolderErrorText"
-                   Text="{Binding ErrorMessage}"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding HasErrorMessage}"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        IsVisible="{Binding HasErrorMessage}">
+          <TextBlock x:Name="FolderErrorText"
+                     Text="{Binding ErrorMessage}"
+                     TextWrapping="Wrap" />
+        </ContentControl>
       </StackPanel>
     </DataTemplate>
 
@@ -116,22 +117,24 @@
                      Text="{Binding DataRootSourceText}"
                      Classes="t-label" />
 
-          <TextBlock x:Name="DataRootErrorText"
-                     Text="{Binding DataRootError}"
-                     TextWrapping="Wrap"
-                     IsVisible="{Binding HasDataRootError}"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasDataRootError}">
+            <TextBlock x:Name="DataRootErrorText"
+                       Text="{Binding DataRootError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
 
           <Grid x:Name="PendingMoveRow"
                 IsVisible="{Binding HasPendingMove}"
                 ColumnDefinitions="*,Auto"
                 ColumnSpacing="8">
-            <TextBlock Grid.Column="0"
-                       x:Name="PendingMoveNoteText"
-                       Text="{Binding PendingMoveNote}"
-                       TextWrapping="Wrap"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource ColorWarning}" />
+            <ContentControl Classes="callout warn inline"
+                            Grid.Column="0"
+                            VerticalAlignment="Center">
+              <TextBlock x:Name="PendingMoveNoteText"
+                         Text="{Binding PendingMoveNote}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
             <Button Grid.Column="1"
                     x:Name="CancelDataRootMoveButton"
                     Content="Cancel move"
@@ -156,11 +159,12 @@
                   Click="OnBrowseCacheDir" />
         </Grid>
 
-        <TextBlock x:Name="CachePathErrorText"
-                   Text="{Binding PathError}"
-                   TextWrapping="Wrap"
-                   IsVisible="{Binding HasPathError}"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        IsVisible="{Binding HasPathError}">
+          <TextBlock x:Name="CachePathErrorText"
+                     Text="{Binding PathError}"
+                     TextWrapping="Wrap" />
+        </ContentControl>
 
         <TextBlock x:Name="FreeSpaceText"
                    Text="{Binding FreeSpaceText}"
@@ -188,11 +192,12 @@
                      Background="{DynamicResource ColorBgInput}"
                      Foreground="{DynamicResource ColorTextPrimary}"
                      Text="{Binding LatitudeText, Mode=TwoWay}" />
-            <TextBlock x:Name="LatitudeErrorText"
-                       Text="{Binding LatitudeError}"
-                       TextWrapping="Wrap"
-                       IsVisible="{Binding HasLatitudeError}"
-                       Foreground="{DynamicResource ColorError}" />
+            <ContentControl Classes="callout error inline"
+                            IsVisible="{Binding HasLatitudeError}">
+              <TextBlock x:Name="LatitudeErrorText"
+                         Text="{Binding LatitudeError}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
           <StackPanel Grid.Column="1" Spacing="4">
             <TextBlock Text="Longitude" Classes="t-label" />
@@ -201,11 +206,12 @@
                      Background="{DynamicResource ColorBgInput}"
                      Foreground="{DynamicResource ColorTextPrimary}"
                      Text="{Binding LongitudeText, Mode=TwoWay}" />
-            <TextBlock x:Name="LongitudeErrorText"
-                       Text="{Binding LongitudeError}"
-                       TextWrapping="Wrap"
-                       IsVisible="{Binding HasLongitudeError}"
-                       Foreground="{DynamicResource ColorError}" />
+            <ContentControl Classes="callout error inline"
+                            IsVisible="{Binding HasLongitudeError}">
+              <TextBlock x:Name="LongitudeErrorText"
+                         Text="{Binding LongitudeError}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
         </Grid>
 

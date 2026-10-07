@@ -177,7 +177,7 @@ public class TargetDetailViewTests
 
         // Ruling Q4: the callout names the group key, the Back button is still there, and the
         // header block and totals row are gone rather than blank.
-        Assert.True(view.Named<Border>("MissingCallout").IsVisible);
+        Assert.True(view.Named<ContentControl>("MissingCallout").IsVisible);
         Assert.Contains(VisibleTexts(view), text => text.Contains(Factory.ResolvedGroupKey));
         Assert.True(view.Named<Button>("BackButton").IsVisible);
         Assert.False(view.Named<Border>("HeaderBlock").IsVisible);

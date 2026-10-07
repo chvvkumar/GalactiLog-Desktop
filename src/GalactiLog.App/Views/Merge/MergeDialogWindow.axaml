@@ -175,8 +175,7 @@
           <StackPanel Spacing="6" DataContext="{Binding Loser}"
                       x:DataType="merge:MergeSideViewModel">
             <TextBlock Text="Merged away"
-                       FontWeight="SemiBold"
-                       Foreground="{DynamicResource ColorWarning}" />
+                       FontWeight="SemiBold" />
             <TextBlock Text="{Binding Name}"
                        TextWrapping="Wrap"
                        FontWeight="SemiBold"
@@ -266,12 +265,9 @@
       </Border>
 
       <!-- Spec 12.9's colliding session dates, with section 9.7's note-merge rule stated once. -->
-      <Border x:Name="CollidingSessionsPanel"
+      <ContentControl x:Name="CollidingSessionsPanel"
+              Classes="callout warn"
               IsVisible="{Binding HasCollidingSessions}"
-              Background="{DynamicResource ColorWarningCalloutFill}"
-              BorderBrush="{DynamicResource ColorWarningCalloutBorder}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
               Padding="12">
         <StackPanel Spacing="6">
           <TextBlock Text="Sessions with notes on both sides"
@@ -289,13 +285,14 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-      </Border>
+      </ContentControl>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorText}"
-                 TextWrapping="Wrap"
-                 IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding ErrorText, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorText}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
 
       <TextBlock x:Name="ConfirmSummaryText"
                  Text="{Binding ConfirmSummary}"

@@ -47,11 +47,12 @@
                    Background="{DynamicResource ColorBgInput}"
                    Foreground="{DynamicResource ColorTextPrimary}"
                    Text="{Binding Name, Mode=TwoWay}" />
-          <TextBlock x:Name="NameErrorText"
-                     Text="{Binding NameError}"
-                     IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding NameError, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock x:Name="NameErrorText"
+                       Text="{Binding NameError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
         <RadioButton x:Name="ExistingMosaicRadio"
                      GroupName="CreateMosaicMode"
@@ -121,11 +122,12 @@
                    Foreground="{DynamicResource ColorTextSecondary}" />
       </StackPanel>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding Error}"
-                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding Error}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
 
       <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
         <Button x:Name="CancelButton"

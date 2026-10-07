@@ -145,7 +145,7 @@ public class DashboardViewTests
         var view = new DashboardView { DataContext = dashboard };
         Show(view);
 
-        var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
+        var notice = view.GetControl<ContentControl>("ScanFilterNoticeBanner");
         Assert.True(notice.IsEffectivelyVisible);
 
         // Row 0 of the list column, above the banners and the list region, so a smaller row index
@@ -184,7 +184,7 @@ public class DashboardViewTests
         var view = new DashboardView { DataContext = dashboard };
         Show(view);
 
-        var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
+        var notice = view.GetControl<ContentControl>("ScanFilterNoticeBanner");
         Assert.Contains("callout", notice.Classes);
 
         // It informs rather than warns, so it takes neither semantic arm.
@@ -195,7 +195,7 @@ public class DashboardViewTests
         using var edited = Dashboard(ScanFilterConfig.Empty);
         var second = new DashboardView { DataContext = edited };
         Show(second);
-        Assert.False(second.GetControl<Border>("ScanFilterNoticeBanner").IsEffectivelyVisible);
+        Assert.False(second.GetControl<ContentControl>("ScanFilterNoticeBanner").IsEffectivelyVisible);
     }
 
     [AvaloniaFact]
@@ -205,7 +205,7 @@ public class DashboardViewTests
         var view = new DashboardView { DataContext = dashboard };
         Show(view);
 
-        var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
+        var notice = view.GetControl<ContentControl>("ScanFilterNoticeBanner");
         var buttons = notice.GetVisualDescendants().OfType<Button>().ToList();
 
         var review = Assert.Single(buttons);
@@ -413,13 +413,13 @@ public class DashboardViewTests
         ShowAt(view, ShippedAllotment);
 
         Assert.True(dashboard.ShowScanFilterNotice);
-        Assert.True(view.GetControl<Border>("ScanFilterNoticeBanner").IsEffectivelyVisible);
+        Assert.True(view.GetControl<ContentControl>("ScanFilterNoticeBanner").IsEffectivelyVisible);
 
         dashboard.ToggleFilterPanelCommand.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(dashboard.IsFilterPanelCollapsed);
-        Assert.True(view.GetControl<Border>("ScanFilterNoticeBanner").IsEffectivelyVisible);
+        Assert.True(view.GetControl<ContentControl>("ScanFilterNoticeBanner").IsEffectivelyVisible);
     }
 
     [AvaloniaFact]
@@ -429,7 +429,7 @@ public class DashboardViewTests
         var view = new DashboardView { DataContext = dashboard };
         ShowAt(view, ShippedAllotment);
 
-        var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
+        var notice = view.GetControl<ContentControl>("ScanFilterNoticeBanner");
         var region = view.GetControl<Border>("TargetListRegion");
 
         // Same parent, and a smaller row index.

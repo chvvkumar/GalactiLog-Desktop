@@ -31,17 +31,13 @@
 
       <!-- Suggestions banner: the web's SuggestionsBanner.tsx, shown only while there is at
            least one suggestion. -->
-      <Border x:Name="SuggestionsBanner"
+      <ContentControl x:Name="SuggestionsBanner"
+              Classes="callout warn"
               IsVisible="{Binding HasSuggestions}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorWarning}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
               Padding="16">
         <StackPanel Spacing="10">
           <TextBlock x:Name="SuggestionsHeadingText"
-                     Text="{Binding SuggestionsHeading}"
-                     Foreground="{DynamicResource ColorWarning}" />
+                     Text="{Binding SuggestionsHeading}" />
           <ItemsControl x:Name="SuggestionList" ItemsSource="{Binding Suggestions}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="settings:SuggestionViewModel">
@@ -77,7 +73,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-      </Border>
+      </ContentControl>
 
       <!-- Spec 12.7's "table of canonical filters, each with a colour swatch and an alias list
            editor", built from the same GroupingEditorViewModel the web's GroupingEditor
@@ -123,11 +119,12 @@
                 Content="Save"
                 Padding="10,3"
                 Command="{Binding SaveCommand}" />
-        <TextBlock x:Name="FilterErrorText"
-                   Text="{Binding ErrorMessage}"
-                   IsVisible="{Binding HasErrorMessage}"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        IsVisible="{Binding HasErrorMessage}">
+          <TextBlock x:Name="FilterErrorText"
+                     Text="{Binding ErrorMessage}"
+                     TextWrapping="Wrap" />
+        </ContentControl>
         <TextBlock x:Name="FilterStatusText"
                    Text="{Binding StatusMessage}"
                    IsVisible="{Binding HasStatusMessage}"

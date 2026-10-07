@@ -102,9 +102,10 @@ public class MaintenanceTabViewTests
             .Where(block => block.IsEffectivelyVisible && block.Text is "Safe" or "Destructive")
             .ToList();
 
+        // The chip's word already states its state, so it carries weight rather than red ink.
         var safe = chips.First(block => block.Text == "Safe");
         var destructive = chips.First(block => block.Text == "Destructive");
-        Assert.NotEqual(Colour(safe.Foreground), Colour(destructive.Foreground));
+        Assert.NotEqual(safe.FontWeight, destructive.FontWeight);
 
         var buttons = view.GetVisualDescendants()
             .OfType<Button>()
@@ -116,10 +117,11 @@ public class MaintenanceTabViewTests
     }
 
     [AvaloniaFact]
-    public void MaintenanceTabView_AFailureLine_IsColouredApartFromAnOutcomeLine()
+    public void MaintenanceTabView_AFailureLine_IsLabelledApartFromAnOutcomeLine()
     {
         // Review minor 2's other half: Failed was never bound either, so spec 12.10's failure line
-        // rendered exactly like a success line.
+        // rendered exactly like a success line. The mark is the shared inline error callout's
+        // label, not red ink on the sentence.
         using var page = NewTab();
         var view = new MaintenanceTabView { DataContext = page };
         Show(view);
@@ -136,7 +138,14 @@ public class MaintenanceTabViewTests
             .OfType<TextBlock>()
             .First(block => block.IsEffectivelyVisible && block.Text == MaintenanceTabViewModel.FailureMessage);
 
-        Assert.NotEqual(Colour(outcome.Foreground), Colour(failure.Foreground));
+        var callout = Assert.Single(
+            failure.GetVisualAncestors().OfType<ContentControl>(),
+            control => control.Classes.Contains("callout"));
+        Assert.Contains("error", callout.Classes);
+        Assert.Contains("inline", callout.Classes);
+        Assert.DoesNotContain(
+            outcome.GetVisualAncestors().OfType<ContentControl>(),
+            control => control.Classes.Contains("callout"));
     }
 
     private static Color? Colour(IBrush? brush)

@@ -137,12 +137,13 @@
                     Command="{Binding AddNewOptionCommand}" />
           </StackPanel>
 
-          <TextBlock x:Name="NewOptionErrorText"
-                     Classes="t-caption"
-                     Text="{Binding NewOptionError}"
-                     TextWrapping="Wrap"
-                     IsVisible="{Binding NewOptionError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding NewOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock x:Name="NewOptionErrorText"
+                       Classes="t-caption"
+                       Text="{Binding NewOptionError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
 
         <!-- Disabled while the form cannot be submitted, with the reason on its tooltip (spec
@@ -305,11 +306,12 @@
                         <Button Classes="sm" Content="Add" Command="{Binding AddEditOptionCommand}" />
                       </StackPanel>
 
-                      <TextBlock Classes="t-caption"
-                                 Text="{Binding EditOptionError}"
-                                 TextWrapping="Wrap"
-                                 IsVisible="{Binding EditOptionError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                 Foreground="{DynamicResource ColorError}" />
+                      <ContentControl Classes="callout error inline"
+                                      IsVisible="{Binding EditOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Classes="t-caption"
+                                   Text="{Binding EditOptionError}"
+                                   TextWrapping="Wrap" />
+                      </ContentControl>
                     </StackPanel>
 
                     <!-- Values: the stored count, so a delete states what it is about to take
@@ -350,7 +352,7 @@
 
                 <!-- The two-press confirm's second half (spec 12.15 section 4.3,
                      MaintenanceActionViewModel's own shape). No dialog and no modal window. -->
-                <Border Classes="callout warn"
+                <ContentControl Classes="callout warn"
                         Margin="0,0,0,8"
                         IsVisible="{Binding ConfirmPending}">
                   <StackPanel Orientation="Horizontal" Spacing="8">
@@ -364,18 +366,19 @@
                             Command="{Binding ConfirmDeleteCommand}" />
                     <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
                   </StackPanel>
-                </Border>
+                </ContentControl>
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </StackPanel>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorMessage}"
-                 IsVisible="{Binding HasErrorMessage}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding HasErrorMessage}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
     </StackPanel>
   </ScrollViewer>
 </UserControl>
