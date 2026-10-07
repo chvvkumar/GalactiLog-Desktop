@@ -33,6 +33,8 @@ GalactiLog walks the library folders you choose, reads the headers of every ligh
 
 **Mosaics.** Group the panels of one large field. Every scan suggests candidate mosaics, or run detection on demand. A mosaic page shows its panels, nights, an arranger for panel layout and a composite lightbox.
 
+![Mosaic detail](docs/screenshots/mosaic-detail.png)
+
 **Activity and Diagnostics.** A newest-first log of everything the application did, with severity and category filters, and a diagnostics page that reports the state of the installation and exports a bundle for a bug report.
 
 **Export for stacking.** A wizard that copies the folders for the nights you check into a staging folder, optionally filtered by quality, or writes a PowerShell or Bash script that does the same. The wizard writes nothing until you commit on the Review step.
@@ -67,9 +69,6 @@ GalactiLog checks GitHub Releases at start and every six hours, downloads a new 
 | stable | `main` | `1.0.1` |
 | rc | `dev` | `1.0.1-rc.3` |
 | alpha | `snd` | `1.0.1-alpha.7` |
-
-> [!NOTE]
-> The first scan reads every file it finds and takes far longer than later scans, which read only files that are new or changed. A folder watcher, on by default, picks up frames that arrive between scheduled scans, so GalactiLog can run on the imaging PC while N.I.N.A. is capturing.
 
 ### Where GalactiLog keeps its files
 
