@@ -25,11 +25,13 @@ public class HelpTopicsTests
     // Phase 18 Task 6 added `mosaic.create`, the Create mosaic dialog's heading, taking it to 112.
     // Phase 19A Task 4 added `mosaic.arranger`, the arranger's caption, taking it to 113.
     // Phase 19B Task 5 added `mosaic.composite`, the composite lightbox's glyph, taking it to 114.
+    // The dashboard's four glyphs (`page.dashboard`, `dashboard.filters`, `dashboard.targets` and
+    // `dashboard.custom`) were removed with their topics, taking it to 110.
     [Fact]
-    public void All_Holds114Topics()
+    public void All_Holds110Topics()
     {
-        Assert.Equal(114, HelpTopics.All.Count);
-        Assert.Equal(114, HelpTopics.Ids.Count);
+        Assert.Equal(110, HelpTopics.All.Count);
+        Assert.Equal(110, HelpTopics.Ids.Count);
     }
 
     // Phase 18 Task 4. The four ids carry spec 12.12's titles.
@@ -86,7 +88,6 @@ public class HelpTopicsTests
     [Fact]
     public void TheFourPhase20Topics_ExistAndCarryTheirTitles()
     {
-        Assert.Equal("Custom", HelpTopics.Get("dashboard.custom").Title);
         Assert.Equal("Nights ledger columns", HelpTopics.Get("settings.display.ledger-columns").Title);
         Assert.Equal("Add a column", HelpTopics.Get("settings.custom-columns.add").Title);
         Assert.Equal("Columns", HelpTopics.Get("settings.custom-columns.table").Title);
@@ -102,7 +103,6 @@ public class HelpTopicsTests
     {
         var phase20Ids = new HashSet<string>(StringComparer.Ordinal)
         {
-            "dashboard.custom",
             "settings.display.ledger-columns",
             "settings.custom-columns.add",
             "settings.custom-columns.table",
@@ -265,21 +265,6 @@ public class HelpTopicsTests
         Assert.DoesNotContain("Delete asks once", paragraph, StringComparison.Ordinal);
     }
 
-    // Fix pass 1, task7-review.md P3-1. Clearing a text value and choosing "Not set" on a list
-    // both remove the value entirely rather than storing a blank (questions.md questions 11 and
-    // 12), stated where this topic already discusses "the values you have filled in yourself".
-    [Fact]
-    public void DashboardCustom_CoversClearingAValue()
-    {
-        var paragraph = HelpTopics.Get("dashboard.custom").Paragraph;
-
-        Assert.Contains("Clearing a text value removes it entirely", paragraph, StringComparison.Ordinal);
-        Assert.Contains(
-            "choosing \"Not set\" on a list column clears its value the same way",
-            paragraph,
-            StringComparison.Ordinal);
-    }
-
     // The page has one layout; a paragraph that names a layout box, a selector or another layout
     // describes controls that no longer exist.
     [Fact]
@@ -309,15 +294,19 @@ public class HelpTopicsTests
         Assert.DoesNotContain("page.target", FiveLongest().Select(topic => topic.Id));
     }
 
-    // The night's parts sit on the page; a paragraph that sends the reader to a drawer or a
-    // button describes a control that no longer exists.
+    // The night's parts sit on the page and the session notes sit in the Details panel
+    // (TargetDetailView.axaml's SessionNotesSection, inside the SplitView pane; the lanes in
+    // ModesLayoutView.axaml end with NightMetricsPart). A paragraph that puts the notes at the
+    // bottom of the lanes, or sends the reader to a drawer or a button, describes a layout that
+    // no longer exists.
     [Fact]
     public void TargetNight_SaysWhereTheNightPartsAre()
     {
         var paragraph = HelpTopics.Get("target.night").Paragraph;
 
         Assert.Contains("the Night metrics section holds the per-filter table, the ranges, the comparison line and the sharpest frame", paragraph, StringComparison.Ordinal);
-        Assert.Contains("Session notes as a section at the bottom of the lanes", paragraph, StringComparison.Ordinal);
+        Assert.Contains("Session notes are in the Details panel", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("bottom of the lanes", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("Night notes", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("left column", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("drawer", paragraph, StringComparison.Ordinal);
@@ -401,10 +390,10 @@ public class HelpTopicsTests
     [Fact]
     public void Get_ReturnsTheTopic()
     {
-        var topic = HelpTopics.Get("page.dashboard");
+        var topic = HelpTopics.Get("page.statistics");
 
-        Assert.Equal("page.dashboard", topic.Id);
-        Assert.Equal("Dashboard", topic.Title);
+        Assert.Equal("page.statistics", topic.Id);
+        Assert.Equal("Statistics", topic.Title);
         Assert.Same(topic, HelpTopics.All[0]);
     }
 
@@ -792,163 +781,75 @@ public class HelpTopicsTests
     /// </summary>
     private static readonly Dictionary<string, string> Expected = new(StringComparer.Ordinal)
     {
-        // Phase 17 Task 7. analysis.filters entered the five longest the day it was written, at
-        // 993 characters, ahead of export.quality. This is the instruction the case's own failure
-        // message names: transcribe rather than narrow. The fix pass (review-p17-t7core majors 1
-        // and 2) rewrote its opening clause, which moved this transcription to 1041 characters
-        // without displacing it from the five longest.
-        ["analysis.filters"] =
-            "Five controls set the scope for the tabs below, though not every tab takes every one. "
-            + "Equipment picks one telescope and camera combination or all of them, Filter "
-            + "restricts to a single optical filter, Granularity "
-            + "switches between per frame and per session, and the date range bounds the imaging "
-            + "night. Granularity reaches only the Correlation tab and the Distributions histogram; "
-            + "every other tab, including the Distributions box plot, ignores it. A per-session "
-            + "point is one night and one target. A night on which two rigs imaged the same target "
-            + "still gives one point, not two, because the grouping key is the night and the target, "
-            + "never the rig. Compare ignores the equipment and filter controls entirely and reads "
-            + "only the date range, because its own two group pickers are the equipment or filter "
-            + "selection. Grouping two cameras together on the Equipment settings tab can fold two "
-            + "equipment combinations into one, merging two rigs whose plate scales differ, so this "
-            + "equipment list is only as separate as the alias groups you have configured.",
-        // Phase 17 Task 7 fix pass. analysis.correlation grew past export.script into the five
-        // longest (873 characters) once the band and Hide Outliers corrections (review-p17-t7core
-        // mediums 4 and 5, minor 13) landed.
-        ["analysis.correlation"] =
-            "A scatter of one X metric against one Y metric across the filtered frames, drawn with a "
-            + "trend line and a shaded confidence band. The trend, the band, the two stats cards and "
-            + "the point counts are all computed over every point that matches the filters. Hide "
-            + "Outliers removes only the points sitting outside 1.5 times the interquartile range on "
-            + "either axis from what is drawn, changing none of those figures. The band is a rough "
-            + "guide rather than a true 95 percent interval, and it is narrower than that interval "
-            + "on a small point set. When a PHD2 guiding metric is chosen on the X axis, its values "
-            + "are night-level figures joined by rig and imaging night, and a night with no mapped "
-            + "PHD2 profile is omitted rather than shown as a gap. Past 5,000 points the chart draws "
-            + "an even sample for speed, while the trend, the band and both stats cards still use "
-            + "every point that matched.",
-        ["stats.guiding"] =
-            "Each rig here is the telescope your PHD2 profile is mapped to, through the same "
-            + "equipment alias map the rest of the application uses, so two spellings of one scope "
-            + "become one row and two cameras sharing one telescope share that row too. A session "
-            + "whose profile is mapped to no telescope belongs to no rig: it is counted in the "
-            + "unmapped tally and appears on neither card. The coloured cells compare each rig's "
-            + "figure against the middle of your rigs, and that comparison refuses to judge "
-            + "anything until it has at least eight values to compare. Here a value is one rig, so "
-            + "it means eight telescopes: a library with one, two or seven rigs sees plain "
-            + "uncoloured figures, and with one rig every cell is neutral. The figures themselves "
-            + "are correct and comparable either way; only the colour is withheld. The frame "
-            + "table's own grading counts differently: there a group is a rig and a filter, a "
-            + "sample is a frame, and eight samples per group is enough. This table is not that "
-            + "table. The altitude card reads each session's altitude from the pointing line PHD2 "
-            + "wrote in its own log, so it needs no observer coordinates and works on a library "
-            + "that has configured none. The table beneath the arcs lists the same rows the arcs "
-            + "draw, one row per rig and altitude band, for a reader who wants the figures rather "
-            + "than the shapes.",
-        ["target.guiding"] =
-            "This night's guiding, read from the PHD2 guide log a scan catalogued for it and not "
-            + "from any frame's FITS headers. Nothing here is read from the log until Night detail "
-            + "is opened. A session under 100 frames is too short to grade, so it still counts in "
-            + "the totals while leaving no RMS figure behind it. The calibration chips print text "
-            + "PHD2 itself wrote about its own calibration run, so a chip on screen reports a "
-            + "fault PHD2 found rather than one this application decided. The graph beneath it "
-            + "draws five layers, back to front: the bands where guiding was settling, the axis "
-            + "grid, the RA and Dec error traces, the points marking a lost star, and the dither "
-            + "lines. It answers four gestures: Ctrl with the wheel zooms time, Ctrl and Shift with "
-            + "the wheel zoom the arcsecond scale, a drag pans, and a double click resets both; a "
-            + "plain wheel scrolls the pane.",
         ["export.folders"] =
-            "The rows under a night are that night's own frames' folders, from the top of your "
-            + "library down to the folder the frames sit in, and one of them is copied whole. The "
-            + "default pick is the deepest folder that holds every one of that night's frames and "
-            + "drags nothing else along. A badge reading \"+2 other nights\" means that folder "
-            + "also holds frames from two other nights, which are copied too; it is advisory, and "
-            + "choosing such a folder is how you deliberately copy a date folder two targets "
-            + "share. The size figure counts every catalogued file in that folder, whatever target "
-            + "it belongs to and whatever kind of frame it is, because it answers how much the "
-            + "copy will move: it reads unknown rather than a partial total when any one file's "
-            + "size was never recorded, and sidecars and files GalactiLog never reads are copied "
-            + "too and are not counted. A night that says it has no folder to copy contributes "
-            + "nothing to the export.",
-        ["export.quality"] =
-            "The chips are absolute limits you type, judged per frame on the metrics that frame "
-            + "actually carries. Type a limit with a decimal point, such as 3.5, whatever your "
-            + "regional number format is. A limit on a metric a frame does not carry is skipped, "
-            + "never failed, so a guiding limit does not silently drop every unguided frame. A "
-            + "frame carrying none of the limited metrics reads Unmeasured, and Unmeasured is not "
-            + "copied; the Copy box on its row is how you copy one anyway. The cell colours grade "
-            + "each frame against the baseline the segment chooses and decide nothing: the limits "
-            + "alone decide a verdict, and the colours are advisory. The limits are remembered per "
-            + "rig, so two rigs keep two sets, and the tally counts every light frame of the "
-            + "checked nights, a wider set than the footer's figures below it.",
-        // The closing sentence is the launched-app look's D3, added at this close: the page's own
-        // byte figures are 1000-based and the script's console is 1024-based, so one copy reads as
-        // two totals. Spec 12.12's row moves with it in the coordinator's own edit.
-        ["export.script"] =
-            "The script is a text file GalactiLog wrote once and never runs; you run it. It only "
-            + "copies: it contains no delete, no move and no rename, and it writes only under the "
-            + "staging folder. The run command beneath it is the line to paste; the PowerShell one "
-            + "unblocks the file first, which is harmless when the file was never marked. Copy "
-            + "script, Show script and the file all carry the same text. Starting another export "
-            + "withdraws this section, because it would otherwise describe a plan that is no "
-            + "longer on screen; the file already written is not touched. If a file of the same "
-            + "name is already in the staging folder, the script overwrites it; nothing in your "
-            + "library is ever overwritten, moved or deleted. GalactiLog counts a kilobyte as 1000 "
-            + "bytes and the script's own console counts it as 1024, so the two state slightly "
-            + "different totals for the same files.",
+            "Each night lists its frames' folders, from the top of your library down to the "
+            + "folder the frames sit in; Change folder opens the list, and the chosen folder is "
+            + "copied whole. The default pick is the deepest folder that holds every one of that "
+            + "night's frames and drags nothing else along. A badge reading \"+2 other nights\" "
+            + "or \"+1 other target\" means that folder also holds other frames, copied too; it "
+            + "is advisory, and choosing such a folder is how you deliberately copy a date folder "
+            + "two targets share. Frames counts this target's light frames; the size counts every "
+            + "catalogued file in the chosen folders, whatever target or frame type, and reads "
+            + "unknown rather than a partial total when any file's size was never recorded. "
+            + "Sidecars and files GalactiLog never read are copied too and are not counted, and a "
+            + "night with no folder to copy contributes nothing.",
         ["target.frames"] =
-            "Each frame is graded by how far its metrics sit from a typical baseline, not against a "
-            + "fixed threshold. Compare to picks it: This session is the other frames of the same "
-            + "night, and This rig is every frame captured with the same telescope, camera and filter "
-            + "across your whole library, whatever the target. Deviation is how many median absolute "
-            + "deviations a frame sits from its group's median, in raw MAD units and not sigma; one MAD"
-            + " unit is about 0.67 sigma, so they run smaller than a standard deviation score. Both "
-            + "ignore outliers, so a few bad frames cannot drag the baseline. A group under 8 frames, "
-            + "or one whose values are all identical, is left ungraded: there is no trustworthy spread "
-            + "to measure against. The colour states the verdict in both directions: better than "
-            + "typical, normal, watch, and likely reject. Signal metrics (star count, background ADU "
-            + "and guiding) are always compared within the same night whichever baseline is selected, "
-            + "because they drift with the sky. A Filter pill per measured metric shows only the frames"
-            + " the night's own outlier rule flagged on it, with their count; a pill at zero is "
-            + "disabled, and Clear filters restores every row. Grading is advisory. No frame is deleted"
-            + " or hidden.",
-        ["page.preview"] =
-            "A rendered view of one frame, at the configured preview resolution. The wheel zooms, "
-            + "a drag pans, and a double-click or the 0 key fits. The left and right arrows step "
-            + "through the frames of the list this preview was opened from. The metadata strip "
-            + "under the frame name carries that frame's filter, exposure and graded metrics, and "
-            + "it updates on every step. Render full preview on navigation is on by default, so "
-            + "every step renders a fresh full-resolution preview; turned off, stepping shows each "
-            + "frame's cached thumbnail, which is faster across a few hundred frames.",
-        ["page.frame-list"] =
-            "Copies the file list for the nights checked in the ledger. Good copies the frames "
-            + "the grading did not reject and Bad copies the frames it did. A frame with no "
-            + "recorded quality data counts as unmeasured: it is never bad, and it joins the good "
-            + "list only while Include unmeasured is checked. Absolute paths gives one full path "
-            + "per line, Names gives one bare file name per line, and Explorer search gives a "
-            + "string to paste into the Windows Explorer search box, which works best up to a few "
-            + "dozen files. This dialog writes the clipboard and nothing else; it moves, renames "
-            + "and deletes no file.",
-        ["target.nights"] =
-            "Every night this target was imaged, newest first, with that night's medians beside "
-            + "the target's own means in the top row. A night's figure is marked only when it is "
-            + "worse than the target mean by more than one unit of the last displayed decimal; "
-            + "better stays silent. A night median against a target mean is not a like-for-like "
-            + "comparison, which is why only the clearly worse figures are marked. The check box on "
-            + "a row selects that night for an action; the lit row is the night the pane beside it "
-            + "is showing, and the two are different marks.",
-        // The thumbnail sentences arrived here from target.night with the strip itself, when the
-        // user's B1 ruling of 2026-09-18 moved the strip into this section. Task 8 makes the same
-        // move in spec 12.12's table, which is what this literal is a transcription of.
+            "Each frame is graded by its distance from a typical baseline, not a fixed "
+            + "threshold; Compare to picks it: This session is the other frames of the night, "
+            + "This rig is every frame with the same telescope, camera and filter across your "
+            + "library. Deviation is how many median absolute deviations a frame sits from its "
+            + "group's median, in raw MAD units and not sigma; one MAD unit is about 0.67 sigma, "
+            + "and a few bad frames cannot drag a median. A metric with under 8 measured values "
+            + "in its group, or identical values, is left ungraded; star count, background ADU "
+            + "and guiding are always compared within the same night. The colour states the "
+            + "verdict: better than typical, normal, watch, likely reject; a pill per metric "
+            + "shows only the frames the night's outlier rule flagged, and Clear filters restores "
+            + "every row. Grading is advisory: no frame is deleted or hidden.",
+        ["export.quality"] =
+            "Enable filters turns the chips on; each chip is an absolute limit you type, judged "
+            + "per light frame on the metrics that frame carries. Type a limit with a decimal "
+            + "point, such as 3.5, whatever your regional format; the eccentricity chip offers "
+            + "the presets Strict 0.55, Balanced 0.65 and Relaxed 0.75. A limit on a metric a "
+            + "frame does not carry is skipped, never failed, so a guiding limit keeps unguided "
+            + "frames; a frame carrying none of the limited metrics reads Unmeasured and is not "
+            + "copied, and the Copy box on its row copies one anyway or leaves out one that "
+            + "passed. The cell colours grade each frame against the baseline Compare to chooses "
+            + "and decide nothing: the limits alone decide the verdict. The limits are remembered "
+            + "per rig, and the tally counts every light frame of the checked nights, a wider set "
+            + "than the review step's totals.",
+        ["stats.guiding"] =
+            "Two cards built from PHD2 guide logs. A rig is the telescope the PHD2 profile is "
+            + "mapped to, so two cameras under one telescope share a row; a session whose profile "
+            + "is mapped to no telescope joins the unmapped tally and appears on neither card. "
+            + "RMS figures are frame-count weighted and skip sessions under 100 guide frames, "
+            + "counted in the Sessions column as too short to score. The coloured cells compare "
+            + "each rig's figure against the middle of your rigs and need at least eight values; "
+            + "a value is one rig, so it means eight telescopes, and with one rig every cell is "
+            + "neutral while the figures stay correct. The altitude card splits each rig's RMS "
+            + "into bands below 30, 30 to 60 and above 60 degrees, reading altitude from the "
+            + "pointing line in the PHD2 log, so it needs no observer coordinates; Table view "
+            + "lists the same rows.",
+        ["export.script"] =
+            "The script is a text file GalactiLog wrote once and never runs; you run it, and it "
+            + "only copies: no delete, no move, no rename, and it writes only under the staging "
+            + "folder. The run command beneath it is the line to paste, and the PowerShell one "
+            + "unblocks the file first, which is harmless when the file was never marked. Copy "
+            + "script, Show script and the file all carry the same text, and Start another export "
+            + "withdraws this section without touching the file already written. If a file of the "
+            + "same name is already in the staging folder, the script overwrites it, where Copy "
+            + "now skips it; nothing in your library is ever overwritten, moved or deleted. "
+            + "GalactiLog counts a kilobyte as 1000 bytes and the script's own console counts it "
+            + "as 1024, so the two state slightly different totals for the same files.",
         ["target.night-detail"] =
-            "It opens with this night's sharpest light frame, the one with the lowest "
-            + "recorded HFR, shown whole at the frame's own aspect ratio and never cropped, and on "
-            + "a night imaged by more than one rig there is one per rig; clicking one opens that "
-            + "frame in the preview. Then the per-filter figures for this night and the ranges "
-            + "across it. HFR and eccentricity in the per-filter table are "
-            + "graded against this rig overall, meaning every frame captured with the same "
-            + "telescope, camera and filter across your whole library, whatever the target. "
-            + "Integration, frame counts and exposure are not graded. On a night imaged by more "
-            + "than one rig the table splits per rig under a rig label row. This night's guiding "
-            + "is the Guiding pill on the night chart.",
+            "It opens with this night's sharpest light frame, the one with the lowest recorded "
+            + "HFR, shown whole at the frame's own aspect ratio and never cropped. A night imaged "
+            + "by more than one rig shows one per rig, and clicking one opens that frame in the "
+            + "preview. Then the per-filter table: each filter's median HFR, eccentricity, FWHM, "
+            + "guiding RMS and star count, with its exposure, frame count and integration. The "
+            + "ranges table gives the minimum, median and maximum of each metric across the "
+            + "night, and on a night imaged by more than one rig both tables split per rig under "
+            + "a rig label row. The comparison line names the metrics where this night's median "
+            + "is worse than the target's mean, and this night's guiding is the Guiding pill on "
+            + "the night chart.",
     };
 }

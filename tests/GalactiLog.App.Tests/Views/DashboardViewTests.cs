@@ -148,24 +148,27 @@ public class DashboardViewTests
         var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
         Assert.True(notice.IsEffectivelyVisible);
 
-        // Row 0 of the list column, above the toolbar row, so a smaller row index is literally
-        // "above" as it was before the move.
+        // Row 0 of the list column, above the banners and the list region, so a smaller row index
+        // is literally "above" as it was before the move.
         Assert.Equal(0, Grid.GetRow(notice));
-        Assert.Equal(1, Grid.GetRow(view.GetControl<StackPanel>("DashboardToolbar")));
+        Assert.Equal(2, Grid.GetRow(view.GetControl<Border>("TargetListRegion")));
 
         var source = ViewSource();
 
-        // The left column is now heading, summary strip, panel; the list column carries the four
-        // rows, the notice first.
+        // The left column is heading, summary strip, panel; the list column carries three rows,
+        // the notice first, then the banners, then the list. The toolbar row that held the page's
+        // help glyph is gone, so the list sits one row higher.
         Assert.Contains("RowDefinitions=\"Auto,Auto,*\"", source, StringComparison.Ordinal);
         Assert.Contains(
-            "Grid Grid.Column=\"2\" RowDefinitions=\"Auto,Auto,Auto,*\"",
+            "Grid Grid.Column=\"2\" RowDefinitions=\"Auto,Auto,*\"",
             source,
             StringComparison.Ordinal);
+        Assert.DoesNotContain("DashboardToolbar", source, StringComparison.Ordinal);
+        Assert.DoesNotContain("HelpButton", source, StringComparison.Ordinal);
         Assert.True(
             source.IndexOf("x:Name=\"ScanFilterNoticeBanner\"", StringComparison.Ordinal)
-            < source.IndexOf("x:Name=\"DashboardToolbar\"", StringComparison.Ordinal),
-            "the notice must be declared above the toolbar row");
+            < source.IndexOf("x:Name=\"TargetListRegion\"", StringComparison.Ordinal),
+            "the notice must be declared above the list region");
 
         // And it is out of the filter panel's column for good: nothing about the panel governs it.
         Assert.True(
@@ -420,18 +423,18 @@ public class DashboardViewTests
     }
 
     [AvaloniaFact]
-    public void TheScanFilterNotice_SitsAboveTheToolbarRow_InTheListColumn()
+    public void TheScanFilterNotice_SitsAboveTheListRegion_InTheListColumn()
     {
         using var dashboard = Dashboard(Seeded());
         var view = new DashboardView { DataContext = dashboard };
         ShowAt(view, ShippedAllotment);
 
         var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
-        var toolbar = view.GetControl<StackPanel>("DashboardToolbar");
+        var region = view.GetControl<Border>("TargetListRegion");
 
         // Same parent, and a smaller row index.
-        Assert.Same(notice.Parent, toolbar.Parent);
-        Assert.True(Grid.GetRow(notice) < Grid.GetRow(toolbar));
+        Assert.Same(notice.Parent, region.Parent);
+        Assert.True(Grid.GetRow(notice) < Grid.GetRow(region));
 
         // In the list column, not the panel's.
         Assert.Equal(2, Grid.GetColumn((Control)notice.Parent!));

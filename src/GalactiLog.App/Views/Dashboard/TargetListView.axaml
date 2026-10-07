@@ -433,11 +433,6 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center">
-          <!-- Spec 12.12's dashboard.targets. The list has no heading, so the glyph sits on the
-               header row beside the Columns button rather than on a column header, which the
-               placement rule forbids. -->
-          <controls:HelpButton Topic="dashboard.targets" />
-
           <!-- Column picker: a gear rather than a text label (spec 12.2, ruling D4). DESIGN.md
                section 8 and spec 14.5 refuse a Unicode glyph standing in for an icon (questions.md
                Q10), so this draws a Path over Theme/Controls.axaml's IconGear StreamGeometry, the
