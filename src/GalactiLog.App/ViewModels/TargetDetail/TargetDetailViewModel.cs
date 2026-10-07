@@ -445,6 +445,15 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// <summary>The dashboard group key this page was opened for.</summary>
     public string GroupKey { get; }
 
+    /// <summary>
+    /// The name of the <c>TargetPageMode</c> the Modes layout is showing, or null while the layout
+    /// has not chosen one (its own default). The layout writes it on a mode click and reads it on
+    /// attach; the shell observes it to push a history entry per mode switch
+    /// (.planning/mouse-navigation.md, decision 2) and writes it back on Back or Forward.
+    /// </summary>
+    [ObservableProperty]
+    public partial string? Mode { get; set; }
+
     /// <summary>Spec 12.4's header block. Null until the first load completes, and while
     /// <see cref="IsMissing"/> is true.</summary>
     [ObservableProperty]

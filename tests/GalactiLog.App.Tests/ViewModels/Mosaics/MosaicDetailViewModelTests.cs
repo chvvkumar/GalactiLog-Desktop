@@ -145,15 +145,34 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         Assert.Equal(0, mosaic.LayoutWrites);
     }
 
+    // Mouse-navigation decision 4: history Back can reopen a mosaic deleted since. The page says
+    // so rather than blanking, and Back still closes it.
     [Fact]
-    public async Task AMosaicThatIsGone_ShowsTheLoadFailure()
+    public async Task AMosaicThatIsGone_SaysSo_AndBackStillCloses()
     {
         var mosaic = TwoPanels();
         mosaic.Deleted = true;
-
         var page = await Open(mosaic);
+        var closed = 0;
+        page.BackRequested += (_, _) => closed++;
+
+        Assert.True(page.IsNotFound);
+        Assert.False(page.LoadFailed);
+        Assert.Empty(page.Panels);
+
+        page.BackCommand.Execute(null);
+
+        Assert.Equal(1, closed);
+    }
+
+    [Fact]
+    public async Task AReadThatThrows_ShowsTheLoadFailure_NotTheNotFoundState()
+    {
+        var mosaic = TwoPanels();
+        var page = await Open(mosaic, backend: mosaic.Backend() with { Detail = _ => throw new InvalidOperationException("locked") });
 
         Assert.True(page.LoadFailed);
+        Assert.False(page.IsNotFound);
     }
 
     [Fact]

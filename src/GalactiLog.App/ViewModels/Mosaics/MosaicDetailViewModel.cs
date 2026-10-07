@@ -56,8 +56,12 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// <summary>What a failed Export panels write shows under the header.</summary>
     public const string ExportFailedText = "The file could not be written.";
 
-    /// <summary>What a failed or empty read shows in place of the page.</summary>
+    /// <summary>What a failed read shows under the header.</summary>
     public const string LoadFailedText = "The mosaic could not be loaded.";
+
+    /// <summary>What a read that found no mosaic shows in place of the page: a history Back can
+    /// reopen a mosaic deleted since (mouse-navigation decision 4).</summary>
+    public const string NotFoundText = "This mosaic no longer exists; it may have been deleted since this page was opened.";
 
     /// <summary>The CSV's header line (spec 12.17).</summary>
     public const string CsvHeader = "panel_label,targets,frames,integration_seconds,filters";
@@ -172,9 +176,15 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
     /// <summary>The last read, so a test awaits it rather than sleeping.</summary>
     internal Task PendingLoad { get; private set; } = Task.CompletedTask;
 
-    /// <summary>True when the last read failed or found no mosaic.</summary>
+    /// <summary>True when the last read threw. The page keeps what it showed and offers Retry.</summary>
     [ObservableProperty]
     public partial bool LoadFailed { get; private set; }
+
+    /// <summary>True when the last read found no mosaic for <see cref="Id"/>: the view shows
+    /// <see cref="NotFoundText"/> and Back, and hides the arranger, the notes and the sessions
+    /// region, never a blank page.</summary>
+    [ObservableProperty]
+    public partial bool IsNotFound { get; private set; }
 
     [RelayCommand]
     private Task Retry() => ReloadAsync();
@@ -545,7 +555,8 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
 
     private void Apply(MosaicDetail? detail, IReadOnlyList<CustomColumnDefinition> columns, IReadOnlyList<CustomValueRow> values)
     {
-        LoadFailed = detail is null;
+        LoadFailed = false;
+        IsNotFound = detail is null;
         if (detail is null)
         {
             return;

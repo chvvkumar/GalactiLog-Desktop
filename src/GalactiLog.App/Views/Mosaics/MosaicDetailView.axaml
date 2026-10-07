@@ -13,11 +13,9 @@
        arranger (Phase 19A), a splitter that trades height between the arranger and the
        sessions region, and the sessions region in its own ScrollViewer. Every colour is a theme
        token, nothing sets FontSize, and no button is filled. -->
-  <!-- The target page's Back shortcuts (spec 12.4), so the overlay's two pages behave alike:
-       Alt+Left here, Escape in the code-behind because a text box owns Escape while it has focus. -->
-  <UserControl.KeyBindings>
-    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
-  </UserControl.KeyBindings>
+  <!-- The target page's Escape shortcut (spec 12.4), so the overlay's two pages behave alike,
+       lives in the code-behind because a text box owns Escape while it has focus. Alt+Left and
+       the mouse back button are MainWindow's, for every page. -->
 
   <Grid RowDefinitions="Auto,Auto,*,Auto,*" Margin="16">
 
@@ -114,6 +112,14 @@
         </StackPanel>
       </Grid>
 
+      <!-- Mouse-navigation decision 4: a history Back can reopen a mosaic deleted since. The page
+           says so beside the Back button above and hides the notes, the arranger and the sessions
+           region, never a blank page and never a UI-thread exception (the target page's
+           MissingCallout). -->
+      <ContentControl Classes="callout warn" x:Name="NotFoundCallout" IsVisible="{Binding IsNotFound}">
+        <TextBlock Text="{x:Static mos:MosaicDetailViewModel.NotFoundText}" TextWrapping="Wrap" />
+      </ContentControl>
+
       <ContentControl Classes="callout error inline"
                       IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}">
         <TextBlock Text="{Binding RenameError}" />
@@ -145,7 +151,7 @@
         <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetryCommand}" />
       </StackPanel>
 
-      <StackPanel Spacing="4" Margin="0,4,0,0">
+      <StackPanel Spacing="4" Margin="0,4,0,0" IsVisible="{Binding !IsNotFound}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <TextBlock Text="Notes" Classes="section" VerticalAlignment="Center" />
           <controls:HelpButton Topic="mosaic.notes" />
@@ -199,16 +205,20 @@
 
     <!-- ===== Row 2: the arranger (Phase 19A), filling the starred row; the splitter below trades
          its height with the sessions region (ruling R7) ===== -->
-    <mosaics:ArrangerView Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding Arranger}" />
+    <mosaics:ArrangerView Grid.Row="2"
+                          Margin="0,10,0,0"
+                          DataContext="{Binding Arranger}"
+                          IsVisible="{Binding !#Root.((mos:MosaicDetailViewModel)DataContext).IsNotFound}" />
 
     <!-- ===== Row 3: the splitter; its position is not stored. Its height and look are the
          GridSplitter style's in Theme/Controls.axaml (spec 14) ===== -->
     <GridSplitter Grid.Row="3"
                   x:Name="ArrangerSplitter"
-                  ResizeDirection="Rows" />
+                  ResizeDirection="Rows"
+                  IsVisible="{Binding !IsNotFound}" />
 
     <!-- ===== Row 4: the sessions region ===== -->
-    <ScrollViewer Grid.Row="4" x:Name="SessionsScroller">
+    <ScrollViewer Grid.Row="4" x:Name="SessionsScroller" IsVisible="{Binding !IsNotFound}">
       <StackPanel Spacing="8" Margin="0,0,12,0">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">

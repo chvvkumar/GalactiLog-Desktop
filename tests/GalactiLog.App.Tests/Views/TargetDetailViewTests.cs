@@ -458,12 +458,13 @@ public class TargetDetailViewTests
     [AvaloniaFact]
     public void TargetDetailView_KeyBindings_NameCommandsThatExist()
     {
-        // Ruling Q11's three modified shortcuts. Escape is the fourth and lives in OnKeyDown.
+        // Ruling Q11's two modified shortcuts. Escape lives in OnKeyDown and Alt+Left is
+        // MainWindow's, beside the mouse back button.
         using var harness = Factory.Create().Settle();
         var view = new TargetDetailView { DataContext = harness.ViewModel };
         Show(view);
 
-        Assert.Equal(3, view.KeyBindings.Count);
+        Assert.Equal(2, view.KeyBindings.Count);
         Assert.All(view.KeyBindings, binding => Assert.NotNull(binding.Command));
     }
 

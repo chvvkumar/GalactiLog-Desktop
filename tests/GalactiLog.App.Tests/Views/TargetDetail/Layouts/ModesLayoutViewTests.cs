@@ -1261,4 +1261,28 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.Equal(600d, lanes.Bounds.Height, 1d);
         Assert.True(lanes.Extent.Height > lanes.Viewport.Height + 20d, $"extent {lanes.Extent.Height}, viewport {lanes.Viewport.Height} with the section open");
     }
+
+    // The shell's history observes the page's Mode (.planning/mouse-navigation.md): a strip press
+    // writes it, and Back across a mode switch writes it the other way, which the layout follows.
+    [AvaloniaFact]
+    public void ModeStrip_ReportsToThePage_AndFollowsThePage()
+    {
+        using var mounted = Mount();
+        var view = mounted.View;
+        var page = mounted.Page;
+
+        // Attach never writes the page, or every open would push a second history entry.
+        Assert.Null(page.Mode);
+
+        view.SelectMode.Execute(TargetPageMode.Integration);
+        mounted.Settle();
+        Assert.Equal(nameof(TargetPageMode.Integration), page.Mode);
+        Assert.True(view.Named<Control>("IntegrationRegion").IsVisible);
+
+        page.Mode = nameof(TargetPageMode.CompareNights);
+        mounted.Settle();
+        Assert.Equal(TargetPageMode.CompareNights, view.Mode);
+        Assert.True(view.Named<Control>("CompareNightsRegion").IsVisible);
+        Assert.False(view.Named<Control>("IntegrationRegion").IsVisible);
+    }
 }

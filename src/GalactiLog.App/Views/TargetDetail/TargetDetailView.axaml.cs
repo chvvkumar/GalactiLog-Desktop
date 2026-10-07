@@ -143,14 +143,15 @@ public partial class TargetDetailView : UserControl
     /// <summary>
     /// Ruling Q11's Escape: it closes the Details drawer when the drawer is open, and goes back
     /// otherwise. A <c>KeyBinding</c> cannot express that order, which is why this one key is
-    /// here and the other three are in the markup.
+    /// here and the other two are in the markup. Alt+Left is the shell's: MainWindow binds it beside
+    /// the mouse back button, for every page.
     /// </summary>
     /// <remarks>
     /// The guard is Escape's alone, and the phase review's P3-6 (F2 beginning a rename over a
     /// half-typed note) stays open because the other three cannot have it: Avalonia evaluates a
     /// <c>KeyBinding</c> before this handler runs and without consulting <c>Handled</c>, which a
     /// guard here and a tunnelling handler on this control were both measured against and neither
-    /// withheld, and moving the three gestures into a handler of this control's own loses Alt+Left
+    /// withheld, and moving the gestures into a handler of this control's own loses Alt+Left
     /// to the access-key path. Phase 13 candidate, with the reproduction in the fixer report.
     /// </remarks>
     protected override void OnKeyDown(KeyEventArgs e)
