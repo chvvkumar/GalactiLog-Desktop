@@ -10,16 +10,16 @@ Windows desktop session logger for astrophotography. Indexes the FITS and XISF f
 
 ## Overview
 
-GalactiLog walks the library folders you choose, reads the headers of every light and calibration frame, and keeps the result in a local SQLite catalogue. The frames on disk stay the ground truth: the catalogue is a derived index that a rescan rebuilds at any time. There is no server, no account and no cloud component. One installer, one process, a tray icon.
+GalactiLog walks the library folders you choose, reads the headers of every light and calibration frame, and keeps the result in a local SQLite catalogue. Your image files are the source of truth. The catalogue is an index built from them, and a rescan rebuilds it at any time. There is no server, no account and no cloud component. One installer and one process, with a tray icon.
 
 > [!IMPORTANT]
-> GalactiLog only reads your image files. It never deletes, moves, renames or edits anything in your library, and it has no feature that could. It keeps its own catalogue, thumbnails and logs in a separate folder of its own. The one time it copies files is when you ask it to export frames for stacking, and that goes to a folder you choose outside your library.
+> GalactiLog only reads your image files. It never deletes, moves, renames or edits anything in your library. Its own catalogue, thumbnails and logs live in a separate folder. It copies files only when you export frames for stacking, into a folder you choose outside your library.
 
 ## Features
 
 **Dashboard.** Every target in the library with integration totals, frame counts and the latest night. Filter by object type, date range, filter, equipment, metric quality, FITS header values and custom columns, search by name, and open a target with one click.
 
-**Target detail.** The catalogue record, notes, a nights ledger with per-night totals, and three modes: Night review, Compare nights and Integration. Per-frame grading against the median of the same telescope, camera and filter, guiding RMS from the matching PHD2 session, metric trends across nights, the raw FITS header panel, a frame preview at the configured resolution up to native, and a Sky view fetched from CDS hips2fits.
+**Target detail.** The catalogue record, notes, a list of nights with per-night totals, and three modes: Night review, Compare nights and Integration. Per-frame grading against the median of the same telescope, camera and filter, guiding RMS from the matching PHD2 session, metric trends across nights, the raw FITS header panel, a frame preview at the configured resolution up to native, and a Sky view fetched from CDS hips2fits.
 
 ![Target detail](docs/screenshots/target-detail.png)
 
@@ -31,7 +31,7 @@ GalactiLog walks the library folders you choose, reads the headers of every ligh
 
 ![Analysis](docs/screenshots/analysis.png)
 
-**Mosaics.** Group the panels of one large field. Suggestions arrive from every scan or on demand, and a mosaic page shows its panels, nights, an arranger for panel layout and a composite lightbox.
+**Mosaics.** Group the panels of one large field. Every scan suggests candidate mosaics, or run detection on demand. A mosaic page shows its panels, nights, an arranger for panel layout and a composite lightbox.
 
 **Activity and Diagnostics.** A newest-first log of everything the application did, with severity and category filters, and a diagnostics page that reports the state of the installation and exports a bundle for a bug report.
 
@@ -48,13 +48,13 @@ GalactiLog walks the library folders you choose, reads the headers of every ligh
 | Calibration frames | BIAS, DARK, FLAT, DARKFLAT and BIASFLAT, when "Include calibration frames" is on. |
 | N.I.N.A. ImageMetaData CSV | The scanner merges the CSV from the frame's folder into the frame metadata. |
 | PHD2 guide logs | `PHD2_GuideLog_*.txt` anywhere under a library folder. RMS per section excluding dither and settle windows, equipment profile, pixel scale and algorithms. Sessions correlate to frames by time. |
-| Catalogues | Bundled, offline: OpenNGC (with Messier cross-references), Caldwell, Herschel 400, Abell, Arp, SAC and Stellarium common names. SIMBAD and Sesame resolve what the bundle does not know. |
+| Catalogues | Bundled, offline: OpenNGC (with Messier cross-references), Caldwell, Herschel 400, Abell, Arp, SAC and Stellarium common names. SIMBAD and Sesame look up names the bundled catalogues do not contain. |
 
 Quality metrics read from headers or file names: median HFR, FWHM, eccentricity, detected stars, guiding RMS (total, RA, Dec) and median ADU. Grading places each frame in one of four bands by its MAD-z distance from the group median.
 
 ## Installation
 
-1. Download `GalactiLog-<channel>-Setup.exe` from [Releases](https://github.com/chvvkumar/GalactiLog-Desktop/releases). Pick `stable` unless you want to test ahead of it; the channels are listed below.
+1. Download `GalactiLog-<channel>-Setup.exe` from [Releases](https://github.com/chvvkumar/GalactiLog-Desktop/releases). Most users want `stable`; the channels are listed below.
 2. Run it. The installer is per user and needs no administrator rights. It places the application under `%LOCALAPPDATA%\GalactiLog`.
 3. Complete the setup wizard: choose the library folders to scan, where the catalogue lives, your observer location and the scan schedule, then run the first scan.
 
@@ -83,7 +83,7 @@ Uninstalling removes the binaries and leaves the data folder in place. Set the `
 
 ### Network use
 
-Everything works offline except name resolution for unknown targets (SIMBAD and Sesame), the Sky view images (CDS hips2fits, switchable off under Settings, General), update checks (GitHub), and the N.I.N.A. and Stellarium instances you configure yourself. GalactiLog never listens on a socket.
+Everything works offline except name resolution for unknown targets (SIMBAD and Sesame), the Sky view images (CDS hips2fits, switchable off under Settings, General), update checks (GitHub), and the N.I.N.A. and Stellarium instances you configure yourself. GalactiLog opens no listening ports.
 
 ## Command line
 
@@ -96,8 +96,8 @@ The same executable serves as a command line tool when given an argument. From a
 | Command | Description |
 | --- | --- |
 | `scan [<path>...]` | Scan the configured roots, or the given directories, for new or changed files. Ctrl+C cancels. |
-| `resolve <name>` | Run a target name through the resolver pipeline and print the stage that answered. Never creates a target. |
-| `inspect <file>` | Print the extracted metadata for one FITS or XISF file, with the provenance of each value. |
+| `resolve <name>` | Look up a target name in the catalogues and online services and print which source matched. Never creates a target. |
+| `inspect <file>` | Print the extracted metadata for one FITS or XISF file, and where each value came from. |
 | `dump-headers <file>` | Print every raw header card of one FITS or XISF file. |
 
 `--json` emits one JSON object on stdout. `--quiet` suppresses progress but never the result. `inspect` and `dump-headers` do not open the database, so they work while the desktop application is running. Exit codes: 0 success, 1 nothing resolved, 2 bad arguments, 3 input error, 4 database error, 5 cancelled, 6 data location unavailable, 70 unhandled error.
@@ -128,7 +128,7 @@ The solution has four source projects and four test projects:
 | --- | --- |
 | `GalactiLog.Core` | FITS and XISF readers, PHD2 parser, metrics, catalogues, resolver, integrations. No UI, no database. |
 | `GalactiLog.Data` | SQLite catalogue through EF Core: entities, migrations, ingest, queries, maintenance. |
-| `GalactiLog.Cli` | The command line dispatcher and its exit code contract. |
+| `GalactiLog.Cli` | The command line commands and their exit codes. |
 | `GalactiLog.App` | The Avalonia desktop application: views, view models, tray, updates, host. |
 
 Tests use xunit; the App tests render views with Avalonia.Headless. Warnings are errors and Avalonia bindings are compiled, so a binding path typo fails the build.
