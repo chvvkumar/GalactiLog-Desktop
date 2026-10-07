@@ -50,8 +50,7 @@
                    Text="{Binding SeverityGlyph}"
                    ToolTip.Tip="{Binding SeverityTitle}"
                    Width="18"
-                   TextAlignment="Center"
-                   Foreground="{Binding SeverityBrush}" />
+                   TextAlignment="Center" />
         <TextBlock Grid.Column="3"
                    Text="{Binding CategoryLabel}"
                    Width="60"
@@ -264,8 +263,7 @@
                              ToolTip.Tip="{Binding ChildAlertTitle}"
                              IsVisible="{Binding HasChildAlert}"
                              VerticalAlignment="Center"
-                             Margin="2,0"
-                             Foreground="{Binding ChildAlertBrush}" />
+                             Margin="2,0" />
                   <Button Grid.Column="3"
                           Classes="chevron"
                           IsVisible="{Binding HasChildren}"

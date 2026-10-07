@@ -110,7 +110,7 @@ public class AnalysisViewTests : IDisposable
         // SHOW it.
         Assert.False(shown.Tabs[0].PlateScaleWarningVisible);
         Assert.DoesNotContain(
-            view.GetVisualDescendants().OfType<Border>(),
+            view.GetVisualDescendants().OfType<ContentControl>(),
             border => border.Classes.Contains("callout") && border.Classes.Contains("warn")
                 && border.IsEffectivelyVisible);
 
@@ -121,11 +121,17 @@ public class AnalysisViewTests : IDisposable
         // Y is hfr by default, so the pixel-metric half is satisfied and the callout is drawn in
         // the warning composite of the control vocabulary.
         Assert.True(shown.Tabs[0].PlateScaleWarningVisible);
-        var callout = view.GetVisualDescendants().OfType<Border>()
+        var callout = view.GetVisualDescendants().OfType<ContentControl>()
             .Single(border => border.Classes.Contains("callout") && border.Classes.Contains("warn")
                 && border.IsEffectivelyVisible);
-        var sentence = Assert.IsType<TextBlock>(callout.Child);
+        var sentence = Assert.IsType<TextBlock>(callout.Content);
         Assert.Equal(AnalysisTabViewModel.PlateScaleWarningText, sentence.Text);
+
+        // The warn arm marks itself with a label row, not with a tinted fill or amber ink.
+        Assert.Contains(
+            callout.GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == "Warning" && block.IsEffectivelyVisible);
+        Assert.Equal(view.FindResource("ColorTextPrimary"), sentence.Foreground);
     }
 
     [AvaloniaFact]
@@ -300,7 +306,7 @@ public class AnalysisViewTests : IDisposable
         page.SharedFilter.DateTo = new DateTimeOffset(new DateTime(2025, 6, 1), TimeSpan.Zero);
         AnalysisSettle.Page(page);
 
-        var error = Named<Border>(view, "DateRangeError");
+        var error = Named<ContentControl>(view, "DateRangeError");
         var controls = Named<WrapPanel>(view, "FilterControls");
         var strip = Named<ItemsControl>(view, "TabStrip");
         var scroller = Scroller(view);
@@ -308,7 +314,10 @@ public class AnalysisViewTests : IDisposable
         Assert.True(error.IsEffectivelyVisible);
         Assert.Equal(
             SharedFilterViewModel.RangeErrorText,
-            Assert.IsType<TextBlock>(error.Child).Text);
+            Assert.IsType<TextBlock>(error.Content).Text);
+        Assert.Contains(
+            error.GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == "Error" && block.IsEffectivelyVisible);
 
         // Under the two fields, and the strip is still reachable below it.
         Assert.True(error.TranslatePoint(default, view)!.Value.Y

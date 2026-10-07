@@ -47,10 +47,6 @@
       <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
       <Setter Property="TextWrapping" Value="Wrap" />
     </Style>
-    <Style Selector="TextBlock.failure">
-      <Setter Property="Foreground" Value="{DynamicResource ColorWarning}" />
-      <Setter Property="TextWrapping" Value="Wrap" />
-    </Style>
   </UserControl.Styles>
 
   <!-- P12 R6: the panel stays inline under its frame row and loses its outer bordered Border. A
@@ -72,10 +68,12 @@
                  Classes="disclosure"
                  Text="Loading headers..."
                  IsVisible="{Binding IsLoading}" />
-      <TextBlock x:Name="FailureLine"
-                 Classes="failure"
-                 Text="This frame's headers could not be loaded. See the log for details."
-                 IsVisible="{Binding LastFailure, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding LastFailure, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock x:Name="FailureLine"
+                   Text="This frame's headers could not be loaded. See the log for details."
+                   TextWrapping="Wrap" />
+      </ContentControl>
       <TextBlock x:Name="MissingLine"
                  Classes="disclosure"
                  Text="This frame is no longer in the library. It may have been removed by a rescan."

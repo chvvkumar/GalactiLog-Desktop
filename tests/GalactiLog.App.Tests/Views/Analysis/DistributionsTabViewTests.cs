@@ -198,13 +198,13 @@ public class DistributionsTabViewTests : IDisposable
         Assert.True(note.IsEffectivelyVisible);
         Assert.Equal(DistributionsTabViewModel.PixelNoteText, note.Text);
 
-        var callout = view.GetVisualDescendants().OfType<Border>().Single(
+        var callout = view.GetVisualDescendants().OfType<ContentControl>().Single(
             border => border.Classes.Contains("callout")
                 && border.Classes.Contains("warn")
                 && border.IsEffectivelyVisible);
         Assert.Equal(
             AnalysisTabViewModel.PlateScaleWarningText,
-            Assert.IsType<TextBlock>(callout.Child).Text);
+            Assert.IsType<TextBlock>(callout.Content).Text);
 
         // The warning is the base's row, drawn by AnalysisView above this body; the note is the
         // tab's own and is therefore below it.

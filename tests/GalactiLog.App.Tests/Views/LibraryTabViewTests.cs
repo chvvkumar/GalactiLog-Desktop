@@ -109,7 +109,7 @@ public class LibraryTabViewTests
                  })
         {
             Assert.False(
-                view.GetControl<Border>(section).IsEffectivelyVisible,
+                view.GetControl<Control>(section).IsEffectivelyVisible,
                 $"{section} is still visible after a failed read.");
         }
 
@@ -126,7 +126,7 @@ public class LibraryTabViewTests
         var view = new LibraryTabView { DataContext = harness.ViewModel };
         Show(view);
 
-        Assert.False(view.GetControl<Border>("StoredValuesNoticeBanner").IsEffectivelyVisible);
+        Assert.False(view.GetControl<ContentControl>("StoredValuesNoticeBanner").IsEffectivelyVisible);
 
         harness.ViewModel.AddScanRoot(Factory.SecondRoot);
         harness.SaveElsewhere(general => general with
@@ -135,7 +135,7 @@ public class LibraryTabViewTests
         });
         Dispatcher.UIThread.RunJobs();
 
-        Assert.True(view.GetControl<Border>("StoredValuesNoticeBanner").IsEffectivelyVisible);
+        Assert.True(view.GetControl<ContentControl>("StoredValuesNoticeBanner").IsEffectivelyVisible);
 
         // FIXER LIST F13: the banner names the reason, and this one really is another writer.
         Assert.Contains(
@@ -328,7 +328,7 @@ public class LibraryTabViewTests
         var view = new LibraryTabView { DataContext = harness.ViewModel };
         Show(view);
 
-        var notice = view.GetControl<Border>("ScanFilterNoticeBanner");
+        var notice = view.GetControl<ContentControl>("ScanFilterNoticeBanner");
         Assert.True(notice.IsEffectivelyVisible);
         Assert.Contains("callout", notice.Classes);
         Assert.DoesNotContain("warn", notice.Classes);
@@ -359,7 +359,7 @@ public class LibraryTabViewTests
 
         Assert.False(harness.ViewModel.IsReady);
         Assert.False(harness.ViewModel.ShowScanFilterNotice);
-        Assert.False(view.GetControl<Border>("ScanFilterNoticeBanner").IsEffectivelyVisible);
+        Assert.False(view.GetControl<ContentControl>("ScanFilterNoticeBanner").IsEffectivelyVisible);
         Assert.Empty(ButtonTexts(view));
     }
 
@@ -416,7 +416,7 @@ public class LibraryTabViewTests
         var view = new LibraryTabView { DataContext = harness.ViewModel };
         Show(view);
 
-        var banner = view.GetControl<Border>("StoredValuesNoticeBanner");
+        var banner = view.GetControl<ContentControl>("StoredValuesNoticeBanner");
         Assert.Contains("callout", banner.Classes);
         Assert.Contains("warn", banner.Classes);
 

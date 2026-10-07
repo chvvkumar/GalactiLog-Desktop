@@ -1,83 +1,11 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
-using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using GalactiLog.App.Theme;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Data.Queries;
 
 namespace GalactiLog.App.ViewModels.Activity;
-
-/// <summary>
-/// The three severity colours, resolved once from the theme rather than once per row.
-/// </summary>
-/// <remarks>
-/// Spec 14.5: a view-model that holds a brush holds an <see cref="ImmutableSolidColorBrush"/>.
-/// Constructed on the UI thread and only there (Task 3's standing rule): the resolution reads
-/// <c>Application.Current</c>'s merged dictionary through <c>ChartTheme.Read</c>, whose token
-/// lookup goes through <c>SolidColorBrush.Color</c>, and that getter verifies dispatcher access.
-/// A background load's callback must never build one. The page rebuilds this on
-/// <c>ChartTheme.Changed</c>, which is raised on the UI thread, exactly as the Statistics page
-/// rebuilds its band brushes (review finding 4).
-/// </remarks>
-internal sealed class SeverityBrushes
-{
-    public SeverityBrushes()
-    {
-        Info = Resolve("ColorTextSecondary");
-        Warning = Resolve("ColorWarning");
-        Error = Resolve("ColorError");
-    }
-
-    public IImmutableSolidColorBrush Info { get; }
-
-    public IImmutableSolidColorBrush Warning { get; }
-
-    public IImmutableSolidColorBrush Error { get; }
-
-    /// <summary>The web's <c>SEVERITY_CLASS</c>: <c>text-secondary</c>, <c>text-warning</c>,
-    /// <c>text-error</c>. An unrecognized severity renders as info rather than as nothing.
-    /// </summary>
-    public IImmutableSolidColorBrush For(string severity) => severity switch
-    {
-        "warning" => Warning,
-        "error" => Error,
-        _ => Info,
-    };
-
-    // ChartTheme.Read is the application's one token-to-colour reader, with the documented
-    // neutral-grey fallback for a key that is missing from the dictionary, exactly as
-    // Statistics' BandBrushes uses it.
-    //
-    // Phase 14B fixer, fixer list item 6 (Task 7 review escalation 2, ruled to the fixer). The
-    // known flake, ActivityViewModelTests.LoadOlder_WhileLoading_IsRefusedInTheCommandBody, is
-    // this resolution running off the UI thread while Application.Current is non-null:
-    // ChartTheme.Read already answers the fallback when Application.Current is null, but when it
-    // is set the resource it finds is a SolidColorBrush whose Color getter verifies dispatcher
-    // access and throws InvalidOperationException from any other thread. The App test assembly
-    // already runs with parallelization disabled, so an xUnit collection would buy nothing: the
-    // race is left-behind process state (an AvaloniaFact sets Application.Current for good), not
-    // a schedule. The guard is here rather than in ChartTheme.Read so the standing rule that
-    // theme tokens are read on the UI thread keeps failing loudly everywhere else; the cost of
-    // it here is three rows of neutral grey, which is what the documented fallback is for.
-    private static IImmutableSolidColorBrush Resolve(string key)
-    {
-        try
-        {
-            return Brush(ChartTheme.Read(key, ChartTheme.Fallback));
-        }
-        catch (InvalidOperationException)
-        {
-            return Brush(ChartTheme.Fallback);
-        }
-
-        static IImmutableSolidColorBrush Brush(SkiaSharp.SKColor colour)
-            => new ImmutableSolidColorBrush(
-                Color.FromArgb(colour.Alpha, colour.Red, colour.Green, colour.Blue));
-    }
-}
 
 /// <summary>
 /// One row of spec 12.6's feed: timestamp, severity, category, message and duration, plus the two
@@ -102,7 +30,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
 {
     private readonly IReadOnlyList<ActivityRow> _childRows;
     private readonly Func<ActivityRow, ActivityRowViewModel>? _buildChild;
-    private SeverityBrushes _brushes;
 
     /// <param name="row">The query row.</param>
     /// <param name="children">This row's sub-events as query rows, oldest first. Empty for a child
@@ -111,8 +38,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
     /// <param name="buildChild">How to turn one of those rows into a child view-model. Supplied by
     /// the page, which owns the brushes and the zone; null on a child row, which has no children of
     /// its own (<c>parent_id</c> is one level deep by construction, spec 10.9).</param>
-    /// <param name="brushes">Resolved by the page on the UI thread; never resolved here, because a
-    /// row is built inside a background load's post callback.</param>
     /// <param name="zone">Spec 5.8.1's <c>general.timezone</c>, resolved once by the page.</param>
     /// <param name="use24Hour">Spec 5.8.1's <c>general.use_24h_time</c>.</param>
     /// <param name="isUnseen">Spec 12.6, PAR-017. Whether this row's <c>timestamp</c> was strictly
@@ -123,7 +48,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
         ActivityRow row,
         IReadOnlyList<ActivityRow> children,
         Func<ActivityRow, ActivityRowViewModel>? buildChild,
-        SeverityBrushes brushes,
         TimeZoneInfo zone,
         bool use24Hour,
         bool isUnseen = false)
@@ -131,7 +55,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
         Row = row;
         _childRows = children;
         _buildChild = buildChild;
-        _brushes = brushes;
         IsUnseen = isUnseen;
 
         // The one general.timezone / general.use_24h_time path in the application (collision-map
@@ -193,9 +116,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
     /// geometric characters rather than emoji or private-use glyphs, the same rule
     /// <c>FrameRowViewModel.GuidingRmsSourceGlyph</c> follows.</summary>
     public string SeverityGlyph => GlyphFor(Row.Severity);
-
-    /// <summary>The web's <c>SEVERITY_CLASS</c> as a theme brush.</summary>
-    public IImmutableSolidColorBrush SeverityBrush => _brushes.For(Row.Severity);
 
     /// <summary>The web's icon <c>title</c>: the raw severity string.</summary>
     public string SeverityTitle => Row.Severity;
@@ -280,8 +200,6 @@ public sealed partial class ActivityRowViewModel : ObservableObject
 
     public string ChildAlertGlyph => ChildAlertSeverity is { } severity ? GlyphFor(severity) : "";
 
-    public IImmutableSolidColorBrush ChildAlertBrush => _brushes.For(ChildAlertSeverity ?? "info");
-
     public string ChildAlertTitle => ChildAlertSeverity switch
     {
         "error" => "This scan recorded an error",
@@ -339,31 +257,12 @@ public sealed partial class ActivityRowViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Swaps in the theme's new severity colours and tells the bindings. Called by the page from
-    /// <c>ChartTheme.Changed</c>, on the UI thread, never from a load callback (review finding 4).
-    /// Applies to this row's already-built children too, so an expanded scan repaints with its
-    /// parent.
-    /// </summary>
-    internal void RefreshBrushes(SeverityBrushes brushes)
-    {
-        _brushes = brushes;
-        OnPropertyChanged(nameof(SeverityBrush));
-        OnPropertyChanged(nameof(ChildAlertBrush));
-
-        foreach (var child in Children)
-        {
-            child.RefreshBrushes(brushes);
-        }
-    }
-
-    /// <summary>
     /// Recomputes <see cref="IsUnseen"/> in place against <paramref name="cutoff"/>, the marker
     /// stored before the open that is asking (spec 12.6, section 7.2; P2-2 review). Called by the
     /// page's <c>MarkOpened</c> on every open, for every row already loaded: the page does not
     /// reload on open (it keeps its scroll position and its loaded page set on purpose), so an
     /// already-built row's marker has to be corrected here or it would read whatever cutoff was in
-    /// force the one time it was built, forever. Applies to this row's already-built children too,
-    /// the same recursive shape <see cref="RefreshBrushes"/> uses.
+    /// force the one time it was built, forever. Applies to this row's already-built children too.
     /// </summary>
     internal void RefreshUnseen(DateTimeOffset? cutoff)
     {

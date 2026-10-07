@@ -36,6 +36,12 @@ public partial class ModesLayoutView : TargetLayoutView
         {
             Mode = mode;
             ShowMode();
+            // The shell's history observes the page's Mode, so a press is reported there; the
+            // attach below never writes it, or every open would push a second entry.
+            if (Page is { } page)
+            {
+                page.Mode = mode.ToString();
+            }
         });
         InitializeComponent();
         NightReviewButton.Command = SelectMode;
@@ -124,9 +130,37 @@ public partial class ModesLayoutView : TargetLayoutView
         var stored = page.TargetPage.Layout(LayoutKey);
         SidebarHandle.Refresh();
         NightMetricsSection.IsExpanded = stored.NightMetricsOpen ?? true;
+        // Back across a mode switch keeps the page and only writes its Mode, so the view follows
+        // the page both on attach and for as long as it is attached.
+        FollowPageMode(page);
+        page.PropertyChanged += OnPageModeChanged;
     }
 
-    protected override void OnReleasing() => SidebarHandle.Flush();
+    protected override void OnReleasing()
+    {
+        if (Page is { } page)
+        {
+            page.PropertyChanged -= OnPageModeChanged;
+        }
+
+        SidebarHandle.Flush();
+    }
+
+    private void OnPageModeChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TargetDetailViewModel.Mode) && sender is TargetDetailViewModel page)
+        {
+            FollowPageMode(page);
+        }
+    }
+
+    private void FollowPageMode(TargetDetailViewModel page)
+    {
+        if (Enum.TryParse<TargetPageMode>(page.Mode, out var mode) && mode != Mode)
+        {
+            Mode = mode;
+        }
+    }
 
     // What sits above the chart, as a sum of heights rather than a bottom edge: the Session metrics
     // section's open body is never charged to the lanes (it scrolls, R2 and R15), and a sum does

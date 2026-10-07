@@ -101,7 +101,7 @@ public class MergeDialogWindowTests
         using var harness = Factory.Create().Settle();
         var window = Show(harness.ViewModel);
 
-        Assert.False(window.GetControl<Border>("CollidingSessionsPanel").IsVisible);
+        Assert.False(window.GetControl<ContentControl>("CollidingSessionsPanel").IsVisible);
 
         window.Close();
     }

@@ -181,7 +181,7 @@ public class FilterPanelCustomSectionTests
         // The vocabulary it moved into, named so a later rewrite back to a card fails here too.
         Assert.Contains("Classes=\"rule\"", source, StringComparison.Ordinal);
         Assert.Contains("Classes=\"tag\"", source, StringComparison.Ordinal);
-        Assert.Equal(3, Regex.Matches(source, "Classes=\"callout\"").Count);
+        Assert.Equal(3, Regex.Matches(source, "Classes=\"callout[^\"]*\"").Count);
         Assert.DoesNotContain("<Style ", source, StringComparison.Ordinal);
     }
 

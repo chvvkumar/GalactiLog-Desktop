@@ -41,11 +41,14 @@
                          Watermark="AstroBin id"
                          KeyDown="OnCommitFieldKeyDown"
                          Text="{Binding IdText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
-                           Text="{Binding Error}"
-                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource ColorError}" />
+                <ContentControl Classes="callout error inline"
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="2"
+                                IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <TextBlock Text="{Binding Error}"
+                             TextWrapping="Wrap" />
+                </ContentControl>
               </Grid>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -68,11 +71,12 @@
                    HorizontalAlignment="Left"
                    KeyDown="OnCommitFieldKeyDown"
                    Text="{Binding BortleText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-          <TextBlock x:Name="BortleErrorText"
-                     Text="{Binding BortleError}"
-                     IsVisible="{Binding BortleError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding BortleError, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock x:Name="BortleErrorText"
+                       Text="{Binding BortleError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
       </StackPanel>
 
@@ -114,11 +118,14 @@
                            IsVisible="{Binding ShowNotOfferedCaption}"
                            TextWrapping="Wrap"
                            Classes="t-caption" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
-                           Text="{Binding UrlError}"
-                           IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource ColorError}" />
+                <ContentControl Classes="callout error inline"
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="4"
+                                IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <TextBlock Text="{Binding UrlError}"
+                             TextWrapping="Wrap" />
+                </ContentControl>
               </Grid>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -169,11 +176,14 @@
                            IsVisible="{Binding ShowNotOfferedCaption}"
                            TextWrapping="Wrap"
                            Classes="t-caption" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
-                           Text="{Binding UrlError}"
-                           IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                           TextWrapping="Wrap"
-                           Foreground="{DynamicResource ColorError}" />
+                <ContentControl Classes="callout error inline"
+                                Grid.Row="1"
+                                Grid.Column="0"
+                                Grid.ColumnSpan="4"
+                                IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                  <TextBlock Text="{Binding UrlError}"
+                             TextWrapping="Wrap" />
+                </ContentControl>
               </Grid>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
@@ -186,11 +196,12 @@
                 Command="{Binding AddStellariumInstanceCommand}" />
       </StackPanel>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorMessage}"
-                 IsVisible="{Binding HasErrorMessage}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding HasErrorMessage}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
       <TextBlock x:Name="StatusText"
                  Text="{Binding StatusMessage}"
                  IsVisible="{Binding HasStatusMessage}"

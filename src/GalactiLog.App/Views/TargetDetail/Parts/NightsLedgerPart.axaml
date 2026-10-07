@@ -35,6 +35,15 @@
     <Style Selector="parts|NightsLedgerPart:collapsed :is(Control).ledger-metric, parts|NightsLedgerPart:collapsed :is(Control).ledger-title">
       <Setter Property="IsVisible" Value="False" />
     </Style>
+    <!-- The head over the date column reads "Night" open and "All" collapsed: collapsed, the only
+         thing left beside it is the select-all box, and "Night" hanging off a box names nothing.
+         Both words come from here because a local Text would beat the collapsed setter. -->
+    <Style Selector="parts|NightsLedgerPart TextBlock#LedgerNightHead">
+      <Setter Property="Text" Value="Night" />
+    </Style>
+    <Style Selector="parts|NightsLedgerPart:collapsed TextBlock#LedgerNightHead">
+      <Setter Property="Text" Value="All" />
+    </Style>
     <Style Selector="parts|NightsLedgerPart:collapsed StackPanel#LedgerTitle">
       <Setter Property="Grid.Row" Value="1" />
       <Setter Property="Grid.ColumnSpan" Value="2" />
@@ -318,7 +327,7 @@
                         IsChecked="{Binding AreAllNightsSelected, Mode=OneWay}"
                         Command="{Binding ToggleAllNightsCommand}"
                         ToolTip.Tip="Select every night, or clear the selection" />
-              <TextBlock Grid.Column="1" Classes="t-label ledger-head" Text="Night" />
+              <TextBlock Grid.Column="1" x:Name="LedgerNightHead" Classes="t-label ledger-head" />
               <TextBlock Grid.Column="2" Classes="t-label ledger-head num ledger-metric" Text="h" />
               <TextBlock Grid.Column="3" Classes="t-label ledger-head num ledger-frames ledger-metric" Text="Frames" />
               <!-- R4: every comparison this page draws between a night and the target is

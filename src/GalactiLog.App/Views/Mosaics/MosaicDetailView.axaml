@@ -13,11 +13,9 @@
        arranger (Phase 19A), a splitter that trades height between the arranger and the
        sessions region, and the sessions region in its own ScrollViewer. Every colour is a theme
        token, nothing sets FontSize, and no button is filled. -->
-  <!-- The target page's Back shortcuts (spec 12.4), so the overlay's two pages behave alike:
-       Alt+Left here, Escape in the code-behind because a text box owns Escape while it has focus. -->
-  <UserControl.KeyBindings>
-    <KeyBinding Gesture="Alt+Left" Command="{Binding BackCommand}" />
-  </UserControl.KeyBindings>
+  <!-- The target page's Escape shortcut (spec 12.4), so the overlay's two pages behave alike,
+       lives in the code-behind because a text box owns Escape while it has focus. Alt+Left and
+       the mouse back button are MainWindow's, for every page. -->
 
   <Grid RowDefinitions="Auto,Auto,*,Auto,*" Margin="16">
 
@@ -114,11 +112,20 @@
         </StackPanel>
       </Grid>
 
-      <TextBlock Text="{Binding RenameError}"
-                 IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                 Foreground="{DynamicResource ColorError}" />
+      <!-- Mouse-navigation decision 4: a history Back can reopen a mosaic deleted since. The page
+           says so beside the Back button above and hides the notes, the arranger and the sessions
+           region, never a blank page and never a UI-thread exception (the target page's
+           MissingCallout). -->
+      <ContentControl Classes="callout warn" x:Name="NotFoundCallout" IsVisible="{Binding IsNotFound}">
+        <TextBlock Text="{x:Static mos:MosaicDetailViewModel.NotFoundText}" TextWrapping="Wrap" />
+      </ContentControl>
 
-      <Border Classes="callout warn" IsVisible="{Binding DeletePending}">
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding RenameError, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock Text="{Binding RenameError}" />
+      </ContentControl>
+
+      <ContentControl Classes="callout warn" IsVisible="{Binding DeletePending}">
         <StackPanel Spacing="6">
           <TextBlock Text="{x:Static mos:MosaicDetailViewModel.DeleteConfirmText}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8">
@@ -126,22 +133,25 @@
             <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteCommand}" />
           </StackPanel>
         </StackPanel>
-      </Border>
+      </ContentControl>
 
-      <TextBlock Text="{Binding Error}"
-                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock Text="{Binding Error}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
 
       <TextBlock x:Name="SummaryLine" Text="{Binding SummaryText}" Foreground="{DynamicResource ColorTextSecondary}" />
 
       <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding LoadFailed}">
-        <TextBlock Text="{x:Static mos:MosaicDetailViewModel.LoadFailedText}" VerticalAlignment="Center"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        VerticalAlignment="Center">
+          <TextBlock Text="{x:Static mos:MosaicDetailViewModel.LoadFailedText}" />
+        </ContentControl>
         <Button Classes="quiet" Content="Retry" Foreground="{DynamicResource ColorAccent}" Command="{Binding RetryCommand}" />
       </StackPanel>
 
-      <StackPanel Spacing="4" Margin="0,4,0,0">
+      <StackPanel Spacing="4" Margin="0,4,0,0" IsVisible="{Binding !IsNotFound}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <TextBlock Text="Notes" Classes="section" VerticalAlignment="Center" />
           <controls:HelpButton Topic="mosaic.notes" />
@@ -153,15 +163,15 @@
                  MaxHeight="120"
                  Text="{Binding Notes.Text, Mode=TwoWay}" />
         <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
-        <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+        <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
           <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
                      TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
       </StackPanel>
     </StackPanel>
 
     <!-- ===== Row 1: the available labels banner, nothing when there is no label ===== -->
-    <Border Grid.Row="1" Classes="callout" Margin="0,10,0,0" IsVisible="{Binding HasAvailableLabels}">
+    <ContentControl Grid.Row="1" Classes="callout" Margin="0,10,0,0" IsVisible="{Binding HasAvailableLabels}">
       <StackPanel Spacing="6">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <TextBlock Text="New panel labels available" FontWeight="SemiBold" VerticalAlignment="Center" />
@@ -185,27 +195,30 @@
                 <TextBlock Text="{Binding Error}"
                            IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
                            TextWrapping="Wrap"
-                           MaxWidth="360"
-                           Foreground="{DynamicResource ColorError}" />
+                           MaxWidth="360" />
               </StackPanel>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
       </StackPanel>
-    </Border>
+    </ContentControl>
 
     <!-- ===== Row 2: the arranger (Phase 19A), filling the starred row; the splitter below trades
          its height with the sessions region (ruling R7) ===== -->
-    <mosaics:ArrangerView Grid.Row="2" Margin="0,10,0,0" DataContext="{Binding Arranger}" />
+    <mosaics:ArrangerView Grid.Row="2"
+                          Margin="0,10,0,0"
+                          DataContext="{Binding Arranger}"
+                          IsVisible="{Binding !#Root.((mos:MosaicDetailViewModel)DataContext).IsNotFound}" />
 
     <!-- ===== Row 3: the splitter; its position is not stored. Its height and look are the
          GridSplitter style's in Theme/Controls.axaml (spec 14) ===== -->
     <GridSplitter Grid.Row="3"
                   x:Name="ArrangerSplitter"
-                  ResizeDirection="Rows" />
+                  ResizeDirection="Rows"
+                  IsVisible="{Binding !IsNotFound}" />
 
     <!-- ===== Row 4: the sessions region ===== -->
-    <ScrollViewer Grid.Row="4" x:Name="SessionsScroller">
+    <ScrollViewer Grid.Row="4" x:Name="SessionsScroller" IsVisible="{Binding !IsNotFound}">
       <StackPanel Spacing="8" Margin="0,0,12,0">
         <Grid ColumnDefinitions="*,Auto">
           <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -217,10 +230,11 @@
             <Button Classes="sm" Content="Add panel" Command="{Binding ToggleAddPanelCommand}" />
           </StackPanel>
         </Grid>
-        <TextBlock Text="{Binding SessionsError}"
-                   IsVisible="{Binding SessionsError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        IsVisible="{Binding SessionsError, Converter={x:Static ObjectConverters.IsNotNull}}">
+          <TextBlock Text="{Binding SessionsError}"
+                     TextWrapping="Wrap" />
+        </ContentControl>
 
         <!-- The add panel form (AddPanelViewModel), shared with the Mosaics table row. -->
         <Panel IsVisible="{Binding IsAddPanelOpen}">
@@ -247,10 +261,11 @@
           <TextBlock Text="{Binding Caption}"
                      IsVisible="{Binding Caption, Converter={x:Static ObjectConverters.IsNotNull}}"
                      Foreground="{DynamicResource ColorTextSecondary}" />
-          <TextBlock Text="{Binding Error}"
-                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <TextBlock Text="{Binding Error}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
         </StackPanel>
         </Panel>
 
@@ -315,7 +330,7 @@
                       <TextBlock Grid.Column="6" Text="{Binding DeficitText}" Padding="8,0" VerticalAlignment="Center"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
                       <Border Grid.Column="7" Classes="tag" Margin="8,0" IsVisible="{Binding HasAvailable}">
-                        <TextBlock Text="{Binding AvailableText}" Foreground="{DynamicResource ColorWarning}" />
+                        <TextBlock Text="{Binding AvailableText}" />
                       </Border>
                       <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Center">
                         <Button Classes="sm" Content="Include all" Command="{Binding IncludeAllCommand}" />
@@ -324,7 +339,7 @@
                       </StackPanel>
                     </Grid>
 
-                    <Border Classes="callout warn" IsVisible="{Binding DeletePending}" Margin="0,4">
+                    <ContentControl Classes="callout warn" IsVisible="{Binding DeletePending}" Margin="0,4">
                       <StackPanel Spacing="6">
                         <TextBlock Text="{Binding DeleteConfirmText}" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
@@ -332,11 +347,12 @@
                           <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeletePanelCommand}" />
                         </StackPanel>
                       </StackPanel>
-                    </Border>
-                    <TextBlock Text="{Binding Error}"
-                               IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                               TextWrapping="Wrap"
-                               Foreground="{DynamicResource ColorError}" />
+                    </ContentControl>
+                    <ContentControl Classes="callout error inline"
+                                    IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                      <TextBlock Text="{Binding Error}"
+                                 TextWrapping="Wrap" />
+                    </ContentControl>
 
                     <!-- Expanded: Included and Available side by side. -->
                     <Grid ColumnDefinitions="*,*" Margin="28,6,0,10" IsVisible="{Binding IsExpanded}">
@@ -367,10 +383,11 @@
                                   <TextBlock Grid.Column="5" Text="{Binding IntegrationText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
                                   <Button Grid.Column="6" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
                                 </Grid>
-                                <TextBlock Text="{Binding Error}"
-                                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                           TextWrapping="Wrap"
-                                           Foreground="{DynamicResource ColorError}" />
+                                <ContentControl Classes="callout error inline"
+                                                IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                  <TextBlock Text="{Binding Error}"
+                                             TextWrapping="Wrap" />
+                                </ContentControl>
                               </StackPanel>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
@@ -417,10 +434,11 @@
                                   <Button Grid.Column="1" Classes="sm" Content="Create" Margin="8,0,0,0" Command="{Binding CreateNewPanelCommand}" />
                                   <Button Grid.Column="2" Classes="sm" Content="Cancel" Margin="8,0,0,0" Command="{Binding CancelNewPanelCommand}" />
                                 </Grid>
-                                <TextBlock Text="{Binding Error}"
-                                           IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                           TextWrapping="Wrap"
-                                           Foreground="{DynamicResource ColorError}" />
+                                <ContentControl Classes="callout error inline"
+                                                IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                  <TextBlock Text="{Binding Error}"
+                                             TextWrapping="Wrap" />
+                                </ContentControl>
                               </StackPanel>
                             </DataTemplate>
                           </ItemsControl.ItemTemplate>
@@ -442,10 +460,11 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-                          <TextBlock Text="{Binding Error}"
-                                     IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}"
-                                     TextWrapping="Wrap"
-                                     Foreground="{DynamicResource ColorError}" />
+                          <ContentControl Classes="callout error inline"
+                                          IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Text="{Binding Error}"
+                                       TextWrapping="Wrap" />
+                          </ContentControl>
                         </StackPanel>
                       </StackPanel>
                     </Grid>

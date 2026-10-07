@@ -67,21 +67,23 @@
                      Text="{Binding DataRootSourceText}"
                      Foreground="{DynamicResource ColorTextSecondary}" />
 
-          <TextBlock x:Name="DataRootErrorText"
-                     Text="{Binding DataRootError}"
-                     IsVisible="{Binding HasDataRootError}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasDataRootError}">
+            <TextBlock x:Name="DataRootErrorText"
+                       Text="{Binding DataRootError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
 
           <Grid x:Name="PendingMoveRow"
                 IsVisible="{Binding HasPendingMove}"
                 ColumnDefinitions="*,Auto">
-            <TextBlock Grid.Column="0"
-                       x:Name="PendingMoveNoteText"
-                       Text="{Binding PendingMoveNote}"
-                       TextWrapping="Wrap"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource ColorWarning}" />
+            <ContentControl Classes="callout warn inline"
+                            Grid.Column="0"
+                            VerticalAlignment="Center">
+              <TextBlock x:Name="PendingMoveNoteText"
+                         Text="{Binding PendingMoveNote}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
             <Button Grid.Column="1"
                     x:Name="CancelDataRootMoveButton"
                     Content="Cancel move"
@@ -133,11 +135,12 @@
                     Click="OnBrowseCacheDir" />
           </Grid>
 
-          <TextBlock x:Name="CacheDirErrorText"
-                     Text="{Binding CacheDirError}"
-                     IsVisible="{Binding HasCacheDirError}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasCacheDirError}">
+            <TextBlock x:Name="CacheDirErrorText"
+                       Text="{Binding CacheDirError}"
+                       TextWrapping="Wrap" />
+          </ContentControl>
 
           <TextBlock x:Name="FreeSpaceText"
                      Text="{Binding FreeSpaceText}"
@@ -203,11 +206,12 @@
                        Text="{Binding CacheFloorNote}"
                        TextWrapping="Wrap"
                        Foreground="{DynamicResource ColorTextTertiary}" />
-            <TextBlock x:Name="CacheMbNoteText"
-                       Text="{Binding CacheMbNote}"
-                       IsVisible="{Binding HasCacheMbNote}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorWarning}" />
+            <ContentControl Classes="callout warn inline"
+                            IsVisible="{Binding HasCacheMbNote}">
+              <TextBlock x:Name="CacheMbNoteText"
+                         Text="{Binding CacheMbNote}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
         </StackPanel>
       </Border>
@@ -235,11 +239,12 @@
                      Foreground="{DynamicResource ColorTextPrimary}"
                      KeyDown="OnCommitFieldKeyDown"
                      Text="{Binding ThumbnailWidthText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-            <TextBlock x:Name="ThumbnailWidthErrorText"
-                       Text="{Binding ThumbnailWidthError}"
-                       IsVisible="{Binding HasThumbnailWidthError}"
-                       TextWrapping="Wrap"
-                       Foreground="{DynamicResource ColorError}" />
+            <ContentControl Classes="callout error inline"
+                            IsVisible="{Binding HasThumbnailWidthError}">
+              <TextBlock x:Name="ThumbnailWidthErrorText"
+                         Text="{Binding ThumbnailWidthError}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
 
           <!-- Spec 11.3: the cache key includes the width, so nothing needs purging. -->
@@ -250,11 +255,12 @@
         </StackPanel>
       </Border>
 
-      <TextBlock x:Name="ErrorText"
-                 Text="{Binding ErrorMessage}"
-                 IsVisible="{Binding HasErrorMessage}"
-                 TextWrapping="Wrap"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding HasErrorMessage}">
+        <TextBlock x:Name="ErrorText"
+                   Text="{Binding ErrorMessage}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
       <TextBlock x:Name="StatusText"
                  Text="{Binding StatusMessage}"
                  IsVisible="{Binding HasStatusMessage}"

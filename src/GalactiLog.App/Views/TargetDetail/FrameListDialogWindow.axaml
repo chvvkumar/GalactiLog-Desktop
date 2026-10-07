@@ -70,15 +70,14 @@
                  TextWrapping="Wrap"
                  Foreground="{DynamicResource ColorTextSecondary}" />
 
-      <!-- Spec 12.4's partial-load warning. Border.callout warn is the shared vocabulary's, and
-           its warn arm carries the warning ink for its text too. -->
-      <Border x:Name="PartialLoadWarning"
+      <!-- Spec 12.4's partial-load warning: the shared vocabulary's warn callout. -->
+      <ContentControl x:Name="PartialLoadWarning"
               Classes="callout warn"
               IsVisible="{Binding HasPartialLoad}">
         <TextBlock x:Name="PartialLoadText"
                    Text="{Binding PartialLoadText}"
                    TextWrapping="Wrap" />
-      </Border>
+      </ContentControl>
 
       <StackPanel Orientation="Horizontal" Spacing="6">
         <TextBlock Text="Format"

@@ -114,6 +114,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // yet here.
         dashboard.ReviewScanFiltersRequested += OnOpenSettingsRequested;
 
+        // Mouse navigation decision 2: a Settings tab switch is one history entry. The page is
+        // eager, so the subscription is constructor-time; the Analysis page's is attached when it
+        // is built, and a target page's when it is opened.
+        settings.PropertyChanged += OnStripChanged;
+
         Items =
         [
             new NavigationItem("dashboard", "Dashboard", dashboard, "IconDashboard"),
@@ -142,6 +147,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // construction.
         _selected = Items[0];
         _shownPage = CurrentPage;
+        _history.Push(Snapshot());
 
         ContentMaxWidth = ResolveContentMaxWidth(general.ContentWidth);
         RootFontSize = ResolveRootFontSize(general.TextSize);
@@ -207,11 +213,19 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         return page;
     }
 
-    // Spec 12.14's Analysis page (Phase 17 Task 4), the third sibling of the two above. It
-    // subscribes to nothing, because the page raises no routing event: there is deliberately no
-    // _analysis field and no Dispose arm for a subscription that does not exist, and both arrive
-    // the moment a routing event does.
-    private object BuildAnalysis() => _analysisFactory();
+    // Spec 12.14's Analysis page (Phase 17 Task 4), the third sibling of the two above. The page
+    // raises no routing event; the one subscription is the history's, so a tab switch on the
+    // strip pushes an entry (mouse navigation decision 2).
+    private object BuildAnalysis()
+    {
+        var page = _analysisFactory();
+        page.PropertyChanged += OnStripChanged;
+        _analysis = page;
+        return page;
+    }
+
+    // The Analysis page once built, so Dispose can drop the handler above.
+    private AnalysisViewModel? _analysis;
 
     // Spec 12.17's Mosaics page (Phase 18). Its two routing events are the shell's, for the reason
     // the Statistics page's are: the shell owns the content region and the detail overlay.
@@ -250,6 +264,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         page.BackRequested += OnDetailBackRequested;
         page.OpenTargetRequested += OnMosaicTargetOpenRequested;
         Detail = page;
+        Navigate(Snapshot());
     }
 
     private object BuildActivity()
@@ -333,6 +348,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 if (value.Key == "activity") { (value.Page as ActivityViewModel)?.MarkOpened(); OnPropertyChanged(nameof(UnseenActivityCount)); }
                 OnPropertyChanged(nameof(CurrentPage));
             }
+
+            // After the close above as well as after a change: re-selecting the destination under
+            // a detail page is the move from that page to the destination, which is one entry.
+            Navigate(Snapshot());
         }
     }
 
@@ -354,7 +373,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// Bound to the page's Back button through its own <c>BackCommand</c>, and to the shell's own
     /// close path.</summary>
     [RelayCommand]
-    private void CloseDetail() => CloseDetailCore();
+    private void CloseDetail()
+    {
+        CloseDetailCore();
+        Navigate(Snapshot());
+    }
 
     // Spec 12.2's row click navigation, forwarded by the dashboard rather than reached two levels
     // into its target list. Phase 14B Task 6 widens the payload with the optional session date a
@@ -375,8 +398,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <remarks>
     /// Public rather than private because the date has no caller inside this type: both existing
     /// routes pass null and behave exactly as they did, and Phase 14B's dashboard session rows
-    /// are the first surface to pass a date. There is no URL, no query string and no navigation
-    /// stack (spec 12.4); this is the method that opens the shell's single overlay.
+    /// are the first surface to pass a date. There is no URL and no query string (spec 12.4); this
+    /// is the method that opens the shell's single overlay. The history below records the open; it
+    /// does not stack overlays.
     /// </remarks>
     public void OpenDetail(string groupKey, DateOnly? sessionDate = null)
     {
@@ -396,10 +420,14 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         // built for this. A merge and an undo raise the same event, for the same reason.
         page.TargetRenamed += OnDetailTargetRenamed;
         page.OpenTargetRequested += OnDetailOpenTargetRequested;
+        page.PropertyChanged += OnStripChanged;
         Detail = page;
+        Navigate(Snapshot());
     }
 
-    private void OnDetailBackRequested(object? sender, EventArgs e) => CloseDetailCore();
+    // The page's Back keeps its meaning, close the overlay, and that close is an entry like any
+    // other navigation (mouse navigation decision 3).
+    private void OnDetailBackRequested(object? sender, EventArgs e) => CloseDetail();
 
     // The page on screen before the latest CurrentPage change.
     private object _shownPage;
@@ -511,6 +539,7 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
                 page.BackRequested -= OnDetailBackRequested;
                 page.TargetRenamed -= OnDetailTargetRenamed;
                 page.OpenTargetRequested -= OnDetailOpenTargetRequested;
+                page.PropertyChanged -= OnStripChanged;
                 Detail = null;
                 page.Dispose();
                 break;
@@ -532,6 +561,156 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
 
+    // ---- Mouse back and forward (.planning/mouse-navigation.md) --------------------------------
+    //
+    // Every path that moves the user ends in Navigate(Snapshot()): the Selected setter, OpenDetail,
+    // OpenMosaic, CloseDetail (the command and the page's Back), and the three strips through
+    // OnStripChanged. CloseDetailCore itself pushes nothing: OpenDetail and OpenMosaic call it to
+    // replace the overlay, and target A to target B is one move, not two. Back and Forward apply
+    // an entry under _applying, so the same paths run and push nothing.
+
+    private readonly NavigationHistory _history = new();
+    private bool _applying;
+
+    /// <summary>Whether <see cref="BackCommand"/> has an entry to go to.</summary>
+    public bool CanGoBack => _history.CanGoBack;
+
+    /// <summary>Whether <see cref="ForwardCommand"/> has an entry to go to.</summary>
+    public bool CanGoForward => _history.CanGoForward;
+
+    /// <summary>The history's current entry, for tests.</summary>
+    internal NavigationEntry? CurrentEntry => _history.Current;
+
+    [RelayCommand(CanExecute = nameof(CanGoBack))]
+    private void Back()
+    {
+        if (!_disposed && _history.Back() is { } entry)
+        {
+            Apply(entry);
+            RaiseHistoryChanged();
+        }
+    }
+
+    [RelayCommand(CanExecute = nameof(CanGoForward))]
+    private void Forward()
+    {
+        if (!_disposed && _history.Forward() is { } entry)
+        {
+            Apply(entry);
+            RaiseHistoryChanged();
+        }
+    }
+
+    // Where the user is right now, as one entry. The tab key is read only off the page that is
+    // showing, so a strip changing on a page that is not current snapshots to the entry already
+    // current and pushes nothing.
+    private NavigationEntry Snapshot() => Detail switch
+    {
+        TargetDetailViewModel target => new NavigationEntry(Selected.Key, DetailKind.Target, target.GroupKey, target.Mode),
+        MosaicDetailViewModel mosaic => new NavigationEntry(Selected.Key, DetailKind.Mosaic, mosaic.Id.ToString(), null),
+        _ => new NavigationEntry(Selected.Key, DetailKind.None, null, Selected.Key switch
+        {
+            "settings" => _settings.Selected.Key,
+            "analysis" when Selected.IsConstructed => (Selected.Page as AnalysisViewModel)?.SelectedTab.Key,
+            _ => null,
+        }),
+    };
+
+    // The choke point. Applying an entry runs the same paths that call this, hence the flag.
+    private void Navigate(NavigationEntry entry)
+    {
+        if (_applying || _disposed || !_history.Push(entry))
+        {
+            return;
+        }
+
+        RaiseHistoryChanged();
+    }
+
+    private void RaiseHistoryChanged()
+    {
+        OnPropertyChanged(nameof(CanGoBack));
+        OnPropertyChanged(nameof(CanGoForward));
+        BackCommand.NotifyCanExecuteChanged();
+        ForwardCommand.NotifyCanExecuteChanged();
+    }
+
+    // Selects the destination, rebuilds the detail page through the existing factory when the
+    // entry names a different one (decision 5: fresh page; decision 4: a stale key opens anyway and
+    // the page explains), then sets the tab or mode. A detail page the entry already names is
+    // kept: a Back across a mode switch moves the mode, it does not reload the target.
+    private void Apply(NavigationEntry entry)
+    {
+        _applying = true;
+        try
+        {
+            var destination = Items.First(item => item.Key == entry.Destination);
+            if (!ReferenceEquals(Selected, destination))
+            {
+                Selected = destination;
+            }
+
+            if (!DetailMatches(entry))
+            {
+                switch (entry.Detail)
+                {
+                    case DetailKind.Target:
+                        OpenDetail(entry.DetailKey!);
+                        break;
+                    case DetailKind.Mosaic:
+                        OpenMosaic(Guid.Parse(entry.DetailKey!));
+                        break;
+                    default:
+                        CloseDetailCore();
+                        break;
+                }
+            }
+
+            switch (Detail)
+            {
+                case TargetDetailViewModel target:
+                    target.Mode = entry.TabKey;
+                    break;
+                case null when Selected.Key == "settings" && entry.TabKey is { } tabKey:
+                    if (_settings.Tabs.FirstOrDefault(tab => tab.Key == tabKey) is { } tab)
+                    {
+                        _settings.Selected = tab;
+                    }
+
+                    break;
+                case null when Selected.Key == "analysis" && entry.TabKey is { } analysisTab
+                    && Selected.Page is AnalysisViewModel analysis:
+                    if (analysis.Tabs.FirstOrDefault(tab => tab.Key == analysisTab) is { } found)
+                    {
+                        analysis.SelectedTab = found;
+                    }
+
+                    break;
+            }
+        }
+        finally
+        {
+            _applying = false;
+        }
+    }
+
+    private bool DetailMatches(NavigationEntry entry) => Detail switch
+    {
+        TargetDetailViewModel target => entry.Detail == DetailKind.Target && target.GroupKey == entry.DetailKey,
+        MosaicDetailViewModel mosaic => entry.Detail == DetailKind.Mosaic && mosaic.Id.ToString() == entry.DetailKey,
+        _ => entry.Detail == DetailKind.None,
+    };
+
+    // The three strips (decision 2): Analysis SelectedTab, Settings Selected, target page Mode.
+    private void OnStripChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(AnalysisViewModel.SelectedTab) or nameof(SettingsViewModel.Selected)
+            or nameof(TargetDetailViewModel.Mode))
+        {
+            Navigate(Snapshot());
+        }
+    }
+
     /// <summary>
     /// The shell is a DI singleton, so the host owns its lifetime. Disposing it closes an open
     /// detail page, which is what flushes a note the user typed and never navigated away from
@@ -548,6 +727,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _dashboard.TargetOpened -= OnTargetOpened;
         _dashboard.MosaicOpened -= OnMosaicOpenRequested;
         _dashboard.ReviewScanFiltersRequested -= OnOpenSettingsRequested;
+        _settings.PropertyChanged -= OnStripChanged;
+
+        if (_analysis is { } analysis)
+        {
+            analysis.PropertyChanged -= OnStripChanged;
+        }
 
         // Null when nobody ever opened Statistics, which is the case F21 exists to make cheap.
         if (_statistics is { } statistics)

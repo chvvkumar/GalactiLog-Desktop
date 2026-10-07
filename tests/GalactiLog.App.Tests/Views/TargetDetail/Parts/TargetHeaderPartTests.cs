@@ -64,8 +64,8 @@ public class TargetHeaderPartTests
 
         // Ruling Q12: the merge is named rather than hidden, and the generic stale-key callout
         // gives way to the one that says what happened.
-        Assert.True(view.Named<Border>("MergedAwayCallout").IsVisible);
-        Assert.False(view.Named<Border>("MissingCallout").IsVisible);
+        Assert.True(view.Named<ContentControl>("MergedAwayCallout").IsVisible);
+        Assert.False(view.Named<ContentControl>("MissingCallout").IsVisible);
 
         Assert.Contains("This target was merged into \"M 31\".", VisibleTexts(view));
 
@@ -81,8 +81,8 @@ public class TargetHeaderPartTests
         var view = new TargetHeaderPart { DataContext = harness.ViewModel };
         Show(view);
 
-        Assert.True(view.Named<Border>("MissingCallout").IsVisible);
-        Assert.False(view.Named<Border>("MergedAwayCallout").IsVisible);
+        Assert.True(view.Named<ContentControl>("MissingCallout").IsVisible);
+        Assert.False(view.Named<ContentControl>("MergedAwayCallout").IsVisible);
     }
 
     [AvaloniaFact]

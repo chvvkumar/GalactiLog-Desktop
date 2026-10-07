@@ -3,7 +3,6 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
-using GalactiLog.App.Theme;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
@@ -71,11 +70,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     /// redeclared, so the search box here and the dashboard's cannot drift apart.</summary>
     internal static readonly TimeSpan DebounceWindow = DashboardViewModel.DebounceWindow;
 
-    // FIXER LIST F8: the theme subscription and its unsubscribe as one token. The unsubscribe is
-    // the half that matters: ChartTheme.Changed is static, so a handler left behind pins this
-    // view-model for the life of the process.
-    private readonly IDisposable _themeSubscription;
-
     private readonly Func<ActivityFilters, ActivityCursor?, int, ActivityPage> _page;
     private readonly Func<int> _retentionDays;
     private readonly Func<int, int> _pruneNow;
@@ -89,12 +83,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     // construction and moved forward only by MarkOpened's deferred commit, never eagerly, which is
     // what keeps a first open's render reading the pre-open value (section 7.2).
     private DateTimeOffset? _seenAt;
-
-    // Spec 14.5, and Task 3's standing rule: theme tokens are resolved on the UI thread only.
-    // The page is constructed on the UI thread; a load's post callback runs inline on the loading
-    // thread in a unit test, so it must never build these. Rebuilt from ChartTheme.Changed, which
-    // is raised on the UI thread too (review finding 4).
-    private SeverityBrushes _brushes;
 
     // Spec 5.8.1's display zone and clock, resolved once: FindSystemTimeZoneById is a system
     // lookup and must not run per row (the rule FrameTableViewModel states).
@@ -166,7 +154,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         _post = post ?? UiPost.Default;
         _searchWindow = new Debouncer(_lifetime.Token, delay ?? Task.Delay, DebounceWindow);
         _logger = logger ?? NullLogger.Instance;
-        _brushes = new SeverityBrushes();
         _mutateGeneral = mutateGeneral;
         _countUnseen = countUnseen;
 
@@ -196,12 +183,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
             // ScanStatusService has already marshalled onto the UI thread; do not post again.
             scanStatus.ScanFinished += OnScanFinished;
         }
-
-        // Review finding 4: every other theme-brush holder in the application rebuilds on
-        // ChartTheme.Changed, so the severity and child-alert glyphs repaint with the
-        // DynamicResource text around them instead of keeping the previous theme's colours until
-        // restart. Raised on the UI thread, which is where the rebuild has to happen.
-        _themeSubscription = ChartTheme.Subscribe(OnThemeChanged);
 
         Load(fromStart: true);
         RefreshUnseenCount();
@@ -638,23 +619,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         }
     }
 
-    // Runs on the UI thread, where ChartTheme.Changed is raised, which is the only thread a token
-    // may be read on (Task 3's standing rule). Rows repaint in place rather than being rebuilt: a
-    // theme switch must not collapse an expanded scan or lose the reader's scroll position.
-    private void OnThemeChanged()
-    {
-        if (_disposed)
-        {
-            return;
-        }
-
-        _brushes = new SeverityBrushes();
-        foreach (var row in Rows)
-        {
-            row.RefreshBrushes(_brushes);
-        }
-    }
-
     // The shape TargetDetailViewModel.Load and UnresolvedNamesViewModel.Load use: a generation
     // counter plus the lifetime token, with the read itself on a background thread because
     // ActivityQuery is a synchronous SQLite read and this page lives on the UI thread.
@@ -753,13 +717,13 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
     {
         var childRows = children.TryGetValue(row.Id, out var found) ? found : [];
         return new ActivityRowViewModel(
-            row, childRows, BuildChild, _brushes, _zone, _use24Hour, IsUnseen(row));
+            row, childRows, BuildChild, _zone, _use24Hour, IsUnseen(row));
     }
 
     // A child row has no children of its own: parent_id is one level deep by construction
     // (spec 10.9), so it needs no builder.
     private ActivityRowViewModel BuildChild(ActivityRow child)
-        => new(child, [], null, _brushes, _zone, _use24Hour, IsUnseen(child));
+        => new(child, [], null, _zone, _use24Hour, IsUnseen(child));
 
     // Spec 12.6: a row is unseen when its timestamp is strictly newer than the marker in force at
     // the moment the row is built. Set here at build time and corrected again on every later open
@@ -784,10 +748,6 @@ public sealed partial class ActivityViewModel : ObservableObject, IDisposable
         {
             _scanStatus.ScanFinished -= OnScanFinished;
         }
-
-        // The theme is static and outlives this page, so a page that does not unsubscribe keeps
-        // repainting rows after it has closed.
-        _themeSubscription.Dispose();
 
         _searchWindow.Dispose();
         _lifetime.Dispose();

@@ -22,10 +22,10 @@
                  MinHeight="70"
                  Text="{Binding Notes.Text, Mode=TwoWay}" />
         <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
-        <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+        <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
           <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
                      TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
       </StackPanel>
     </Panel>
 
@@ -48,10 +48,10 @@
                      MinHeight="70"
                      Text="{Binding Notes.Text, Mode=TwoWay}" />
             <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
-            <Border Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
+            <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
               <TextBlock Text="This note could not be saved. The text above is kept; it is retried on the next edit."
                          TextWrapping="Wrap" />
-            </Border>
+            </ContentControl>
           </StackPanel>
         </DataTemplate>
       </ItemsControl.ItemTemplate>

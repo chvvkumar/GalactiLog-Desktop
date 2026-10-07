@@ -23,13 +23,13 @@
     <DataTemplate DataType="wbpp:FoldersStep">
       <StackPanel Spacing="14">
         <!-- Spec 12.13's empty export warning, above the parts it is about. -->
-        <Border x:Name="EmptyExportWarning"
+        <ContentControl x:Name="EmptyExportWarning"
                 Classes="callout warn"
                 IsVisible="{Binding Page.HasEmptyExportWarning}">
           <TextBlock x:Name="EmptyExportText"
                      Text="{Binding Page.EmptyExportText}"
                      TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
 
         <TextBlock x:Name="LevelsLoadingLine"
                    Text="Reading the folders for these nights"
@@ -95,8 +95,7 @@
                                    Text="{Binding ChosenOtherNightsBadge}"
                                    IsVisible="{Binding HasChosenOtherNightsBadge}"
                                    VerticalAlignment="Center"
-                                   ToolTip.Tip="{Binding ChosenOtherNightsTooltip}"
-                                   Foreground="{DynamicResource ColorWarning}" />
+                                   ToolTip.Tip="{Binding ChosenOtherNightsTooltip}" />
     
                         <TextBlock x:Name="ChosenOtherTargetsBadge"
                                    Grid.Column="4"
@@ -104,8 +103,7 @@
                                    Text="{Binding ChosenOtherTargetsBadge}"
                                    IsVisible="{Binding HasChosenOtherTargetsBadge}"
                                    VerticalAlignment="Center"
-                                   ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}"
-                                   Foreground="{DynamicResource ColorWarning}" />
+                                   ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}" />
     
                         <Button x:Name="ChangeFolderButton"
                                 Grid.Column="5"
@@ -125,18 +123,20 @@
                       <!-- Seam review ruling 3's partial case: the night keeps its levels and states
                            the count its levels leave behind, read from SessionLevels and never
                            subtracted from two figures. -->
-                      <TextBlock Text="{Binding LeftoverText}"
-                                 IsVisible="{Binding HasLeftoverText}"
-                                 TextWrapping="Wrap"
-                                 Foreground="{DynamicResource ColorWarning}" />
+                      <ContentControl Classes="callout warn inline"
+                                      IsVisible="{Binding HasLeftoverText}">
+                        <TextBlock Text="{Binding LeftoverText}"
+                                   TextWrapping="Wrap" />
+                      </ContentControl>
     
                       <!-- The same shape for the frames that sit in the scan root itself on a night
                            whose other frames sit deeper: no level can carry them. The two counts are
                            independent and both are stated when both are non zero. -->
-                      <TextBlock Text="{Binding RootFramesText}"
-                                 IsVisible="{Binding HasRootFramesText}"
-                                 TextWrapping="Wrap"
-                                 Foreground="{DynamicResource ColorWarning}" />
+                      <ContentControl Classes="callout warn inline"
+                                      IsVisible="{Binding HasRootFramesText}">
+                        <TextBlock Text="{Binding RootFramesText}"
+                                   TextWrapping="Wrap" />
+                      </ContentControl>
     
                       <!-- One of spec 12.13's four unavailable sentences, verbatim. -->
                       <TextBlock Text="{Binding UnavailableText}"
@@ -187,16 +187,14 @@
                                            Text="{Binding OtherNightsBadge}"
                                            IsVisible="{Binding HasOtherNights}"
                                            VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding OtherNightsTooltip}"
-                                           Foreground="{DynamicResource ColorWarning}" />
+                                           ToolTip.Tip="{Binding OtherNightsTooltip}" />
     
                                 <TextBlock Grid.Column="4"
                                            Margin="0,0,10,0"
                                            Text="{Binding OtherTargetsBadge}"
                                            IsVisible="{Binding HasOtherTargets}"
                                            VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding OtherTargetsTooltip}"
-                                           Foreground="{DynamicResource ColorWarning}" />
+                                           ToolTip.Tip="{Binding OtherTargetsTooltip}" />
     
                                 <TextBlock Grid.Column="5"
                                            Text="{Binding BytesText}"
@@ -260,11 +258,11 @@
                   Command="{Binding Page.PickStagingFolderCommand}" />
         </Grid>
 
-        <Border x:Name="StagingError"
+        <ContentControl x:Name="StagingError"
                 Classes="callout warn"
                 IsVisible="{Binding Page.HasStagingError}">
           <TextBlock Text="{Binding Page.StagingError}" TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
 
         <CheckBox x:Name="SubfolderCheckBox"
                   Content="{Binding SubfolderLabel}"
@@ -288,11 +286,11 @@
                  MinHeight="120"
                  Text="{Binding Page.ExclusionsText, Mode=TwoWay}" />
 
-        <Border x:Name="ExclusionError"
+        <ContentControl x:Name="ExclusionError"
                 Classes="callout warn"
                 IsVisible="{Binding Page.HasExclusionError}">
           <TextBlock Text="{Binding Page.ExclusionError}" TextWrapping="Wrap" />
-        </Border>
+        </ContentControl>
 
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Button x:Name="SaveAsDefaultsButton"
@@ -360,9 +358,9 @@
         <ItemsControl x:Name="ReviewBlocks" ItemsSource="{Binding Blocks}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="sys:String">
-              <Border Classes="callout warn" Margin="0,0,0,6">
-                <TextBlock Text="{Binding}" TextWrapping="Wrap" Foreground="{DynamicResource ColorError}" />
-              </Border>
+              <ContentControl Classes="callout error" Margin="0,0,0,6">
+                <TextBlock Text="{Binding}" TextWrapping="Wrap" />
+              </ContentControl>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
@@ -370,9 +368,9 @@
         <ItemsControl x:Name="ReviewWarnings" ItemsSource="{Binding Warnings}">
           <ItemsControl.ItemTemplate>
             <DataTemplate x:DataType="sys:String">
-              <Border Classes="callout warn" Margin="0,0,0,6">
+              <ContentControl Classes="callout warn" Margin="0,0,0,6">
                 <TextBlock Text="{Binding}" TextWrapping="Wrap" />
-              </Border>
+              </ContentControl>
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
@@ -403,9 +401,10 @@
 
         <StackPanel Spacing="8" IsVisible="{Binding IsCopyResult}">
           <TextBlock x:Name="CountsText" Text="{Binding CountsText}" TextWrapping="Wrap" />
-          <TextBlock Text="Present but different size, left untouched:"
-                     IsVisible="{Binding HasDifferentSize}"
-                     Foreground="{DynamicResource ColorWarning}" />
+          <ContentControl Classes="callout warn inline"
+                          IsVisible="{Binding HasDifferentSize}">
+            <TextBlock Text="Present but different size, left untouched:" />
+          </ContentControl>
           <ItemsControl x:Name="DifferentSizeList" ItemsSource="{Binding DifferentSizePaths}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="sys:String">
@@ -413,9 +412,10 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Text="Failed:"
-                     IsVisible="{Binding HasFailures}"
-                     Foreground="{DynamicResource ColorError}" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasFailures}">
+            <TextBlock Text="Failed:" />
+          </ContentControl>
           <ItemsControl x:Name="FailureList" ItemsSource="{Binding FailureLines}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="sys:String">
@@ -423,9 +423,10 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Text="Stopped part way, left with partial contents:"
-                     IsVisible="{Binding HasPartials}"
-                     Foreground="{DynamicResource ColorWarning}" />
+          <ContentControl Classes="callout warn inline"
+                          IsVisible="{Binding HasPartials}">
+            <TextBlock Text="Stopped part way, left with partial contents:" />
+          </ContentControl>
           <ItemsControl x:Name="PartialList" ItemsSource="{Binding PartialPaths}">
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="sys:String">

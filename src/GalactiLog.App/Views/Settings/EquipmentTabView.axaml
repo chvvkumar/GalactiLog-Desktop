@@ -27,17 +27,13 @@
                  IsVisible="{Binding IsLoading}"
                  Foreground="{DynamicResource ColorTextTertiary}" />
 
-      <Border x:Name="SuggestionsBanner"
+      <ContentControl x:Name="SuggestionsBanner"
+              Classes="callout warn"
               IsVisible="{Binding HasSuggestions}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorWarning}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
               Padding="16">
         <StackPanel Spacing="10">
           <TextBlock x:Name="SuggestionsHeadingText"
-                     Text="{Binding SuggestionsHeading}"
-                     Foreground="{DynamicResource ColorWarning}" />
+                     Text="{Binding SuggestionsHeading}" />
           <ItemsControl x:Name="SuggestionList" ItemsSource="{Binding Suggestions}">
             <ItemsControl.ItemTemplate>
               <DataTemplate DataType="settings:SuggestionViewModel">
@@ -73,7 +69,7 @@
             </ItemsControl.ItemTemplate>
           </ItemsControl>
         </StackPanel>
-      </Border>
+      </ContentControl>
 
       <Border x:Name="CamerasCard"
               Background="{DynamicResource ColorBgSurface}"
@@ -138,12 +134,13 @@
 
           <!-- A refused write reverts the user's box; without this line it reverted with no
                explanation at all (review P2-4). -->
-          <TextBlock x:Name="Phd2ProfilesErrorText"
-                     Text="{Binding ErrorMessage}"
-                     IsVisible="{Binding HasErrorMessage}"
-                     TextWrapping="Wrap"
-                     Foreground="{DynamicResource ColorError}"
-                     Classes="t-caption" />
+          <ContentControl Classes="callout error inline"
+                          IsVisible="{Binding HasErrorMessage}">
+            <TextBlock x:Name="Phd2ProfilesErrorText"
+                       Text="{Binding ErrorMessage}"
+                       TextWrapping="Wrap"
+                       Classes="t-caption" />
+          </ContentControl>
 
           <!-- Spec 12.7: the panel says a re-run has been queued rather than blocking on it. -->
           <TextBlock x:Name="Phd2ProfilesStatusText"
@@ -258,28 +255,31 @@
                                Text="{Binding LongitudeText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
                     </StackPanel>
                   </WrapPanel>
-                  <TextBlock x:Name="LatitudeErrorText"
-                             Text="{Binding LatitudeError}"
-                             IsVisible="{Binding HasLatitudeError}"
-                             Foreground="{DynamicResource ColorError}"
-                             Classes="t-caption" />
-                  <TextBlock x:Name="LongitudeErrorText"
-                             Text="{Binding LongitudeError}"
-                             IsVisible="{Binding HasLongitudeError}"
-                             Foreground="{DynamicResource ColorError}"
-                             Classes="t-caption" />
+                  <ContentControl Classes="callout error inline"
+                                  IsVisible="{Binding HasLatitudeError}">
+                    <TextBlock x:Name="LatitudeErrorText"
+                               Text="{Binding LatitudeError}"
+                               Classes="t-caption" />
+                  </ContentControl>
+                  <ContentControl Classes="callout error inline"
+                                  IsVisible="{Binding HasLongitudeError}">
+                    <TextBlock x:Name="LongitudeErrorText"
+                               Text="{Binding LongitudeError}"
+                               Classes="t-caption" />
+                  </ContentControl>
 
                   <TextBlock x:Name="ZoneResolutionOkText"
                              Text="{Binding ZoneResolutionText}"
                              IsVisible="{Binding !ZoneIsUnset}"
                              TextWrapping="Wrap"
                              Classes="t-caption" />
-                  <TextBlock x:Name="ZoneResolutionWarningText"
-                             Text="{Binding ZoneResolutionText}"
-                             IsVisible="{Binding ZoneIsUnset}"
-                             TextWrapping="Wrap"
-                             Foreground="{DynamicResource ColorWarning}"
-                             Classes="t-caption" />
+                  <ContentControl Classes="callout warn inline"
+                                  IsVisible="{Binding ZoneIsUnset}">
+                    <TextBlock x:Name="ZoneResolutionWarningText"
+                               Text="{Binding ZoneResolutionText}"
+                               TextWrapping="Wrap"
+                               Classes="t-caption" />
+                  </ContentControl>
                   <TextBlock x:Name="SiteResolutionText"
                              Text="{Binding SiteResolutionText}"
                              TextWrapping="Wrap"
@@ -296,11 +296,12 @@
                 Content="Save"
                 Padding="10,3"
                 Command="{Binding SaveCommand}" />
-        <TextBlock x:Name="EquipmentErrorText"
-                   Text="{Binding ErrorMessage}"
-                   IsVisible="{Binding HasErrorMessage}"
-                   TextWrapping="Wrap"
-                   Foreground="{DynamicResource ColorError}" />
+        <ContentControl Classes="callout error inline"
+                        IsVisible="{Binding HasErrorMessage}">
+          <TextBlock x:Name="EquipmentErrorText"
+                     Text="{Binding ErrorMessage}"
+                     TextWrapping="Wrap" />
+        </ContentControl>
         <TextBlock x:Name="EquipmentStatusText"
                    Text="{Binding StatusMessage}"
                    IsVisible="{Binding HasStatusMessage}"

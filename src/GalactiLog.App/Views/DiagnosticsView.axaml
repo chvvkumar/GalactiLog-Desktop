@@ -94,12 +94,13 @@
 
     <!-- The sentence lives on the view-model as DiagnosticsViewModel.FailureText and is bound
          here, so rewording it is one edit rather than two that can drift apart. -->
-    <TextBlock Grid.Row="1"
-               x:Name="FailureLine"
-               Text="{Binding FailureMessage}"
-               TextWrapping="Wrap"
-               IsVisible="{Binding LoadFailed}"
-               Foreground="{DynamicResource ColorError}" />
+    <ContentControl Grid.Row="1"
+                    Classes="callout error inline"
+                    IsVisible="{Binding LoadFailed}">
+      <TextBlock x:Name="FailureLine"
+                 Text="{Binding FailureMessage}"
+                 TextWrapping="Wrap" />
+    </ContentControl>
 
     <ScrollViewer Grid.Row="1" IsVisible="{Binding !LoadFailed}">
       <StackPanel Spacing="8">
@@ -145,16 +146,11 @@
                                                  TextWrapping="Wrap"
                                                  Margin="0,0,12,0"
                                                  Foreground="{DynamicResource ColorTextPrimary}" />
-                            <!-- An unreachable root reads in the error token, because an unplugged
-                                 drive is the answer to most "why did nothing ingest" questions. -->
-                            <Panel Grid.Column="1">
-                              <TextBlock Text="{Binding StatusText}"
-                                         IsVisible="{Binding Reachable}"
-                                         Foreground="{DynamicResource ColorTextSecondary}" />
-                              <TextBlock Text="{Binding StatusText}"
-                                         IsVisible="{Binding !Reachable}"
-                                         Foreground="{DynamicResource ColorError}" />
-                            </Panel>
+                            <!-- The status words say whether the root is reachable ("not watching,
+                                 directory unreachable"), so the cell carries no ink of its own. -->
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding StatusText}"
+                                       Foreground="{DynamicResource ColorTextSecondary}" />
                           </Grid>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>

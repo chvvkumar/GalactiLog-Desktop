@@ -74,28 +74,24 @@
                      Foreground="{DynamicResource ColorTextTertiary}" />
         </StackPanel>
 
-        <Border x:Name="ErrorPanel"
+        <ContentControl x:Name="ErrorPanel"
+                Classes="callout error"
                 IsVisible="{Binding HasError}"
                 HorizontalAlignment="Center"
                 VerticalAlignment="Center"
-                Background="{DynamicResource ColorErrorCalloutFill}"
-                BorderBrush="{DynamicResource ColorErrorCalloutBorder}"
-                BorderThickness="1"
-                CornerRadius="{StaticResource RadiusMd}"
                 Padding="16">
           <StackPanel Spacing="8">
             <TextBlock x:Name="ErrorText"
                        Text="{Binding ErrorText}"
                        TextWrapping="Wrap"
-                       AutomationProperties.LiveSetting="Assertive"
-                       Foreground="{DynamicResource ColorError}" />
+                       AutomationProperties.LiveSetting="Assertive" />
             <Button x:Name="RetryButton"
                     Content="Retry"
                     HorizontalAlignment="Center"
                     Padding="14,4"
                     Command="{Binding RetryCommand}" />
           </StackPanel>
-        </Border>
+        </ContentControl>
       </Panel>
     </Border>
 
@@ -107,11 +103,12 @@
                  TextWrapping="Wrap"
                  IsVisible="{Binding LeftOutText, Converter={x:Static ObjectConverters.IsNotNull}}"
                  Foreground="{DynamicResource ColorTextSecondary}" />
-      <TextBlock x:Name="DownloadErrorText"
-                 Text="{Binding DownloadError}"
-                 TextWrapping="Wrap"
-                 IsVisible="{Binding DownloadError, Converter={x:Static ObjectConverters.IsNotNull}}"
-                 Foreground="{DynamicResource ColorError}" />
+      <ContentControl Classes="callout error inline"
+                      IsVisible="{Binding DownloadError, Converter={x:Static ObjectConverters.IsNotNull}}">
+        <TextBlock x:Name="DownloadErrorText"
+                   Text="{Binding DownloadError}"
+                   TextWrapping="Wrap" />
+      </ContentControl>
     </StackPanel>
 
     <Border Grid.Row="3"

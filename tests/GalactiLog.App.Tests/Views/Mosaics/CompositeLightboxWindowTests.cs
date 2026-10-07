@@ -58,7 +58,7 @@ public class CompositeLightboxWindowTests
         Assert.Equal("M 31, Ha composite", window.GetControl<TextBlock>("TitleText").Text);
         Assert.True(window.GetControl<StackPanel>("BuildingIndicator").IsVisible);
         Assert.Equal("Building the composite...", window.GetControl<TextBlock>("BuildingText").Text);
-        Assert.False(window.GetControl<Border>("ErrorPanel").IsVisible);
+        Assert.False(window.GetControl<ContentControl>("ErrorPanel").IsVisible);
         Assert.False(window.GetControl<Button>("DownloadButton").IsEffectivelyEnabled);
 
         window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
