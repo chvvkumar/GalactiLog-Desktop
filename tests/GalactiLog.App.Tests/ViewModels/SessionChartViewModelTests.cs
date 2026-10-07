@@ -235,6 +235,24 @@ public class SessionChartViewModelTests
         Assert.Single(chart.Series);
     }
 
+    // A failure is the ring's tooltip printing the library default: the time fraction as X and
+    // the value at full double precision.
+    [Fact]
+    public void OutlierRing_TooltipIgnoresX_AndRoundsYToThreeDecimals()
+    {
+        using var fixture = new Fixture();
+        var chart = fixture.Build(Detail(
+            [Frame(1, hfr: 2.1d), Frame(2, hfr: 7.263807350425825d) with { IsHfrOutlier = true }],
+            hfr: new MetricRangeSummary(2.1d, 7.3d, 4.7d)));
+
+        var ring = Assert.Single(chart.Series.OfType<ScatterSeries<LiveChartsCore.Defaults.ObservablePoint>>());
+        Assert.Equal("HFR (px) outliers", ring.Name);
+        Assert.NotNull(ring.XToolTipLabelFormatter);
+        Assert.NotNull(ring.YToolTipLabelFormatter);
+        Assert.Equal("7.264", MetricChartViewModel.ThreeDecimals(7.263807350425825d));
+        Assert.Equal("2", MetricChartViewModel.ThreeDecimals(2d));
+    }
+
     [Fact]
     public void Series_OnePerEnabledMetric_OverFrameIndex()
     {

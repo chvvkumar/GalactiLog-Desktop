@@ -371,6 +371,15 @@ public abstract partial class MetricChartViewModel : ObservableObject, IDisposab
             ScalesYAt = scalesYAt,
         };
 
+    /// <summary>A scatter point's y value to at most three decimals for its tooltip. The library's
+    /// scatter default prints "X = .., Y = .." at full double precision, and the x is a time
+    /// fraction or a night index that means nothing to the reader.</summary>
+    protected static string ThreeDecimals(LiveChartsCore.Kernel.ChartPoint point)
+        => ThreeDecimals(point.Coordinate.PrimaryValue);
+
+    internal static string ThreeDecimals(double value)
+        => value.ToString("0.###", CultureInfo.InvariantCulture);
+
     /// <summary>The filter tint the shared selection already resolved for this canonical filter,
     /// as a chart colour. Falls back to the documented neutral grey for a filter with no
     /// configured colour, which is what <c>AliasMap.FilterColor</c> hands back anyway (spec 14.5).
