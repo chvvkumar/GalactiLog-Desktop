@@ -9,6 +9,7 @@ on:
       - '**/*.md'
       - 'docs/**'
       - 'LICENSE'
+      - 'repomix-output.xml'
 
 permissions:
   contents: read
