@@ -139,31 +139,15 @@ public class FilterPanelCustomSectionTests
         Assert.Contains("CommandParameter=\"Any\"", source, StringComparison.Ordinal);
     }
 
-    // ---- 26: the help glyph -------------------------------------------------------------
-
-    [Fact]
-    public void ThePanel_CarriesTheDashboardCustomHelpGlyph()
-    {
-        var source = SourceOf("Views", "Dashboard", "FilterPanelView.axaml");
-
-        var placed = HelpPlacementCensusTest.PlacedIn(source, "FilterPanelView.axaml");
-
-        // Task 7 landed the record; this task places the glyph, once, in the section's own
-        // heading row. A commented-out glyph is invisible to the census, so this is the same
-        // reading HelpPlacementCensusTest takes.
-        Assert.Single(placed, id => id == "dashboard.custom");
-        Assert.True(HelpTopics.Ids.Contains("dashboard.custom"));
-    }
-
     // ---- the eighth header shares the template -------------------------------------------
 
     [Fact]
     public void TheEighthHeader_ReusesTheSharedSectionHeaderTemplate()
     {
         // The eighth section's header draws through the same ContentControl and SectionHeader
-        // template the other seven use, with the help glyph beside it, rather than a second copy
-        // of the dot and the title. Red against that second copy: the accent dot's fill is
-        // declared exactly once in the whole file, inside SectionHeader itself.
+        // template the other seven use, rather than a second copy of the dot and the title. Red
+        // against that second copy: the accent dot's fill is declared exactly once in the whole
+        // file, inside SectionHeader itself. The dashboard carries no help glyph.
         var source = SourceOf("Views", "Dashboard", "FilterPanelView.axaml");
 
         Assert.Single(Regex.Matches(source, Regex.Escape("Fill=\"{DynamicResource ColorAccent}\"")));
@@ -172,7 +156,7 @@ public class FilterPanelCustomSectionTests
         var headerEnd = source.IndexOf("</Expander.Header>", slotStart, StringComparison.Ordinal);
         var slotHeader = source[slotStart..headerEnd];
         Assert.Contains("ContentTemplate=\"{StaticResource SectionHeader}\"", slotHeader, StringComparison.Ordinal);
-        Assert.Contains("controls:HelpButton", slotHeader, StringComparison.Ordinal);
+        Assert.DoesNotContain("controls:HelpButton", source, StringComparison.Ordinal);
     }
 
     // ---- 27: the card chrome ------------------------------------------------------------

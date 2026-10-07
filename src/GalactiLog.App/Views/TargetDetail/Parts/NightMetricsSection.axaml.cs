@@ -4,7 +4,7 @@ using Avalonia.VisualTree;
 
 namespace GalactiLog.App.Views.TargetDetail.Parts;
 
-/// <summary>The collapsible "Night metrics" section: the per-filter table, the ranges, the
+/// <summary>The collapsible "Session metrics" section: the per-filter table, the ranges, the
 /// comparison line and the sharpest frame in one wrapping row under the night header.</summary>
 public partial class NightMetricsSection : Expander
 {

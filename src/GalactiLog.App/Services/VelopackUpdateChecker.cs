@@ -167,7 +167,8 @@ public sealed class VelopackUpdateChecker : IUpdateChecker
     }
 
     // Spec 19.2: no embedded browser. The notes are carried as text and rendered as text; the
-    // markdown form is preferred because the HTML form would render as tags.
+    // markdown form is preferred because the HTML form would render as tags, and its markup is
+    // reduced to plain text here so neither view shows raw markdown.
     private static string? ReleaseNotesOf(VelopackAsset? asset)
-        => asset?.NotesMarkdown is { Length: > 0 } markdown ? markdown : null;
+        => asset?.NotesMarkdown is { Length: > 0 } markdown ? ReleaseNotesText.Plain(markdown) : null;
 }

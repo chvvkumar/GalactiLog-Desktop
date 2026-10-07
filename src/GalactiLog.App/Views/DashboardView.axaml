@@ -29,9 +29,9 @@
     </Grid.ColumnDefinitions>
 
     <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
-      <!-- The panel's own collapse chevron, and the heading that carries the one dashboard.filters
-           help glyph. Both belong to the expanded state: at 48 pixels neither fits, and the strip
-           carries its own chevron instead. -->
+      <!-- The panel's own collapse chevron and the Filters heading. Both belong to the expanded
+           state: at 48 pixels neither fits, and the strip carries its own chevron instead. The
+           dashboard carries no help glyph. -->
       <Grid Grid.Row="0"
             x:Name="FilterPanelHeading"
             ColumnDefinitions="*,Auto"
@@ -42,7 +42,6 @@
                      FontWeight="SemiBold"
                      VerticalAlignment="Center"
                      Foreground="{DynamicResource ColorTextSecondary}" />
-          <controls:HelpButton Topic="dashboard.filters" />
         </StackPanel>
         <!-- A drawn Path, never a Unicode guillemet: DESIGN.md section 8 refuses a glyph standing
              in for an icon, and the pair now lives once in Theme/Controls.axaml (ruling E2).
@@ -127,7 +126,7 @@
                   ShowsPreview="True"
                   IsVisible="{Binding !IsFilterPanelShowingStrip}" />
 
-    <Grid Grid.Column="2" RowDefinitions="Auto,Auto,Auto,*" Margin="8,0,0,0">
+    <Grid Grid.Column="2" RowDefinitions="Auto,Auto,*" Margin="8,0,0,0">
       <!-- Spec 12.2's scan filter notice (PAR-014), at the top of the target list column, above
            the toolbar row, while the stored scan filters are still only the five the setup wizard
            seeded. The condition is ScanFilterConfig.IsOnlyTheSeededRules, the one computation the
@@ -162,22 +161,10 @@
         </StackPanel>
       </Border>
 
-      <!-- Row 1 is spec 12.12's toolbar row, which carries page.dashboard's help glyph. It held an
-           expand chevron beside it until Phase 14C; that button was the workaround for a panel
-           that vanished when it collapsed, and the strip's own chevron is the way back now. -->
-      <StackPanel Grid.Row="1"
-                  x:Name="DashboardToolbar"
-                  Orientation="Horizontal"
-                  Spacing="6"
-                  HorizontalAlignment="Left"
-                  Margin="0,0,0,8">
-        <controls:HelpButton Topic="page.dashboard" />
-      </StackPanel>
-
       <!-- Banners, above the list region and never in place of it: spec 12.10 says an unreachable
            root renders as a warning banner "not as a silent empty list", so whatever rows the
            database still holds keep rendering underneath. -->
-      <StackPanel Grid.Row="2" Spacing="8" Margin="0,0,0,8">
+      <StackPanel Grid.Row="1" Spacing="8" Margin="0,0,0,8">
         <!-- Phase 20: the Border.callout composite DESIGN.md section 4 names for exactly this
              pair, the same one the scan filter notice above and the session pane's status lines
              already use. The warning tokens stay where they are and the padding is unchanged; the
@@ -246,7 +233,7 @@
            four-sided hairline stays. DESIGN.md section 4's rule is about the radius and the card,
            not about a 1 px outline, and TargetListView.axaml and TargetDetailView.axaml already
            carry plain edges. -->
-      <Border Grid.Row="3"
+      <Border Grid.Row="2"
               x:Name="TargetListRegion"
               Padding="16"
               BorderBrush="{DynamicResource ColorBorderDefault}"
