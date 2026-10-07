@@ -88,7 +88,7 @@ public class HelpTopicsTests
     [Fact]
     public void TheFourPhase20Topics_ExistAndCarryTheirTitles()
     {
-        Assert.Equal("Nights ledger columns", HelpTopics.Get("settings.display.ledger-columns").Title);
+        Assert.Equal("Nights list columns", HelpTopics.Get("settings.display.ledger-columns").Title);
         Assert.Equal("Add a column", HelpTopics.Get("settings.custom-columns.add").Title);
         Assert.Equal("Columns", HelpTopics.Get("settings.custom-columns.table").Title);
     }
@@ -277,7 +277,7 @@ public class HelpTopicsTests
             + "Compare nights, and Integration",
             paragraph,
             StringComparison.Ordinal);
-        Assert.Contains("The ledger is a sidebar: drag the handle on its right edge", paragraph, StringComparison.Ordinal);
+        Assert.Contains("The nights list is a sidebar: drag the handle on its right edge", paragraph, StringComparison.Ordinal);
         Assert.Contains("the chevron in its header collapses it", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("lit ledger row", paragraph, StringComparison.Ordinal);
         foreach (var gone in new[] { "layout box", "four layouts", "Night Bench", "Cascading Rows", "Aligned Tracks", "brush" })

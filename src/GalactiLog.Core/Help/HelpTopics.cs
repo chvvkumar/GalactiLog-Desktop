@@ -77,8 +77,8 @@ public static class HelpTopics
         new("page.target", "Target detail",
             "Everything GalactiLog knows about one target: the identity line, the log line with "
             + "the totals, the Details panel with the catalogue record and the notes, and the "
-            + "nights ledger. The page is one layout, Question Modes, with a mode switch under "
-            + "the header: Night review, Compare nights, and Integration. The ledger is a "
+            + "nights list. The page is one layout, Question Modes, with a mode switch under "
+            + "the header: Night review, Compare nights, and Integration. The nights list is a "
             + "sidebar: drag the handle on its right edge, or press Left and Right on it, to set "
             + "its width, and the chevron in its header collapses it to the check boxes and the "
             + "dates. Both are kept per profile."),
@@ -113,7 +113,7 @@ public static class HelpTopics
             + "a change. A merge is recorded and Undo in the merge history reverses it."),
 
         new("page.frame-list", "Copy frame list",
-            "Copies the file list for the nights checked in the ledger. Good copies the frames "
+            "Copies the file list for the nights checked in the nights list. Good copies the frames "
             + "the grading did not reject and Bad copies the frames it did. A frame with no "
             + "recorded quality data counts as unmeasured: it is never bad, and it joins the good "
             + "list only while Include unmeasured frames is checked. Absolute paths gives one "
@@ -564,14 +564,14 @@ public static class HelpTopics
 
         new("settings.display.metrics", "Metric visibility",
             "Which metric groups and which fields inside them appear on the target detail page, "
-            + "with the column pickers for the dashboard, the frame table, the Nights ledger and "
+            + "with the column pickers for the dashboard, the frame table, the Nights list and "
             + "mosaics below. A group that is off hides its columns everywhere, whatever the "
             + "column pickers say, so the group toggle wins and a column whose group is off is "
             + "disabled in the pickers. Hiding a metric hides the column; it does not stop the "
             + "value being read or stored. Metric visibility is written when you press Save "
             + "metric visibility, and Revert reloads what is stored."),
 
-        new("settings.display.ledger-columns", "Nights ledger columns",
+        new("settings.display.ledger-columns", "Nights list columns",
             "Chooses which of your own night columns appear on the Nights list of a target "
             + "page. Every custom night column starts switched off here. When the window is "
             + "narrow these columns are the first thing dropped, so the columns already on that "

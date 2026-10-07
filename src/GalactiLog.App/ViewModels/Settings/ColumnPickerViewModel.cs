@@ -230,7 +230,7 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
         ColumnPickerViewModel? picker = null;
         picker = new ColumnPickerViewModel(
             DisplaySettings.LedgerTableId,
-            "Nights ledger columns",
+            "Nights list columns",
             columns,
             column =>
             {
