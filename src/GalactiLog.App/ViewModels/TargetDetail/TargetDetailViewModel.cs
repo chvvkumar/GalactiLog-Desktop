@@ -2215,12 +2215,12 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         Sessions.Clear();
     }
 
-    // ---- Phase 21: the overflow menu's two send submenus (spec 12.16, ruling B5) --------------
+    // ---- Phase 21: the night heading's Send to menu (spec 12.16, ruling B5) -------------------
 
     /// <summary>The offered NINA instances, one <see cref="IntegrationSendItemViewModel"/> per
     /// enabled instance with a name and a URL (<see cref="IntegrationInstance.IsOffered"/>), in the
-    /// stored order. The overflow menu's "Send to NINA" submenu binds this as its
-    /// <c>ItemsSource</c> and is hidden while it is empty (spec 12.16 step 3d, ruling B5).</summary>
+    /// stored order. The night heading's "NINA" submenu binds this as its <c>ItemsSource</c> and
+    /// is hidden while it is empty (spec 12.16 step 3d, ruling B5).</summary>
     public ObservableCollection<IntegrationSendItemViewModel> NinaSendItems { get; } = [];
 
     /// <summary>The offered Stellarium instances, same rule as <see cref="NinaSendItems"/>.</summary>
@@ -2230,9 +2230,42 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
 
     public bool HasStellariumSendItems => StellariumSendItems.Count > 0;
 
-    /// <summary>Ruling B9's separator, hidden with both submenus so a target page with nothing
-    /// configured looks exactly as it does today (spec 12.16 step 3d).</summary>
-    public bool ShowIntegrationSeparator => HasNinaSendItems || HasStellariumSendItems;
+    /// <summary>The night heading's Send to button, hidden with both submenus so a page with
+    /// nothing configured looks exactly as it does today (spec 12.16 step 3d).</summary>
+    public bool HasSendItems => HasNinaSendItems || HasStellariumSendItems;
+
+    /// <summary>What a send carries: the night under review's own pointing, read off its
+    /// reference frame (or the first frame that recorded one) with that frame's rotator angle,
+    /// because each night can be framed and rotated differently; the target's catalogue
+    /// coordinates and position angle when no frame of the night recorded a pointing. Null when
+    /// neither has coordinates, which is what disables every item.</summary>
+    /// <param name="FromNight">True when the pointing is the night's own, which is what makes
+    /// Stellarium slew to the coordinates rather than to the catalogue name.</param>
+    internal readonly record struct SendPointing(double Ra, double Dec, double? Angle, bool FromNight);
+
+    // ponytail: the items' enabled state is computed at rebuild, so a night whose frames carry a
+    // pointing on a target with no catalogue coordinates stays disabled until the next rebuild.
+    // Rebuild on ReviewSession's detail load if that case ever matters.
+    internal SendPointing? CurrentPointing()
+    {
+        var detail = ReviewSession?.Detail;
+        if (detail is not null)
+        {
+            var frame = detail.Frames.FirstOrDefault(f => f.ImageId == detail.ReferenceImageId && f is { RaDeg: not null, DecDeg: not null })
+                ?? detail.Frames.FirstOrDefault(f => f is { RaDeg: not null, DecDeg: not null });
+            if (frame is { RaDeg: { } frameRa, DecDeg: { } frameDec })
+            {
+                return new SendPointing(frameRa, frameDec, frame.RotatorPosition, true);
+            }
+        }
+
+        if (Header?.Block.Ra is { } ra && Header?.Block.Dec is { } dec)
+        {
+            return new SendPointing(ra, dec, Header.Block.PositionAngle, false);
+        }
+
+        return null;
+    }
 
     /// <summary>
     /// The ONE place the two submenus are built: read fresh from the stored document every publish
@@ -2256,7 +2289,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
             ? []
             : IntegrationSettings.ReadInstances(general.StellariumInstancesDocument);
 
-        var hasCoordinates = Header?.Block.Ra is not null && Header?.Block.Dec is not null;
+        var hasCoordinates = CurrentPointing() is not null;
         var toolTip = hasCoordinates ? null : "This target has no coordinates to send.";
 
         NinaSendItems.Clear();
@@ -2287,7 +2320,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
 
         OnPropertyChanged(nameof(HasNinaSendItems));
         OnPropertyChanged(nameof(HasStellariumSendItems));
-        OnPropertyChanged(nameof(ShowIntegrationSeparator));
+        OnPropertyChanged(nameof(HasSendItems));
     }
 
     /// <summary>The kind the NINA send registers under, named here so
@@ -2331,7 +2364,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>
-    /// Spec 12.16's NINA send: the header block's own RA, Dec and position angle, unchanged, behind
+    /// Spec 12.16's NINA send: <see cref="CurrentPointing"/>'s RA, Dec and angle, unchanged, behind
     /// <see cref="JobRegistry"/> with no cancel delegate. The exception is Task 5's to log
     /// (core-shapes.md section 1): <c>Error</c> for a failed send, <c>Warning</c> for a failed
     /// rotation, the instance name and its URL as Serilog properties, never the exception's own
@@ -2339,7 +2372,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// </summary>
     private Task SendNinaAsync(IntegrationInstance instance)
     {
-        if (Header?.Block.Ra is not { } ra || Header?.Block.Dec is not { } dec)
+        if (CurrentPointing() is not { } pointing)
         {
             // The item is disabled for this case; the body guard repeats the rule
             // RelayCommand.Execute ignoring CanExecute makes every other command here repeat.
@@ -2355,7 +2388,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
                 var result = _ninaClient is null
                     ? new NinaSendResult(false, NinaRotation.None, IntegrationMessages.NinaFailed, null)
                     : await _ninaClient
-                        .SendCoordinatesAsync(instance.Url, ra, dec, Header?.Block.PositionAngle)
+                        .SendCoordinatesAsync(instance.Url, pointing.Ra, pointing.Dec, pointing.Angle)
                         .ConfigureAwait(true);
 
                 if (!result.Ok)
@@ -2404,10 +2437,12 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>Spec 12.16's Stellarium slew, on the same rule as <see cref="SendNinaAsync"/>.
-    /// The target name is the header block's own <see cref="TargetHeaderViewModel.Name"/>.</summary>
+    /// The target name is the header block's own <see cref="TargetHeaderViewModel.Name"/>, and is
+    /// withheld when the pointing is the night's own, so Stellarium goes to where the night was
+    /// framed rather than to the catalogue object.</summary>
     private Task SlewStellariumAsync(IntegrationInstance instance)
     {
-        if (Header?.Block.Ra is not { } ra || Header?.Block.Dec is not { } dec)
+        if (CurrentPointing() is not { } pointing)
         {
             return Task.CompletedTask;
         }
@@ -2422,7 +2457,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
                     ? new StellariumSlewResult(
                         false, StellariumFocus.Coordinates, IntegrationMessages.StellariumFailed, null)
                     : await _stellariumClient
-                        .SlewAsync(instance.Url, ra, dec, Header?.Name)
+                        .SlewAsync(instance.Url, pointing.Ra, pointing.Dec, pointing.FromNight ? null : Header?.Name)
                         .ConfigureAwait(true);
 
                 if (!result.Ok)
@@ -2546,10 +2581,11 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
 }
 
 /// <summary>
-/// One offered instance on the overflow menu's "Send to NINA" or "Slew Stellarium" submenu (spec
-/// 12.16, ruling B5). The submenu's <c>ItemContainerTheme</c> binds every member here on the
-/// generated <c>MenuItem</c>. Enabled follows the target's own coordinates; the instance's offered
-/// state is what puts it in the list at all (<see cref="TargetDetailViewModel.NinaSendItems"/>).
+/// One offered instance on the night heading's "NINA" or "Stellarium" submenu (spec 12.16, ruling
+/// B5). The submenu's <c>ItemContainerTheme</c> binds every member here on the generated
+/// <c>MenuItem</c>. Enabled follows <see cref="TargetDetailViewModel.CurrentPointing"/>; the
+/// instance's offered state is what puts it in the list at all
+/// (<see cref="TargetDetailViewModel.NinaSendItems"/>).
 /// </summary>
 public sealed partial class IntegrationSendItemViewModel : ObservableObject
 {

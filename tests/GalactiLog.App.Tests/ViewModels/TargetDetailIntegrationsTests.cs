@@ -272,13 +272,13 @@ public class TargetDetailIntegrationsTests
     // ---- Case 2: nothing configured leaves the menu exactly as before -------------------------
 
     [Fact]
-    public void NothingConfigured_HidesBothSubmenusAndTheSeparator()
+    public void NothingConfigured_HidesBothSubmenusAndTheSendButton()
     {
         using var harness = Build(general: new GeneralSettings()).Settle();
 
         Assert.False(harness.ViewModel.HasNinaSendItems);
         Assert.False(harness.ViewModel.HasStellariumSendItems);
-        Assert.False(harness.ViewModel.ShowIntegrationSeparator);
+        Assert.False(harness.ViewModel.HasSendItems);
     }
 
     // ---- Case 3: no RA or no Dec disables every item with the fixed tooltip -------------------
@@ -315,6 +315,104 @@ public class TargetDetailIntegrationsTests
         Assert.Equal(header.Dec!.Value, QueryValue(handler.Requests[0].Url, "DecAngle"));
         Assert.Equal(header.PositionAngle!.Value, QueryValue(handler.Requests[1].Url, "rotation"));
     }
+
+    // ---- Case 4b: the reviewed night's own pointing and rotator angle win over the catalogue ----
+
+    [Fact]
+    public async Task SendNina_CarriesTheReviewedNightsReferenceFramePointing_AndItsRotatorAngle()
+    {
+        var handler = new FakeHandler();
+        using var http = new HttpClient(handler);
+        var nina = new NinaClient(http);
+        var reference = Guid.NewGuid();
+        var frames = new[]
+        {
+            FrameAt(Factory.LastSession, 0, ra: 10.5d, dec: 41.0d, rotator: 12.5d),
+            FrameAt(Factory.LastSession, 1, ra: 10.75d, dec: 41.25d, rotator: 97.5d) with { ImageId = reference },
+        };
+        using var harness = Build(
+            sessions: [Factory.Session(Factory.LastSession)],
+            ninaClient: nina,
+            general: WithNina(new IntegrationInstance("Obsy1", "http://a.local", true)),
+            configure: h => h.OpenedDetails[Factory.LastSession] =
+                CardFactory.PopulatedDetail(Factory.LastSession) with { Frames = frames, ReferenceImageId = reference })
+            .Settle()
+            .SettleCards();
+        Assert.NotNull(harness.ViewModel.ReviewSession?.Detail);
+
+        await harness.ViewModel.NinaSendItems.Single().SendCommand.ExecuteAsync(null);
+
+        Assert.Equal(2, handler.Requests.Count);
+        Assert.Equal(10.75d, QueryValue(handler.Requests[0].Url, "RAangle"));
+        Assert.Equal(41.25d, QueryValue(handler.Requests[0].Url, "DecAngle"));
+        Assert.Equal(97.5d, QueryValue(handler.Requests[1].Url, "rotation"));
+    }
+
+    [Fact]
+    public async Task SlewStellarium_WithTheNightsOwnPointing_GoesToTheCoordinates_NotTheName()
+    {
+        var handler = new FakeHandler();
+        using var http = new HttpClient(handler);
+        var stellarium = new StellariumClient(http);
+        var frames = new[] { FrameAt(Factory.LastSession, 0, ra: 10.5d, dec: 41.0d, rotator: null) };
+        using var harness = Build(
+            sessions: [Factory.Session(Factory.LastSession)],
+            stellariumClient: stellarium,
+            general: WithStellarium(new IntegrationInstance("Desk", "http://s.local", true)),
+            configure: h => h.OpenedDetails[Factory.LastSession] =
+                CardFactory.PopulatedDetail(Factory.LastSession) with { Frames = frames })
+            .Settle()
+            .SettleCards();
+
+        await harness.ViewModel.StellariumSendItems.Single().SendCommand.ExecuteAsync(null);
+
+        var slew = Assert.Single(handler.Requests, r => r.Url.EndsWith("/api/scripts/direct", StringComparison.Ordinal));
+        Assert.Contains("10.500000d", Uri.UnescapeDataString(slew.Body!), StringComparison.Ordinal);
+        Assert.Contains("41.000000d", Uri.UnescapeDataString(slew.Body!), StringComparison.Ordinal);
+        Assert.DoesNotContain(handler.Requests, r => r.Url.EndsWith("/api/main/focus", StringComparison.Ordinal));
+    }
+
+    private static FrameRow FrameAt(DateOnly date, int index, double? ra, double? dec, double? rotator) => new(
+        ImageId: Guid.NewGuid(),
+        FilePath: $@"C:\Astro\M 31\frame_{index:0000}.fits",
+        FileName: $"frame_{index:0000}.fits",
+        CaptureDate: date.ToDateTime(new TimeOnly(21, 0)).AddMinutes(index * 5),
+        FilterUsed: "Ha",
+        ExposureTime: 300d,
+        MedianHfr: 2.3d,
+        Eccentricity: 0.4d,
+        Fwhm: 1.9d,
+        DetectedStars: 1490,
+        GuidingRmsArcsec: 0.45d,
+        GuidingRmsRaArcsec: null,
+        GuidingRmsDecArcsec: null,
+        GuidingRmsSource: null,
+        AduMean: null,
+        AduMedian: null,
+        AduStdev: null,
+        AduMin: null,
+        AduMax: null,
+        FocuserPosition: null,
+        FocuserTemp: null,
+        AmbientTemp: null,
+        DewPoint: null,
+        Humidity: null,
+        Pressure: null,
+        WindSpeed: null,
+        WindDirection: null,
+        WindGust: null,
+        CloudCover: null,
+        SkyQuality: null,
+        Airmass: null,
+        PierSide: null,
+        RotatorPosition: rotator,
+        SensorTemp: null,
+        CameraGain: 100,
+        Rig: "RC8 / ASI2600MM",
+        IsHfrOutlier: false,
+        IsEccentricityOutlier: false,
+        RaDeg: ra,
+        DecDeg: dec);
 
     // ---- Case 5: a null position angle sends no rotation and the summary says nothing ---------
 
@@ -570,7 +668,7 @@ public class TargetDetailIntegrationsTests
 
         Assert.Empty(harness.ViewModel.NinaSendItems);
         Assert.False(harness.ViewModel.HasNinaSendItems);
-        Assert.False(harness.ViewModel.ShowIntegrationSeparator);
+        Assert.False(harness.ViewModel.HasSendItems);
 
         // And the page lets the store's event go on Dispose.
         Assert.NotNull(follower);

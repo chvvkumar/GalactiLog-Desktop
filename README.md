@@ -39,7 +39,7 @@ GalactiLog walks the library folders you choose, reads the headers of every ligh
 
 **Export for stacking.** A wizard that copies the folders for the nights you check into a staging folder, optionally filtered by quality, or writes a PowerShell or Bash script that does the same. The wizard writes nothing until you commit on the Review step.
 
-**Integrations.** Send a target's coordinates and rotation to N.I.N.A. through its Advanced API, slew Stellarium through its Remote Control plugin, export an AstroBin acquisition CSV, and copy frame lists to the clipboard as paths, file names or an Explorer search string.
+**Integrations.** Send a night's coordinates and rotation to N.I.N.A. through its Advanced API, slew Stellarium to them through its Remote Control plugin, export an AstroBin acquisition CSV, and copy frame lists to the clipboard as paths, file names or an Explorer search string.
 
 ### Supported inputs
 

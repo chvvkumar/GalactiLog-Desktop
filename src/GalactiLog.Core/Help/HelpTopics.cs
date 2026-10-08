@@ -625,19 +625,21 @@ public static class HelpTopics
             "Each instance is one copy of NINA on your network. Give it a Name you will "
             + "recognise in a menu and the address of its API: http:// then the machine and then "
             + "the port the API is listening on, usually 1888. An instance that is On and has "
-            + "both a name and an address appears on a target's menu as Send to NINA. Choosing it "
-            + "opens the target in NINA's framing assistant at its coordinates and, when the "
-            + "target has a known orientation, rotates the frame to match. Nothing listens on "
-            + "this machine: GalactiLog only ever makes the call."),
+            + "both a name and an address appears under the night's Send to button as NINA. "
+            + "Choosing it opens NINA's framing assistant at the night's own coordinates and "
+            + "rotation, read from its frames, or at the target's catalogue position when the "
+            + "frames recorded none. Nothing listens on this machine: GalactiLog only ever makes "
+            + "the call."),
 
         new("settings.external-tools.stellarium", "Stellarium instances",
             "Each instance is one copy of Stellarium running the Remote Control plugin. Its "
             + "address is http:// then the machine and then the port the plugin is listening on, "
-            + "usually 8090. An instance that is On and has both a Name and an address appears on "
-            + "a target's menu as Slew Stellarium. Choosing it points Stellarium at the target by "
-            + "its catalogue name where Stellarium knows it, and by its coordinates where it does "
-            + "not. It then sets the field of view to 20 degrees so the object is framed rather "
-            + "than filling the screen."),
+            + "usually 8090. An instance that is On and has both a Name and an address appears "
+            + "under the night's Send to button as Stellarium. Choosing it points Stellarium at "
+            + "the night's own coordinates where its frames recorded them, and otherwise at the "
+            + "target by its catalogue name where Stellarium knows it and by its coordinates "
+            + "where it does not. It then sets the field of view to 20 degrees so the object is "
+            + "framed rather than filling the screen."),
 
         new("settings.storage.data-location", "Data location",
             "Where GalactiLog keeps its database, settings, logs and, by default, the thumbnail "
@@ -749,7 +751,9 @@ public static class HelpTopics
         // and the thumbnails are no longer under the facts line.
         new("target.night", "The night",
             "This night's own facts: the gain, the exposure lengths present, the first and last "
-            + "frame times, and the median airmass, ambient temperature and humidity. Under it, "
+            + "frame times, and the median airmass, ambient temperature and humidity. Send to, at "
+            + "the line's end, sends this night's coordinates and rotation to a NINA or Stellarium "
+            + "instance set up under Settings, External tools. Under it, "
             + "the Session metrics section holds the per-filter table, the ranges, the comparison "
             + "line and the sharpest frame, and keeps its open state; then come the timeline, the "
             + "chart and the frames. Session notes are in the Details panel. When several nights "

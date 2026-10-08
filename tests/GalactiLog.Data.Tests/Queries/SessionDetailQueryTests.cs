@@ -530,7 +530,7 @@ public class SessionDetailQueryTests(ITestOutputHelper output)
     public void Get_FrameRows_CarryEveryFrameTableColumn()
     {
         // One frame with every column of spec 12.4's eight groups set to a distinct value, then
-        // asserted field by field. This is what catches an ordinal slip in a 39 column reader,
+        // asserted field by field. This is what catches an ordinal slip in a 41 column reader,
         // which is the most likely defect in this task: two adjacent doubles swapped compile,
         // run, and report each other's numbers forever.
         using var library = Library.Empty();
@@ -575,6 +575,8 @@ public class SessionDetailQueryTests(ITestOutputHelper output)
             frame.CameraGain = 121;
             frame.Telescope = "RC8";
             frame.Camera = "ASI2600MM";
+            frame.RaDeg = 314.75d;
+            frame.DecDeg = 44.5d;
         });
 
         var row = Assert.Single(Detail(library, target.Id).Frames);
@@ -615,6 +617,8 @@ public class SessionDetailQueryTests(ITestOutputHelper output)
         Assert.Equal(-10.5d, row.SensorTemp);
         Assert.Equal(121, row.CameraGain);
         Assert.Equal("RC8 / ASI2600MM", row.Rig);
+        Assert.Equal(314.75d, row.RaDeg);
+        Assert.Equal(44.5d, row.DecDeg);
     }
 
     [Fact]

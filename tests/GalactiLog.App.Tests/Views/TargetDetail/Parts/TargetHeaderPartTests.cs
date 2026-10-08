@@ -156,65 +156,6 @@ public class TargetHeaderPartTests
     }
 
     [AvaloniaFact]
-    public void NothingConfigured_TheOverflowMenuHidesBothSubmenusAndTheSeparator()
-    {
-        using var page = BuildPage();
-        var view = new TargetHeaderPart { DataContext = page };
-        Show(view);
-
-        Assert.False(MenuItemFromOverflow(view, "SendToNinaMenuItem").IsVisible);
-        Assert.False(MenuItemFromOverflow(view, "SlewStellariumMenuItem").IsVisible);
-
-        // The separator carries no name, so it is found by type: it is the only one in the menu.
-        var owner = view.Named<Button>("OverflowButton");
-        var separator = Assert.Single(
-            Assert.IsType<MenuFlyout>(owner.Flyout).Items.OfType<Separator>());
-        Assert.False(separator.IsVisible);
-    }
-
-    [AvaloniaFact]
-    public void OneOfferedNinaInstance_TheSubmenuIsVisible_WithTheViewModelsOwnItems()
-    {
-        var general = new GeneralSettings
-        {
-            NinaInstancesDocument = IntegrationSettings.WriteInstances(
-                [new IntegrationInstance("Obsy1", "http://a.local", true)]),
-        };
-        using var page = BuildPage(general);
-        var view = new TargetHeaderPart { DataContext = page };
-        Show(view);
-
-        var item = MenuItemFromOverflow(view, "SendToNinaMenuItem");
-        Assert.True(item.IsVisible);
-        Assert.Same(page.NinaSendItems, item.ItemsSource);
-        Assert.False(MenuItemFromOverflow(view, "SlewStellariumMenuItem").IsVisible);
-    }
-
-    // wave2-review: the one part of ruling B5 that can fail silently. A broken or unresolved
-    // IntegrationSendItemTheme renders blank, inert leaf items and every other case still passes,
-    // so this one opens the submenu and reads the generated container.
-    [AvaloniaFact]
-    public void TheGeneratedSubmenuItem_CarriesTheThemesHeaderAndCommand()
-    {
-        var general = new GeneralSettings
-        {
-            NinaInstancesDocument = IntegrationSettings.WriteInstances(
-                [new IntegrationInstance("Obsy1", "http://a.local", true)]),
-        };
-        using var page = BuildPage(general);
-        var view = new TargetHeaderPart { DataContext = page };
-        Show(view);
-
-        var item = MenuItemFromOverflow(view, "SendToNinaMenuItem");
-        item.Open();
-        Dispatcher.UIThread.RunJobs();
-
-        var container = Assert.IsType<MenuItem>(item.ContainerFromIndex(0));
-        Assert.Equal("Obsy1", container.Header);
-        Assert.Same(page.NinaSendItems[0].SendCommand, container.Command);
-    }
-
-    [AvaloniaFact]
     public void AstroBinCsvResultLine_IsHidden_UntilTheViewModelSetsIt()
     {
         using var page = BuildPage();
