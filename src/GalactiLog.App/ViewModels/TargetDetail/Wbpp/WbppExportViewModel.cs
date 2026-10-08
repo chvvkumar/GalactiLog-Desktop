@@ -1171,10 +1171,16 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasScript))]
     [NotifyCanExecuteChangedFor(nameof(CopyScriptCommand))]
+    [NotifyCanExecuteChangedFor(nameof(CopyRunCommandCommand))]
     private string? _scriptText;
 
     /// <summary>Whether the Script part is on screen.</summary>
     public bool HasScript => ScriptText is not null;
+
+    /// <summary>The flavour the last Generate wrote, or null while no script stands. Run script
+    /// reads this: only a PowerShell script is run from the page.</summary>
+    [ObservableProperty]
+    private WbppScriptType? _generatedScriptType;
 
     /// <summary>The run command for the flavour that was generated, stated exactly and matching
     /// the script's own header comment byte for byte.</summary>
@@ -1205,6 +1211,18 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         await _copyText(text).ConfigureAwait(true);
     }
 
+    /// <summary>Writes the run command line to the clipboard.</summary>
+    [RelayCommand(CanExecute = nameof(HasScript))]
+    private async Task CopyRunCommandAsync()
+    {
+        if (!HasScript || RunCommandText.Length == 0)
+        {
+            return;
+        }
+
+        await _copyText(RunCommandText).ConfigureAwait(true);
+    }
+
     // Spec 12.13: changing a level, a constraint, an override, an exclusion or the staging folder
     // after a Generate withdraws the Script part, because it would otherwise describe a plan no
     // longer on the page. The file already on disk is not touched: this application wrote it once
@@ -1224,6 +1242,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         ScriptText = null;
         ScriptPath = null;
+        GeneratedScriptType = null;
         RunCommandText = "";
         IsScriptShown = false;
     }
@@ -1347,6 +1366,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         ScriptPath = destination;
         ScriptText = text;
+        GeneratedScriptType = type;
         RunCommandText = RunCommandFor(type, fileName);
         IsScriptShown = false;
     }

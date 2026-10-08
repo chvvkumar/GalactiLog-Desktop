@@ -22,10 +22,12 @@ public class WbppExportWizardTests
             Harness = ExportHarness.Create(library ?? new Library().Frame(N1, Ha("a.fits")), [N1], parked: parked);
             Jobs = new JobRegistry(action => action());
             Wizard = new WbppExportWizardViewModel(
-                Harness.Page, _ => Task.CompletedTask, Jobs, openFolder: Opened.Add, post: action => action());
+                Harness.Page, _ => Task.CompletedTask, Jobs, openFolder: Opened.Add, runScript: Ran.Add, post: action => action());
         }
 
         public List<string> Opened { get; } = [];
+
+        public List<string> Ran { get; } = [];
 
         public ExportHarness Harness { get; }
 
@@ -375,6 +377,28 @@ public class WbppExportWizardTests
         Assert.True(rig.Wizard.OpenFolderCommand.CanExecute(null));
         rig.Wizard.OpenFolderCommand.Execute(null);
         Assert.Equal([rig.Harness.Page.CopyDestination!], rig.Opened);
+    }
+
+    // A failure here is Run script reachable before a PowerShell script stands on the result
+    // step, or one that hands the shell a path other than the file this export wrote.
+    [Fact]
+    public async Task RunScript_IsDisabled_UntilAPowerShellScriptStandsOnTheResultStep()
+    {
+        using var rig = new Rig();
+        rig.Harness.Destination = rig.Harness.ScriptPath("wbpp_M_31.ps1");
+        await rig.ToReviewAsync();
+        rig.Wizard.Method.IsScript = true;
+        Assert.False(rig.Wizard.RunScriptCommand.CanExecute(null));
+        rig.Wizard.RunScriptCommand.Execute(null);
+        Assert.Empty(rig.Ran);
+
+        await rig.Wizard.CommitCommand.ExecuteAsync(null);
+
+        Assert.Equal(5, rig.Wizard.StepIndex);
+        Assert.Equal(WbppScriptType.PowerShell, rig.Harness.Page.GeneratedScriptType);
+        Assert.True(rig.Wizard.RunScriptCommand.CanExecute(null));
+        rig.Wizard.RunScriptCommand.Execute(null);
+        Assert.Equal([rig.Harness.Page.ScriptPath!], rig.Ran);
     }
 
     // Review risk 6. A failure here is an unexpected exception that escapes the commit and leaves

@@ -1666,7 +1666,7 @@ public static class AppHost
                     logger: serviceProvider.GetRequiredService<ILogger<WbppExportViewModel>>()));
 
         // The export wizard over the page factory above: the job
-        // registry for the status bar, one activity row per copy, Copy path and Open folder.
+        // registry for the status bar, one activity row per copy, Copy path, Open folder and Run script.
         builder.Services.AddSingleton(serviceProvider => new WbppExportDialogService(
             (groupKey, targetName, nights) => new WbppExportWizardViewModel(
                 serviceProvider
@@ -1677,6 +1677,7 @@ public static class AppHost
                 message => serviceProvider.GetRequiredService<ActivityRepository>()
                     .EmitStandalone("user_action", "info", "stacking_copy", message),
                 serviceProvider.GetRequiredService<ShellIntegration>().OpenFolderInExplorer,
+                serviceProvider.GetRequiredService<ShellIntegration>().RunPowerShellScript,
                 logger: serviceProvider.GetRequiredService<ILogger<WbppExportWizardViewModel>>()),
             serviceProvider.GetRequiredService<ModalHost>()));
 

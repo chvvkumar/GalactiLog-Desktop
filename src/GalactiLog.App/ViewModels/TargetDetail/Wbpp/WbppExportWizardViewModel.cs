@@ -23,6 +23,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     private readonly Action<string>? _recordActivity;
     private readonly Func<string, Task> _copyText;
     private readonly Action<string>? _openFolder;
+    private readonly Action<string>? _runScript;
     private readonly Action<Action> _post;
     private CancellationTokenSource? _copyCancel;
     private bool _wroteSomething;
@@ -34,6 +35,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     /// assert it.</param>
     /// <param name="recordActivity">Records one activity row with the given message.</param>
     /// <param name="openFolder">Normally <c>ShellIntegration.OpenFolderInExplorer</c>, for Open folder.</param>
+    /// <param name="runScript">Normally <c>ShellIntegration.RunPowerShellScript</c>, for Run script.</param>
     /// <param name="post">How to reach the UI thread. Defaults to <c>UiPost.Default</c>.</param>
     public WbppExportWizardViewModel(
         WbppExportViewModel page,
@@ -41,6 +43,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         JobRegistry? jobs = null,
         Action<string>? recordActivity = null,
         Action<string>? openFolder = null,
+        Action<string>? runScript = null,
         Action<Action>? post = null,
         ILogger? logger = null)
         : base(Build(page, post), logger)
@@ -50,6 +53,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         _jobs = jobs;
         _recordActivity = recordActivity;
         _openFolder = openFolder;
+        _runScript = runScript;
         _post = post ?? UiPost.Default;
         Review.PropertyChanged += OnReviewChanged;
     }
@@ -98,6 +102,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
             OnPropertyChanged(nameof(IsResultStep));
             StartAnotherCommand.NotifyCanExecuteChanged();
             OpenFolderCommand.NotifyCanExecuteChanged();
+            RunScriptCommand.NotifyCanExecuteChanged();
             CommitCommand.NotifyCanExecuteChanged();
             CancelCopyCommand.NotifyCanExecuteChanged();
             CloseCommand.NotifyCanExecuteChanged();
@@ -284,6 +289,21 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         if (CanOpenFolder())
         {
             _openFolder?.Invoke(Page.CopyDestination!);
+        }
+    }
+
+    // Only the PowerShell flavour, and only from the result step: a Bash script has no shell
+    // here, and ShellIntegration launches nothing unless the file still exists.
+    private bool CanRunScript()
+        => IsResultStep && Page.GeneratedScriptType == WbppScriptType.PowerShell && Page.ScriptPath is not null;
+
+    /// <summary>PowerShell on the script this export wrote, in its own console window.</summary>
+    [RelayCommand(CanExecute = nameof(CanRunScript))]
+    private void RunScript()
+    {
+        if (CanRunScript())
+        {
+            _runScript?.Invoke(Page.ScriptPath!);
         }
     }
 
