@@ -38,6 +38,9 @@ public class WbppExportGenerateTests
     private static void CopyScript(WbppExportViewModel page)
         => page.CopyScriptCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
 
+    private static void CopyRunCommand(WbppExportViewModel page)
+        => page.CopyRunCommandCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+
     // ------------------------------------------------------------------ 10.7 cancelled and done
 
     [Fact]
@@ -118,6 +121,23 @@ public class WbppExportGenerateTests
         // command, which the shell then cannot resolve.
         Assert.DoesNotContain(WbppExportViewModel.BomPrefix, harness.Page.ScriptText!);
         Assert.DoesNotContain(WbppExportViewModel.BomPrefix, harness.Copied[0]);
+    }
+
+    [Fact]
+    public void CopyRunCommand_CopiesTheStatedCommand_OnlyOnceAScriptStands()
+    {
+        // A failure looks like the clipboard carrying a regenerated or empty command rather than
+        // the one line the page shows, or a copy offered before there is a script to run.
+        using var harness = Ready();
+        Assert.False(harness.Page.CopyRunCommandCommand.CanExecute(null));
+        Assert.Null(harness.Page.GeneratedScriptType);
+
+        harness.Destination = harness.ScriptPath("wbpp.ps1");
+        Generate(harness.Page, WbppScriptType.PowerShell);
+        CopyRunCommand(harness.Page);
+
+        Assert.Equal(WbppScriptType.PowerShell, harness.Page.GeneratedScriptType);
+        Assert.Equal([harness.Page.RunCommandText], harness.Copied);
     }
 
     [Fact]

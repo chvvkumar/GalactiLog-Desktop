@@ -845,9 +845,10 @@ public static class HelpTopics
             + "time."),
 
         new("export.script", "Script",
-            "The script is a text file GalactiLog wrote once and never runs; you run it, and it "
-            + "only copies: no delete, no move, no rename, and it writes only under the staging "
-            + "folder. The run command beneath it is the line to paste, and the PowerShell one "
+            "The script is a text file GalactiLog wrote once; Run script opens it in its own "
+            + "PowerShell window, or you run it yourself, and it only copies: no delete, no "
+            + "move, no rename, and it writes only under the staging folder. The run command "
+            + "beneath it is the line to paste, Copy command copies it, and the PowerShell one "
             + "unblocks the file first, which is harmless when the file was never marked. Copy "
             + "script, Show script and the file all carry the same text, and Start another export "
             + "withdraws this section without touching the file already written. If a file of the "

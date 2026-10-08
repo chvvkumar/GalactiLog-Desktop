@@ -285,4 +285,53 @@ public class ShellIntegrationTests
         Assert.False(info.UseShellExecute);
         Assert.Equal([folder], info.ArgumentList);
     }
+
+    // ---- The export wizard's Run script ------------------------------------------------------
+
+    // A failure here is a path that is not an existing file handed to PowerShell, which would
+    // open a console that reports a missing script.
+    [Fact]
+    public void RunPowerShellScript_LaunchesNothing_ForAMissingFile()
+    {
+        var harness = new Harness();
+        var missing = Path.Combine(Path.GetTempPath(), "galactilog-shell-missing-" + Guid.NewGuid().ToString("N") + ".ps1");
+
+        harness.Create().RunPowerShellScript(missing);
+
+        Assert.Empty(harness.Launched);
+    }
+
+    // A failure here is an existing script that is not run, or run through a shell execute, a
+    // composed argument string, a different working directory, or without the policy bypass that
+    // makes the pasted Unblock-File step unnecessary.
+    [Fact]
+    public void RunPowerShellScript_LaunchesPowerShell_WithTheScriptAsItsFileArgument()
+    {
+        var harness = new Harness();
+        var folder = Directory.CreateTempSubdirectory("galactilog-shell-run-").FullName;
+        var script = Path.Combine(folder, "wbpp.ps1");
+        try
+        {
+            File.WriteAllText(script, "# nothing");
+            harness.Create().RunPowerShellScript(script);
+        }
+        finally
+        {
+            Directory.Delete(folder, recursive: true);
+        }
+
+        if (!ShellIntegration.IsWindowsShellAvailable)
+        {
+            Assert.Empty(harness.Launched);
+            return;
+        }
+
+        var info = Assert.Single(harness.Launched);
+        Assert.Equal("powershell.exe", info.FileName);
+        Assert.False(info.UseShellExecute);
+        Assert.Equal(folder, info.WorkingDirectory);
+        Assert.Equal(
+            ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", script],
+            info.ArgumentList);
+    }
 }
