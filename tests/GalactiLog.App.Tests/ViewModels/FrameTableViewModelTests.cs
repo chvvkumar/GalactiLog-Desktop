@@ -1677,6 +1677,45 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
+    public void SetColumnWidth_ANumericColumn_StopsAtItsAutoFit()
+    {
+        // Spec item 3: a number never trims, so a drag stops a numeric column at its measured fit.
+        // A text column may trim and still narrows to the bare floor.
+        var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
+        var hfr = harness.Table.Columns.Single(column => column.Key == "median_hfr");
+        var fileName = harness.Table.Columns.Single(column => column.Key == "file_name");
+
+        harness.Table.SetAutoFitWidth("median_hfr", 70d);
+        harness.Table.SetColumnWidth("median_hfr", 50d);
+        Assert.Equal(70d, hfr.Width);
+
+        harness.Table.SetAutoFitWidth("file_name", 200d);
+        harness.Table.SetColumnWidth("file_name", 50d);
+        Assert.Equal(50d, fileName.Width);
+    }
+
+    [Fact]
+    public async Task AStoredNumericWidth_UnderItsAutoFit_RendersAtTheAutoFit_AndStaysStored()
+    {
+        // A stored width narrower than a numeric column's fit (a larger font since the drag) draws
+        // at the fit, and the stored figure is never rewritten by the font change.
+        var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
+        harness.Table.SetColumnWidth("fwhm", 50d);
+        harness.Table.StoreColumnWidth("fwhm");
+        await harness.Pending;
+        var saves = harness.Saves;
+
+        var table = harness.NewTable(harness.Display, FlaggedFrames());
+        var fwhm = table.Columns.Single(column => column.Key == "fwhm");
+        table.SetAutoFitWidth("fwhm", 70d);
+
+        Assert.Equal(70d, fwhm.Width);
+        Assert.True(table.HasStoredWidth("fwhm"));
+        Assert.Equal(50d, harness.Display.ColumnWidthsFor(DisplaySettings.FramesTableId)["fwhm"]);
+        Assert.Equal(saves, harness.Saves);
+    }
+
+    [Fact]
     public async Task StoreColumnWidth_WritesTheWidth_AndATableBuiltAfterwardsStartsFromIt()
     {
         // A drag stores and survives a reload: the width lands in display.column_widths.frames

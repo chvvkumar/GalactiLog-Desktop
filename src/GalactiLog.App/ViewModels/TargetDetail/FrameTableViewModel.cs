@@ -785,9 +785,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         SelectedRows.Add(row);
     }
 
-    /// <summary>R5's floor, the least a drag or an auto-fit leaves any column: enough for a cell
-    /// to keep its first characters so a column can never be dragged out of existence. There is
-    /// no ceiling: a wide value pushes the row wider and the horizontal scroll covers it.</summary>
+    /// <summary>R5's floor for a text column, the least a drag or an auto-fit leaves it: enough
+    /// for a cell to keep its first characters so a column can never be dragged out of existence.
+    /// A numeric column's floor is its auto-fit once measured, because a number never trims
+    /// (spec.md item 3). There is no ceiling: a wide value pushes the row wider and the horizontal
+    /// scroll covers it.</summary>
     public const double ColumnFloor = 48d;
 
     /// <summary>Whether the profile stores a width for a column, in which case the auto-fit is
@@ -795,7 +797,8 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     public bool HasStoredWidth(string columnKey) => _storedWidths.ContainsKey(columnKey);
 
     /// <summary>Records the width the view measured for a column's widest cell and header, and
-    /// applies it unless the profile stores a width for that column. A non-finite or non-positive
+    /// applies it unless the profile stores a width for that column. A stored numeric width under
+    /// the fit draws at the fit and stays stored as it was. A non-finite or non-positive
     /// figure is refused outright: a measurement taken before the control has a typeface produces
     /// one, and a NaN width reaches layout as a silently unmeasurable column.</summary>
     public void SetAutoFitWidth(string columnKey, double width)
@@ -806,10 +809,9 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         }
 
         _autoWidths[columnKey] = Math.Max(ColumnFloor, width);
-        if (!_storedWidths.ContainsKey(columnKey))
-        {
-            column.Width = _autoWidths[columnKey];
-        }
+        column.Width = _storedWidths.TryGetValue(columnKey, out var stored)
+            ? Math.Max(stored, FloorFor(column))
+            : _autoWidths[columnKey];
     }
 
     /// <summary>A drag in progress: the column takes the width live, floored, and nothing is
@@ -818,7 +820,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     {
         if (double.IsFinite(width) && Column(columnKey) is { } column)
         {
-            column.Width = Math.Max(ColumnFloor, width);
+            column.Width = Math.Max(FloorFor(column), width);
         }
     }
 
@@ -852,6 +854,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
 
     private ColumnViewModel? Column(string columnKey)
         => Columns.FirstOrDefault(column => column.Key == columnKey);
+
+    // Spec item 3: a number is never cut, so a numeric column's least width is its measured fit;
+    // a text column may trim and keeps the bare floor.
+    private double FloorFor(ColumnViewModel column)
+        => column.IsNumeric && _autoWidths.TryGetValue(column.Key, out var fit) ? fit : ColumnFloor;
 
     /// <summary>Highlights the row at an index into capture order. Out of range, null, or a row
     /// the current filter hides clears the highlight rather than leaving a stale one stranded:
