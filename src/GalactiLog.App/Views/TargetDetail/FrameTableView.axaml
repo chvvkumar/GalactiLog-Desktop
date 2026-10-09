@@ -257,8 +257,12 @@
          Theme/Table.axaml's ListBox.table rules (spec.md item 7); a local Background setter here
          would beat the zebra. Selection is light, not colour (P12 direction): the spine's lighter
          selected field plus the 2 px lit edge the row template draws. The spine's selected rule
-         also inherits its accent ink down the row; the frame cells resist it only because
-         TextBlock.cell sets their Foreground. -->
+         also sets an accent ink on the container; this rule puts the page ink back, so the raw
+         header panel's uninked text (its failure line) does not turn accent while its row is
+         selected. No accent hue carries state on this page (P12). -->
+    <Style Selector="ListBox#FrameRows ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    </Style>
   </UserControl.Styles>
 
   <!-- Ruling Q11: the frame table answers Ctrl+C and Escape, and nothing else. Ctrl+D, F2 and
@@ -602,7 +606,7 @@
                   <TextBlock Classes="cell tc-text"
                              Width="{Binding Columns[2].Width}"
                              IsVisible="{Binding Columns[2].IsShown}"
-                             ToolTip.Tip="{Binding FilterText}"
+                             ToolTip.Tip="{Binding Row.FilterUsed}"
                              Text="{Binding FilterText}" />
                   <TextBlock Classes="cell tc-num"
                              Width="{Binding Columns[3].Width}"
@@ -776,7 +780,7 @@
                   <TextBlock Classes="cell tc-text"
                              Width="{Binding Columns[28].Width}"
                              IsVisible="{Binding Columns[28].IsShown}"
-                             ToolTip.Tip="{Binding PierSideText}"
+                             ToolTip.Tip="{Binding Row.PierSide}"
                              Text="{Binding PierSideText}" />
                   <TextBlock Classes="cell tc-num"
                              Width="{Binding Columns[29].Width}"

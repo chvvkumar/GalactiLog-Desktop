@@ -1690,15 +1690,19 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public void SetColumnWidth_ANumericColumn_StopsAtItsAutoFit()
+    public void SetColumnWidth_ANumericColumn_StopsAtItsFigureFit()
     {
-        // Spec item 3: a number never trims, so a drag stops a numeric column at its measured fit.
-        // A text column may trim and still narrows to the bare floor.
+        // Spec item 3: a number never trims, so a drag stops a numeric column at its widest
+        // figure. Its header may trim behind its tip (item 5), so the drag goes below the
+        // header-driven auto-fit. A text column may trim and still narrows to the bare floor.
         var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
         var hfr = harness.Table.Columns.Single(column => column.Key == "median_hfr");
         var fileName = harness.Table.Columns.Single(column => column.Key == "file_name");
 
-        harness.Table.SetAutoFitWidth("median_hfr", 70d);
+        harness.Table.SetAutoFitWidth("median_hfr", 90d, 70d);
+        Assert.Equal(90d, hfr.Width);
+        harness.Table.SetColumnWidth("median_hfr", 80d);
+        Assert.Equal(80d, hfr.Width);
         harness.Table.SetColumnWidth("median_hfr", 50d);
         Assert.Equal(70d, hfr.Width);
 
@@ -1708,10 +1712,11 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public async Task AStoredNumericWidth_UnderItsAutoFit_RendersAtTheAutoFit_AndStaysStored()
+    public async Task AStoredNumericWidth_UnderItsFigureFit_RendersAtTheFigureFit_AndStaysStored()
     {
-        // A stored width narrower than a numeric column's fit (a larger font since the drag) draws
-        // at the fit, and the stored figure is never rewritten by the font change.
+        // A stored width narrower than a numeric column's widest figure (a larger font since the
+        // drag) draws at the figure fit, and the stored figure is never rewritten by the font
+        // change.
         var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
         harness.Table.SetColumnWidth("fwhm", 50d);
         harness.Table.StoreColumnWidth("fwhm");
@@ -1720,7 +1725,7 @@ public class FrameTableViewModelTests
 
         var table = harness.NewTable(harness.Display, FlaggedFrames());
         var fwhm = table.Columns.Single(column => column.Key == "fwhm");
-        table.SetAutoFitWidth("fwhm", 70d);
+        table.SetAutoFitWidth("fwhm", 90d, 70d);
 
         Assert.Equal(70d, fwhm.Width);
         Assert.True(table.HasStoredWidth("fwhm"));

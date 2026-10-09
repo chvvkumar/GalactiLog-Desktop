@@ -122,11 +122,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         ["guiding_rms_arcsec"] = TableHeads.RmsTip,
         ["guiding_rms_ra_arcsec"] = "Guiding RMS error in right ascension, arcseconds",
         ["guiding_rms_dec_arcsec"] = "Guiding RMS error in declination, arcseconds",
-        ["adu_mean"] = "Analog-to-digital units",
-        ["adu_median"] = "Analog-to-digital units",
-        ["adu_stdev"] = "Analog-to-digital units",
-        ["adu_min"] = "Analog-to-digital units",
-        ["adu_max"] = "Analog-to-digital units",
+        ["adu_mean"] = "Mean pixel value, analog-to-digital units",
+        ["adu_median"] = "Median pixel value, analog-to-digital units",
+        ["adu_stdev"] = "Standard deviation of pixel values, analog-to-digital units",
+        ["adu_min"] = "Lowest pixel value, analog-to-digital units",
+        ["adu_max"] = "Highest pixel value, analog-to-digital units",
         ["wind_direction"] = "Wind direction",
         ["sky_quality"] = "Sky quality meter, magnitudes per square arcsecond",
         ["sensor_temp"] = "Sensor temperature, degrees Celsius",
@@ -184,9 +184,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
 
     // R5: the widths the profile stores for this table, overlaid with what this process has
     // written since the display snapshot was read; and the auto-fit the view last measured per
-    // column, which is what a stored width falls back to when cleared.
+    // column, which is what a stored width falls back to when cleared; and the widest figure plus
+    // its gutters, a numeric column's floor.
     private readonly Dictionary<string, double> _storedWidths;
     private readonly Dictionary<string, double> _autoWidths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _figureFits = new(StringComparer.Ordinal);
     private readonly Action<Action> _post;
     private readonly ShellIntegration _shell;
     private readonly Action<IReadOnlyList<FrameRowViewModel>, int>? _openPreview;
@@ -787,8 +789,8 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
 
     /// <summary>R5's floor for a text column, the least a drag or an auto-fit leaves it: enough
     /// for a cell to keep its first characters so a column can never be dragged out of existence.
-    /// A numeric column's floor is its auto-fit once measured, because a number never trims
-    /// (spec.md item 3). There is no ceiling: a wide value pushes the row wider and the horizontal
+    /// A numeric column's floor is its figure fit once measured, because a number never trims
+    /// (spec.md item 3); its header may (spec.md item 5). There is no ceiling: a wide value pushes the row wider and the horizontal
     /// scroll covers it.</summary>
     public const double ColumnFloor = 48d;
 
@@ -797,11 +799,13 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     public bool HasStoredWidth(string columnKey) => _storedWidths.ContainsKey(columnKey);
 
     /// <summary>Records the width the view measured for a column's widest cell and header, and
-    /// applies it unless the profile stores a width for that column. A stored numeric width under
-    /// the fit draws at the fit and stays stored as it was. A non-finite or non-positive
-    /// figure is refused outright: a measurement taken before the control has a typeface produces
-    /// one, and a NaN width reaches layout as a silently unmeasurable column.</summary>
-    public void SetAutoFitWidth(string columnKey, double width)
+    /// applies it unless the profile stores a width for that column. <paramref name="figureFit"/>
+    /// is the widest cell alone plus its gutters, a numeric column's floor. A stored numeric width
+    /// under the figure fit draws at the figure fit and stays stored as it was. A non-finite or
+    /// non-positive figure is refused outright: a measurement taken before the control has a
+    /// typeface produces one, and a NaN width reaches layout as a silently unmeasurable column.
+    /// </summary>
+    public void SetAutoFitWidth(string columnKey, double width, double figureFit = 0d)
     {
         if (!double.IsFinite(width) || width <= 0d || Column(columnKey) is not { } column)
         {
@@ -809,6 +813,9 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         }
 
         _autoWidths[columnKey] = Math.Max(ColumnFloor, width);
+        _figureFits[columnKey] = double.IsFinite(figureFit)
+            ? Math.Clamp(figureFit, ColumnFloor, _autoWidths[columnKey])
+            : ColumnFloor;
         column.Width = _storedWidths.TryGetValue(columnKey, out var stored)
             ? Math.Max(stored, FloorFor(column))
             : _autoWidths[columnKey];
@@ -855,10 +862,10 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     private ColumnViewModel? Column(string columnKey)
         => Columns.FirstOrDefault(column => column.Key == columnKey);
 
-    // Spec item 3: a number is never cut, so a numeric column's least width is its measured fit;
-    // a text column may trim and keeps the bare floor.
+    // Spec item 3: a number is never cut, so a numeric column's least width is its widest figure;
+    // its header trims behind its tip (item 5). A text column may trim and keeps the bare floor.
     private double FloorFor(ColumnViewModel column)
-        => column.IsNumeric && _autoWidths.TryGetValue(column.Key, out var fit) ? fit : ColumnFloor;
+        => column.IsNumeric && _figureFits.TryGetValue(column.Key, out var fit) ? fit : ColumnFloor;
 
     /// <summary>Highlights the row at an index into capture order. Out of range, null, or a row
     /// the current filter hides clears the highlight rather than leaving a stale one stranded:

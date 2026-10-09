@@ -151,7 +151,12 @@ public partial class FrameTableView : UserControl
     /// sub-pixel precision: the file name cell has no trimming, so a column a fraction of a pixel
     /// short clips the last glyph instead of eliding.</summary>
     public static double AutoFitWidth(double header, double widestCell)
-        => Math.Ceiling(Math.Max(header + HeaderSlack, widestCell) + 2 * TableMetrics.Gutter);
+        => FigureFitWidth(Math.Max(header + HeaderSlack, widestCell));
+
+    /// <summary>The widest cell alone plus its two gutters: a numeric column's floor, since a
+    /// figure never trims and its header may (spec.md items 3 and 5).</summary>
+    public static double FigureFitWidth(double widestCell)
+        => Math.Ceiling(widestCell + 2 * TableMetrics.Gutter);
 
     // R5: every column auto-fits the widest text of the loaded night plus its header. Measured
     // here rather than in the view-model because a FormattedText needs a Typeface and a font
@@ -201,7 +206,8 @@ public partial class FrameTableView : UserControl
 
             table.SetAutoFitWidth(
                 column.Key,
-                AutoFitWidth(Measure(column.Title, headerTypeface, headerSize), widest));
+                AutoFitWidth(Measure(column.Title, headerTypeface, headerSize), widest),
+                FigureFitWidth(widest));
         }
     }
 

@@ -76,7 +76,8 @@ public class FrameTableViewTests
         List<(IReadOnlyList<FrameRowViewModel> Rows, int Index)>? previews = null,
         GeneralSettings? general = null,
         List<DisplaySettings>? saves = null,
-        Action<DisplayColumnWriter>? writerSink = null)
+        Action<DisplayColumnWriter>? writerSink = null,
+        Func<Guid, FrameHeaders?>? getHeaders = null)
     {
         var current = display ?? EveryColumn();
         var writer = new DisplayColumnWriter(() => current, value =>
@@ -102,9 +103,9 @@ public class FrameTableViewTests
                 ? null
                 : (rows, index) => previews.Add((rows, index)),
             general ?? new GeneralSettings { Timezone = "UTC", Use24HTime = true },
-            // Phase 6 Task 6: raw header rendering is covered by RawHeaderPanelTests; this view
-            // test needs only a stub that is never expected to be called.
-            getHeaders: _ => null);
+            // Phase 6 Task 6: raw header rendering is covered by RawHeaderPanelTests; a view test
+            // passes its own only to expand a panel inside a row.
+            getHeaders: getHeaders ?? (_ => null));
     }
 
     /// <summary>The frame table no longer bounds its own rows: P12 Task 6 deleted
@@ -2139,16 +2140,21 @@ public class FrameTableViewTests
     }
 
     [AvaloniaFact]
-    public async Task FrameTableView_ANarrowedNumericColumn_NeverCollapsesItsFigure()
+    public async Task FrameTableView_ANarrowedNumericColumn_StopsAtItsWidestFigure()
     {
-        // Spec.md item 3: a drag 2000 px left stops a numeric column at its auto-fit, and no
-        // realised figure is cut.
+        // Spec.md items 3 and 5: a drag 2000 px left stops a numeric column at its widest figure,
+        // below the header-driven auto-fit since the title may trim, and no realised figure is
+        // cut: every figure's text fits inside its cell's padding.
         DisplayColumnWriter? writer = null;
         var table = CreateTable(writerSink: w => writer = w);
         var view = new FrameTableView { DataContext = table };
         var window = ShowTable(view);
         var hfr = table.Columns.Single(column => column.Key == "median_hfr");
         var fit = hfr.Width;
+        var hfrCells = RowBorders(view).Select((_, row) => (TextBlock)RowCellsAt(view, row)[4]).ToList();
+        var figureFit = Math.Max(
+            FrameTableViewModel.ColumnFloor,
+            FrameTableView.FigureFitWidth(hfrCells.Max(cell => MeasuredWidth(cell, cell.Text!))));
 
         var from = DividerPoint(window, view, hfr);
         window.MouseDown(from, MouseButton.Left);
@@ -2157,10 +2163,36 @@ public class FrameTableViewTests
         Dispatcher.UIThread.RunJobs();
         await writer!.Pending;
 
-        Assert.Equal(fit, hfr.Width);
+        Assert.Equal(figureFit, hfr.Width);
+        Assert.True(hfr.Width < fit);
         Assert.All(
-            view.GetVisualDescendants().OfType<TextBlock>().Where(block => block.Classes.Contains("tc-num")),
-            block => Assert.DoesNotContain(block.TextLayout.TextLines, line => line.HasCollapsed));
+            view.GetVisualDescendants().OfType<TextBlock>()
+                .Where(block => block.Classes.Contains("tc-num") && block.IsEffectivelyVisible),
+            block => Assert.True(
+                block.TextLayout.WidthIncludingTrailingWhitespace
+                    <= block.Bounds.Width - block.Padding.Left - block.Padding.Right + 0.01d,
+                $"'{block.Text}' is cut"));
+    }
+
+    [AvaloniaFact]
+    public async Task FrameTableView_ASelectedRow_KeepsItsRawHeaderTextInThePageInk()
+    {
+        // P12: no accent hue carries state on this page. The spine's selected rule inks the
+        // container accent, and the raw header panel's failure line has no ink of its own.
+        var table = CreateTable(getHeaders: _ => throw new InvalidOperationException("unreadable"));
+        var view = new FrameTableView { DataContext = table };
+        ShowTable(view);
+        var row = table.Rows[0];
+
+        table.ToggleRawHeadersCommand.Execute(row);
+        await row.RawHeaders!.PendingLoad!;
+        Dispatcher.UIThread.RunJobs();
+        table.SelectFrameAt(0);
+        Dispatcher.UIThread.RunJobs();
+
+        var failure = view.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Name == "FailureLine");
+        Assert.True(failure.IsEffectivelyVisible);
+        Assert.Equal(ThemeColor("ColorTextPrimary"), Assert.IsAssignableFrom<ISolidColorBrush>(failure.Foreground).Color);
     }
 
     [AvaloniaFact]
