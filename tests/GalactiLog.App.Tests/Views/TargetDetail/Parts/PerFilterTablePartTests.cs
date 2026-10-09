@@ -3,9 +3,11 @@ using static GalactiLog.App.Tests.Views.TargetDetail.Parts.NightPartsTestKit;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -88,7 +90,7 @@ public class PerFilterTablePartTests
     }
 
     [Fact]
-    public void FilterRows_ASubRow_HasNoSwatchAndNoFwhmOrRmsOrStars()
+    public void FilterRows_ASubRow_HasNoSwatchAndDashesForFwhmRmsAndStars()
     {
         using var harness = Cards.Create(detail: Cards.PopulatedDetail() with
         {
@@ -105,9 +107,9 @@ public class PerFilterTablePartTests
 
         var sub = harness.Card.FilterRows[1];
         Assert.Null(sub.Swatch);
-        Assert.Equal("", sub.MedianFwhmText);
-        Assert.Equal("", sub.MedianGuidingRmsText);
-        Assert.Equal("", sub.MedianDetectedStarsText);
+        Assert.Equal(MetricText.Missing, sub.MedianFwhmText);
+        Assert.Equal(MetricText.Missing, sub.MedianGuidingRmsText);
+        Assert.Equal(MetricText.Missing, sub.MedianDetectedStarsText);
 
         // A FilterDetailRow does carry HFR and eccentricity, so those two are real figures.
         Assert.Equal("1.69", sub.MedianHfrText);
@@ -136,7 +138,26 @@ public class PerFilterTablePartTests
         Assert.False(orphan.IsSubRow);
         Assert.NotNull(orphan.Swatch);
         Assert.Equal("12", orphan.FrameCountText);
-        Assert.Equal("", orphan.MedianFwhmText);
+        Assert.Equal(MetricText.Missing, orphan.MedianFwhmText);
+    }
+
+    [Fact]
+    public void FilterRows_AMediansRowWithNoDetailRows_DashesExpFramesAndHours()
+    {
+        using var harness = Cards.Create(detail: Cards.PopulatedDetail() with
+        {
+            FilterMedians = [new FilterMedians("Ha", 2.28d, 0.39d, 1.88d, 0.44d, 1490d)],
+            FilterDetails = [],
+        });
+
+        harness.Card.IsExpanded = true;
+        harness.Settle();
+
+        var row = Assert.Single(harness.Card.FilterRows);
+        Assert.Equal(MetricText.Missing, row.ExposureTimeText);
+        Assert.Equal(MetricText.Missing, row.FrameCountText);
+        Assert.Equal(MetricText.Missing, row.IntegrationText);
+        Assert.False(row.IsExposureCount);
     }
 
     [AvaloniaFact]
@@ -204,12 +225,9 @@ public class PerFilterTablePartTests
         Assert.StartsWith("Done", AutomationProperties.GetName(box), StringComparison.Ordinal);
     }
 
-    private static double Right(Grid grid, int column, Visual root)
-        => grid.TranslatePoint(new Point(grid.ColumnDefinitions.Take(column + 1).Sum(c => c.ActualWidth), 0), root)!.Value.X;
-
     private const double WideFigure = 123456.789d;
 
-    private const double FilterHfrMinWidthCell = 78d - 12d;
+    private const double FilterHfrMinWidthCell = 82d - 16d;
 
     [AvaloniaFact]
     public void PerFilterTablePart_FilterTableColumns_ReportEqualWidthsAfterLayout()
@@ -230,22 +248,21 @@ public class PerFilterTablePartTests
         var rows = TableRows(pane, "FilterTable");
         Assert.True(rows.Count >= 2, "the filter table rendered no rows under its header");
 
-        // Column 1 is HFR px on every row of the table, header included.
-        var header = TableCellAt(rows[0], 1);
-        var first = TableCellAt(rows[1], 1);
+        // A Number heading right-aligns over its figures, so the header and the wide figure end on
+        // one edge.
+        var header = TableCellAt(rows[0], "hfr");
+        var first = TableCellAt(rows[1], "hfr");
         Assert.True(
             first.Bounds.Width > FilterHfrMinWidthCell,
             $"the seeded HFR figure is not wider than the column minimum ({first.Bounds.Width}).");
-        Assert.Equal(header.Bounds.Width, first.Bounds.Width, 3);
+        Assert.Equal(header.Bounds.Right, first.Bounds.Right, 0.5);
     }
 
     [AvaloniaFact]
     public void PerFilterTablePart_ASubRow_IsIndentedUnderItsFilter()
     {
-        // The comp indents a sub-row's first cell to 26 px against the 6 px every other cell
-        // carries (comp-observing-ledger.html:162), so an exposure reads as belonging to the
-        // filter above it. The indent is a style setter, and it is inert the moment anything puts
-        // an inline Margin on the element it targets.
+        // An exposure reads as belonging to the filter above it. The indent is a spacer inside the
+        // label cell, not a margin, so the cell's own gutter stays the table's.
         using var harness = Cards.Create(detail: Cards.PopulatedDetail() with
         {
             FilterMedians = [new FilterMedians("R", 1.75d, 0.34d, 3.41d, 0.61d, 312d)],
@@ -266,24 +283,26 @@ public class PerFilterTablePartTests
         var rows = TableRows(pane, "FilterTable");
         Assert.Equal(4, rows.Count);
 
-        var parentCell = TableCellAt(rows[1], 0);
-        var subCell = TableCellAt(rows[2], 0);
+        var parentCell = (Panel)TableCellAt(rows[1], "name");
+        var subCell = (Panel)TableCellAt(rows[2], "name");
+        Assert.Equal(TableMetrics.Gutter, parentCell.Bounds.X);
+        Assert.Equal(TableMetrics.Gutter, subCell.Bounds.X);
 
-        Assert.Equal(6d, parentCell.Bounds.X);
-        Assert.Equal(26d, subCell.Bounds.X);
-        Assert.Equal(20d, subCell.Bounds.X - parentCell.Bounds.X);
+        // 12 is the parent's 7 px dot and its 5 px margin, which a sub-row has no swatch for.
+        var parentName = parentCell.Children[^1];
+        var subName = subCell.Children[^1];
+        Assert.Equal(TableMetrics.SubRowIndent - 12d, subName.Bounds.X - parentName.Bounds.X);
     }
 
     [AvaloniaFact]
-    public void PerFilterTablePart_ARigLabelRow_SpansTheNineColumns()
+    public void PerFilterTablePart_ARigLabelRow_SpansTheRow()
     {
         var (pane, harness) = ThumbnailKit.RigHost(card => new PerFilterTablePart { DataContext = card }, [ThumbnailKit.RigA, ThumbnailKit.RigB]);
         using var scope = harness;
         Dispatcher.UIThread.RunJobs();
 
-        // ContentControl since the Phase 14A fixer folded the two tables' copies of these two runs
-        // onto one shared RigLabelRowTemplate in Theme/Controls.axaml (phase review P3-3); the
-        // placement, the column span and the text are what this case is about and none moved.
+        // The label row is the item's second child, shown instead of its TableRow, so it spans the
+        // item between the two gutters.
         var labels = pane.Named<ItemsControl>("FilterRowsList")
             .GetVisualDescendants()
             .OfType<ContentControl>()
@@ -291,15 +310,48 @@ public class PerFilterTablePartTests
             .ToList();
 
         Assert.Equal(2, labels.Count);
-        Assert.All(labels, label => Assert.Equal(9, Grid.GetColumnSpan(label)));
-        Assert.All(labels, label => Assert.Equal(0, Grid.GetColumn(label)));
+        Assert.All(labels, label => Assert.Equal(
+            label.FindAncestorOfType<ContentPresenter>()!.Bounds.Width,
+            label.Bounds.Width + 2 * TableMetrics.Gutter,
+            0.5));
 
-        // The rig label row adds no column and changes no shared size group, which is what keeps the two
-        // tables aligned.
-        var header = pane.Named<Grid>("FilterTableHeader");
-        Assert.Equal(9, header.ColumnDefinitions.Count);
+        var header = pane.Named<TableRow>("FilterTableHeader");
+        Assert.Equal(10, header.Columns!.Count);
+        Assert.Equal(10, header.ColumnDefinitions.Count);
 
         Assert.Contains(ThumbnailKit.RigA, VisibleTexts(pane));
         Assert.Contains(ThumbnailKit.RigB, VisibleTexts(pane));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void PerFilterTablePart_MeetsTableConventions(bool extraLarge)
+    {
+        using var harness = Cards.Create(detail: Cards.PopulatedDetail() with
+        {
+            FilterMedians = [new FilterMedians("R", 1.75d, 0.34d, 3.41d, 0.61d, 312d)],
+            FilterDetails =
+            [
+                new FilterDetailRow("R", 15, 450d, 1.69d, 0.36d, 30d),
+                new FilterDetailRow("R", 19, 5700d, 1.78d, 0.33d, 300d),
+                new FilterDetailRow("SII", 12, 3600d, 2.50d, 0.41d, 300d),
+            ],
+        });
+
+        harness.Card.IsExpanded = true;
+        harness.Settle();
+
+        var pane = new PerFilterTablePart { DataContext = harness.Card };
+        var window = Show(pane, 1280, 800);
+        if (extraLarge)
+        {
+            window.FontSize = 20d;
+        }
+
+        Dispatcher.UIThread.RunJobs();
+
+        TableAssert.Conventions(pane);
+        TextFit.AssertTextFitsItsBox(pane);
     }
 }

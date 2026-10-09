@@ -1,4 +1,5 @@
 using System.Globalization;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -225,7 +226,7 @@ public class SessionCardViewModelTests
         harness.Card.IsExpanded = true;
         harness.Settle();
 
-        Assert.DoesNotContain("Guiding RMS", harness.Card.Ranges.Select(range => range.Label));
+        Assert.DoesNotContain("Guiding " + TableHeads.Rms, harness.Card.Ranges.Select(range => range.Label));
     }
 
     [Fact]
@@ -439,7 +440,7 @@ public class SessionCardViewModelTests
         harness.Settle();
 
         Assert.Equal(
-            ["HFR", "Eccentricity", "FWHM", "Guiding RMS", "Sensor temp"],
+            [TableHeads.Hfr, "Eccentricity", TableHeads.Fwhm, "Guiding " + TableHeads.Rms, "Sensor temp C"],
             harness.Card.Ranges.Select(range => range.Label));
     }
 
@@ -531,7 +532,7 @@ public class SessionCardViewModelTests
         var card = harness.Card;
 
         Assert.Equal(
-            ["HFR", "Eccentricity", "FWHM", "Guiding RMS", "Sensor temp"],
+            [TableHeads.Hfr, "Eccentricity", TableHeads.Fwhm, "Guiding " + TableHeads.Rms, "Sensor temp C"],
             card.Ranges.Select(range => range.Label));
         Assert.Equal("1.23", card.MedianAirmassText);
         Assert.Equal("4.5 C", card.MedianAmbientTempText);
