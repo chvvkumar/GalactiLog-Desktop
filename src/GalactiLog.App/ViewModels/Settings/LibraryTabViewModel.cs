@@ -147,7 +147,7 @@ public static class IntervalChoices
 /// what keeps the tab constructible with no window (HANDOFF.md section 5).
 /// </para>
 /// </remarks>
-public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
+public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, IPendingEdits
 {
     private readonly Func<ScanRunOptions, CancellationToken, Task<ScanRunOutcome>> _runScan;
     private readonly Action _cancelScan;
@@ -189,7 +189,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     /// <c>handler =&gt; settingsStore.GeneralChanged += handler</c>. The tab is a DI singleton whose
     /// state outlives a visit to the Settings page, and the setup wizard writes the same document
     /// from a link on this very tab, so without this the tab shows stale lists indefinitely and
-    /// the next "Save rules" writes them back over the wizard's (Task 5 review finding I3). A pair
+    /// the next save writes them back over the wizard's (Task 5 review finding I3). A pair
     /// of delegates rather than the store itself, the rule every view-model here follows. Null
     /// leaves the tab on its single constructor load, which is what a unit test that is not about
     /// external changes wants.</param>
@@ -348,12 +348,15 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyCanExecuteChangedFor(nameof(RevertCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
     public partial bool IsDirty { get; private set; }
 
     /// <summary>True while a filter-block save is in flight.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool IsSaving { get; private set; }
 
     /// <summary>True when at least one include or exclude path is outside every configured scan
@@ -361,6 +364,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool HasInvalidPath { get; private set; }
 
     /// <summary>True when at least one name rule has an empty pattern or an uncompilable regex.
@@ -368,6 +372,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool HasInvalidRule { get; private set; }
 
     /// <summary>Spec 7.5's calibration frames. Saves immediately.</summary>
@@ -552,6 +557,20 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         }
     }
 
+    /// <inheritdoc />
+    public string Label => "Library folders, paths and rules";
+
+    /// <inheritdoc />
+    public string NavigationKey => "library";
+
+    /// <summary>The save bar's refusal: the Save tooltip text, but only while there is something
+    /// to save and saving is not possible, so a clean tab or a savable one reports null.</summary>
+    public string? SaveRefusal => IsDirty && !CanSave() ? SaveRefusalReason : null;
+
+    Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
+
+    void IPendingEdits.Discard() => Revert();
+
     // PendingLoad, PendingWrite and IsDisposed belong to the spine (FIXER LIST F18).
 
     /// <summary>
@@ -569,6 +588,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         {
             SaveCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(SaveRefusalReason));
+            OnPropertyChanged(nameof(SaveRefusal));
 
             // ShowScanFilterNotice is gated on IsReady, which these two derive, so a read that
             // fails after the view has bound must take the notice down with the sections.
@@ -796,15 +816,6 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             return;
         }
 
-        // Web parity, ScanFiltersPanel.tsx's applyNow: a scan reads the stored filters, so an
-        // unsaved rule is the one thing the user expects it to apply and the one thing it cannot
-        // see. Refused with the reason on the tab rather than run against the old rules.
-        if (IsDirty)
-        {
-            ErrorMessage = UnsavedFiltersRefusal;
-            return;
-        }
-
         try
         {
             // Spec 10.3's two per-run arguments, built at the press and carried no further: the
@@ -829,10 +840,6 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             Post(ClearPerRunOptions);
         }
     }
-
-    /// <summary>Why a scan was refused while the filter block is dirty.</summary>
-    public const string UnsavedFiltersRefusal =
-        "Save the library folders, paths and rules before scanning. A scan uses the last saved filters, not unsaved edits.";
 
     private bool CanRunScan()
         => _scanStatus is null || (!_scanStatus.IsRunning && !_scanStatus.ResolutionInProgress);

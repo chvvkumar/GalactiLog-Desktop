@@ -374,21 +374,6 @@
                     Content="Add rule"
                     Padding="10,3"
                     Command="{Binding AddNameRuleCommand}" />
-            <Button x:Name="SaveFiltersButton"
-                    Content="Save rules"
-                    Padding="10,3"
-                    ToolTip.Tip="{Binding SaveRefusalReason}"
-                    Command="{Binding SaveCommand}" />
-            <Button x:Name="RevertFiltersButton"
-                    Content="Revert"
-                    Padding="10,3"
-                    Command="{Binding RevertCommand}" />
-            <!-- The web panel's "unsaved" badge: the rules table holds edits until Save rules,
-                 and a scan started meanwhile runs on the stored rules. -->
-            <TextBlock x:Name="UnsavedFiltersText"
-                       Text="Unsaved"
-                       VerticalAlignment="Center"
-                       IsVisible="{Binding IsDirty}" />
           </StackPanel>
 
           <ContentControl Classes="callout error inline"
