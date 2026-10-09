@@ -54,6 +54,9 @@
          code-behind measures the auto-fit, and the divider at the right edge of each header cell
          drags it. The one fixed width left is the Rig column's, which has no key to store under. -->
     <sys:Double x:Key="FrameColTextWidth">90</sys:Double>
+    <!-- The row-end actions button's width, which the header's trailing spacer repeats so the
+         header and the rows share one extent and pan to the same far right. -->
+    <sys:Double x:Key="FrameColActionsWidth">44</sys:Double>
 
     <!-- R23: a watch or reject row is tinted in its band colour at an alpha every ink stays
          readable over in both themes (reject is the guide graph's failed-settle alpha); hover is
@@ -74,11 +77,11 @@
          fixed Width, so a Margin would only narrow the hit area), and the title is the shared
          t-label header tier with the column's tip.
 
-         The title sits in the Grid's star column (fixer-list item 20, phase 14C) so it measures
-         against the cell's real width and TextTrimming can run; a StackPanel would offer it
-         infinite width. The sort glyph is drawn on the side away from the alignment edge: before a
-         numeric title and after a text one, so a title's aligned edge is its column's edge whether
-         or not the column is the sort key (audit inconsistency 10, the dashboard's placement). -->
+         The title and its sort glyph are the spine's TableSortTitle or TableSortTitleNumeric
+         (ruling R5), picked by IsNumeric: the glyph sits after a text title and before a numeric
+         one, so a title's aligned edge is its column's edge whether or not the column is the sort
+         key. Both titles sit in a Grid star column (fixer-list item 20, phase 14C) so they trim
+         against the cell's real width. -->
     <DataTemplate x:Key="FrameHeaderCell" DataType="dash:ColumnViewModel">
       <Grid>
         <Button Classes="header-cell tc-head"
@@ -88,23 +91,14 @@
                 Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).SortByCommand}"
                 CommandParameter="{Binding Key}"
                 Padding="{x:Static t:TableMetrics.CellPadding}">
-          <Grid ColumnDefinitions="Auto,*,Auto">
-            <TextBlock Grid.Column="0"
-                       Classes="t-label tc-sortglyph"
-                       Text="{Binding SortGlyph}"
-                       Margin="0,0,4,0"
-                       IsVisible="{Binding IsNumeric}" />
-            <TextBlock Grid.Column="1"
-                       Classes="header-title t-label" Classes.numeric="{Binding IsNumeric}"
-                       Text="{Binding Title}"
-                       ToolTip.Tip="{Binding Tip}"
-                       TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2"
-                       Classes="t-label tc-sortglyph"
-                       Text="{Binding SortGlyph}"
-                       Margin="4,0,0,0"
-                       IsVisible="{Binding !IsNumeric}" />
-          </Grid>
+          <Panel>
+            <ContentPresenter Content="{Binding}"
+                              ContentTemplate="{StaticResource TableSortTitle}"
+                              IsVisible="{Binding !IsNumeric}" />
+            <ContentPresenter Content="{Binding}"
+                              ContentTemplate="{StaticResource TableSortTitleNumeric}"
+                              IsVisible="{Binding IsNumeric}" />
+          </Panel>
         </Button>
         <!-- P24 R5's divider, over the button's right edge, which is the cell's right gutter: a
              drag sets the column's width live and stores it on release; a double-click clears the
@@ -138,10 +132,7 @@
          rule fails on, and an exemption nobody has to remember is worth two lines in the shared
          vocabulary (P12 Task 5).
 
-         One definition each for the two cell roles (spec 14.4's role rules). -->
-    <Style Selector="TextBlock.header-title.numeric">
-      <Setter Property="TextAlignment" Value="Right" />
-    </Style>
+         One definition for the cell role (spec 14.4's role rules). -->
     <Style Selector="TextBlock.cell">
       <Setter Property="VerticalAlignment" Value="Center" />
       <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
@@ -264,14 +255,10 @@
 
     <!-- The item container, the comp's lit row. Its padding, zero minimum and zebra fill are
          Theme/Table.axaml's ListBox.table rules (spec.md item 7); a local Background setter here
-         would beat the zebra. Selection is light, not colour (P12 direction): a lighter field plus
-         the 2 px lit edge the row template draws. This rule repeats the spine's selected field
-         without its accent ink: the frame cells set their ink by local style, and no accent hue
-         carries state anywhere on this page, so the metric inks and the filter inks are never read
-         as a selection. -->
-    <Style Selector="ListBox#FrameRows ListBoxItem:selected /template/ ContentPresenter">
-      <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
-    </Style>
+         would beat the zebra. Selection is light, not colour (P12 direction): the spine's lighter
+         selected field plus the 2 px lit edge the row template draws. The spine's selected rule
+         also inherits its accent ink down the row; the frame cells resist it only because
+         TextBlock.cell sets their Foreground. -->
   </UserControl.Styles>
 
   <!-- Ruling Q11: the frame table answers Ctrl+C and Escape, and nothing else. Ctrl+D, F2 and
@@ -533,6 +520,8 @@
                         IsVisible="{Binding Columns[31].IsShown}"
                         Content="{Binding Columns[31]}"
                         ContentTemplate="{StaticResource FrameHeaderCell}" />
+        <!-- Over the row-end actions button, which has no header of its own. -->
+        <Control Width="{StaticResource FrameColActionsWidth}" Margin="8,0,0,0" />
       </StackPanel>
       </ScrollViewer>
       </Border>
@@ -551,10 +540,9 @@
            The rows scroll horizontally in the ListBox itself, so its vertical bar sits at the
            viewport's right edge and is always drawn (spec.md item 8, t:Table.Scroller), which
            keeps its reserved width constant; FrameTableView.axaml.cs keeps the header band's
-           offset equal to the rows' offset. Classes="table" is the spine's zebra. -->
+           offset equal to the rows' offset. t:Table.Scroller also adds the spine's table class, its zebra. -->
       <ListBox Grid.Row="1"
                x:Name="FrameRows"
-               Classes="table"
                t:Table.Scroller="True"
                ItemsSource="{Binding Rows}"
                SelectionMode="Multiple"
@@ -806,7 +794,7 @@
                   <!-- Spec 12.4's five per-frame actions, behind one row-end button so the row
                        stays readable. Open preview is spec 11.5's modal and stays disabled until
                        Phase 8 binds the delegate. -->
-                  <Button Content="..." Padding="6,0" Margin="8,0,0,0">
+                  <Button Content="..." Padding="6,0" Margin="8,0,0,0" Width="{StaticResource FrameColActionsWidth}">
                     <Button.Flyout>
                       <Flyout>
                         <StackPanel Spacing="2">

@@ -1854,9 +1854,11 @@ public class FrameTableViewTests
     private static ContentControl HeaderCell(FrameTableView view, ColumnViewModel column)
         => HeaderCells(view).Single(cell => ReferenceEquals(cell.Content, column));
 
-    // The title TextBlock of a header cell; the sort glyphs either side of it are TextBlocks too.
+    // The shown title TextBlock of a header cell. The cell carries both spine title templates, one
+    // hidden, and the sort glyph beside the title is a TextBlock too.
     private static TextBlock HeaderTitle(ContentControl cell)
-        => cell.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Classes.Contains("header-title"));
+        => cell.GetVisualDescendants().OfType<TextBlock>().Single(block =>
+            block.IsEffectivelyVisible && block.Text == ((ColumnViewModel)cell.Content!).Title);
 
     private static IReadOnlyList<string> VisibleHeaderTitles(FrameTableView view)
         => [.. HeaderCells(view)
@@ -2213,13 +2215,17 @@ public class FrameTableViewTests
     public void FrameTableView_PannedToTheFarRight_TheHeaderStaysInStep()
     {
         // The rows' viewport is one bar width narrower than the window onto the header would be;
-        // the header's ScrollInset keeps the two equal, so at the far right the header's offset
-        // does not clamp short of the rows'.
+        // the header's ScrollInset keeps the two equal, and its trailing spacer over the row-end
+        // button keeps the extents equal, so at the far right neither offset clamps the other
+        // short. The two-way sync makes the header's offset always equal the rows', so what
+        // proves it is that the rows still reach their own far right.
         var (view, rows, header, table) = ShowNarrow();
-        rows.Offset = new Vector(rows.Extent.Width - rows.Viewport.Width, 0);
+        var farRight = rows.Extent.Width - rows.Viewport.Width;
+        rows.Offset = new Vector(farRight, 0);
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(rows.Offset.X > 0d);
+        Assert.Equal(farRight, rows.Offset.X, 0.5);
         Assert.Equal(rows.Offset.X, header.Offset.X);
 
         var last = table.Columns.Last(column => column.IsShown);

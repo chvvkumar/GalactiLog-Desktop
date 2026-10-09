@@ -112,8 +112,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     };
 
     /// <summary>What an abbreviated header stands for (spec item 5). A column missing here takes
-    /// its title as its tip, so a text title dragged narrow enough to trim still reads in full.
-    /// </summary>
+    /// its title as its tip (<see cref="ColumnViewModel.Tip"/>).</summary>
     private static readonly Dictionary<string, string> HeaderTips = new(StringComparer.Ordinal)
     {
         ["exposure_time"] = TableHeads.ExposureTip,
@@ -128,6 +127,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         ["adu_stdev"] = "Analog-to-digital units",
         ["adu_min"] = "Analog-to-digital units",
         ["adu_max"] = "Analog-to-digital units",
+        ["wind_direction"] = "Wind direction",
         ["sky_quality"] = "Sky quality meter, magnitudes per square arcsecond",
         ["sensor_temp"] = "Sensor temperature, degrees Celsius",
     };
@@ -327,7 +327,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
                 // in the markup: the header cell aligns over its figures instead of at the far edge.
                 isNumeric: column.IsNumeric)
             {
-                Tip =HeaderTips.GetValueOrDefault(column.Key) ?? title,
+                Tip = HeaderTips.GetValueOrDefault(column.Key),
             };
         })];
 

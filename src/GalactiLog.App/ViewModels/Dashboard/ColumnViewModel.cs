@@ -1,3 +1,4 @@
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace GalactiLog.App.ViewModels.Dashboard;
@@ -110,8 +111,12 @@ public sealed partial class ColumnViewModel : ObservableObject
     [ObservableProperty]
     private string _sortGlyph = "";
 
-    /// <summary>The header's tooltip: what an abbreviated title stands for, or null.</summary>
-    public string? Tip { get; init; }
+    /// <summary>The header's tooltip: what an abbreviated title stands for, else the title itself,
+    /// so a title trimmed narrow still reads in full.</summary>
+    [AllowNull]
+    public string Tip { get => _tip ?? Title; init => _tip = value; }
+
+    private readonly string? _tip;
 
     /// <summary>The frame table's column width in device-independent pixels, bound by its header
     /// cell and every row cell (Phase 24 R5). Owned by <c>FrameTableViewModel</c>, which seeds it

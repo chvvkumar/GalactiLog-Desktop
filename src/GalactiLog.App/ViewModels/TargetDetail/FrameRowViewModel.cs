@@ -129,7 +129,7 @@ public sealed partial class FrameRowViewModel : ObservableObject
     /// in the cell, so a column of figures shares one decimal axis, and the missing dash when the
     /// frame recorded no exposure. This was the only one of the 32 cells that carried a suffix.
     /// </summary>
-    public string ExposureText => MetricText.Cell(Row.ExposureTime, "0.##");
+    public string ExposureText => MetricText.Cell(Row.ExposureTime, "#,0.##");
 
     /// <summary>design-spec 12.4's HFR column. <c>median_hfr</c> is the per-frame HFR the
     /// ingester recorded, not a session aggregate.</summary>
@@ -172,7 +172,7 @@ public sealed partial class FrameRowViewModel : ObservableObject
 
     public string HumidityText => MetricText.Cell(Row.Humidity, "0");
 
-    public string PressureText => MetricText.Cell(Row.Pressure, "0");
+    public string PressureText => MetricText.Cell(Row.Pressure, "N0");
 
     public string WindSpeedText => MetricText.Cell(Row.WindSpeed, "0.0");
 
@@ -192,7 +192,7 @@ public sealed partial class FrameRowViewModel : ObservableObject
 
     public string SensorTempText => MetricText.Cell(Row.SensorTemp, "0.0");
 
-    public string CameraGainText => MetricText.Cell(Row.CameraGain, "0");
+    public string CameraGainText => MetricText.Cell(Row.CameraGain, "N0");
 
     // ---- the guiding RMS source disclosure (spec 12.4, Phase 15A) -------------------------------
 

@@ -800,7 +800,7 @@ public class FrameTableViewModelTests
         Assert.Equal("3.4", row.AmbientTempText);
         Assert.Equal("1.6", row.DewPointText);
         Assert.Equal("62", row.HumidityText);
-        Assert.Equal("1013", row.PressureText);
+        Assert.Equal("1,013", row.PressureText);
         Assert.Equal("3.4", row.WindSpeedText);
         Assert.Equal("271", row.WindDirectionText);
         Assert.Equal("6.6", row.WindGustText);
@@ -837,6 +837,19 @@ public class FrameTableViewModelTests
         // A real zero is a measurement and shows as one.
         var zero = Harness.Create(frames: [Frame(cameraGain: 0)], display: EveryGroup()).Table.Rows[0];
         Assert.Equal("0", zero.CameraGainText);
+    }
+
+    [Fact]
+    public void Rows_LongNumbers_CarryTheThousandsSeparator()
+    {
+        // Spec item 3: every figure past three digits groups its thousands, like ADU and Stars.
+        var row = Harness.Create(
+            frames: [Frame(exposureTime: 1200.5d, pressure: 1013d, cameraGain: 1600)],
+            display: EveryGroup()).Table.Rows[0];
+
+        Assert.Equal("1,200.5", row.ExposureText);
+        Assert.Equal("1,013", row.PressureText);
+        Assert.Equal("1,600", row.CameraGainText);
     }
 
     [Fact]

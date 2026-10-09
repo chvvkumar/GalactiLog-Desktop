@@ -62,17 +62,19 @@
     <DataTemplate x:Key="TableSortTitle" x:DataType="dash:ColumnViewModel">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
-                   ToolTip.Tip="{Binding Title}" />
+                   ToolTip.Tip="{Binding Tip}" />
         <TextBlock Grid.Column="1" Margin="4,0,0,0" Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
       </Grid>
     </DataTemplate>
     <!-- Numeric: the glyph leads, so the title's right edge is the figures' right edge whether the
-         column is the sort key or not. -->
+         column is the sort key or not. The title sits in a star column, not a StackPanel, so a
+         fixed-width cell measures it against its real width and TextTrimming can run. -->
     <DataTemplate x:Key="TableSortTitleNumeric" x:DataType="dash:ColumnViewModel">
-      <StackPanel Orientation="Horizontal" Spacing="4">
-        <TextBlock Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
-        <TextBlock Classes="t-label" Text="{Binding Title}" />
-      </StackPanel>
+      <Grid ColumnDefinitions="Auto,*">
+        <TextBlock Margin="0,0,4,0" Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
+        <TextBlock Grid.Column="1" Classes="t-label" Text="{Binding Title}" TextAlignment="Right"
+                   TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Tip}" />
+      </Grid>
     </DataTemplate>
   </Styles.Resources>
 
