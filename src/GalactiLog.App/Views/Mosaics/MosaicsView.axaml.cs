@@ -91,7 +91,8 @@ public partial class MosaicsView : UserControl
 
     private void Sync()
     {
-        foreach (var column in (_picker?.Columns ?? []).Where(column => DisplaySettings.MosaicColumnKeys.Contains(column.Key)))
+        foreach (var column in (_picker?.Columns ?? [])
+                     .Where(column => DisplaySettings.MosaicColumnKeys.Contains(column.Key)))
         {
             _cols[column.TableKey].IsDropped = !column.IsVisible;
         }

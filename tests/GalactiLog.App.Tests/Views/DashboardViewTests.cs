@@ -478,7 +478,7 @@ public class DashboardViewTests
     // the page at the right allotment and then asserted the region's width was greater than zero,
     // which is true of any layout that does not collapse entirely, this one included: at the floor
     // the list was handed 448 pixels with the panel at 300 and 268 at 480, against a row that needs
-    // TargetListView.ListMinWidth, so Last Session, the Expand button and the pager's page-size
+    // TargetListView.ListMinWidth, so Last session, the Expand button and the pager's page-size
     // select clipped off the trailing edge with no horizontal scroller to reach them. It now
     // asserts the two trailing edges, which is what the shell paragraph's claim actually is.
     [AvaloniaTheory]

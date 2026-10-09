@@ -210,8 +210,11 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         => _drawnCells >= _cells.Cells.Count ? _cells.Cells : [.. _cells.Cells.Take(_drawnCells)];
 
     /// <summary>The night expander's custom headings: every session-scope column, in the order
-    /// its line cells are drawn. Empty with no custom column wiring.</summary>
-    public IReadOnlyList<CustomColumnDefinition> SessionCustomHeadings => _custom?.SessionColumns ?? [];
+    /// its line cells are drawn. Empty with no custom column wiring, and empty on an unresolved
+    /// obj: group, which <see cref="LoadSessionCells"/> builds no cells for, so no heading stands
+    /// over a blank strip.</summary>
+    public IReadOnlyList<CustomColumnDefinition> SessionCustomHeadings
+        => Row.TargetId is null ? [] : _custom?.SessionColumns ?? [];
 
     /// <summary>Ruling C24's figure, pushed down by <see cref="TargetListViewModel"/> from the
     /// width rule. Nothing is disposed: a dropped column is not drawn, not discarded.</summary>

@@ -186,10 +186,17 @@ public class SessionExpanderTests
         // order the cells under it are drawn, and follows a changed column set.
         var seeing = SessionColumn("Seeing", 0);
         var clouds = SessionColumn("Clouds", 1);
-        var source = Row("g1", [new SessionSummary(new DateOnly(2025, 12, 7), 10, 3_000d)]);
+        var source = Row("g1", [new SessionSummary(new DateOnly(2025, 12, 7), 10, 3_000d)])
+            with { TargetId = Guid.NewGuid() };
         var row = new TargetRowViewModel(source, [], custom: Context(seeing, clouds));
 
         Assert.Equal([seeing, clouds], row.SessionCustomHeadings);
+
+        // An unresolved obj: group has no target id to key a night's value by, so it gets no
+        // session cells and so no headings over them.
+        var unresolved = new TargetRowViewModel(
+            source with { GroupKey = "obj:Bubble Neb", TargetId = null }, [], custom: Context(seeing, clouds));
+        Assert.Empty(unresolved.SessionCustomHeadings);
 
         var raised = new List<string?>();
         row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);

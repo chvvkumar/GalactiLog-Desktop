@@ -4,6 +4,7 @@
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
              xmlns:t="using:GalactiLog.App.Controls.Table"
+             xmlns:vmtd="using:GalactiLog.App.ViewModels.TargetDetail"
              x:Class="GalactiLog.App.Views.Dashboard.TargetListView"
              x:Name="Root"
              x:DataType="dash:TargetListViewModel">
@@ -425,17 +426,23 @@
                   <!-- One line of badges, never a WrapPanel: the wrap is what made the row two
                        lines high (user ruling U3 item 4). The column is shared and uncapped, so it
                        is as wide as the widest palette on the page and no badge is clipped and the
-                       count is not capped (questions.md Q10). -->
-                  <ItemsControl t:TableRow.Col="palette"
-                                x:Name="PaletteCell"
-                                ItemsSource="{Binding PaletteBadges}"
-                                ItemTemplate="{StaticResource TargetFilterBadge}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                  </ItemsControl>
+                       count is not capped (questions.md Q10). A target whose frames carry no
+                       filter reads the faint dash instead of a silent blank (spec.md item 6). -->
+                  <Panel t:TableRow.Col="palette">
+                    <ItemsControl x:Name="PaletteCell"
+                                  ItemsSource="{Binding PaletteBadges}"
+                                  ItemTemplate="{StaticResource TargetFilterBadge}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock x:Name="PaletteMissing"
+                               Text="{x:Static vmtd:MetricText.Missing}"
+                               Foreground="{DynamicResource ColorTextTertiary}"
+                               IsVisible="{Binding !PaletteBadges.Count}" />
+                  </Panel>
 
                   <!-- Never "-" (a group with no frames reads 0.0), so it keeps the primary ink. -->
                   <TextBlock t:TableRow.Col="integration"
@@ -499,18 +506,23 @@
                         <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCountText}" />
                         <TextBlock t:TableRow.Col="hours" Text="{Binding IntegrationText}" />
                         <!-- The same Border.tag badges the Palette column draws (spec 12.2), in
-                             the same filter order. A night whose frames carry no filter renders
-                             nothing here rather than a placeholder: the ItemsControl is empty. -->
-                        <ItemsControl t:TableRow.Col="filters"
-                                      x:Name="SessionFiltersCell"
-                                      ItemsSource="{Binding Filters}"
-                                      ItemTemplate="{StaticResource TargetFilterBadge}">
-                          <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                          </ItemsControl.ItemsPanel>
-                        </ItemsControl>
+                             the same filter order. A night whose frames carry no filter reads
+                             the faint dash, as the Palette cell does (spec.md item 6). -->
+                        <Panel t:TableRow.Col="filters">
+                          <ItemsControl x:Name="SessionFiltersCell"
+                                        ItemsSource="{Binding Filters}"
+                                        ItemTemplate="{StaticResource TargetFilterBadge}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                          </ItemsControl>
+                          <TextBlock x:Name="SessionFiltersMissing"
+                                     Text="{x:Static vmtd:MetricText.Missing}"
+                                     Foreground="{DynamicResource ColorTextTertiary}"
+                                     IsVisible="{Binding !Filters.Count}" />
+                        </Panel>
                         <!-- Spec 12.15 amendment 2.4's session-scope cells. Ungated by any picker
                              (user choice 4), and read only when the row is expanded (ruling
                              C11), so the column measures nothing until then. -->

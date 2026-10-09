@@ -87,11 +87,11 @@ public partial class TargetListView : UserControl
     /// column is as wide as the widest palette on the page.</summary>
     internal const double PaletteBudget = 120d;
 
-    /// <summary>The Equipment column's cap, written to its <see cref="TableColumn"/> once. Raised from 180 by the fixer pass: at a 1900 window the
-    /// column trimmed a telescope and camera pair ("Esprit 100 / ASI6200MM Pro" measures 272 with
-    /// its gutters) while Name held about 500 pixels of spare width. Equipment is drawn at all only
-    /// above the fit width, and the fit width is built from this, so a generous cap buys its own
-    /// room rather than taking Name's.</summary>
+    /// <summary>The Equipment column's cap, written to its <see cref="TableColumn"/> once. Raised
+    /// from 180 by the fixer pass: at a 1900 window the column trimmed a telescope and camera pair
+    /// ("Esprit 100 / ASI6200MM Pro" measures 272 with its gutters) while Name held about 500
+    /// pixels of spare width. Equipment is drawn at all only above the fit width, and the fit width
+    /// is built from this, so a generous cap buys its own room rather than taking Name's.</summary>
     internal const double EquipmentCap = 300d;
 
     /// <summary>The sessions cell: the Expand button plus its gutter. Not a cap, because the
@@ -113,8 +113,9 @@ public partial class TargetListView : UserControl
     /// suppressed and Name at its floor. Measured rather than summed: the caps above are maxima,
     /// so a sum over them (720) overstates what the row actually takes, and on the shipped fixture
     /// the Expand button's trailing edge settles at 664, its gutter ends the row at 672 and the
-    /// reserved vertical bar carries the list to 684. The pager's own minimum, the page buttons plus "Rows per page" and its select, is 566,
-    /// so the row is the binding constraint and this is the figure the page is laid out against.
+    /// reserved vertical bar carries the list to 684. The pager's own minimum, the page buttons
+    /// plus "Rows per page" and its select, is 566, so the row is the binding constraint and this
+    /// is the figure the page is laid out against.
     /// <para>
     /// <c>DashboardView.axaml.cs</c> is what reads it: the filter panel's rendered width is
     /// bounded so the list keeps at least this much, and below the panel's own 220 floor the panel
@@ -237,7 +238,8 @@ public partial class TargetListView : UserControl
     /// <see cref="FitWidthFor"/> is built from, over the same shown set.
     /// </para></summary>
     public static readonly StyledProperty<double> NameCellMaxWidthProperty =
-        AvaloniaProperty.Register<TargetListView, double>(nameof(NameCellMaxWidth), defaultValue: NameFloor - CellGutter);
+        AvaloniaProperty.Register<TargetListView, double>(
+            nameof(NameCellMaxWidth), defaultValue: NameFloor - CellGutter);
 
     /// <summary>The width rule's budget for Designation, Integration and Last session:
     /// <see cref="DataCap"/> while the list is wide enough to draw every shown column,

@@ -13,6 +13,7 @@ using Avalonia.VisualTree;
 using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Dashboard;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.Views.Dashboard;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
@@ -71,7 +72,7 @@ public class TargetListViewTests
         Sessions:
         [
             // The newest night carries filters, drawn as Border.tag badges; the older one carries
-            // none, which must render as an empty cell rather than a placeholder (spec 12.2).
+            // none, which renders the faint dash rather than a silent blank (spec.md item 6).
             new SessionSummary(new DateOnly(2025, 12, 7), 88, 26_400d, [new FilterBadge("Ha", "#FF0000", 88, 26_400d)]),
             new SessionSummary(new DateOnly(2024, 1, 5), 60, 18_240d),
         ]);
@@ -332,7 +333,7 @@ public class TargetListViewTests
         // Re-pointed in the fix pass. The old assertion was that the next cell's x moved left by
         // exactly the hidden cell's width, which a star column makes false by design: Equipment is
         // one of the two stars now, so the width it gives up is absorbed by Name rather than
-        // pulling Last Session leftwards. The rule the case exists for is that the hidden column
+        // pulling Last session leftwards. The rule the case exists for is that the hidden column
         // contributes nothing and the table stays aligned, which is what it asserts instead.
         Assert.False(equipmentCell.IsVisible);
         Assert.Equal(0d, ColumnWidth(view, "TargetListHeaderRow", 4));
@@ -370,7 +371,7 @@ public class TargetListViewTests
         ShowList(view);
 
         // Collapsed: the per-session lines are not rendered. The older session's date is the
-        // discriminator; the newer one is also the row's Last Session cell.
+        // discriminator; the newer one is also the row's Last session cell.
         Assert.DoesNotContain("2024-01-05", VisibleCellTexts(view));
 
         var toggle = Assert.Single(
@@ -462,7 +463,7 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_ANightWithNoFilter_DrawsAnEmptyCell()
+    public void View_ANightWithNoFilter_DrawsTheFaintDash()
     {
         var list = CreatePopulatedList();
         var view = new TargetListView { DataContext = list };
@@ -471,12 +472,40 @@ public class TargetListViewTests
         var cells = view.GetVisualDescendants().OfType<ItemsControl>().Where(c => c.Name == "SessionFiltersCell").ToList();
         Assert.Equal(2, cells.Count);
 
-        // The older session (index 1, 2024-01-05) has no filters: its cell realizes no badge at
-        // all, rather than a placeholder. Selected by class for the reason the case above gives.
+        // The older session (index 1, 2024-01-05) has no filters: its cell realizes no badge and
+        // shows the faint dash beside the empty strip (spec.md item 6). The newer night, which has
+        // a badge, shows no dash.
         var emptyFilters = list.Rows[0].Sessions[1].Filters;
         var empty = cells.Single(c => ReferenceEquals(c.ItemsSource, emptyFilters));
-
         Assert.Empty(Badges(empty));
+
+        var dashes = NamedCells(view, "SessionFiltersMissing").Cast<TextBlock>().ToList();
+        Assert.Equal(2, dashes.Count);
+        var dash = Assert.Single(dashes, block => block.IsEffectivelyVisible);
+        Assert.Same(empty.Parent, dash.Parent);
+        AssertFaintDash(dash);
+    }
+
+    [AvaloniaFact]
+    public void View_ATargetWithNoFilter_DrawsTheFaintDashInThePalette()
+    {
+        // An OSC library: no frame carries a filter, so the Palette cell has no badge to draw.
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([SampleRow with { Palette = [] }], 1, 44_640d, 148, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        Assert.Empty(Badges(Assert.Single(NamedCells(view, "PaletteCell"))));
+        AssertFaintDash(Assert.IsType<TextBlock>(Assert.Single(NamedCells(view, "PaletteMissing"))));
+    }
+
+    private static void AssertFaintDash(TextBlock dash)
+    {
+        Assert.True(dash.IsEffectivelyVisible);
+        Assert.Equal(MetricText.Missing, dash.Text);
+        var faint = (ISolidColorBrush)Application.Current!.FindResource("ColorTextTertiary")!;
+        Assert.Equal(faint.Color, Assert.IsAssignableFrom<ISolidColorBrush>(dash.Foreground).Color);
     }
 
     [AvaloniaFact]
@@ -779,6 +808,66 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
+    public void View_ANewPage_MeasuresItsColumnsAfresh()
+    {
+        // A new page is measured on its own cells: the short page below must not keep the wide
+        // page's Designation width.
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([WideRow], 1, 0d, 0, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        ShowList(view, WidePageAllotment, 1900d);
+        var wide = ColumnWidth(view, "Target", "designation");
+
+        list.Load(new TargetListingPage([WideRow with { CatalogId = "M 1" }], 1, 0d, 0, 1, 50));
+        Dispatcher.UIThread.RunJobs();
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+
+        var narrow = ColumnWidth(view, "Target", "designation");
+        Assert.True(narrow < wide - 10, $"Designation stayed at {narrow} from {wide}.");
+    }
+
+    [AvaloniaFact]
+    public void View_ATextSizeChange_MeasuresTheColumnsAfresh()
+    {
+        // A shared size group only grows while its rows stay in the tree, so a column measured at
+        // one text size would keep that width at the next. Headless text measures the same at
+        // every size, so the shrink is staged in place instead: both rows' Palette cells are
+        // pointed at the narrow row's three badges, which leaves the column at the wide row's
+        // seven, and the size change alone has to let it narrow.
+        var list = CreatePopulatedList(bothRows: true);
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view, WidePageAllotment, 1900d);
+        var wide = ColumnWidth(view, "Target", "palette");
+
+        foreach (var cell in NamedCells(view, "PaletteCell").Cast<ItemsControl>())
+        {
+            cell.ItemsSource = list.Rows[0].PaletteBadges;
+        }
+
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(wide, ColumnWidth(view, "Target", "palette"));
+
+        window.FontSize = 20;
+        Dispatcher.UIThread.RunJobs();
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(
+            ColumnWidth(view, "Target", "palette") < wide - 10,
+            $"Palette stayed at {ColumnWidth(view, "Target", "palette")} from {wide}.");
+    }
+
+    private static double ColumnWidth(TargetListView view, string table, string key)
+    {
+        var header = view.GetVisualDescendants().OfType<TableRow>()
+            .First(row => row.Kind == RowKind.Header && row.Columns!.Id == table);
+        return header.ColumnDefinitions[header.Columns!.IndexOf(key)].ActualWidth;
+    }
+
+    [AvaloniaFact]
     public void View_MissingFigures_DrawTheFaintDash()
     {
         // Spec.md item 6: no catalogue id, no rig and no dated night read "-" in the faintest
@@ -828,7 +917,7 @@ public class TargetListViewTests
 
         Assert.True(
             LeftEdge(toggle, view) > LeftEdge(lastSession, view),
-            "The sessions control is not past the Last Session cell.");
+            "The sessions control is not past the Last session cell.");
     }
 
     [AvaloniaFact]
@@ -1026,7 +1115,7 @@ public class TargetListViewTests
         // be visible. Six columns and a worded button do not fit the 720 the page gives the list at
         // this type size, so Equipment gives way (the web's table has no equipment column at all).
         // This case fails on the previous pass's markup, where Equipment was cut at the viewport
-        // edge and Last Session and the sessions control were off screen. It runs on the
+        // edge and Last session and the sessions control were off screen. It runs on the
         // representative row rather than the seven filter stress row, whose palette alone measures
         // 286 and which no column set fits into 720.
         var list = CreatePopulatedList();
@@ -1042,7 +1131,7 @@ public class TargetListViewTests
             $"The sessions control ends at {RightEdge(toggle, view)} in a {view.Bounds.Width} viewport.");
         Assert.True(
             RightEdge(lastSession, view) <= view.Bounds.Width + 0.5d,
-            $"Last Session ends at {RightEdge(lastSession, view)} in a {view.Bounds.Width} viewport.");
+            $"Last session ends at {RightEdge(lastSession, view)} in a {view.Bounds.Width} viewport.");
 
         // Equipment is not drawn, and it has taken its width with it. The tight cap is pinned here
         // so the pair with View_HidingEquipmentInTheGear_DoesNotTightenTheOtherColumns, which pins
@@ -1140,8 +1229,9 @@ public class TargetListViewTests
         // on the header cell and the row cell of every column that carries one.
         var source = File.ReadAllText(FindTargetListViewAxaml());
 
-        // 120 Name floor + 160 Designation + 120 Palette + 160 Integration + 300 Equipment
-        // + 160 Last Session + 96 sessions + 12 trailing inset.
+        // The width rule's budget, summed: 120 Name floor + 160 Designation + 120 Palette
+        // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 12 trailing inset.
+        // Integration and Last session are budgeted at 160, not capped there.
         Assert.Equal(1128d, TargetListView.DefaultFitWidth);
         Assert.Equal(
             TargetListView.DefaultFitWidth,
@@ -1207,7 +1297,7 @@ public class TargetListViewTests
     public void View_HidingEquipmentInTheGear_DoesNotTightenTheOtherColumns()
     {
         // One flag served two causes (phase-review P2): unticking Equipment at any width also
-        // dropped Designation, Integration and Last Session to the tight cap and trimmed their
+        // dropped Designation, Integration and Last session to the tight cap and trimmed their
         // headers. The tight cap follows the width rule and nothing else.
         var list = CreatePopulatedList(bothRows: true);
         var view = new TargetListView { DataContext = list };
