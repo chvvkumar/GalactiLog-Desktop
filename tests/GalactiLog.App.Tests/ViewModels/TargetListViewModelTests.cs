@@ -3,6 +3,7 @@ using GalactiLog.App.Tests.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Dashboard;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Queries;
@@ -584,7 +585,7 @@ public class TargetListViewModelTests
         Assert.Equal("M 31", row.Designation);
         Assert.Equal(["Ha", "OIII"], row.PaletteBadges.Select(badge => badge.CanonicalName));
         Assert.Equal([60, 40], row.PaletteBadges.Select(badge => badge.FrameCount));
-        Assert.Equal("12.4 h", row.IntegrationText);
+        Assert.Equal("12.4", row.IntegrationText);
         Assert.Equal("FRA600 / ASI294MC, RC8 / ASI2600MM", row.EquipmentText);
         Assert.Equal("2025-12-07", row.LastSessionText);
 
@@ -618,17 +619,30 @@ public class TargetListViewModelTests
     }
 
     [Fact]
-    public void Rows_NullOptionalValues_RenderAsEmptyText()
+    public void Rows_MissingValues_RenderTheDash()
     {
+        // Spec.md item 6: a table cell never goes silently blank. The common name is not a cell of
+        // its own (it rides beside the name), so it stays empty.
         var list = CreateList();
-        list.Load(PageOf([Row(commonName: null, catalogId: null, lastSession: null) with { LastSession = null }]));
+        list.Load(PageOf([Row(commonName: null, catalogId: null, equipment: []) with { LastSession = null }]));
 
         var row = Assert.Single(list.Rows);
 
         Assert.Equal("", row.CommonName);
         Assert.False(row.HasCommonName);
-        Assert.Equal("", row.Designation);
-        Assert.Equal("", row.LastSessionText);
+        Assert.Equal(MetricText.Missing, row.Designation);
+        Assert.Equal(MetricText.Missing, row.EquipmentText);
+        Assert.Equal(MetricText.Missing, row.LastSessionText);
+    }
+
+    [Fact]
+    public void Columns_TitlesAreSentenceCase()
+    {
+        // Spec.md item 5 and ruling R15: one header style, sentence case, and the integration
+        // column is "Hours" over unitless figures.
+        Assert.Equal(
+            ["Name", "Designation", "Palette", "Hours", "Equipment", "Last session"],
+            CreateList().Columns.Select(column => column.Title));
     }
 
     [Fact]
@@ -679,7 +693,16 @@ public class TargetListViewModelTests
         Assert.False(row.IsExpanded);
         Assert.Equal(["2025-12-07", "2025-11-19", "2025-10-01"], row.Sessions.Select(session => session.DateText));
         Assert.Equal([40, 30, 20], row.Sessions.Select(session => session.FrameCount));
-        Assert.Equal(["3.3 h", "2.5 h", "1.7 h"], row.Sessions.Select(session => session.IntegrationText));
+        Assert.Equal(["3.3", "2.5", "1.7"], row.Sessions.Select(session => session.IntegrationText));
+    }
+
+    [Fact]
+    public void Sessions_FrameCountText_UsesThousandsSeparators()
+    {
+        var list = CreateList();
+        list.Load(PageOf([Row(sessions: [new SessionSummary(new DateOnly(2025, 12, 7), 1204, 12_000d)])]));
+
+        Assert.Equal("1,204", Assert.Single(Assert.Single(list.Rows).Sessions).FrameCountText);
     }
 
     [Fact]
@@ -692,11 +715,12 @@ public class TargetListViewModelTests
     }
 
     [Theory]
-    [InlineData(0d, "0.0 h")]
-    [InlineData(3_600d, "1.0 h")]
-    [InlineData(44_640d, "12.4 h")]
-    [InlineData(270_000d, "75.0 h")]
-    public void Rows_IntegrationText_FormatsHoursToOneDecimal(double seconds, string expected)
+    [InlineData(0d, "0.0")]
+    [InlineData(3_600d, "1.0")]
+    [InlineData(44_640d, "12.4")]
+    [InlineData(270_000d, "75.0")]
+    [InlineData(4_500_000d, "1,250.0")]
+    public void Rows_IntegrationText_IsHoursToOneDecimal_WithNoUnit(double seconds, string expected)
     {
         var list = CreateList();
         list.Load(PageOf([Row(integrationSeconds: seconds)]));
@@ -715,7 +739,7 @@ public class TargetListViewModelTests
         Assert.Equal("Bubble Neb", row.Name);
         Assert.Equal("obj:Bubble Neb", row.GroupKey);
         Assert.Null(row.TargetId);
-        Assert.Equal("", row.Designation);
+        Assert.Equal(MetricText.Missing, row.Designation);
     }
 
     [Fact]

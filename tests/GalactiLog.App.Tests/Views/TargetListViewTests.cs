@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
@@ -9,6 +10,8 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
+using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.Views.Dashboard;
 using GalactiLog.Core.Settings;
@@ -29,9 +32,9 @@ namespace GalactiLog.App.Tests.Views;
 // the shell at 1280 by 800, which is what ShowList does.
 public class TargetListViewTests
 {
-    // Spec 12.2's row height and header height (DESIGN.md section 5): 34 for a row, 30 for the
-    // header, which is the base control height Button.header-cell already carries.
-    private const double RowHeight = 34d;
+    // The row height and the header height, measured: a row is the spine's RowMinHeight (ruling
+    // R15), which the sm Expand button fits inside; the header is the column gear's own height.
+    private const double RowHeight = 28d;
 
     // How far a column may differ between the header and a row. The star column's cell bounds its
     // own text by the width it was arranged at, which settles about two pixels above the column's
@@ -159,7 +162,7 @@ public class TargetListViewTests
         var texts = view.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text).ToList();
         Assert.Contains("M 31", texts);
         Assert.Contains("Andromeda Galaxy", texts);
-        Assert.Contains("12.4 h", texts);
+        Assert.Contains("12.4", texts);
         Assert.Contains("2025-12-07", texts);
         Assert.Contains("RC8 / ASI2600MM", texts);
         Assert.Contains("Ha", texts);
@@ -279,9 +282,7 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = CreatePopulatedList() };
         ShowList(view, WidePageAllotment, 1900d);
 
-        var headerButtons = HeaderCells(view)
-            .SelectMany(cell => cell.GetVisualDescendants().OfType<Button>())
-            .ToList();
+        var headerButtons = HeaderCells(view).OfType<Button>().ToList();
 
         // Still six after the sessions column arrives: its header cell is empty and holds no
         // button. A button placed there is what fails this, and the fix is to remove it.
@@ -342,8 +343,8 @@ public class TargetListViewTests
         Assert.Contains("Name", VisibleHeaderTitles(view));
     }
 
-    // The six header cells: ContentControls whose Content is a column. Buttons are ContentControls
-    // too, so the Content test is what separates them.
+    // The six header cells: the sort buttons, whose Content is a column. Every button is a
+    // ContentControl, so the Content test is what separates them.
     private static IReadOnlyList<ContentControl> HeaderCells(TargetListView view)
         => [.. view.GetVisualDescendants().OfType<ContentControl>().Where(cell => cell.Content is ColumnViewModel)];
 
@@ -402,11 +403,23 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view);
 
-        // Date, Frames, Integration: the three that already existed. 26,400 seconds is 7.3 hours.
+        // Date, Frames, Hours: the three that already existed. 26,400 seconds is 7.3 hours, the
+        // unit in the expander's own header (ruling R15).
         var texts = VisibleCellTexts(view);
         Assert.Contains("2025-12-07", texts);
         Assert.Contains("88", texts);
-        Assert.Contains("7.3 h", texts);
+        Assert.Contains("7.3", texts);
+
+        var heads = Assert.Single(
+            view.GetVisualDescendants().OfType<TableRow>(),
+            row => row.Kind == RowKind.Header && row.Columns!.Id == "Sess");
+        var labels = heads.Children.OfType<TextBlock>().ToList();
+        Assert.Equal(["Date", "Frames", "Hours", "Filters"], labels.Select(block => block.Text));
+        Assert.All(labels, block =>
+        {
+            Assert.True(block.IsEffectivelyVisible);
+            Assert.Contains("t-label", block.Classes);
+        });
 
         // Phase 14B fixer, fixer list item 38 (task6-review P3). The fourth column used to be
         // proved by Assert.Contains("Ha", texts) over every visible TextBlock, and SampleRow's
@@ -557,7 +570,7 @@ public class TargetListViewTests
 
         Assert.Equal(RowHeight, Assert.Single(RowGrids(view)).Bounds.Height);
 
-        // The header row is the base control height, under its own rule.
+        // The header row, under its own rule.
         var header = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow");
         Assert.Equal(HeaderHeight, header.Bounds.Height);
     }
@@ -595,7 +608,7 @@ public class TargetListViewTests
         var designationHeader = HeaderCell(view, list, "designation");
         Assert.Contains("123456.789", list.Rows[1].Designation);
         Assert.True(
-            designationHeader.Bounds.Width > HeaderTitle(designationHeader).Bounds.Width + 16d,
+            ColumnWidth(view, "TargetListHeaderRow", 1) > designationHeader.Bounds.Width + 2 * TableMetrics.Gutter + 0.5d,
             "The Designation column is sitting at the width of its own header label, so alignment proves nothing.");
 
         AssertHeaderAlignsWithRows(view, list);
@@ -717,25 +730,27 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_TheRows_AreSeparatedByOneRuleAndCarryNoCard()
+    public void View_TheRows_AreZebraBandedUnderOneHeaderRule()
     {
-        // A failure is the per-row card coming back (a fill, a radius, a four sided border) or a
-        // row drawing a top edge as well, which puts a 2 pixel line between two rows.
-        var view = new TargetListView { DataContext = CreatePopulatedList(bothRows: true) };
+        // Spec.md item 7: a rule under the header and a light zebra fill on alternate rows, no rule
+        // between rows. A failure is the per-row rule or the per-row card (a fill, a radius, a four
+        // sided border) coming back.
+        var list = CreatePopulatedList(bothRows: true);
+        var view = new TargetListView { DataContext = list };
         ShowList(view);
 
-        var rules = view.GetVisualDescendants().OfType<Border>()
-            .Where(border => border.Classes.Contains("rule"))
-            .ToList();
+        Assert.DoesNotContain(view.GetVisualDescendants().OfType<Border>(), border => border.Classes.Contains("rule"));
 
-        // One under the header, one under each of the two rows.
-        Assert.Equal(3, rules.Count);
-        Assert.All(rules, border =>
-        {
-            Assert.Equal(new Thickness(0, 0, 0, 1), border.BorderThickness);
-            Assert.Equal(default, border.CornerRadius);
-            Assert.Null(border.Background);
-        });
+        var header = view.GetVisualDescendants().OfType<TableRow>().Single(row => row.Name == "TargetListHeaderRow");
+        var rule = Assert.Single(header.RuleLines);
+        Assert.Equal(rule.A.Y, rule.B.Y);
+        Assert.Equal(header.Bounds.Height - 0.5d, rule.A.Y, 1);
+
+        var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBorderDefault")!).Color;
+        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "TargetListRows");
+        Color? Band(int index) => (((ContentPresenter)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
+        Assert.NotEqual(zebra, Band(0));
+        Assert.Equal(zebra, Band(1));
 
         // No rounded or filled container anywhere in a row but the badges themselves, which since
         // the frosted-glass port carry their tint wash on an inner Border of their own.
@@ -744,6 +759,61 @@ public class TargetListViewTests
                 .Where(border => !border.Classes.Contains("tag")
                     && !border.GetVisualAncestors().OfType<Border>().Any(b => b.Classes.Contains("tag"))),
             border => Assert.Equal(default, border.CornerRadius));
+    }
+
+    [AvaloniaFact]
+    public void View_MeetsTheTableConventions()
+    {
+        // The spine's census (spine-spec 6.2) at the shipped allotment and at the x-large text
+        // size, with a row expanded so the night expander's table is held to it too.
+        var list = CreatePopulatedList(bothRows: true);
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view);
+        TableAssert.Conventions(view);
+
+        window.FontSize = 20;
+        Dispatcher.UIThread.RunJobs();
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+        TableAssert.Conventions(view);
+    }
+
+    [AvaloniaFact]
+    public void View_MissingFigures_DrawTheFaintDash()
+    {
+        // Spec.md item 6: no catalogue id, no rig and no dated night read "-" in the faintest
+        // ink, never a silent blank.
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage(
+            [WideRow with { CatalogId = null, Equipment = [], LastSession = null }], 1, 0d, 0, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        ShowList(view, WidePageAllotment, 1900d);
+
+        var faint = ((ISolidColorBrush)Application.Current!.FindResource("ColorTextTertiary")!).Color;
+        foreach (var name in new[] { "DesignationCell", "EquipmentCell", "LastSessionCell" })
+        {
+            var cell = (TextBlock)Assert.Single(NamedCells(view, name));
+            Assert.Equal("-", cell.Text);
+            Assert.Equal(faint, Assert.IsAssignableFrom<ISolidColorBrush>(cell.Foreground).Color);
+        }
+    }
+
+    [AvaloniaFact]
+    public void View_LastSession_IsLeftAligned()
+    {
+        // Spec.md item 2: a date is text and sits at its column's leading edge, under its header.
+        var list = CreatePopulatedList(bothRows: true);
+        list.Rows[0].IsExpanded = false;
+        var view = new TargetListView { DataContext = list };
+        ShowList(view, WidePageAllotment, 1900d);
+
+        var header = HeaderCell(view, list, "last_session");
+        var left = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow")
+            .ColumnDefinitions.Take(5).Sum(column => column.ActualWidth);
+
+        Assert.Equal(left + TableMetrics.Gutter, header.Bounds.X, 1);
+        Assert.All(NamedCells(view, "LastSessionCell"), cell => Assert.Equal(LeftEdge(header, view), LeftEdge(cell, view), 1));
     }
 
     [AvaloniaFact]
@@ -914,15 +984,9 @@ public class TargetListViewTests
             expander.GetVisualDescendants().OfType<Border>().Where(border => !border.Classes.Contains("tag")),
             border => Assert.Equal(new Thickness(0), border.BorderThickness));
 
-        foreach (var ancestor in expander.GetVisualAncestors().OfType<Border>())
-        {
-            if (ancestor.Classes.Contains("rule"))
-            {
-                break;
-            }
-
-            Assert.Equal(new Thickness(0), ancestor.BorderThickness);
-        }
+        Assert.All(
+            expander.GetVisualAncestors().TakeWhile(ancestor => ancestor.Name != "TargetListRows").OfType<Border>(),
+            ancestor => Assert.Equal(new Thickness(0), ancestor.BorderThickness));
     }
 
     [AvaloniaFact]
@@ -948,7 +1012,7 @@ public class TargetListViewTests
         var pager = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListPager");
         var header = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow");
         Assert.True(
-            Grid.GetRow(pager) < Grid.GetRow((Control)header.Parent!),
+            Grid.GetRow(pager) < Grid.GetRow(header),
             "The pager no longer sits above the header row.");
     }
 
@@ -1083,14 +1147,27 @@ public class TargetListViewTests
             TargetListView.DefaultFitWidth,
             TargetListView.FitWidthFor(CreatePopulatedList().Columns));
 
-        // Applied, not merely declared: three data columns and Equipment, header cell and row cell
-        // each, and no literal cap left on a cell.
-        Assert.Equal(6, Regex.Matches(source, @"MaxWidth=""\{Binding #Root\.DataCellMaxWidth\}""").Count);
-        Assert.Equal(2, Regex.Matches(source, @"MaxWidth=""\{Binding #Root\.EquipmentCellMaxWidth\}""").Count);
-        Assert.Equal(3, Regex.Matches(source, @"MaxWidth=""\{Binding #Root\.NameCellMaxWidth\}""").Count);
+        // Applied, not merely declared. Designation and Equipment are capped on their column, which
+        // writes the cap to the header cell and every row cell alike, at both allotments; the
+        // figure and the date carry none (spec.md item 3); Name is bounded on its header cell and
+        // its row cell; and no literal cap is left in the markup.
+        foreach (var (allotment, width) in new[] { (PageAllotment, 1280d), (WidePageAllotment, 1900d) })
+        {
+            var view = new TargetListView { DataContext = CreatePopulatedList() };
+            ShowList(view, allotment, width);
+            var columns = (TableColumns)view.Resources["TargetCols"]!;
+
+            Assert.Equal(view.DataCellMaxWidth - TargetListView.CellGutter, columns["designation"].MaxWidth);
+            Assert.Equal(TargetListView.EquipmentCap - TargetListView.CellGutter, columns["equipment"].MaxWidth);
+            Assert.Equal(double.PositiveInfinity, columns["integration"].MaxWidth);
+            Assert.Equal(double.PositiveInfinity, columns["lastsession"].MaxWidth);
+            Assert.Equal(columns["designation"].MaxWidth, Assert.Single(NamedCells(view, "DesignationCell")).MaxWidth);
+        }
+
+        Assert.Equal(2, Regex.Matches(source, @"MaxWidth=""\{Binding #Root\.NameCellMaxWidth\}""").Count);
         Assert.DoesNotMatch(new Regex(@"MaxWidth=""\d"), source);
         Assert.Contains($"MinWidth=\"{TargetListView.NameFloor:0}\"", source);
-        Assert.Contains("TableTrailingInset", source);
+        Assert.Contains("TableMetrics.ScrollInset", source);
 
         // Palette is a budget and not a cap (ruling Q10): it is in the sum and in no cell.
         Assert.Equal(TargetListView.PaletteBudget, TargetListView.BudgetFor("palette"));
@@ -1171,7 +1248,7 @@ public class TargetListViewTests
         {
             Assert.False(
                 cell.TextLayout.TextLines[0].HasCollapsed,
-                $"Equipment '{cell.Text}' is trimmed at {cell.Bounds.Width} against a {view.EquipmentCellMaxWidth} cap.");
+                $"Equipment '{cell.Text}' is trimmed at {cell.Bounds.Width} against a {TargetListView.EquipmentCap} cap.");
         }
 
         // Not vacuous: the longer of the two rigs would trim against the cap this replaces.
@@ -1240,7 +1317,7 @@ public class TargetListViewTests
             ("palette", "PaletteCell", false),
             ("integration", "IntegrationCell", true),
             ("equipment", "EquipmentCell", false),
-            ("last_session", "LastSessionCell", true),
+            ("last_session", "LastSessionCell", false),
         ];
 
         var rows = RowGrids(view).Count;
@@ -1259,22 +1336,9 @@ public class TargetListViewTests
             Assert.Equal(rows, cells.Count);
             foreach (var cell in cells)
             {
-                // The Name cell is a grid of two runs and carries its gutter on the runs rather
-                // than on itself, so its own leading edge is the column's; the run is what lines up
-                // with the header label.
-                var measured = cell is Grid ? cell.GetVisualDescendants().OfType<TextBlock>().First() : cell;
-
-                // A row cell carries its gutter as Padding, inside its own bounds, exactly as the
-                // header cell carries it as the base Button padding; the ink starts after it.
-                var gutter = measured switch
-                {
-                    TextBlock text => text.Padding,
-                    ItemsControl items => items.Padding,
-                    _ => default,
-                };
-                var cellEdge = numeric
-                    ? RightEdge(measured, view) - gutter.Right
-                    : LeftEdge(measured, view) + gutter.Left;
+                // The gutter is the cell's margin, outside its bounds, on a row cell and a header
+                // cell alike, so the cell's own edge is where its ink starts or ends.
+                var cellEdge = numeric ? RightEdge(cell, view) : LeftEdge(cell, view);
                 Assert.True(
                     Math.Abs(headerEdge - cellEdge) < ColumnSettle,
                     $"Column '{key}': header at {headerEdge}, cell at {cellEdge}.");

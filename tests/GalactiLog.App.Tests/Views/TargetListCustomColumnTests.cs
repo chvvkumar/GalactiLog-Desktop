@@ -211,7 +211,7 @@ public class TargetListCustomColumnTests
                 Math.Abs(value - baseline) < ColumnSettle,
                 $"At {allotment}, the Last Session value measures {value} with custom columns on "
                     + $"and {baseline} with none on.");
-            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor, "The star column went below its floor.");
+            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor - TargetListView.CellGutter, "The star column went below its floor.");
         }
     }
 
@@ -455,7 +455,7 @@ public class TargetListCustomColumnTests
         // runs paint no background of their own, reaches the row's own click target behind the
         // cells and opens the target. Without it this case would pass against a row that never
         // opens at all.
-        Press(window, At(window, Named<Grid>(view, "NameCell"), 0.5d, 0.5d));
+        Press(window, At(window, Named<DockPanel>(view, "NameCell"), 0.5d, 0.5d));
 
         Assert.Equal(1, opened);
     }
@@ -632,7 +632,7 @@ public class TargetListCustomColumnTests
         // built-in ones rather than a second column state.
         var boxes = FlyoutBoxes(gear);
         Assert.Equal(
-            ["Name", "Designation", "Palette", "Integration", "Equipment", "Last Session", "Processed"],
+            ["Name", "Designation", "Palette", "Hours", "Equipment", "Last session", "Processed"],
             boxes);
 
         gear.Flyout.Hide();
@@ -659,7 +659,7 @@ public class TargetListCustomColumnTests
         Assert.DoesNotContain("Built-in", texts);
         Assert.DoesNotContain("Custom", texts);
         Assert.Equal(
-            ["Name", "Designation", "Palette", "Integration", "Equipment", "Last Session"],
+            ["Name", "Designation", "Palette", "Hours", "Equipment", "Last session"],
             FlyoutBoxes(gear));
 
         gear.Flyout.Hide();

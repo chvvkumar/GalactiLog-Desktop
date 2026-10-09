@@ -305,7 +305,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// would otherwise render the strip. The bound governs what the application decides by itself,
     /// on load and on resize; a gesture the user makes in the window in front of them wins, because
     /// the alternative is a chevron that toggles a stored flag and changes nothing on screen, which
-    /// reads as a broken button, with the filters unreachable at every window below about 1198
+    /// reads as a broken button, with the filters unreachable at every window below about 1186
     /// pixels, the shipped 1024 minimum included.</summary>
     /// <remarks>
     /// A view flag and nothing else: it is never read from the document, never written to it, and

@@ -18,7 +18,6 @@ public class TableMarkupScanTest
     private static readonly string[] SharedSizeGroupAllowlist =
     [
         // Tables, removed by their migration.
-        "Views/Dashboard/TargetListView.axaml",
         "Views/Mosaics/MosaicsView.axaml",
         "Views/TargetDetail/Parts/IntegrationTablesPart.axaml",
         "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
@@ -41,7 +40,6 @@ public class TableMarkupScanTest
         "Views/TargetDetail/Parts/CompareTablePart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
-        "Views/Dashboard/TargetListView.axaml",
         "Views/Mosaics/MosaicsView.axaml",
         "Views/StatisticsView.axaml",
         "Views/Settings/CustomColumnsTabView.axaml",

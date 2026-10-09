@@ -1,11 +1,10 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
 using Avalonia.Markup.Xaml;
 using Avalonia.Media;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.Core.Settings;
@@ -28,9 +27,10 @@ namespace GalactiLog.App.Views.Dashboard;
 /// It is a layout suppression and nothing more. Nothing is written to <c>display.columns.dashboard</c>,
 /// <see cref="ColumnViewModel.IsShown"/> stays true, the column gear still shows Equipment ticked,
 /// and a user who has hidden Equipment themselves is unaffected because the two gates are combined
-/// rather than one overwriting the other. The suppressed column leaves its shared size group as
-/// well as its cells, because a group in Avalonia only ever grows and would otherwise keep
-/// reserving the width it last measured.
+/// rather than one overwriting the other. The suppressed column is dropped through
+/// <see cref="TableColumn.IsDropped"/>, which takes it out of its shared size group as well as
+/// hiding its cells, because a group in Avalonia only ever grows and would otherwise keep reserving
+/// the width it last measured.
 /// </para>
 /// <para>
 /// Fixer pass, phase-review P2: the width rule and the user's own column hiding are two causes and
@@ -54,9 +54,10 @@ namespace GalactiLog.App.Views.Dashboard;
 /// </remarks>
 public partial class TargetListView : UserControl
 {
-    /// <summary>The cell gutter, 8 left and 8 right, so adjacent columns sit 16 apart
-    /// (spec 12.2, second fix pass).</summary>
-    internal const double CellGutter = 16d;
+    /// <summary>The cell gutter, <see cref="TableMetrics.Gutter"/> left and right, so adjacent
+    /// columns sit 16 apart. Every cap below is a column width and includes it; the spine writes a
+    /// cap to the cell, whose gutter is a margin outside it, so the gutter is taken off first.</summary>
+    internal const double CellGutter = 2 * TableMetrics.Gutter;
 
     /// <summary>The Name column's floor. It is the one star column: it takes the remainder at a
     /// wide window and trims with an ellipsis down to this, which holds a catalogue designation
@@ -67,11 +68,10 @@ public partial class TargetListView : UserControl
     /// enough to draw every shown column. One figure for the three, not three, because the three
     /// were only ever round numbers and the arithmetic below is the only thing that read them
     /// apart. It is what a long catalogue designation needs: the fixture's "PGC 123456.789" cell
-    /// measures 156 with its two gutters. The markup applies it, through
-    /// <see cref="DataCellMaxWidth"/>, on the header cell and the row cell alike; before the fixer
-    /// pass the three were uncapped above the fit width, so an Auto column could take more than
-    /// this arithmetic assumed and the row ran past a viewport with no horizontal scroller
-    /// (phase-review P2).</summary>
+    /// measures 156 with its two gutters. It caps Designation alone, written to the column through
+    /// <see cref="DataCellMaxWidth"/>; Integration is a figure and Last session a date, and neither
+    /// ever trims (spec.md item 3), so for those two it is the budget the arithmetic sums and
+    /// nothing in the table.</summary>
     internal const double DataCap = 160d;
 
     /// <summary>What those same three are capped at while the list is too narrow to draw every
@@ -87,8 +87,7 @@ public partial class TargetListView : UserControl
     /// column is as wide as the widest palette on the page.</summary>
     internal const double PaletteBudget = 120d;
 
-    /// <summary>The Equipment cell's cap, applied by the markup through
-    /// <see cref="EquipmentCellMaxWidth"/>. Raised from 180 by the fixer pass: at a 1900 window the
+    /// <summary>The Equipment column's cap, written to its <see cref="TableColumn"/> once. Raised from 180 by the fixer pass: at a 1900 window the
     /// column trimmed a telescope and camera pair ("Esprit 100 / ASI6200MM Pro" measures 272 with
     /// its gutters) while Name held about 500 pixels of spare width. Equipment is drawn at all only
     /// above the fit width, and the fit width is built from this, so a generous cap buys its own
@@ -99,9 +98,9 @@ public partial class TargetListView : UserControl
     /// button sizes itself; the figure is what it measures at the shipped type size.</summary>
     internal const double SessionsBudget = 96d;
 
-    /// <summary>The trailing inset both grids carry, so the overlay scrollbar thumb cannot draw
-    /// over the Expand button. Declared once in the markup as TableTrailingInset.</summary>
-    internal const double TrailingInset = 12d;
+    /// <summary>The reserved vertical bar: the rows end at it, and the header and the pager carry
+    /// the same figure as <see cref="TableMetrics.ScrollInset"/>.</summary>
+    internal const double TrailingInset = TableMetrics.ScrollBarSize;
 
     /// <summary>The list width at or above which the default six columns fit with Name at its
     /// floor. The shipped figure for the default set; the rule itself runs over the shown set
@@ -113,8 +112,8 @@ public partial class TargetListView : UserControl
     /// <summary>The narrowest list that still draws a row whole, with Equipment already
     /// suppressed and Name at its floor. Measured rather than summed: the caps above are maxima,
     /// so a sum over them (720) overstates what the row actually takes, and on the shipped fixture
-    /// the Expand button's trailing edge settles at 684 and the row's trailing inset carries it to
-    /// 696. The pager's own minimum, the page buttons plus "Rows per page" and its select, is 566,
+    /// the Expand button's trailing edge settles at 664, its gutter ends the row at 672 and the
+    /// reserved vertical bar carries the list to 684. The pager's own minimum, the page buttons plus "Rows per page" and its select, is 566,
     /// so the row is the binding constraint and this is the figure the page is laid out against.
     /// <para>
     /// <c>DashboardView.axaml.cs</c> is what reads it: the filter panel's rendered width is
@@ -124,7 +123,7 @@ public partial class TargetListView : UserControl
     /// 1280 by 800 and asserts the Expand button and the page-size select are inside the list,
     /// which is what fails if this figure drifts from what the row measures.
     /// </para></summary>
-    internal const double ListMinWidth = 696d;
+    internal const double ListMinWidth = 684d;
 
     /// <summary>A check box cell (spec 12.15): <see cref="CustomCellWidths.Check"/>. An empty
     /// <c>CheckBox</c> measures 18, which the ledger's own selection column comment records
@@ -175,17 +174,6 @@ public partial class TargetListView : UserControl
         string? name, CustomColumnType type, double fontSize, FontFamily? family)
         => CustomCellWidths.ForHeading(name, type, fontSize, family);
 
-    /// <summary>How the markup reaches <see cref="CustomCellWidthFor"/>, on the header entry and on
-    /// the row cell, with the view's own type size and family as the last two values so a root text
-    /// size change re-measures both strips together.
-    /// <para>
-    /// The figures are declared once, here, and never as a literal in the markup:
-    /// <c>TargetListViewTests.View_NoCellDeclaresAFixedWidth</c> fails any
-    /// <c>Width="&lt;digit&gt;"</c> in this view and is the case that stopped the seven retired
-    /// fixed cell widths coming back.
-    /// </para></summary>
-    public static readonly FuncMultiValueConverter<object?, double> CellWidth = CustomCellWidths.HeadingWidth;
-
     /// <summary>What one column contributes to the fit width. Keyed by the column key rather than
     /// by position, so the shown set can be summed in any order.</summary>
     /// <remarks>Built-in keys only. A custom slug falls into the default arm and contributes
@@ -230,15 +218,15 @@ public partial class TargetListView : UserControl
             + SessionsBudget + TrailingInset;
     }
 
-    /// <summary>Whether the Equipment cells are drawn: the user's own column visibility and the
-    /// width rule above, combined. The cells bind this and not the column, so the persisted list
-    /// and the suppression cannot be confused for one another.</summary>
+    /// <summary>Whether the Equipment column is drawn: the user's own column visibility and the
+    /// width rule above, combined, and written to the column's <see cref="TableColumn.IsDropped"/>,
+    /// so the persisted list and the suppression cannot be confused for one another.</summary>
     public static readonly StyledProperty<bool> IsEquipmentShownProperty =
         AvaloniaProperty.Register<TargetListView, bool>(nameof(IsEquipmentShown), defaultValue: true);
 
     /// <summary>The width the Name cell is bounded by, header cell and row cell alike: the share
     /// the star column has once every other column has taken its cap, never below
-    /// <see cref="NameFloor"/>.
+    /// <see cref="NameFloor"/>, less the cell's two gutters.
     /// <para>
     /// It exists because a star column in Avalonia does not shrink below its own cell's desired
     /// width. The header's Name cell holds the word "Name" and desires about 60; a row's holds a
@@ -249,60 +237,23 @@ public partial class TargetListView : UserControl
     /// <see cref="FitWidthFor"/> is built from, over the same shown set.
     /// </para></summary>
     public static readonly StyledProperty<double> NameCellMaxWidthProperty =
-        AvaloniaProperty.Register<TargetListView, double>(nameof(NameCellMaxWidth), defaultValue: NameFloor);
+        AvaloniaProperty.Register<TargetListView, double>(nameof(NameCellMaxWidth), defaultValue: NameFloor - CellGutter);
 
-    /// <summary>The Equipment column's shared size group, or <c>null</c> while it is suppressed or
-    /// hidden. Same value <see cref="ColumnViewModel.SizeGroup"/> carries, with the width rule over
-    /// it.</summary>
-    public static readonly StyledProperty<string?> EquipmentSizeGroupProperty =
-        AvaloniaProperty.Register<TargetListView, string?>(nameof(EquipmentSizeGroup), defaultValue: "equipment");
-
-    /// <summary>
-    /// The shared size group of each column <see cref="DataCellMaxWidth"/> caps, carrying the cap's
-    /// own generation, or <c>null</c> while that column is hidden.
-    /// </summary>
-    /// <remarks>
-    /// <para>
-    /// A shared size group in Avalonia only ever grows. <see cref="ColumnViewModel.SizeGroup"/>
-    /// already answers that for a column that goes away, by leaving the group; a cap that tightens
-    /// on a column that stays is the other half of the same finding, and it has no answer until
-    /// this exists. Switching a custom column on through the gear narrows these three caps from
-    /// 124 to 72, and the groups went on reserving the 120 they had already measured, so the row
-    /// stayed 122 pixels wider than the list and the Expand button was drawn off the viewport
-    /// (launched look, 1280 by 800, spec 12.15).
-    /// </para>
-    /// <para>
-    /// The generation is what frees the old width: a group nothing is a member of reserves nothing,
-    /// so a renamed group measures the cells as they are now. The header cell and the row cell of
-    /// one column always read the same property, so the two grids cannot disagree.
-    /// </para>
-    /// </remarks>
-    public static readonly StyledProperty<string?> DesignationSizeGroupProperty =
-        AvaloniaProperty.Register<TargetListView, string?>(nameof(DesignationSizeGroup), defaultValue: "designation");
-
-    /// <inheritdoc cref="DesignationSizeGroupProperty"/>
-    public static readonly StyledProperty<string?> IntegrationSizeGroupProperty =
-        AvaloniaProperty.Register<TargetListView, string?>(nameof(IntegrationSizeGroup), defaultValue: "integration");
-
-    /// <inheritdoc cref="DesignationSizeGroupProperty"/>
-    public static readonly StyledProperty<string?> LastSessionSizeGroupProperty =
-        AvaloniaProperty.Register<TargetListView, string?>(nameof(LastSessionSizeGroup), defaultValue: "last_session");
-
-    /// <summary>The cap Designation, Integration and Last Session carry: <see cref="DataCap"/>
-    /// while the list is wide enough to draw every shown column, <see cref="TightCap"/> while it
-    /// is not. It is driven by the width rule alone: the user's own hide is the column's
+    /// <summary>The width rule's budget for Designation, Integration and Last session:
+    /// <see cref="DataCap"/> while the list is wide enough to draw every shown column,
+    /// <see cref="TightCap"/> while it is not, and Designation's cap (less its gutters). It is
+    /// driven by the width rule alone: the user's own hide is the column's
     /// <see cref="ColumnViewModel.IsShown"/> and nothing else, so unticking Equipment in the
-    /// column gear no longer drops the other three to the tight cap (phase-review P2).</summary>
+    /// column gear does not drop the others to the tight cap (phase-review P2).
+    /// <para>
+    /// A shared size group only ever grows, so a cap that tightens resets the column set
+    /// (<see cref="TableColumns.Reset"/>): switching a custom column on through the gear once
+    /// narrowed these caps and the groups went on reserving what they had measured, and the Expand
+    /// button was drawn off the viewport (launched look, 1280 by 800, spec 12.15).
+    /// </para></summary>
     public static readonly StyledProperty<double> DataCellMaxWidthProperty =
         AvaloniaProperty.Register<TargetListView, double>(
             nameof(DataCellMaxWidth), defaultValue: DataCap);
-
-    /// <summary>The Equipment cell's cap, so <see cref="EquipmentCap"/> is declared once and the
-    /// markup applies it from that one declaration rather than repeating the figure on two
-    /// cells.</summary>
-    public static readonly StyledProperty<double> EquipmentCellMaxWidthProperty =
-        AvaloniaProperty.Register<TargetListView, double>(
-            nameof(EquipmentCellMaxWidth), defaultValue: EquipmentCap);
 
     private IReadOnlyList<ColumnViewModel> _columns = [];
 
@@ -312,9 +263,18 @@ public partial class TargetListView : UserControl
     // built-ins for the life of the page.
     private TargetListViewModel? _list;
 
+    // The two column sets the markup declares; this file writes the dashboard's drops and caps to
+    // them and resets them where a column has to shrink.
+    private readonly TableColumns _cols;
+    private readonly TableColumns _sessCols;
+
     public TargetListView()
     {
         InitializeComponent();
+        _cols = (TableColumns)Resources["TargetCols"]!;
+        _sessCols = (TableColumns)Resources["SessCols"]!;
+        _cols["designation"].MaxWidth = DataCap - CellGutter;
+        _cols["equipment"].MaxWidth = EquipmentCap - CellGutter;
     }
 
     public bool IsEquipmentShown
@@ -335,39 +295,6 @@ public partial class TargetListView : UserControl
         private set => SetValue(DataCellMaxWidthProperty, value);
     }
 
-    public double EquipmentCellMaxWidth
-    {
-        get => GetValue(EquipmentCellMaxWidthProperty);
-        private set => SetValue(EquipmentCellMaxWidthProperty, value);
-    }
-
-    public string? EquipmentSizeGroup
-    {
-        get => GetValue(EquipmentSizeGroupProperty);
-        private set => SetValue(EquipmentSizeGroupProperty, value);
-    }
-
-    public string? DesignationSizeGroup
-    {
-        get => GetValue(DesignationSizeGroupProperty);
-        private set => SetValue(DesignationSizeGroupProperty, value);
-    }
-
-    public string? IntegrationSizeGroup
-    {
-        get => GetValue(IntegrationSizeGroupProperty);
-        private set => SetValue(IntegrationSizeGroupProperty, value);
-    }
-
-    public string? LastSessionSizeGroup
-    {
-        get => GetValue(LastSessionSizeGroupProperty);
-        private set => SetValue(LastSessionSizeGroupProperty, value);
-    }
-
-    // Bumped whenever the capped columns' cap moves, which is what renames their groups.
-    private int _capGeneration;
-
     // Ruling C24's figure, decided by Apply and read back by the taken loop.
     private int _drawnCustomColumns = int.MaxValue;
 
@@ -377,6 +304,7 @@ public partial class TargetListView : UserControl
         {
             _list.Columns.CollectionChanged -= OnColumnsChanged;
             _list.PropertyChanged -= OnListChanged;
+            _list.Rows.CollectionChanged -= OnRowsChanged;
         }
 
         _list = DataContext as TargetListViewModel;
@@ -385,6 +313,7 @@ public partial class TargetListView : UserControl
         {
             _list.Columns.CollectionChanged += OnColumnsChanged;
             _list.PropertyChanged += OnListChanged;
+            _list.Rows.CollectionChanged += OnRowsChanged;
         }
 
         FollowColumns();
@@ -412,6 +341,22 @@ public partial class TargetListView : UserControl
 
     private void OnColumnsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FollowColumns();
 
+    // A new page clears the rows before it adds the next set, so the columns are measured afresh
+    // rather than keeping the previous page's widest cells.
+    private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (e.Action == NotifyCollectionChangedAction.Reset)
+        {
+            ResetColumns();
+        }
+    }
+
+    private void ResetColumns()
+    {
+        _cols.Reset();
+        _sessCols.Reset();
+    }
+
     private void OnListChanged(object? sender, PropertyChangedEventArgs e)
     {
         // The drawn custom set is what the strip's widths are summed from, so the arithmetic runs
@@ -433,6 +378,12 @@ public partial class TargetListView : UserControl
         // DataContext, so a custom column's own width moves with it: the heading it is measured
         // from is drawn at this size (FrameTableView's file name column follows the same property
         // for the same reason).
+        if (change.Property == FontSizeProperty)
+        {
+            // A column measured at the old size would keep that width (a group only grows).
+            ResetColumns();
+        }
+
         if (change.Property == BoundsProperty || change.Property == FontSizeProperty)
         {
             Apply();
@@ -471,7 +422,14 @@ public partial class TargetListView : UserControl
         var equipmentShown = _columns.FirstOrDefault(column => column.Key == "equipment")?.IsShown ?? true;
 
         IsEquipmentShown = equipmentShown && fits;
-        EquipmentSizeGroup = IsEquipmentShown ? "equipment" : null;
+
+        // A dropped column leaves its group and hides its cells. Writing an unchanged value is a
+        // no-op, so a Bounds change rebuilds no row unless a column actually flips.
+        foreach (var column in _columns.Where(column => !CustomColumnSlug.IsCustom(column.Key)))
+        {
+            _cols[column.Key.Replace("_", "", StringComparison.Ordinal)].IsDropped =
+                !(column.Key == "equipment" ? IsEquipmentShown : column.IsShown);
+        }
 
         // The three capped columns are capped by the width rule alone. A custom strip never
         // tightens them: a custom column gives way first and no built-in column pays for one, and
@@ -481,19 +439,14 @@ public partial class TargetListView : UserControl
         var cap = fits ? DataCap : TightCap;
         if (cap != DataCellMaxWidth)
         {
-            // The cap moved, so the three groups it governs have to be measured again rather than
-            // keeping the width they last reserved.
-            _capGeneration++;
+            // The cap moved, so the groups are renamed and measured again rather than keeping the
+            // width they last reserved.
+            DataCellMaxWidth = cap;
+            _cols["designation"].MaxWidth = cap - CellGutter;
+            _cols.Reset();
         }
 
-        DataCellMaxWidth = cap;
-        EquipmentCellMaxWidth = EquipmentCap;
-
-        DesignationSizeGroup = CappedGroupFor("designation");
-        IntegrationSizeGroup = CappedGroupFor("integration");
-        LastSessionSizeGroup = CappedGroupFor("last_session");
-
-        NameCellMaxWidth = Math.Max(NameFloor, StarRemainderFor(customBudget));
+        NameCellMaxWidth = Math.Max(NameFloor, StarRemainderFor(customBudget)) - CellGutter;
     }
 
     /// <summary>
@@ -556,11 +509,6 @@ public partial class TargetListView : UserControl
 
         return Bounds.Width - taken;
     }
-
-    private string? CappedGroupFor(string key)
-        => _columns.FirstOrDefault(column => column.Key == key)?.IsShown ?? true
-            ? string.Create(System.Globalization.CultureInfo.InvariantCulture, $"{key}{_capGeneration}")
-            : null;
 
     // What one drawn custom column's cell takes, the same figure both strips draw it at. A slug the
     // list is not drawing, which is every column the reader has not switched on, contributes

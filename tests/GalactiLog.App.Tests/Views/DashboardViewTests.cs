@@ -108,8 +108,8 @@ public class DashboardViewTests
 
     // A real 1600 by 900 window, the allotment the two splitter cases below are laid out at since
     // the fixer pass. The panel's rendered width is now bounded by what the target list needs
-    // (fixer-list item 6), and at the shipped 1280 that bound is 302, below the 480 maximum those
-    // two cases exist to exercise; at 1600 it is 622, so the 220 to 480 clamp is reachable end to
+    // (fixer-list item 6), and at the shipped 1280 that bound is 314, below the 480 maximum those
+    // two cases exist to exercise; at 1600 it is 634, so the 220 to 480 clamp is reachable end to
     // end and neither case had to give up anything it proved. Both figures are asserted, not
     // asserted about, in TheLayoutBound_WhenTheWindowNarrows_IsNotReadAsADrag_AndWritesNothing.
     private static readonly Size WideAllotment = new(
@@ -529,7 +529,7 @@ public class DashboardViewTests
         Dispatcher.UIThread.RunJobs();
 
         // 1048 for the grid inside DashboardView's own 16 margin, less the splitter column, the
-        // list column's margin, the region's padding and edge and the list's minimum: 302, so the
+        // list column's margin, the region's padding and edge and the list's minimum: 314, so the
         // stored 480 renders bounded rather than as the strip, and the list still has its minimum.
         Assert.False(dashboard.IsFilterPanelShowingStrip);
         var rendered = PanelColumn(view).ActualWidth;
@@ -567,19 +567,19 @@ public class DashboardViewTests
         // 1368 for the grid inside DashboardView's own 16 margin, less the 8 pixel splitter column
         // (the GridSplitter style's width, which the code-behind reads rather than restates),
         // the list column's 8 margin and the region's 34 of padding and edge, less the list's own
-        // 696 minimum: 622, clear of the 480 maximum, so the stored width renders whole here.
+        // 684 minimum: 634, clear of the 480 maximum, so the stored width renders whole here.
         Assert.Equal(8d, view.GetControl<Grid>("DashboardRoot").ColumnDefinitions[1].ActualWidth, 3);
-        Assert.Equal(622d, dashboard.MaxRenderedPanelWidth, 3);
+        Assert.Equal(634d, dashboard.MaxRenderedPanelWidth, 3);
         Assert.Equal(DashboardDisplaySettings.MaxPanelWidth, PanelColumn(view).ActualWidth, 3);
 
         window.Width = ShippedAllotment.Width;
         Dispatcher.UIThread.RunJobs();
         dashboard.PendingPanelPersist.GetAwaiter().GetResult();
 
-        // The same arithmetic over the shipped window's 1048: 302, below the stored 480, so the
+        // The same arithmetic over the shipped window's 1048: 314, below the stored 480, so the
         // bound is what renders.
-        Assert.Equal(302d, dashboard.MaxRenderedPanelWidth, 3);
-        Assert.Equal(302d, PanelColumn(view).ActualWidth, 3);
+        Assert.Equal(314d, dashboard.MaxRenderedPanelWidth, 3);
+        Assert.Equal(314d, PanelColumn(view).ActualWidth, 3);
 
         // And nothing of it reached the view-model or the document.
         Assert.Equal(DashboardDisplaySettings.MaxPanelWidth, dashboard.FilterPanelWidth, 3);
@@ -595,10 +595,10 @@ public class DashboardViewTests
     // the refusal this ruling reversed: it asserted that neither gesture changed what was drawn at
     // the floor. The four cases below replace it, and everything it proved survives among them and
     // in AtTheWindowMinimumAllotment_TheExpandButtonAndThePageSizeSelect_AreInsideTheList, which
-    // holds the list at its 696 minimum while the strip is what renders.
+    // holds the list at its 684 minimum while the strip is what renders.
 
     // The bound is what the application decides by itself, on load and on resize. A gesture the
-    // user makes in the window in front of them wins: below about 1198 the panel would otherwise be
+    // user makes in the window in front of them wins: below about 1186 the panel would otherwise be
     // unreachable, with a chevron that toggles a stored flag and changes nothing on screen, which
     // reads as a broken button. Forced open, the panel takes its 220 floor and the list is clipped
     // at its trailing edge exactly as it was before the bound existed.
@@ -616,7 +616,7 @@ public class DashboardViewTests
         // It loads as the strip although the stored flag says expanded: that decision is the
         // application's own and the bound still governs it.
         Assert.True(stored.Dashboard.FilterPanelExpanded);
-        Assert.Equal(46d, dashboard.MaxRenderedPanelWidth, 3);
+        Assert.Equal(58d, dashboard.MaxRenderedPanelWidth, 3);
         Assert.Equal(DashboardViewModel.CollapsedStripWidth, PanelColumn(view).ActualWidth, 3);
 
         dashboard.ToggleFilterPanelCommand.Execute(null);
@@ -722,7 +722,7 @@ public class DashboardViewTests
         Dispatcher.UIThread.RunJobs();
         dashboard.PendingPanelPersist.GetAwaiter().GetResult();
 
-        Assert.Equal(302d, dashboard.MaxRenderedPanelWidth, 3);
+        Assert.Equal(314d, dashboard.MaxRenderedPanelWidth, 3);
         Assert.Equal(DashboardDisplaySettings.DefaultPanelWidth, PanelColumn(view).ActualWidth, 3);
 
         // And back to the floor, where the bound governs again and the strip returns.
