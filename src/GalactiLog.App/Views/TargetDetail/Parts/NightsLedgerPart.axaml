@@ -57,7 +57,7 @@
   <Grid RowDefinitions="Auto,Auto">
     <!-- Collapsed (sidebar ruling R1): the title and its glyph hide, the chevron, Export and the
          sort note stack one per line, so no line is wider than a date row. -->
-    <Grid x:Name="LedgerChrome" Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
       <StackPanel x:Name="LedgerTitle" Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
         <TextBlock x:Name="LedgerTitleText" Classes="t-label section ledger-title" Text="Nights" VerticalAlignment="Center" />
         <controls:HelpButton Classes="ledger-title" Topic="target.nights" />

@@ -249,9 +249,9 @@ public class LedgerCustomColumnLayoutTests
     [AvaloniaFact]
     public void TheView_StillDeclaresNoLocalButtonTagOrCalloutStyle()
     {
-        // ControlStyleScanTest's seven needles, asserted over this view's own source: the three
-        // per-kind width styles this task added are CustomCellEditor selectors and none of them is
-        // a Button, a ToggleButton, a Border.tag, a Border.callout, a ScrollBar or an lvc| style.
+        // ControlStyleScanTest's seven needles, asserted over this view's own source: none of its
+        // styles is a Button, a ToggleButton, a Border.tag, a Border.callout, a ScrollBar or an
+        // lvc| style.
         var source = File.ReadAllText(ViewSourcePath());
 
         foreach (var needle in new[]
