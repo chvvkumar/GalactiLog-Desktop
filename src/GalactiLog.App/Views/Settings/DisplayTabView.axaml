@@ -145,7 +145,8 @@
         </StackPanel>
       </Border>
 
-      <!-- Metric visibility (spec 5.8.2). The one part of this tab behind a Save button. -->
+      <!-- Metric visibility (spec 5.8.2). The one part of this tab staged until Save changes in the
+           app-wide save bar. -->
       <Border x:Name="MetricVisibilitySection"
               IsVisible="{Binding IsReady}"
               Background="{DynamicResource ColorBgSurface}"

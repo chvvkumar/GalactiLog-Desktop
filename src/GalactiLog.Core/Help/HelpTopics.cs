@@ -423,7 +423,7 @@ public static class HelpTopics
             + "and with folder include rules one of its parent folders must match one. The first "
             + "run seeds five exclude rules for common processing folders, which you can edit, "
             + "switch off or remove like any other rule. Rules take effect when you press Save "
-            + "rules; Revert discards unsaved edits."),
+            + "changes in the bar at the bottom of the window; Discard drops unsaved edits."),
 
         new("settings.library.test-path", "Test a path",
             "Paste a file or folder path to see how the current rules treat it: Will be "
@@ -492,21 +492,23 @@ public static class HelpTopics
             + "same filter. A filter with no colour of its own takes its category's default until "
             + "you pick one. When GalactiLog finds likely alias pairs it lists them above: Merge "
             + "folds them into one group and Dismiss hides the pair. Add Filter creates a new "
-            + "canonical name, and nothing is written until you press Save."),
+            + "canonical name, and nothing is written until you press Save changes in the bar at the "
+            + "bottom of the window."),
 
         new("settings.equipment.cameras", "Cameras",
             "Canonical camera names and their aliases. An alias is the raw string as it appears "
             + "in the INSTRUME header; the canonical name is what GalactiLog displays and groups "
             + "by. Grouping two spellings of one camera is what makes per-camera statistics add "
             + "up. Suggested groupings can be merged or dismissed, and nothing is written until "
-            + "you press Save."),
+            + "you press Save changes in the bar at the bottom of the window."),
 
         new("settings.equipment.telescopes", "Telescopes",
             "Canonical telescope names and their aliases from the TELESCOP header. Grouping "
             + "consolidates spellings of one optical train into one entry, so rig-level figures "
             + "stay coherent across nights where the capture profile wrote the name differently. "
             + "The canonical names here are also what the PHD2 profiles panel offers when you map "
-            + "a profile to a telescope. Nothing is written until you press Save."),
+            + "a profile to a telescope. Nothing is written until you press Save changes in the bar at "
+            + "the bottom of the window."),
 
         new("settings.equipment.phd2-profiles", "PHD2 profiles",
             "The equipment profiles your PHD2 guide logs named, with each profile's guide "
@@ -569,7 +571,7 @@ public static class HelpTopics
             + "column pickers say, so the group toggle wins and a column whose group is off is "
             + "disabled in the pickers. Hiding a metric hides the column; it does not stop the "
             + "value being read or stored. Metric visibility is written when you press Save "
-            + "metric visibility, and Revert reloads what is stored."),
+            + "changes in the bar at the bottom of the window, and Discard reloads what is stored."),
 
         new("settings.display.ledger-columns", "Nights list columns",
             "Chooses which of your own night columns appear on the Nights list of a target "

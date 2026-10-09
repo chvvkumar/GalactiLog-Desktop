@@ -210,7 +210,7 @@ public abstract partial class GeneralSettingsTabViewModel : ObservableObject, ID
     /// <summary>
     /// Whether the tab holds an edit that a reload would throw away. The default is false, which
     /// is right for a tab whose every control saves immediately; the Display tab overrides it for
-    /// its metric-group block, which is the one part behind a Save button.
+    /// its metric-group block, which is the one part staged until Save changes in the save bar.
     /// </summary>
     public virtual bool HasPendingEdits => false;
 

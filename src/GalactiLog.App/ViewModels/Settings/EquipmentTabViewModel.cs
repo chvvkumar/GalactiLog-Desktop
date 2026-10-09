@@ -13,7 +13,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// Design-spec 12.7's Equipment tab: "the same shape for cameras and telescopes: canonical name,
 /// aliases, discovered names with counts, suggested groupings, dismiss." Two
 /// <see cref="GroupingEditorViewModel"/>s, both with <c>ShowColorPicker</c> false, sharing one
-/// suggestions banner and one Save (design-lessons rule 1 at the third
+/// suggestions banner and one save through the app-wide save bar (design-lessons rule 1 at the third
 /// <see cref="GroupingEditorViewModel"/> occurrence).
 /// </summary>
 public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposable, IPendingEdits

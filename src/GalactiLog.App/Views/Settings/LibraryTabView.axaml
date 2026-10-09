@@ -32,8 +32,8 @@
                  Classes="t-caption" />
 
       <!-- The stored document and the on-screen edit differ (review finding I3, and FIXER LIST
-           F13 for the first-read case). The edit is not overwritten and not discarded; Revert
-           takes the stored values, and the notice says which of the two happened. -->
+           F13 for the first-read case). The edit is not overwritten and not discarded; Discard in
+           the save bar takes the stored values, and the notice says which of the two happened. -->
       <ContentControl x:Name="StoredValuesNoticeBanner"
               Classes="callout warn"
               IsVisible="{Binding StoredValuesNotShown}">

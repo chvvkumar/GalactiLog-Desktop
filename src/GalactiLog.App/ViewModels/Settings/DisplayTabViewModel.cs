@@ -34,9 +34,9 @@ public sealed record ChartSessionsOption(int Sessions, string Label);
 /// <remarks>
 /// <para>
 /// Two save shapes, matching the web. Everything except the metric groups saves immediately and
-/// optimistically, with a roll-back on failure. The metric groups are the one part behind a Save
-/// button, because six groups and 27 field checkboxes are edited together and a half-applied set
-/// is not a state anyone wants persisted.
+/// optimistically, with a roll-back on failure. The metric groups are the one part staged until
+/// Save changes in the app-wide save bar, because six groups and 27 field checkboxes are edited
+/// together and a half-applied set is not a state anyone wants persisted.
 /// </para>
 /// <para>
 /// Three documents are written from this one tab and each goes through its own single writer:
@@ -273,8 +273,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     [ObservableProperty]
     public partial ChartSessionsOption SelectedChartSessions { get; set; }
 
-    /// <summary>The six metric groups (design-spec 5.8.2). The one part of this tab behind a Save
-    /// button.</summary>
+    /// <summary>The six metric groups (design-spec 5.8.2). The one part of this tab staged until
+    /// Save changes in the save bar.</summary>
     public ObservableCollection<DisplayMetricGroupViewModel> Groups { get; } = [];
 
     /// <summary>Design-spec 12.2's dashboard column picker, or null on a surface with no
@@ -303,7 +303,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     public partial bool GroupsDirty { get; private set; }
 
     /// <summary>The stored display document changed under an unsaved metric group edit. The edit
-    /// is neither overwritten nor discarded; Revert is the way to take the stored values.
+    /// is neither overwritten nor discarded; Discard in the save bar is the way to take the stored
+    /// values.
     /// </summary>
     [ObservableProperty]
     public partial bool GroupsChangedElsewhere { get; private set; }
@@ -311,8 +312,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     /// <summary>
     /// A read of the display document that threw. Cleared by the next successful apply of that
     /// document, whether from the first read or from another writer's <c>DisplayChanged</c>
-    /// (review minor 4): a latched flag left a populated editor whose Save button could never be
-    /// pressed again.
+    /// (review minor 4): a latched flag left a populated editor whose save could never run again.
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveGroupsCommand))]

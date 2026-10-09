@@ -119,17 +119,18 @@ public static class IntervalChoices
 /// </para>
 /// <para>
 /// Two save shapes, matching the web. The filter block (roots, include and exclude paths, name
-/// rules) has one explicit Save with dirty tracking and Revert, because those four lists are
-/// edited together and a half-applied filter set is not a state anyone wants persisted. The four
-/// scalar controls save immediately and optimistically, and a save that fails rolls its control
-/// back: a checkbox that stays ticked after a failed save is a lie.
+/// rules) is staged with dirty tracking until Save changes or Discard in the app-wide save bar,
+/// because those four lists are edited together and a half-applied filter set is not a state
+/// anyone wants persisted. The four scalar controls save immediately and optimistically, and a
+/// save that fails rolls its control back: a checkbox that stays ticked after a failed save is a
+/// lie.
 /// </para>
 /// <para>
 /// FIXER LIST F18. The read, the publish, the serialized write chain, the immediate-save shape
 /// with its roll-back, the <c>GeneralChanged</c> follow and the tab lifetime all belong to
 /// <see cref="GeneralSettingsTabViewModel"/>, which this tab wrote first and Task 6 extracted
 /// (design-lessons rule 1). What is left here is the Library tab's own material: the four lists,
-/// the dirty filter block with its Save and Revert, the inline validation, the scan buttons and
+/// the dirty filter block behind the save bar, the inline validation, the scan buttons and
 /// the "Run setup again" link.
 /// </para>
 /// <para>
@@ -317,8 +318,8 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
 
     /// <summary>
     /// Another writer changed the stored document under an edit in progress (review finding I3).
-    /// The tab does not overwrite the edit and does not discard it; it says so and leaves Revert as
-    /// the way to take the stored values.
+    /// The tab does not overwrite the edit and does not discard it; it says so and leaves Discard in
+    /// the save bar as the way to take the stored values.
     /// </summary>
     /// <remarks>
     /// FIXER LIST F13: raised only by a write this tab did not make. The first read landing over an
@@ -350,8 +351,8 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
     /// <summary>The notice itself, which names the actual reason rather than assuming one.
     /// </summary>
     public string StoredValuesNotice => ChangedElsewhere
-        ? "The stored library settings changed elsewhere. Revert to load them; saving now keeps what is on screen."
-        : "The stored library settings finished loading after you started editing. Revert to load them; saving now keeps what is on screen.";
+        ? "The stored library settings changed elsewhere. Discard the unsaved changes to load them; saving now keeps what is on screen."
+        : "The stored library settings finished loading after you started editing. Discard the unsaved changes to load them; saving now keeps what is on screen.";
 
     /// <summary>Whether the filter block has unsaved edits.</summary>
     [ObservableProperty]
@@ -1008,14 +1009,14 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
         OnPropertyChanged(nameof(ShowScanFilterNotice));
     }
 
-    /// <summary>The filter block is the one part of this tab behind a Save button, so an edit in it
-    /// is what a reload would throw away.</summary>
+    /// <summary>The filter block is the one part of this tab staged until Save changes in the save
+    /// bar, so an edit in it is what a reload would throw away.</summary>
     public override bool HasPendingEdits => IsDirty;
 
     /// <summary>
     /// Another writer changed the <c>general</c> document while the filter block was dirty (review
-    /// finding I3). The edit is never overwritten and never discarded; Revert is the way to take
-    /// the stored values, and it is already enabled because the tab is dirty.
+    /// finding I3). The edit is never overwritten and never discarded; Discard in the save bar is the
+    /// way to take the stored values, and it is already enabled because the tab is dirty.
     /// </summary>
     /// <remarks>
     /// The tab is a DI singleton whose state outlives a visit to the Settings page, and Task 9's
