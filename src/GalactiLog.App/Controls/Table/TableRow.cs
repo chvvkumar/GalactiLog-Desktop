@@ -297,8 +297,14 @@ public class TableRow : Grid
     private readonly RuleLayer _layer;
     private List<(Point A, Point B, bool Emphasis)> _lines = [];
     private TableColumns? _subscribed;
+    private bool _untagged;
 
-    static TableRow() => AffectsArrange<TableRow>(KindProperty);
+    static TableRow()
+    {
+        AffectsArrange<TableRow>(KindProperty);
+        // A cell whose key changes after it joined the row, by a binding for example, is re-tagged.
+        ColProperty.Changed.AddClassHandler<Control>((cell, _) => (cell.Parent as TableRow)?.Retag());
+    }
 
     public TableRow()
     {
@@ -356,7 +362,7 @@ public class TableRow : Grid
         else if (change.Property == KindProperty)
         {
             UpdatePseudoClasses();
-            TagCells();
+            Retag();
         }
         else if (change.Property == RuleBrushProperty || change.Property == EmphasisRuleBrushProperty)
         {
@@ -378,14 +384,22 @@ public class TableRow : Grid
         Unsubscribe();
     }
 
+    // Compiled XAML adds a cell before it sets the cell's t:TableRow.Col, so the cells are tagged
+    // (and a missing key fails) at the next measure, not here.
     protected override void ChildrenChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         base.ChildrenChanged(sender, e);
-        TagCells();
+        Retag();
     }
 
     protected override Size MeasureOverride(Size availableSize)
     {
+        if (_untagged)
+        {
+            TagCells();
+            _untagged = false;
+        }
+
         _layer.Measure(availableSize);
         return base.MeasureOverride(availableSize);
     }
@@ -502,7 +516,7 @@ public class TableRow : Grid
             });
         }
 
-        TagCells();
+        Retag();
     }
 
     private void TagCells()
@@ -538,6 +552,12 @@ public class TableRow : Grid
         }
     }
 
+    private void Retag()
+    {
+        _untagged = true;
+        InvalidateMeasure();
+    }
+
     private void UpdatePseudoClasses()
     {
         PseudoClasses.Set(":header", Kind == RowKind.Header);
@@ -562,6 +582,7 @@ public class TableStripCell : Grid
         AvaloniaProperty.Register<TableStripCell, ColumnKind>(nameof(Kind), ColumnKind.Number);
 
     private TableRow? _row;
+    private TableColumns? _subscribed;
 
     /// <summary>The per-item column id, for example <c>f0</c>, supplied by the cell view model.
     /// </summary>
@@ -590,9 +611,10 @@ public class TableStripCell : Grid
     {
         base.OnAttachedToVisualTree(e);
         _row = this.FindAncestorOfType<TableRow>();
-        if (_row?.Columns is { } columns)
+        _subscribed = _row?.Columns;
+        if (_subscribed is not null)
         {
-            columns.Changed += OnColumnsChanged;
+            _subscribed.Changed += OnColumnsChanged;
         }
 
         Rebuild();
@@ -601,9 +623,10 @@ public class TableStripCell : Grid
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         base.OnDetachedFromVisualTree(e);
-        if (_row?.Columns is { } columns)
+        if (_subscribed is not null)
         {
-            columns.Changed -= OnColumnsChanged;
+            _subscribed.Changed -= OnColumnsChanged;
+            _subscribed = null;
         }
 
         _row = null;

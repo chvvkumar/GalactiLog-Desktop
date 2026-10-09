@@ -1,0 +1,30 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
+             x:Class="GalactiLog.App.Tests.Controls.TableProbe">
+  <!-- Spine-spec section 5 written as a view, so the compiled XAML's order (a cell joins the row
+       before its t:TableRow.Col is set) is what the spine meets. -->
+  <UserControl.Resources>
+    <t:TableColumns x:Key="ProbeCols" Id="Probe">
+      <t:TableColumn Key="label" />
+      <t:TableColumn Key="hfr" Kind="Number" />
+      <t:TableColumn Key="spare" Width="*" />
+    </t:TableColumns>
+  </UserControl.Resources>
+  <StackPanel Grid.IsSharedSizeScope="True">
+    <t:TableRow Kind="Header" Columns="{StaticResource ProbeCols}">
+      <TextBlock t:TableRow.Col="label" Text="Filter" />
+      <TextBlock t:TableRow.Col="hfr" Text="{x:Static t:TableHeads.Hfr}" ToolTip.Tip="{x:Static t:TableHeads.HfrTip}" />
+    </t:TableRow>
+    <ItemsControl x:Name="Rows" Classes="table">
+      <ItemsControl.ItemTemplate>
+        <DataTemplate>
+          <t:TableRow Columns="{StaticResource ProbeCols}">
+            <TextBlock t:TableRow.Col="label" Text="{Binding}" />
+            <TextBlock t:TableRow.Col="hfr" Text="2.10" />
+          </t:TableRow>
+        </DataTemplate>
+      </ItemsControl.ItemTemplate>
+    </ItemsControl>
+  </StackPanel>
+</UserControl>

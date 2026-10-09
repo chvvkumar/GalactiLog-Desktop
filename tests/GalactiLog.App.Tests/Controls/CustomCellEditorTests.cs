@@ -353,8 +353,8 @@ public class CustomCellEditorTests
         // screen, seven times on a seven night ledger (phase review target P3-7, from the capture).
         // Red against the tree before this property: the watermark below is "Notes tag".
         //
-        // The second half is what makes the first half safe: the automation name is untouched, so a
-        // screen reader still hears the column and the night on a cell with no watermark.
+        // With the watermark off the cell shows MetricText.Missing in its place, and the automation
+        // name is unchanged, so a screen reader still hears the column and the night.
         var cell = Factory.Cell(Factory.Text("Notes tag"), subject: "2026-03-14");
         var (_, editor) = Show(cell);
         editor.ShowWatermark = false;

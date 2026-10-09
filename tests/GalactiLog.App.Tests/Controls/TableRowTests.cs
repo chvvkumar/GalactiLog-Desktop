@@ -113,12 +113,47 @@ public class TableRowTests
     }
 
     [AvaloniaFact]
-    public void T2_ACellWithoutAKnownColumn_Throws()
+    public void T2_ACellWithoutAKnownColumn_ThrowsAtLayout()
     {
-        var row = Row(Metrics(), RowKind.Data);
+        // Not at Add: compiled XAML adds a cell before it sets the cell's key.
+        var missing = Row(Metrics(), RowKind.Data, new TextBlock { Text = "no key" });
+        var unknown = Row(Metrics(), RowKind.Data, Text("nope", "unknown key"));
 
-        Assert.Throws<InvalidOperationException>(() => row.Children.Add(new TextBlock { Text = "no key" }));
-        Assert.Throws<InvalidOperationException>(() => Row(Metrics(), RowKind.Data, Text("nope", "unknown key")));
+        Assert.Throws<InvalidOperationException>(() => missing.Measure(Size.Infinity));
+        Assert.Throws<InvalidOperationException>(() => unknown.Measure(Size.Infinity));
+    }
+
+    [AvaloniaFact]
+    public void T2_ACellKeyedAfterItJoined_IsTaggedFromItsLatestKey()
+    {
+        var cell = new TextBlock { Text = "2.10" };
+        var row = Row(Metrics(), RowKind.Data, cell);
+        TableRow.SetCol(cell, "hfr");
+        var window = Show(Scope(row));
+        Assert.Equal(1, Grid.GetColumn(cell));
+
+        TableRow.SetCol(cell, "stars");
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(2, Grid.GetColumn(cell));
+        Assert.Contains("tc-num", cell.Classes);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void T2_TheSpineSpecMarkup_LoadsFromCompiledXaml()
+    {
+        var probe = new TableProbe();
+        var window = Show(probe);
+
+        var rows = probe.GetVisualDescendants().OfType<TableRow>().ToList();
+        Assert.Equal(3, rows.Count);
+        Assert.All(rows, row => Assert.Equal(1, Grid.GetColumn(row.Children[1])));
+        Assert.Contains("tc-head", rows[0].Children[1].Classes);
+        Assert.Contains("tc-num", rows[2].Children[1].Classes);
+        TableAssert.Conventions(probe);
+
+        window.Close();
     }
 
     [AvaloniaFact]

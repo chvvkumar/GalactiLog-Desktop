@@ -60,10 +60,11 @@
          Header row; the view keeps its own Command. TableRow puts tc-head and the column's kind
          class on the Button. -->
     <DataTemplate x:Key="TableSortTitle" x:DataType="dash:ColumnViewModel">
-      <StackPanel Orientation="Horizontal" Spacing="4">
-        <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
-        <TextBlock Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
-      </StackPanel>
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+                   ToolTip.Tip="{Binding Title}" />
+        <TextBlock Grid.Column="1" Margin="4,0,0,0" Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
+      </Grid>
     </DataTemplate>
     <!-- Numeric: the glyph leads, so the title's right edge is the figures' right edge whether the
          column is the sort key or not. -->
