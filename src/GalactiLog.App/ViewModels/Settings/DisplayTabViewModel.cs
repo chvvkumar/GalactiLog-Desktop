@@ -48,7 +48,7 @@ public sealed record ChartSessionsOption(int Sessions, string Label);
 /// a metric toggled on a chart cannot lose one another (design-lessons rule 2).
 /// </para>
 /// </remarks>
-public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
+public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, IPendingEdits
 {
     /// <summary>
     /// Design-spec 14.4's four root font sizes, with the web's labels. The pixel figures come from
@@ -286,6 +286,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveGroupsCommand))]
     [NotifyCanExecuteChangedFor(nameof(RevertGroupsCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool GroupsDirty { get; private set; }
 
     /// <summary>The stored display document changed under an unsaved metric group edit. The edit
@@ -302,6 +304,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveGroupsCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool DisplayLoadFailed { get; private set; }
 
     /// <summary>The in-flight definition re-read, so a case awaits it instead of sleeping. Null
@@ -310,6 +313,20 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
 
     /// <inheritdoc />
     public override bool HasPendingEdits => GroupsDirty;
+
+    /// <inheritdoc />
+    public string Label => "Display metric groups";
+
+    /// <inheritdoc />
+    public string NavigationKey => "display";
+
+    /// <inheritdoc />
+    public string? SaveRefusal =>
+        GroupsDirty && DisplayLoadFailed ? "The display settings could not be read." : null;
+
+    Task IPendingEdits.SaveAsync() => SaveGroupsCommand.ExecuteAsync(null);
+
+    void IPendingEdits.Discard() => RevertGroups();
 
     /// <inheritdoc />
     protected override void OnStoredDocumentChangedElsewhere() => GroupsChangedElsewhere = true;

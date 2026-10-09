@@ -441,6 +441,50 @@ public class DisplayTabViewModelTests
     }
 
     [Fact]
+    public async Task PendingEdits_FollowsGroupsDirty_AndRaisesPropertyChanged()
+    {
+        var harness = await CreateAsync();
+        IPendingEdits pending = harness.Tab;
+        var raised = new List<string?>();
+        pending.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        Assert.Equal("Display metric groups", pending.Label);
+        Assert.Equal("display", pending.NavigationKey);
+        Assert.False(pending.HasPendingEdits);
+        Assert.Null(pending.SaveRefusal);
+
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+
+        Assert.True(pending.HasPendingEdits);
+        Assert.Contains("HasPendingEdits", raised);
+    }
+
+    [Fact]
+    public async Task PendingEdits_SaveAsync_PersistsTheGroups()
+    {
+        var harness = await CreateAsync();
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+
+        await ((IPendingEdits)harness.Tab).SaveAsync();
+        await Settle(harness);
+
+        Assert.False(harness.Tab.GroupsDirty);
+        Assert.True(harness.Store.Display.Groups["weather"].Enabled);
+    }
+
+    [Fact]
+    public async Task PendingEdits_Discard_RestoresTheStoredGroups()
+    {
+        var harness = await CreateAsync();
+        harness.Tab.Groups.Single(group => group.Key == "quality").IsEnabled = false;
+
+        ((IPendingEdits)harness.Tab).Discard();
+
+        Assert.False(harness.Tab.GroupsDirty);
+        Assert.True(harness.Tab.Groups.Single(group => group.Key == "quality").IsEnabled);
+    }
+
+    [Fact]
     public async Task MetricGroups_DisablingAGroup_DimsAndDisablesItsFields()
     {
         var harness = await CreateAsync();
