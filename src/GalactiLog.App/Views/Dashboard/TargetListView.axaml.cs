@@ -35,7 +35,7 @@ namespace GalactiLog.App.Views.Dashboard;
 /// <para>
 /// Fixer pass, phase-review P2: the width rule and the user's own column hiding are two causes and
 /// now carry two flags. Unticking Equipment in the column gear used to drop Designation,
-/// Integration and Last Session to the tight cap at any width, and the width at which Equipment
+/// Integration and Last session to the tight cap at any width, and the width at which Equipment
 /// leaves was a constant over all six columns rather than a sum over the shown ones, so hiding two
 /// columns left Equipment suppressed in a row that would have fitted in half the width.
 /// </para>
@@ -64,7 +64,7 @@ public partial class TargetListView : UserControl
     /// and its two gutters.</summary>
     internal const double NameFloor = 120d;
 
-    /// <summary>The cap Designation, Integration and Last Session carry while the list is wide
+    /// <summary>The cap Designation, Integration and Last session carry while the list is wide
     /// enough to draw every shown column. One figure for the three, not three, because the three
     /// were only ever round numbers and the arithmetic below is the only thing that read them
     /// apart. It is what a long catalogue designation needs: the fixture's "PGC 123456.789" cell
@@ -77,7 +77,7 @@ public partial class TargetListView : UserControl
     /// <summary>What those same three are capped at while the list is too narrow to draw every
     /// shown column. It is bounded above, not chosen: at the 720 pixels the shipped 1280 window
     /// gives the list, Name's floor, the palette, the sessions cell and the trailing inset leave
-    /// 386 for the three, so a cap above 128 puts Last Session and the Expand button off the
+    /// 386 for the three, so a cap above 128 puts Last session and the Expand button off the
     /// viewport. A header label may therefore still trim here; see the fixer report, which carries
     /// the arithmetic and the product options.</summary>
     internal const double TightCap = 124d;
@@ -427,7 +427,7 @@ public partial class TargetListView : UserControl
         // no-op, so a Bounds change rebuilds no row unless a column actually flips.
         foreach (var column in _columns.Where(column => !CustomColumnSlug.IsCustom(column.Key)))
         {
-            _cols[column.Key.Replace("_", "", StringComparison.Ordinal)].IsDropped =
+            _cols[column.TableKey].IsDropped =
                 !(column.Key == "equipment" ? IsEquipmentShown : column.IsShown);
         }
 

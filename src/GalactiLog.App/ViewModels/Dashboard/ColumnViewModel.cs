@@ -40,6 +40,10 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// table: one of <c>FrameColumns.All</c>'s 32 keys.</summary>
     public string Key { get; }
 
+    /// <summary>The key as a table spine column key (<c>TableColumn.Key</c> is
+    /// <c>[a-z][a-z0-9]*</c>): <c>last_session</c> is <c>lastsession</c>.</summary>
+    public string TableKey => Key.Replace("_", "", StringComparison.Ordinal);
+
     public string Title { get; }
 
     /// <summary>False for <c>name</c> only (coordinator ruling Q5): hiding every column leaves a

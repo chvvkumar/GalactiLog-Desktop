@@ -17,6 +17,16 @@ namespace GalactiLog.App.Tests.ViewModels.Mosaics;
 // post and a registry the page's jobs and reloads run through.
 public class MosaicsPageViewModelTests
 {
+    // Spec.md item 6: a session with no filter reads the faint dash, never a blank cell.
+    [Fact]
+    public void ASessionWithNoFilter_ReadsTheDash()
+    {
+        var row = new SuggestionSessionRow(Guid.NewGuid(), "Panel 1", "NGC 7000 P1", new DateOnly(2026, 3, 2), null, 4, 1200, true);
+
+        Assert.Equal(MetricText.Missing, new SuggestionSessionViewModel(row, null!).FilterText);
+        Assert.Equal("Ha", new SuggestionSessionViewModel(row with { Filter = "Ha" }, null!).FilterText);
+    }
+
     // ---- detection keywords ----------------------------------------------------------------------
 
     [Fact]
