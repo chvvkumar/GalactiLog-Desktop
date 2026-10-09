@@ -88,7 +88,10 @@ public class DashboardSearchTests
             new GeneralSettings(),
             delay.Delay,
             post: action => action(),
-            search: search.Search);
+            search: search.Search,
+            // The dim's grace wait shares the delay seam; zero keeps it out of the debounce
+            // assertions here, which are about the search window alone.
+            refetchDimDelay: TimeSpan.Zero);
         dashboard.Filters.PendingReload!.GetAwaiter().GetResult();
         return dashboard;
     }

@@ -81,16 +81,28 @@ public class TargetListRefetchTests
         Func<TargetListingCriteria, TargetListingPage> list,
         FakeDelay delay,
         Action<Action>? post = null,
-        ScanStatusService? scanStatus = null)
+        ScanStatusService? scanStatus = null,
+        TimeSpan? refetchDimDelay = null)
+        => CreateDashboard(list, delay.Delay, post, scanStatus, refetchDimDelay);
+
+    // A zero dim delay by default, so the truth table below dims the moment a query starts
+    // rather than racing the grace wait against the query; the grace has its own cases.
+    private static DashboardViewModel CreateDashboard(
+        Func<TargetListingCriteria, TargetListingPage> list,
+        Func<TimeSpan, CancellationToken, Task> delay,
+        Action<Action>? post = null,
+        ScanStatusService? scanStatus = null,
+        TimeSpan? refetchDimDelay = null)
         => new(
             list,
             DashboardViewModelTestFactory.EmptyFacets,
             () => [],
             DashboardViewModelTestFactory.EmptyAliasMap,
             new GeneralSettings(),
-            delay.Delay,
+            delay,
             scanStatus: scanStatus,
-            post: post ?? (action => action()));
+            post: post ?? (action => action()),
+            refetchDimDelay: refetchDimDelay ?? TimeSpan.Zero);
 
     private static async Task DrainAsync(DashboardViewModel dashboard, FakeDelay delay)
     {
@@ -408,13 +420,12 @@ public class TargetListRefetchTests
         Assert.False(dashboard.Targets.IsRefetching);
     }
 
-    // Review finding (fix pass): OnScanFinished (DashboardViewModel.cs) also reaches
-    // RequestQuery, so a scan landing takes the same dim as a filter change. A real
-    // ScanCoordinator over an empty temp root, the same shape
-    // TargetListViewModelTests.ScanFinished_RefreshesTheList already uses, rather than a fake
-    // event source: what matters is that the real event, not a stand-in for it, reaches the dim.
+    // A scan landing re-reads the page under criteria the reader did not change, so it is a quiet
+    // refresh: the rows stay lit and clickable. A real ScanCoordinator over an empty temp root,
+    // the same shape TargetListViewModelTests.ScanFinished_RefreshesTheList already uses, rather
+    // than a fake event source: what matters is that the real event reaches the query.
     [Fact]
-    public async Task IsRefetching_CyclesAfterAScanFinishes()
+    public async Task IsRefetching_StaysFalseWhileAScanRefreshRuns()
     {
         using var settings = new SettingsFixture();
         settings.Save(general => general with { ScanRoots = [settings.Root] });
@@ -428,9 +439,116 @@ public class TargetListRefetchTests
         Assert.False(dashboard.Targets.IsRefetching);
 
         query.Block();
+        var calls = query.Calls;
         await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
+        await PumpDebounceUntilAsync(delay, () => query.Calls > calls);
+        Assert.True(query.Calls > calls, "The scan never reached the listing query.");
+        Assert.False(dashboard.Targets.IsRefetching);
+
+        query.Release();
+        await DrainAsync(dashboard, delay);
+        Assert.False(dashboard.Targets.IsRefetching);
+    }
+
+    [Fact]
+    public async Task IsRefetching_StaysFalseForAQuietRequest()
+    {
+        var query = new GatedQuery { Page = new TargetListingPage([Row("M 31")], 1, 0d, 0, 1, 50) };
+        var delay = new FakeDelay();
+        var dashboard = CreateDashboard(query.List, delay);
+        await DrainAsync(dashboard, delay);
+
+        query.Block();
+        var calls = query.Calls;
+        dashboard.RequestQuery(quiet: true);
+        await PumpDebounceUntilAsync(delay, () => query.Calls > calls);
+
+        Assert.True(query.Calls > calls, "The quiet request never reached the listing query.");
+        Assert.False(dashboard.Targets.IsRefetching);
+
+        query.Release();
+        await DrainAsync(dashboard, delay);
+        Assert.False(dashboard.Targets.IsRefetching);
+    }
+
+    // A quiet refresh landing inside a filter change's debounce window coalesces into it, and
+    // must not take the dim away from the change the reader is waiting on.
+    [Fact]
+    public async Task IsRefetching_AQuietRequestCoalescedIntoAFilterChange_KeepsTheDim()
+    {
+        var query = new GatedQuery { Page = new TargetListingPage([Row("M 31")], 1, 0d, 0, 1, 50) };
+        var delay = new FakeDelay();
+        var dashboard = CreateDashboard(query.List, delay);
+        await DrainAsync(dashboard, delay);
+
+        query.Block();
+        dashboard.Filters.SelectedCamera = "ASI2600MM";
+        dashboard.RequestQuery(quiet: true);
         await PumpDebounceUntilAsync(delay, () => dashboard.Targets.IsRefetching);
         Assert.True(dashboard.Targets.IsRefetching);
+
+        query.Release();
+        await DrainAsync(dashboard, delay);
+        Assert.False(dashboard.Targets.IsRefetching);
+
+        // The debt is paid once that window lands: a later quiet request does not dim.
+        query.Block();
+        var calls = query.Calls;
+        dashboard.RequestQuery(quiet: true);
+        await PumpDebounceUntilAsync(delay, () => query.Calls > calls);
+        Assert.False(dashboard.Targets.IsRefetching);
+
+        query.Release();
+        await DrainAsync(dashboard, delay);
+    }
+
+    // The grace: a query that answers inside RefetchDimDelay never dims. The delay seam completes
+    // the debounce at once and never completes the grace wait, so the query always wins the race.
+    [Fact]
+    public async Task IsRefetching_NeverTurnsOn_WhenTheQueryLandsInsideTheGrace()
+    {
+        var query = new RecordingQuery { Page = new TargetListingPage([Row("M 31")], 1, 0d, 0, 1, 50) };
+        Task Delay(TimeSpan duration, CancellationToken token) => duration == DashboardViewModel.DebounceWindow
+            ? Task.CompletedTask
+            : Task.Delay(Timeout.Infinite, token);
+        var dashboard = CreateDashboard(query.List, Delay, refetchDimDelay: DashboardViewModel.RefetchDimDelay);
+        if (dashboard.Filters.PendingReload is { } reload)
+        {
+            await reload;
+        }
+
+        await dashboard.PendingQuery!;
+
+        var dimmed = false;
+        dashboard.Targets.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TargetListViewModel.IsRefetching) && dashboard.Targets.IsRefetching)
+            {
+                dimmed = true;
+            }
+        };
+
+        dashboard.Filters.SelectedCamera = "ASI2600MM";
+        await dashboard.PendingQuery!;
+
+        Assert.False(dimmed);
+        Assert.False(dashboard.Targets.IsRefetching);
+    }
+
+    [Fact]
+    public async Task IsRefetching_TurnsOn_OnceTheGraceElapsesWithTheQueryStillRunning()
+    {
+        var query = new GatedQuery { Page = new TargetListingPage([Row("M 31")], 1, 0d, 0, 1, 50) };
+        var delay = new FakeDelay();
+        var dashboard = CreateDashboard(query.List, delay, refetchDimDelay: DashboardViewModel.RefetchDimDelay);
+        await DrainAsync(dashboard, delay);
+
+        query.Block();
+        dashboard.Filters.SelectedCamera = "ASI2600MM";
+        await PumpDebounceUntilAsync(delay, () => dashboard.Targets.IsRefetching);
+
+        Assert.True(dashboard.Targets.IsRefetching);
+        Assert.Contains(DashboardViewModel.RefetchDimDelay, delay.Requested);
 
         query.Release();
         await DrainAsync(dashboard, delay);
