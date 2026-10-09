@@ -47,9 +47,9 @@ public sealed partial class FrameRowViewModel : ObservableObject
         Row = row;
         Columns = columns;
         var clock = SessionTimeFormat.Format(row.CaptureDate, zone, use24Hour);
-        TimeText = datePrefixed && row.CaptureDate is { } captured
+        TimeText = MetricText.Cell(datePrefixed && row.CaptureDate is { } captured
             ? NightStripViewModel.ToLocal(captured, zone).ToString("MM-dd ", CultureInfo.InvariantCulture) + clock
-            : clock;
+            : clock);
         ApplyBaseline(baseline);
     }
 
@@ -114,6 +114,7 @@ public sealed partial class FrameRowViewModel : ObservableObject
     public string PathForCopy => Row.FilePath;
 
     // ---- the 32 cells, in spec 12.4's column order --------------------------------------------
+    // An absent value renders MetricText.Missing, never a blank (spec.md item 6); a real zero is 0.
 
     /// <summary><c>capture_date</c> in <c>general.timezone</c>, formatted per
     /// <c>general.use_24h_time</c>. Computed once at construction rather than per binding pass,
@@ -122,75 +123,76 @@ public sealed partial class FrameRowViewModel : ObservableObject
 
     public string FileName => Row.FileName;
 
-    public string FilterText => Row.FilterUsed ?? "";
+    public string FilterText => MetricText.Cell(Row.FilterUsed);
 
     /// <summary>Seconds, with no unit: the comp puts the unit in the header ("Exp s") and never
-    /// in the cell, so a column of figures shares one decimal axis. This was the only one of the
-    /// 32 cells that carried a suffix.</summary>
-    public string ExposureText => MetricText.Format(Row.ExposureTime, "0.##");
+    /// in the cell, so a column of figures shares one decimal axis, and the missing dash when the
+    /// frame recorded no exposure. This was the only one of the 32 cells that carried a suffix.
+    /// </summary>
+    public string ExposureText => MetricText.Cell(Row.ExposureTime, "#,0.##");
 
     /// <summary>design-spec 12.4's HFR column. <c>median_hfr</c> is the per-frame HFR the
     /// ingester recorded, not a session aggregate.</summary>
-    public string MedianHfrText => MetricText.Format(Row.MedianHfr, "0.00");
+    public string MedianHfrText => MetricText.Cell(Row.MedianHfr, "0.00");
 
     /// <summary>The raw per-frame eccentricity. Not pooled on the session's eccentricity source
     /// (Task 2 deviation D4): spec 12.4's table has no per-frame source column and this cell
     /// grades nothing, so nothing here compares two sources against one baseline.</summary>
-    public string EccentricityText => MetricText.Format(Row.Eccentricity, "0.00");
+    public string EccentricityText => MetricText.Cell(Row.Eccentricity, "0.00");
 
     /// <summary>design-spec 7.1.1: the FWHM column reads <c>fwhm</c>, never
     /// <c>median_fwhm</c>.</summary>
-    public string FwhmText => MetricText.Format(Row.Fwhm, "0.00");
+    public string FwhmText => MetricText.Cell(Row.Fwhm, "0.00");
 
-    public string DetectedStarsText => MetricText.Format(Row.DetectedStars, "N0");
+    public string DetectedStarsText => MetricText.Cell(Row.DetectedStars, "N0");
 
-    public string GuidingRmsText => MetricText.Format(Row.GuidingRmsArcsec, "0.00");
+    public string GuidingRmsText => MetricText.Cell(Row.GuidingRmsArcsec, "0.00");
 
-    public string GuidingRmsRaText => MetricText.Format(Row.GuidingRmsRaArcsec, "0.00");
+    public string GuidingRmsRaText => MetricText.Cell(Row.GuidingRmsRaArcsec, "0.00");
 
-    public string GuidingRmsDecText => MetricText.Format(Row.GuidingRmsDecArcsec, "0.00");
+    public string GuidingRmsDecText => MetricText.Cell(Row.GuidingRmsDecArcsec, "0.00");
 
-    public string AduMeanText => MetricText.Format(Row.AduMean, "N0");
+    public string AduMeanText => MetricText.Cell(Row.AduMean, "N0");
 
-    public string AduMedianText => MetricText.Format(Row.AduMedian, "N0");
+    public string AduMedianText => MetricText.Cell(Row.AduMedian, "N0");
 
-    public string AduStdevText => MetricText.Format(Row.AduStdev, "N0");
+    public string AduStdevText => MetricText.Cell(Row.AduStdev, "N0");
 
-    public string AduMinText => MetricText.Format(Row.AduMin, "N0");
+    public string AduMinText => MetricText.Cell(Row.AduMin, "N0");
 
-    public string AduMaxText => MetricText.Format(Row.AduMax, "N0");
+    public string AduMaxText => MetricText.Cell(Row.AduMax, "N0");
 
-    public string FocuserPositionText => MetricText.Format(Row.FocuserPosition, "N0");
+    public string FocuserPositionText => MetricText.Cell(Row.FocuserPosition, "N0");
 
-    public string FocuserTempText => MetricText.Format(Row.FocuserTemp, "0.0");
+    public string FocuserTempText => MetricText.Cell(Row.FocuserTemp, "0.0");
 
-    public string AmbientTempText => MetricText.Format(Row.AmbientTemp, "0.0");
+    public string AmbientTempText => MetricText.Cell(Row.AmbientTemp, "0.0");
 
-    public string DewPointText => MetricText.Format(Row.DewPoint, "0.0");
+    public string DewPointText => MetricText.Cell(Row.DewPoint, "0.0");
 
-    public string HumidityText => MetricText.Format(Row.Humidity, "0");
+    public string HumidityText => MetricText.Cell(Row.Humidity, "0");
 
-    public string PressureText => MetricText.Format(Row.Pressure, "0");
+    public string PressureText => MetricText.Cell(Row.Pressure, "N0");
 
-    public string WindSpeedText => MetricText.Format(Row.WindSpeed, "0.0");
+    public string WindSpeedText => MetricText.Cell(Row.WindSpeed, "0.0");
 
-    public string WindDirectionText => MetricText.Format(Row.WindDirection, "0");
+    public string WindDirectionText => MetricText.Cell(Row.WindDirection, "0");
 
-    public string WindGustText => MetricText.Format(Row.WindGust, "0.0");
+    public string WindGustText => MetricText.Cell(Row.WindGust, "0.0");
 
-    public string CloudCoverText => MetricText.Format(Row.CloudCover, "0");
+    public string CloudCoverText => MetricText.Cell(Row.CloudCover, "0");
 
-    public string SkyQualityText => MetricText.Format(Row.SkyQuality, "0.00");
+    public string SkyQualityText => MetricText.Cell(Row.SkyQuality, "0.00");
 
-    public string AirmassText => MetricText.Format(Row.Airmass, "0.00");
+    public string AirmassText => MetricText.Cell(Row.Airmass, "0.00");
 
-    public string PierSideText => Row.PierSide ?? "";
+    public string PierSideText => MetricText.Cell(Row.PierSide);
 
-    public string RotatorPositionText => MetricText.Format(Row.RotatorPosition, "0.0");
+    public string RotatorPositionText => MetricText.Cell(Row.RotatorPosition, "0.0");
 
-    public string SensorTempText => MetricText.Format(Row.SensorTemp, "0.0");
+    public string SensorTempText => MetricText.Cell(Row.SensorTemp, "0.0");
 
-    public string CameraGainText => MetricText.Format(Row.CameraGain, "0");
+    public string CameraGainText => MetricText.Cell(Row.CameraGain, "N0");
 
     // ---- the guiding RMS source disclosure (spec 12.4, Phase 15A) -------------------------------
 

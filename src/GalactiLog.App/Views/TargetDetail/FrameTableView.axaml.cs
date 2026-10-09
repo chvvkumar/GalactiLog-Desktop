@@ -7,6 +7,7 @@ using Avalonia.Controls.Documents;
 using Avalonia.Input;
 using Avalonia.Media;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.TargetDetail;
 
@@ -141,19 +142,21 @@ public partial class FrameTableView : UserControl
         }
     }
 
-    /// <summary>The air after a column's widest text, so the end of one cell never touches the
-    /// start of the next, which follows with no margin.</summary>
-    public const double ColumnGap = 12d;
-
-    /// <summary>The room a header title keeps beside it for the sort glyph and the divider.</summary>
+    /// <summary>Room for the sort glyph beside a header title.</summary>
     public const double HeaderSlack = 20d;
 
     /// <summary>R5's auto-fit of one column from its widest text and its header, the one formula
-    /// the view applies and a test can pin. Rounded up rather than handed over at sub-pixel
-    /// precision: the file name cell has no trimming, so a column a fraction of a pixel short
-    /// clips the last glyph instead of eliding.</summary>
+    /// the view applies and a test can pin: the content plus the two gutters every cell pads
+    /// (spec.md item 1), which are the air between columns. Rounded up rather than handed over at
+    /// sub-pixel precision: the file name cell has no trimming, so a column a fraction of a pixel
+    /// short clips the last glyph instead of eliding.</summary>
     public static double AutoFitWidth(double header, double widestCell)
-        => Math.Ceiling(Math.Max(header + HeaderSlack, widestCell) + ColumnGap);
+        => FigureFitWidth(Math.Max(header + HeaderSlack, widestCell));
+
+    /// <summary>The widest cell alone plus its two gutters: a numeric column's floor, since a
+    /// figure never trims and its header may (spec.md items 3 and 5).</summary>
+    public static double FigureFitWidth(double widestCell)
+        => Math.Ceiling(widestCell + 2 * TableMetrics.Gutter);
 
     // R5: every column auto-fits the widest text of the loaded night plus its header. Measured
     // here rather than in the view-model because a FormattedText needs a Typeface and a font
@@ -174,17 +177,19 @@ public partial class FrameTableView : UserControl
         // The control's own size, not a realized cell's: no style in this application sets
         // FontSize (FontSizeTokenTest is the enforcement), so the cells inherit exactly this, and
         // on a root text-size change this control is notified before the size has propagated down
-        // to them. Reading a cell here would measure the old size (review P3-2).
+        // to them. Reading a cell here would measure the old size (review P3-2). The header is
+        // measured at the label tier it renders in (t-label: Medium at FontSizeLabel x root).
         var size = FontSize;
         var inherited = new Typeface(
             TextElement.GetFontFamily(this),
             TextElement.GetFontStyle(this),
             TextElement.GetFontWeight(this));
-        var headerTypeface = new Typeface(inherited.FontFamily, inherited.Style, FontWeight.SemiBold);
+        var headerTypeface = new Typeface(inherited.FontFamily, inherited.Style, FontWeight.Medium);
+        var headerSize = size * (this.TryFindResource("FontSizeLabel", out var ratio) && ratio is double r ? r : 1d);
 
-        // The first realized row's cells, in column order, because they carry the family and the
-        // padding the styles applied (the file name's mono family above all); the control's own
-        // inherited values before the first row exists.
+        // The first realized row's cells, in column order, because they carry the family the
+        // styles applied (the file name's mono family above all); the control's own inherited
+        // values before the first row exists.
         var cells = RealizedCells();
 
         for (var index = 0; index < table.Columns.Count; index++)
@@ -192,9 +197,6 @@ public partial class FrameTableView : UserControl
             var column = table.Columns[index];
             var cell = cells is not null && index < cells.Count ? cells[index] as TextBlock : null;
             var typeface = cell is null ? inherited : new Typeface(cell.FontFamily, cell.FontStyle, cell.FontWeight);
-            var chrome = cell is null
-                ? 0d
-                : cell.Padding.Left + cell.Padding.Right + cell.Margin.Left + cell.Margin.Right;
 
             var widest = 0d;
             foreach (var text in Candidates(table.CellTextsToMeasure(column.Key)))
@@ -204,7 +206,8 @@ public partial class FrameTableView : UserControl
 
             table.SetAutoFitWidth(
                 column.Key,
-                AutoFitWidth(Measure(column.Title, headerTypeface, size), widest + chrome));
+                AutoFitWidth(Measure(column.Title, headerTypeface, headerSize), widest),
+                FigureFitWidth(widest));
         }
     }
 

@@ -634,9 +634,10 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.False(outlierRow.IsSelected || ordinaryRow.IsSelected);
         Assert.Equal(Fill(ordinaryRow), Fill(outlierRow));
 
+        // The row's own borders only: the container's fill is the table's zebra, which follows
+        // the item index (spec.md item 7) and so differs between rows 0 and 1 by design.
         static string Fill(ListBoxItem row) => string.Join(",", row.GetVisualDescendants().OfType<Border>()
-            .Select(border => border.Background?.ToString() ?? "none")
-            .Prepend(row.Background?.ToString() ?? "none"));
+            .Select(border => border.Background?.ToString() ?? "none"));
     }
 
     [AvaloniaFact]

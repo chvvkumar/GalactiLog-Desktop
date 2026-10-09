@@ -36,7 +36,6 @@ public class TableMarkupScanTest
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
         "Views/StatisticsView.axaml",
         "Views/Settings/CustomColumnsTabView.axaml",
-        "Views/TargetDetail/FrameTableView.axaml",
     ];
 
     private static readonly Regex XmlComment = new("<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
