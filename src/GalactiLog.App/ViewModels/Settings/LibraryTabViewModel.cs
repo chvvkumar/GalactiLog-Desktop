@@ -158,6 +158,16 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
     // one, which hides the link.
     private readonly Func<Task>? _runSetupAgain;
 
+    // Bumped by every edit. A save records the value it snapshotted at and clears IsDirty only if
+    // nothing was edited while it ran: an edit made during an in-flight save is not in that save's
+    // document, so it has to stay pending (the Filters and Equipment tabs' rule).
+    private int _editVersion;
+
+    // A Discard that arrived while a save was writing. Saved is still the pre-save document until
+    // the save lands, so reverting then would show what disk no longer holds; the revert runs from
+    // the save's own completion callback instead.
+    private bool _discardAfterSave;
+
     /// <param name="load">Normally <c>SettingsStore.GetGeneral</c>. Called off the UI thread.
     /// </param>
     /// <param name="mutateGeneral">Normally <c>SettingsStore.MutateGeneral</c>, which reads,
@@ -569,7 +579,27 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
 
     Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
 
-    void IPendingEdits.Discard() => Revert();
+    void IPendingEdits.Discard()
+    {
+        if (IsSaving)
+        {
+            _discardAfterSave = true;
+            return;
+        }
+
+        Revert();
+    }
+
+    // Runs a Discard that arrived during a save, on the UI thread, once that save has finished
+    // either way. Called from both of SaveAsync's completion callbacks after IsSaving clears.
+    private void RevertIfDiscardWaited()
+    {
+        if (_discardAfterSave)
+        {
+            _discardAfterSave = false;
+            Revert();
+        }
+    }
 
     // PendingLoad, PendingWrite and IsDisposed belong to the spine (FIXER LIST F18).
 
@@ -727,6 +757,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
         var includePaths = IncludePaths.Select(row => row.Path).ToArray();
         var excludePaths = ExcludePaths.Select(row => row.Path).ToArray();
         var rules = NameRules.Select(row => row.ToRule()).ToArray();
+        var savedVersion = _editVersion;
 
         await Write(
             general => general with
@@ -746,16 +777,22 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
             onSuccess: () =>
             {
                 IsSaving = false;
-                IsDirty = false;
+                if (_editVersion == savedVersion)
+                {
+                    IsDirty = false;
+                }
+
                 StatusMessage = "Library folders, paths and rules saved";
                 ChangedElsewhere = false;
                 EditedBeforeFirstLoad = false;
+                RevertIfDiscardWaited();
             },
             onFailure: () =>
             {
                 // The edits stay on screen. The store refused them, and throwing away what the
                 // user typed is not a way to report that.
                 IsSaving = false;
+                RevertIfDiscardWaited();
             }).ConfigureAwait(false);
     }
 
@@ -1084,6 +1121,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
         }
 
         StatusMessage = null;
+        _editVersion++;
         IsDirty = true;
         Validate();
     }

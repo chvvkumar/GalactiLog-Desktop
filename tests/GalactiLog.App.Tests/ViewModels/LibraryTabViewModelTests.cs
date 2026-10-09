@@ -1141,6 +1141,56 @@ public class LibraryTabViewModelTests
     }
 
     [Fact]
+    public async Task PendingEdits_AnEditDuringAnInFlightSave_StaysDirty()
+    {
+        // The origin bug through the save bar: a folder added while the first save is writing is
+        // not in that save's document, so the save landing must not clear it.
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+        using var release = new ManualResetEventSlim(false);
+        harness.SaveRelease = release;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        var save = tab.SaveAsync();
+        Assert.True(harness.SaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        harness.ViewModel.AddScanRoot(@"E:\Third\Root");
+
+        release.Set();
+        await save;
+        harness.SettleWrites();
+
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.Stored.ScanRoots);
+        Assert.True(harness.ViewModel.IsDirty);
+        Assert.True(tab.HasPendingEdits);
+    }
+
+    [Fact]
+    public async Task PendingEdits_DiscardDuringAnInFlightSave_LandsOnTheSavedDocument()
+    {
+        // Reverting to the pre-save document while the store already holds the saved one would
+        // let the next save silently undo this one. The discard waits for the save instead.
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+        using var release = new ManualResetEventSlim(false);
+        harness.SaveRelease = release;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        var save = tab.SaveAsync();
+        Assert.True(harness.SaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        tab.Discard();
+
+        release.Set();
+        await save;
+        harness.SettleWrites();
+
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.Stored.ScanRoots);
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.ViewModel.ScanRoots.Select(row => row.Path));
+        Assert.False(tab.HasPendingEdits);
+    }
+
+    [Fact]
     public void PendingEdits_Discard_RestoresTheStoredRoots()
     {
         using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();

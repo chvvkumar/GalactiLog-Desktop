@@ -14,13 +14,14 @@ public class PendingEditsRegistryTests
         public string Label { get; } = label;
         public string NavigationKey => Label.ToLowerInvariant();
         public bool Throws { get; set; }
+        public TaskCompletionSource? Gate { get; set; }
         public bool HasPendingEdits { get => _dirty; set { _dirty = value; Raise(nameof(HasPendingEdits)); } }
         public string? SaveRefusal { get => _refusal; set { _refusal = value; Raise(nameof(SaveRefusal)); } }
         public Task SaveAsync()
         {
             log?.Add("save " + Label);
             if (Throws) throw new InvalidOperationException("boom");
-            return Task.CompletedTask;
+            return Gate?.Task ?? Task.CompletedTask;
         }
         public void Discard() => log?.Add("discard " + Label);
         private void Raise(string n) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(n));
@@ -73,6 +74,32 @@ public class PendingEditsRegistryTests
         a.HasPendingEdits = true; c.HasPendingEdits = true;
         await r.SaveAllCommand.ExecuteAsync(null);
         Assert.Equal(new[] { "save A", "save C" }, log);
+    }
+
+    [Fact]
+    public async Task DiscardAll_is_refused_while_SaveAll_runs()
+    {
+        // A Discard landing mid-save would revert a tab to the pre-save document while disk holds
+        // the saved one, so the next save would undo this one.
+        var log = new List<string>();
+        var r = new PendingEditsRegistry();
+        var a = new Fake("A", log) { Gate = new TaskCompletionSource() };
+        r.Register(a);
+        a.HasPendingEdits = true;
+        var raised = 0;
+        r.DiscardAllCommand.CanExecuteChanged += (_, _) => raised++;
+
+        var save = r.SaveAllCommand.ExecuteAsync(null);
+
+        Assert.False(r.DiscardAllCommand.CanExecute(null));
+        Assert.True(raised > 0);
+        r.DiscardAllCommand.Execute(null);
+        Assert.DoesNotContain("discard A", log);
+
+        a.Gate.SetResult();
+        await save;
+
+        Assert.True(r.DiscardAllCommand.CanExecute(null));
     }
 
     [Fact]

@@ -20,6 +20,16 @@ public sealed partial class PendingEditsRegistry : ObservableObject
     public PendingEditsRegistry(ILogger<PendingEditsRegistry>? logger = null)
     {
         _logger = (ILogger?)logger ?? NullLogger.Instance;
+
+        // Discard is refused for the whole of a Save all, so its button has to re-read that the
+        // moment the save starts and the moment it ends.
+        SaveAllCommand.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(SaveAllCommand.IsRunning))
+            {
+                DiscardAllCommand.NotifyCanExecuteChanged();
+            }
+        };
     }
 
     public IReadOnlyList<IPendingEdits> Pending { get; private set; } = [];
@@ -90,9 +100,17 @@ public sealed partial class PendingEditsRegistry : ObservableObject
         }
     }
 
-    [RelayCommand(CanExecute = nameof(AnyPending))]
+    // Not while Save all is running: a tab discarded mid-save would show the pre-save document
+    // while disk holds the saved one, and its next save would undo this one. Each tab also defers
+    // its own Discard until its own save lands; this keeps the button honest about that.
+    private bool CanDiscardAll() => AnyPending && !SaveAllCommand.IsRunning;
+
+    [RelayCommand(CanExecute = nameof(CanDiscardAll))]
     private void DiscardAll()
     {
+        // TRACKING item 13: CanExecute is the affordance, the body is the guard.
+        if (!CanDiscardAll()) return;
+
         foreach (var source in Pending.ToList()) source.Discard();
     }
 }
