@@ -963,6 +963,61 @@ public class EquipmentTabViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task ARenameDuringAnInFlightSave_IsRewrittenByTheNextSave()
+    {
+        // The save records what it wrote as the loaded names, not what the editors hold when it
+        // lands: a rename made mid-save is not on disk yet, and the next save has to carry it to
+        // the rig-label rewrite (and the profile map) or every value under the old name strands.
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Telescopes = new Dictionary<string, EquipmentItemSettings> { ["RC8"] = new EquipmentItemSettings() },
+        });
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var moves = new List<IReadOnlyDictionary<string, string>>();
+        var vm = new EquipmentTabViewModel(
+            _store.GetEquipment,
+            equipment =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveEquipment(equipment);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action(),
+            rewriteRigLabels: (telescopes, _) =>
+            {
+                moves.Add(new Dictionary<string, string>(telescopes));
+                return 0;
+            });
+        vm.PendingLoad?.Wait(Budget);
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+        var group = Assert.Single(vm.TelescopesEditor.Groups);
+        group.RenameText = "RC 8 inch";
+        group.CommitRenameCommand.Execute(null);
+        release.Set();
+        await save;
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.Empty(moves);
+        Assert.True(vm.IsDirty);
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        var move = Assert.Single(moves);
+        Assert.Equal("RC 8 inch", move["RC8"]);
+        Assert.Equal(["RC 8 inch"], _store.GetEquipment().Telescopes.Keys);
+        vm.Dispose();
+    }
+
+    [Fact]
     public async Task Discard_RestoresTheLoadedGroups_AndClearsDirty()
     {
         _store.SaveEquipment(new EquipmentSettings

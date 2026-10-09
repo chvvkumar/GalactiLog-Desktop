@@ -459,6 +459,13 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
         var dismissed = _dismissed.Select(group => new List<string>(group)).ToList();
         var savedVersion = _editVersion;
 
+        // What this save writes, captured with the document: the success callback records these as
+        // the loaded names, never what the editors hold by then. A rename made while the save is in
+        // flight is not on disk yet, and recording it as loaded would leave the next save with no
+        // rename pair and no label move for it.
+        var savedTelescopes = Snapshot(TelescopesEditor);
+        var savedCameras = Snapshot(CamerasEditor);
+
         // Built here, on the UI thread, with the rest of the document: the groups are a bound
         // collection and are read where every other read of them happens (TRACKING section 6
         // item 24).
@@ -576,8 +583,8 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
 
                     // The saved names and the saved alias tables are the loaded ones now, so the
                     // next save carries only the changes made after this one.
-                    Remember(TelescopesEditor, _loadedTelescopeNames, _loadedTelescopeAliases);
-                    Remember(CamerasEditor, _loadedCameraNames, _loadedCameraAliases);
+                    Remember(savedTelescopes, _loadedTelescopeNames, _loadedTelescopeAliases);
+                    Remember(savedCameras, _loadedCameraNames, _loadedCameraAliases);
 
                     RefreshSuggestions();
                     RunDeferredDiscard();
@@ -698,18 +705,30 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
         GroupingEditorViewModel editor,
         Dictionary<AliasGroupViewModel, string> loadedNames,
         Dictionary<string, string> loadedAliases)
+        => Remember(Snapshot(editor), loadedNames, loadedAliases);
+
+    private static void Remember(
+        IReadOnlyList<(AliasGroupViewModel Group, string Canonical, string[] Aliases)> snapshot,
+        Dictionary<AliasGroupViewModel, string> loadedNames,
+        Dictionary<string, string> loadedAliases)
     {
         loadedNames.Clear();
         loadedAliases.Clear();
-        foreach (var group in editor.Groups)
+        foreach (var (group, canonical, aliases) in snapshot)
         {
-            loadedNames[group] = group.Canonical;
-            foreach (var alias in group.Aliases)
+            loadedNames[group] = canonical;
+            foreach (var alias in aliases)
             {
-                loadedAliases[alias] = group.Canonical;
+                loadedAliases[alias] = canonical;
             }
         }
     }
+
+    // One editor's groups as they are now, copied, so a save can record what it wrote after the
+    // editors have moved on.
+    private static List<(AliasGroupViewModel Group, string Canonical, string[] Aliases)> Snapshot(
+        GroupingEditorViewModel editor)
+        => [.. editor.Groups.Select(group => (group, group.Canonical, group.Aliases.ToArray()))];
 
     private bool CanSave() => IsDirty && !IsSaving;
 
