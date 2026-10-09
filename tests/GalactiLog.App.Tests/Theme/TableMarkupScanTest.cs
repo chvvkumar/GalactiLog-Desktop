@@ -7,29 +7,18 @@ using Xunit;
 namespace GalactiLog.App.Tests.Theme;
 
 // The table spine's static scan (spine-spec 6.3): a table is built on t:TableRow, its column set
-// declared once, its gutters, alignment and headings from the spine, never by hand per row. The
-// two lists below only shrink: each migration removes its own entries in the same commit, and a
-// stale entry fails here.
+// declared once, its gutters, alignment and headings from the spine, never by hand per row. Every
+// table is on the spine now; the ActivityView log grid and the LibraryTabView grid are out of
+// scope for this overhaul (ruling R3) and later candidates.
 public class TableMarkupScanTest
 {
-    private const string SpineNamespace = "using:GalactiLog.App.Controls.Table";
-
     // Files that may still declare a SharedSizeGroup. Paths are relative to src/GalactiLog.App.
     private static readonly string[] SharedSizeGroupAllowlist =
     [
-        // Tables, removed by their migration.
-        // Form and bar layouts, not tables (ruling R3): these stay.
+        // Form and bar layouts, not tables (ruling R3).
         "Views/Mosaics/MosaicDetailView.axaml",
         "Views/TargetDetail/CreateMosaicWindow.axaml",
         "Views/TargetDetail/Parts/IntegrationBarsPart.axaml",
-    ];
-
-    // Every table not yet on the spine (spine-spec 7.2, teams A to G). A migration that adds the
-    // spine namespace to one of these removes it here. The ActivityView log grid and the
-    // LibraryTabView grid are out of scope for this overhaul (ruling R3) and later candidates;
-    // they are not listed because nothing here is waiting on them.
-    private static readonly string[] PendingTables =
-    [
     ];
 
     private static readonly Regex XmlComment = new("<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
@@ -114,7 +103,7 @@ public class TableMarkupScanTest
     }
 
     [Fact]
-    public void TheLists_OnlyShrink()
+    public void TheAllowlist_HasNoStaleEntry()
     {
         var files = Markup().ToDictionary(file => file.Relative, file => file.Markup);
         var stale = new List<string>();
@@ -124,14 +113,6 @@ public class TableMarkupScanTest
             if (!files.TryGetValue(entry, out var markup) || !markup.Contains("SharedSizeGroup", StringComparison.Ordinal))
             {
                 stale.Add($"{entry}: no SharedSizeGroup left; remove it from the allowlist");
-            }
-        }
-
-        foreach (var entry in PendingTables)
-        {
-            if (!files.TryGetValue(entry, out var markup) || markup.Contains(SpineNamespace, StringComparison.Ordinal))
-            {
-                stale.Add($"{entry}: on the spine now (or gone); remove it from the pending tables");
             }
         }
 
