@@ -18,6 +18,8 @@ public partial class NightsLedgerPart : UserControl
 
     private double _titleLineWidth;
 
+    private bool _isStacked;
+
     private (double Collapsed, double Open) _extents;
 
     public NightsLedgerPart()
@@ -75,6 +77,21 @@ public partial class NightsLedgerPart : UserControl
         get => GetValue(IsCollapsedProperty);
         set => SetValue(IsCollapsedProperty, value);
     }
+
+    /// <summary>True when the column is narrower than the title line, and always at the stop: the
+    /// chrome stacks one item per line. The layout sets it.</summary>
+    public bool IsStacked
+    {
+        get => _isStacked;
+        set
+        {
+            _isStacked = value;
+            PseudoClasses.Set(":stacked", value);
+        }
+    }
+
+    /// <summary>The title line's width in its one-line form (ruling R8).</summary>
+    public double TitleLineWidth => _titleLineWidth;
 
     /// <summary>The header's chevron; the layout gives it the sidebar's toggle.</summary>
     public Button CollapseToggle => CollapseChevron;
@@ -173,8 +190,8 @@ public partial class NightsLedgerPart : UserControl
 
     private void ReportExtents()
     {
-        // The title line is measured in its open form only; collapsed, it stacks.
-        if (!IsCollapsed)
+        // The title line is measured in its one-line form only; stacked, it is one item per line.
+        if (!IsStacked)
         {
             _titleLineWidth = LineWidth(LedgerTitle) + LineWidth(LedgerActions);
         }

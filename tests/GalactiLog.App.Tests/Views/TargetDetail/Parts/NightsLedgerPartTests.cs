@@ -117,13 +117,16 @@ public class NightsLedgerPartTests
         var view = AtItsOwnWidth(harness.Page);
         Show(view);
 
-        // Row 1: the lit row's ink is the accent, which the watermark inherits.
-        var row = LedgerRowAt(view, 1);
-        var box = row.GetVisualDescendants().OfType<TextBox>().First(control => control.IsEffectivelyVisible);
-        Assert.Equal(MetricText.Missing, box.Watermark);
-        var dash = box.GetVisualDescendants().OfType<TextBlock>().First(block => block.Text == MetricText.Missing && block.IsEffectivelyVisible);
-        Assert.Equal(TokenColor(view, "ColorTextTertiary"), ((ISolidColorBrush)dash.Foreground!).Color);
+        // Row 0 is the lit row, whose accent ink the watermark would otherwise inherit.
+        foreach (var index in new[] { 0, 1 })
+        {
+            var box = LedgerRowAt(view, index).GetVisualDescendants().OfType<TextBox>().First(control => control.IsEffectivelyVisible);
+            Assert.Equal(MetricText.Missing, box.Watermark);
+            var dash = box.GetVisualDescendants().OfType<TextBlock>().First(block => block.Text == MetricText.Missing && block.IsEffectivelyVisible);
+            Assert.Equal(TokenColor(view, "ColorTextTertiary"), ((ISolidColorBrush)dash.Foreground!).Color);
+        }
 
+        var row = LedgerRowAt(view, 1);
         var strip = row.Children.OfType<ItemsControl>().Single();
         var check = strip.GetRealizedContainers().Last();
         var checkBox = check.GetVisualDescendants().OfType<CheckBox>().First(control => control.IsEffectivelyVisible);

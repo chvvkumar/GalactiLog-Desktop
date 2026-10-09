@@ -52,7 +52,7 @@
             <Binding Path="$parent[UserControl].FontFamily" />
           </MultiBinding>
         </Border.Width>
-        <controls:CustomCellEditor ShowWatermark="False" Classes.cell-check="{Binding IsCheckBox}" />
+        <controls:CustomCellEditor Classes="tc-cell" ShowWatermark="False" Classes.cell-check="{Binding IsCheckBox}" />
       </Border>
     </DataTemplate>
 
@@ -185,6 +185,11 @@
     <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccent}" />
   </Style>
 
+  <!-- An empty custom text cell's "-" watermark in the faintest ink (spec.md item 6): Fluent's
+       watermark inherits the box's own foreground, the lit row's accent included. -->
+  <Style Selector="controls|CustomCellEditor.tc-cell TextBox /template/ TextBlock#PART_Watermark">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
   <!-- A check box custom cell centres its box (CustomCellEditor's CheckBox sets no alignment). -->
   <Style Selector="controls|CustomCellEditor.cell-check CheckBox">
     <Setter Property="HorizontalAlignment" Value="Center" />

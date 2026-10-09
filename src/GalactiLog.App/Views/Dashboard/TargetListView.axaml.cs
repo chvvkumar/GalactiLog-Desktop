@@ -138,8 +138,7 @@ public partial class TargetListView : UserControl
 
     /// <summary>A text cell: <see cref="CustomCellWidths.Text"/>. 120 rather than
     /// <see cref="DataCap"/>, which is what every other text-bearing dashboard cell carries: the two
-    /// surfaces that draw a custom cell size its editor from one table, and the Nights ledger's own
-    /// ceiling is what fixes the figure at 120.</summary>
+    /// surfaces that draw a custom cell size its editor from one table.</summary>
     internal const double TextCellWidth = CustomCellWidths.Text;
 
     /// <summary>What one custom cell's editor needs, by the column's type and by nothing else

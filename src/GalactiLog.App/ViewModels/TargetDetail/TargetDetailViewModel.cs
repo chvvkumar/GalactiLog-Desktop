@@ -852,6 +852,14 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     private void RecomputeLedgerCustomColumns()
     {
         _ledgerCustomColumns = CustomColumnSet.LedgerRow(_customColumns, _ledgerColumnKeys);
+        // Raised only when the drawn set changes: the list re-measures every row on it, and a
+        // reload or a scan republishes the same set.
+        static (string, string, CustomColumnType) Drawn(CustomColumnDefinition column) => (column.Slug, column.Name, column.Type);
+        if (LedgerCustomHeadings.Select(Drawn).SequenceEqual(_ledgerCustomColumns.Select(Drawn)))
+        {
+            return;
+        }
+
         LedgerCustomHeadings = _ledgerCustomColumns;
         OnPropertyChanged(nameof(LedgerCustomHeadings));
     }
@@ -894,7 +902,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// <remarks>
     /// The width is the page's own, not the window's, which is the surface the phase review ruled
     /// the 1600 px rule names (P2-6, coordinator ruling (4)): the page is the window less the
-    /// navigation rail, so the wide ledger appears at about an 1800 px window with the rail
+    /// navigation rail, so the Details drawer turns inline at about an 1800 px window with the rail
     /// expanded and about 1650 with it collapsed. <c>task7-addenda.md</c> item 8 said the window and
     /// is corrected.
     /// </remarks>

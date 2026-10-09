@@ -997,6 +997,30 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     }
 
     [AvaloniaFact]
+    public void Sidebar_NarrowerThanTheTitleLine_StacksTheChrome()
+    {
+        // Ruling R8: the chrome reflows to the column, so between the stop and the title line's
+        // width it stacks. Red against a title line drawn under the chevron and Export.
+        using var mounted = MountWithTwoColumns();
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<Control>("LeftColumn");
+
+        DragSidebar(mounted, Stop(ledger) + 40d - column.Bounds.Width);
+
+        Assert.Equal(Stop(ledger) + 40d, column.Bounds.Width, 1.5);
+        Assert.False(IsCollapsed(ledger));
+        Assert.Contains(":stacked", ledger.Classes);
+        var title = ledger.Named<StackPanel>("LedgerTitle");
+        var actions = ledger.Named<StackPanel>("LedgerActions");
+        Assert.True(title.Bounds.Top >= actions.Bounds.Bottom - 0.5,
+            $"the title spans {title.Bounds} and the actions {actions.Bounds}");
+        Assert.Equal("Night", ledger.Named<TextBlock>("LedgerNightHead").Text);
+
+        DragSidebar(mounted, 1000);
+        Assert.DoesNotContain(":stacked", ledger.Classes);
+    }
+
+    [AvaloniaFact]
     public void Sidebar_TheGlyphJumpsToTheStop_AndRestoresTheLastWidth()
     {
         // Spec.md, Nights list: the collapse glyph jumps straight to the stop. Red if it takes

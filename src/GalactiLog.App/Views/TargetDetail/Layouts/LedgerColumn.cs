@@ -38,6 +38,7 @@ public static class LedgerColumn
         {
             column.Width = double.NaN;
             ledger.IsCollapsed = collapsed;
+            ledger.IsStacked = collapsed;
             return;
         }
 
@@ -48,5 +49,8 @@ public static class LedgerColumn
         // With no travel the list keeps its open form: the title line (ruling R8) is measured only
         // in that form, so a list collapsed before it was ever measured would never open.
         ledger.IsCollapsed = applied <= stop + 0.5 && open > stop + 0.5;
+        // The chrome sits outside the slide-over, so it reflows to the column: narrower than the
+        // title line, it stacks as it does collapsed, or the title draws under the actions.
+        ledger.IsStacked = ledger.IsCollapsed || applied < ledger.TitleLineWidth + TableMetrics.ScrollBarSize - 0.5;
     }
 }

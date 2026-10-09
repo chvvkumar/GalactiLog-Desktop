@@ -17,13 +17,9 @@
   </UserControl.Resources>
 
   <UserControl.Styles>
-    <!-- An empty text cell's "-" watermark in the faintest ink (spec.md item 6): Fluent's watermark
-         inherits the box's own foreground. -->
-    <Style Selector="parts|NightsLedgerPart controls|CustomCellEditor TextBox /template/ TextBlock#PART_Watermark">
-      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
-    </Style>
-    <!-- A collapsed list keeps the box and the date only (sidebar ruling R1). -->
-    <Style Selector="parts|NightsLedgerPart:collapsed :is(Control).ledger-title">
+    <!-- A collapsed list keeps the box and the date only (sidebar ruling R1). The chrome stacks at
+         the stop and at any width narrower than its title line, since it reflows to the column. -->
+    <Style Selector="parts|NightsLedgerPart:stacked :is(Control).ledger-title">
       <Setter Property="IsVisible" Value="False" />
     </Style>
     <!-- The head over the date column reads "Night" open and "All" collapsed: collapsed, the only
@@ -35,18 +31,18 @@
     <Style Selector="parts|NightsLedgerPart:collapsed TextBlock#LedgerNightHead">
       <Setter Property="Text" Value="All" />
     </Style>
-    <Style Selector="parts|NightsLedgerPart:collapsed StackPanel#LedgerTitle">
+    <Style Selector="parts|NightsLedgerPart:stacked StackPanel#LedgerTitle">
       <Setter Property="Grid.Row" Value="1" />
       <Setter Property="Grid.ColumnSpan" Value="2" />
       <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
-    <!-- The actions' column and orientation are styled rather than set locally, so the collapsed
+    <!-- The actions' column and orientation are styled rather than set locally, so the stacked
          form's setters below can take them over. -->
     <Style Selector="parts|NightsLedgerPart StackPanel#LedgerActions">
       <Setter Property="Grid.Column" Value="1" />
       <Setter Property="Orientation" Value="Horizontal" />
     </Style>
-    <Style Selector="parts|NightsLedgerPart:collapsed StackPanel#LedgerActions">
+    <Style Selector="parts|NightsLedgerPart:stacked StackPanel#LedgerActions">
       <Setter Property="Grid.Column" Value="0" />
       <Setter Property="Grid.ColumnSpan" Value="2" />
       <Setter Property="HorizontalAlignment" Value="Left" />
@@ -55,7 +51,7 @@
   </UserControl.Styles>
 
   <Grid RowDefinitions="Auto,Auto">
-    <!-- Collapsed (sidebar ruling R1): the title and its glyph hide, the chevron, Export and the
+    <!-- Stacked (sidebar ruling R1): the title and its glyph hide, the chevron, Export and the
          sort note stack one per line, so no line is wider than a date row. -->
     <Grid Grid.Row="0" ColumnDefinitions="*,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
       <StackPanel x:Name="LedgerTitle" Grid.Column="0" Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">

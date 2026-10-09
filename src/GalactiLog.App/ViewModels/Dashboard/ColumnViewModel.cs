@@ -91,9 +91,7 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// A <c>SharedSizeGroup</c> in Avalonia only ever grows: once the group has measured a column
     /// it keeps reserving that width after every cell in it goes invisible, so hiding a column left
     /// its gap behind in the header and in every row alike. A user maximum does not clamp a shared
-    /// minimum either, measured twice now
-    /// (<see cref="TargetDetail.TargetDetailViewModel.LedgerFiltersSizeGroup"/> carries the same
-    /// finding), so the group is what has to go: a hidden column becomes a plain <c>Auto</c> column
+    /// minimum either, measured twice now, so the group is what has to go: a hidden column becomes a plain <c>Auto</c> column
     /// whose only content is invisible, which measures nothing, and rejoins its group unchanged
     /// when it comes back. Derived from <see cref="IsShown"/>, so the cells' visibility and the
     /// column's width cannot disagree.
