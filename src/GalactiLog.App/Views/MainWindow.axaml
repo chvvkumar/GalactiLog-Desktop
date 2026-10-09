@@ -24,7 +24,7 @@
     <KeyBinding Gesture="Alt+Right" Command="{Binding ForwardCommand}" />
     <KeyBinding Gesture="BrowserForward" Command="{Binding ForwardCommand}" />
   </Window.KeyBindings>
-  <Grid RowDefinitions="*,Auto" ColumnDefinitions="Auto,*">
+  <Grid RowDefinitions="*,Auto,Auto" ColumnDefinitions="Auto,*">
     <!-- The rail collapses to a 48px strip on the chevron: the item labels hide and each
          destination shows its icon with its title as a tooltip. Width is bound rather than
          toggled by IsVisible so the content column reflows in step. -->
@@ -109,7 +109,13 @@
                     Content="{Binding CurrentPage}"
                     MaxWidth="{Binding ContentMaxWidth}"
                     HorizontalAlignment="Stretch" />
-    <Border Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+    <!-- The pending-edits save bar (pending-edits spine, Task 6), full width between the page and
+         the status bar so it is in view whichever page holds the edit. Its row collapses to
+         nothing while no edit is pending. -->
+    <views:SaveBarView Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="2"
+                       x:Name="SaveBar"
+                       DataContext="{Binding PendingEdits}" />
+    <Border Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="2"
             x:Name="StatusBar"
             Height="32"
             Background="{DynamicResource ColorBgElevated}">

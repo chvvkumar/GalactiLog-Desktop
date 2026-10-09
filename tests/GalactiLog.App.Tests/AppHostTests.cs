@@ -849,6 +849,38 @@ public sealed class AppHostTests
             StringComparison.Ordinal);
     }
 
+    // The pending-edits spine (Task 6). Each of the four settings tabs with staged edits must
+    // reach the registry, or the save bar never shows its edits; the shell must take the DI
+    // registry, or the bar binds a private empty one; and every manual scan must go through the
+    // one gate, or a scan reads disk while an edit is staged. All three seams are optional or
+    // per-factory, so dropping one compiles.
+    [Fact]
+    public void AppHost_BindsThePendingEditsSpine()
+    {
+        var appHost = File.ReadAllText(Path.Combine(
+            SourceScan.SrcRoot(), "GalactiLog.App", "AppHost.cs"));
+        var stripped = SourceScan.StripComments(appHost);
+
+        foreach (var tab in new[] { "LibraryTabViewModel", "FiltersTabViewModel", "DisplayTabViewModel" })
+        {
+            Assert.Contains($"RegisterPending(serviceProvider, new {tab}(", stripped, StringComparison.Ordinal);
+        }
+        Assert.Contains("return RegisterPending(serviceProvider, tab);", stripped, StringComparison.Ordinal);
+
+        Assert.Contains(
+            "pendingEdits: serviceProvider.GetRequiredService<PendingEditsRegistry>()",
+            RegistrationBlock(appHost, "new MainWindowViewModel("),
+            StringComparison.Ordinal);
+
+        // One manual trigger in the file, inside the gate's registration.
+        var manual = stripped.IndexOf("ScanTrigger.Manual", StringComparison.Ordinal);
+        Assert.True(manual >= 0);
+        Assert.Equal(manual, stripped.LastIndexOf("ScanTrigger.Manual", StringComparison.Ordinal));
+        Assert.Contains("ScanTrigger.Manual", RegistrationBlock(appHost, "new ManualScanGate("), StringComparison.Ordinal);
+        Assert.Equal(3, Regex.Matches(
+            stripped, @"GetRequiredService<ManualScanGate>\(\)\.RunAsync\(").Count);
+    }
+
     // Spec 12.4's Sky view: without openSurveyView the page's button stays disabled forever with
     // the suite green. A failure names the missing argument.
     [Fact]
