@@ -818,20 +818,25 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public void Rows_AbsentMetrics_RenderEmptyRatherThanZero()
+    public void Rows_AbsentMetrics_RenderTheMissingDash()
     {
         // Null means "not measured", never zero (Task 1 handoff). A frame with nothing but a path
-        // renders empty cells, and a null capture date renders an empty Time rather than an epoch.
+        // renders the missing dash (spec item 6, never a silent blank), and a null capture date
+        // renders the dash in Time rather than an epoch.
         var row = Harness.Create(frames: [Frame()], display: EveryGroup()).Table.Rows[0];
 
-        Assert.Equal("", row.TimeText);
-        Assert.Equal("", row.FilterText);
-        Assert.Equal("", row.ExposureText);
-        Assert.Equal("", row.MedianHfrText);
-        Assert.Equal("", row.DetectedStarsText);
-        Assert.Equal("", row.AduMinText);
-        Assert.Equal("", row.PierSideText);
-        Assert.Equal("", row.CameraGainText);
+        Assert.Equal(MetricText.Missing, row.TimeText);
+        Assert.Equal(MetricText.Missing, row.FilterText);
+        Assert.Equal(MetricText.Missing, row.ExposureText);
+        Assert.Equal(MetricText.Missing, row.MedianHfrText);
+        Assert.Equal(MetricText.Missing, row.DetectedStarsText);
+        Assert.Equal(MetricText.Missing, row.AduMinText);
+        Assert.Equal(MetricText.Missing, row.PierSideText);
+        Assert.Equal(MetricText.Missing, row.CameraGainText);
+
+        // A real zero is a measurement and shows as one.
+        var zero = Harness.Create(frames: [Frame(cameraGain: 0)], display: EveryGroup()).Table.Rows[0];
+        Assert.Equal("0", zero.CameraGainText);
     }
 
     [Fact]

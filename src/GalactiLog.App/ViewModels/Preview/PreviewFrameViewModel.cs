@@ -113,9 +113,13 @@ public sealed record PreviewFrameViewModel(
         return badges;
     }
 
+    // The frame table renders an absent value as the missing dash; a badge is simply not drawn.
+    private static bool IsAbsent(string value)
+        => string.IsNullOrWhiteSpace(value) || value == MetricText.Missing;
+
     private static void Add(List<PreviewBadge> badges, string columnKey, string value)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (IsAbsent(value))
         {
             return;
         }
@@ -133,7 +137,7 @@ public sealed record PreviewFrameViewModel(
     // two this reads.
     private static void AddGraded(List<PreviewBadge> badges, string columnKey, GradedCellViewModel cell)
     {
-        if (string.IsNullOrWhiteSpace(cell.Text))
+        if (IsAbsent(cell.Text))
         {
             return;
         }

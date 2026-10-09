@@ -174,7 +174,7 @@ public class FrameGradingViewModelTests
     {
         var row = Row(Frame(medianHfr: null, grading: Grading(sessionHfr: Grade(1.9d, 2.10d))));
 
-        Assert.Equal("", row.HfrCell.Text);
+        Assert.Equal(MetricText.Missing, row.HfrCell.Text);
         Assert.Null(row.HfrCell.Tooltip);
     }
 
