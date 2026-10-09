@@ -199,6 +199,12 @@ public sealed record FrameGrading(
 /// flags are built false, and <c>Get</c> fills it in the same <c>with</c> expression that sets
 /// them.
 /// </para>
+/// <para>
+/// <see cref="RaDeg"/> and <see cref="DecDeg"/> are the frame's own pointing in degrees, the
+/// <c>ra_deg</c> and <c>dec_deg</c> columns, which the night's Send to menu reads so a send
+/// carries the night's framing rather than the catalogue's centre. Trailing and optional, so no
+/// positional construction site moves.
+/// </para>
 /// </remarks>
 public sealed record FrameRow(
     Guid ImageId,
@@ -244,7 +250,9 @@ public sealed record FrameRow(
     bool IsGuidingRmsOutlier = false,
     FrameGrading? Grading = null,
     string? EccentricitySource = null,
-    double? ArcsecPerPixel = null);
+    double? ArcsecPerPixel = null,
+    double? RaDeg = null,
+    double? DecDeg = null);
 
 /// <summary>One night's slice of a detail's <see cref="SessionDetail.Frames"/> list (P25 R3).</summary>
 public sealed record NightSpan(DateOnly Night, int FirstFrameIndex, int FrameCount);

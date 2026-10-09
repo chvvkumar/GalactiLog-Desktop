@@ -94,7 +94,8 @@
             <!-- The frequent action stays a button; the three rare ones are in the overflow
                  flyout (P12 R10, panel-workflow.md). Polish wave 9 ruling 1: Export lives in the
                  Nights ledger's header row, because every one of its entries acts on checked
-                 nights. -->
+                 nights. On the same rule, the NINA and Stellarium sends live on the night heading
+                 (NightHeaderPart), because they carry the night's own pointing. -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
               <Button x:Name="RevealFolderButton" Content="Reveal folder" Command="{Binding RevealFolderCommand}" />
               <!-- Spec 12.4: absent, not disabled, with no RA, Dec or target id;
@@ -137,21 +138,6 @@
                               IsVisible="{Binding IsResolved}"
                               ToolTip.Tip="{Binding NoNightCheckedHint}"
                               ToolTip.ShowOnDisabled="True" />
-                    <!-- Spec 12.16, rulings B5 and B9. A Separator, as LogViewerView.axaml:225,
-                         never a Border.rule inside a menu, hidden with both submenus; each submenu
-                         is hidden while its own list is empty and its leaf items are built by
-                         Theme/Controls.axaml's IntegrationSendItemTheme. -->
-                    <Separator IsVisible="{Binding ShowIntegrationSeparator}" />
-                    <MenuItem x:Name="SendToNinaMenuItem"
-                              Header="Send to NINA"
-                              ItemsSource="{Binding NinaSendItems}"
-                              ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
-                              IsVisible="{Binding HasNinaSendItems}" />
-                    <MenuItem x:Name="SlewStellariumMenuItem"
-                              Header="Slew Stellarium"
-                              ItemsSource="{Binding StellariumSendItems}"
-                              ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
-                              IsVisible="{Binding HasStellariumSendItems}" />
                   </MenuFlyout>
                 </Button.Flyout>
               </Button>

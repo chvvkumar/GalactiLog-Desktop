@@ -29,6 +29,12 @@ public class DisplayTabViewModelTests
 
         public bool DisplaySaveThrows { get; set; }
 
+        /// <summary>Parks SaveDisplay until a test releases it, so a case can act while a groups
+        /// save is genuinely in flight.</summary>
+        public ManualResetEventSlim? DisplaySaveRelease { get; set; }
+
+        public ManualResetEventSlim DisplaySaveEntered { get; } = new(false);
+
         public GeneralSettings GetGeneral() => General;
 
         public GeneralSettings Mutate(Func<GeneralSettings, GeneralSettings> mutate)
@@ -48,6 +54,8 @@ public class DisplayTabViewModelTests
 
         public void SaveDisplay(DisplaySettings value)
         {
+            DisplaySaveEntered.Set();
+            DisplaySaveRelease?.Wait(TimeSpan.FromSeconds(30));
             if (DisplaySaveThrows)
             {
                 throw new InvalidOperationException("the display document is refused by this test");
@@ -435,6 +443,98 @@ public class DisplayTabViewModelTests
         Assert.True(harness.Tab.GroupsDirty);
 
         harness.Tab.RevertGroupsCommand.Execute(null);
+
+        Assert.False(harness.Tab.GroupsDirty);
+        Assert.True(harness.Tab.Groups.Single(group => group.Key == "quality").IsEnabled);
+    }
+
+    [Fact]
+    public async Task PendingEdits_FollowsGroupsDirty_AndRaisesPropertyChanged()
+    {
+        var harness = await CreateAsync();
+        IPendingEdits pending = harness.Tab;
+        var raised = new List<string?>();
+        pending.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        Assert.Equal("Display metric groups", pending.Label);
+        Assert.Equal("display", pending.NavigationKey);
+        Assert.False(pending.HasPendingEdits);
+        Assert.Null(pending.SaveRefusal);
+
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+
+        Assert.True(pending.HasPendingEdits);
+        Assert.Contains("HasPendingEdits", raised);
+    }
+
+    [Fact]
+    public async Task PendingEdits_SaveAsync_PersistsTheGroups()
+    {
+        var harness = await CreateAsync();
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+
+        await ((IPendingEdits)harness.Tab).SaveAsync();
+        await Settle(harness);
+
+        Assert.False(harness.Tab.GroupsDirty);
+        Assert.True(harness.Store.Display.Groups["weather"].Enabled);
+    }
+
+    [Fact]
+    public async Task PendingEdits_AnEditDuringAnInFlightSave_StaysDirty()
+    {
+        var harness = await CreateAsync();
+        using var release = new ManualResetEventSlim(false);
+        harness.Store.DisplaySaveRelease = release;
+
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+        var save = ((IPendingEdits)harness.Tab).SaveAsync();
+        Assert.True(harness.Store.DisplaySaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        // Not in the document being written, so the save landing must not clear it.
+        harness.Tab.Groups.Single(group => group.Key == "mount").IsEnabled = true;
+
+        release.Set();
+        await save;
+        await Settle(harness);
+
+        Assert.True(harness.Store.Display.Groups["weather"].Enabled);
+        Assert.False(harness.Store.Display.Groups["mount"].Enabled);
+        Assert.True(harness.Tab.GroupsDirty);
+        Assert.True(((IPendingEdits)harness.Tab).HasPendingEdits);
+    }
+
+    [Fact]
+    public async Task PendingEdits_DiscardDuringAnInFlightSave_LandsOnTheSavedDocument()
+    {
+        // Reverting to the pre-save document while the store already holds the saved one would
+        // let the next save silently undo this one. The discard waits for the save instead.
+        var harness = await CreateAsync();
+        using var release = new ManualResetEventSlim(false);
+        harness.Store.DisplaySaveRelease = release;
+
+        harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled = true;
+        var save = ((IPendingEdits)harness.Tab).SaveAsync();
+        Assert.True(harness.Store.DisplaySaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        ((IPendingEdits)harness.Tab).Discard();
+
+        release.Set();
+        await save;
+        await Settle(harness);
+
+        Assert.True(harness.Store.Display.Groups["weather"].Enabled);
+        Assert.True(harness.Tab.Groups.Single(group => group.Key == "weather").IsEnabled);
+        Assert.False(harness.Tab.GroupsDirty);
+    }
+
+    [Fact]
+    public async Task PendingEdits_Discard_RestoresTheStoredGroups()
+    {
+        var harness = await CreateAsync();
+        harness.Tab.Groups.Single(group => group.Key == "quality").IsEnabled = false;
+
+        ((IPendingEdits)harness.Tab).Discard();
 
         Assert.False(harness.Tab.GroupsDirty);
         Assert.True(harness.Tab.Groups.Single(group => group.Key == "quality").IsEnabled);

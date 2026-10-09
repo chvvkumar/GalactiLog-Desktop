@@ -202,8 +202,7 @@ public class LibraryTabViewTests
         Assert.Contains("Scan library", ButtonTexts(view));
         Assert.Contains("Stop", ButtonTexts(view));
         Assert.Contains("Add rule", ButtonTexts(view));
-        Assert.Contains("Save rules", ButtonTexts(view));
-        Assert.Contains("Revert", ButtonTexts(view));
+        Assert.DoesNotContain("Save rules", ButtonTexts(view));
     }
 
     // ---- Phase 14B Task 5 ---------------------------------------------------------------------

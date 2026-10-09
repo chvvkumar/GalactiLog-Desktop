@@ -3,6 +3,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
@@ -1086,5 +1087,119 @@ public class LibraryTabViewModelTests
         // two different sections, so consuming one must not answer the other.
         Assert.False(tab.ConsumeNameRulesInViewRequest());
         Assert.True(tab.ConsumeGuideLogSwitchInViewRequest());
+    }
+
+    // ---- pending-edits spine -------------------------------------------------------------------
+
+    [Fact]
+    public void PendingEdits_FollowsIsDirty_AndRaisesForIt()
+    {
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+        var raised = new List<string?>();
+        tab.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+
+        Assert.Equal("Library folders, paths and rules", tab.Label);
+        Assert.Equal("library", tab.NavigationKey);
+        Assert.False(tab.HasPendingEdits);
+        Assert.Null(tab.SaveRefusal);
+
+        harness.ViewModel.AddNameRuleCommand.Execute(null);
+
+        Assert.True(tab.HasPendingEdits);
+        Assert.Contains("HasPendingEdits", raised);
+        Assert.Contains("SaveRefusal", raised);
+    }
+
+    [Fact]
+    public void PendingEdits_SaveRefusal_IsTheTooltipTextWhileDirtyAndUnsavable()
+    {
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+
+        harness.ViewModel.AddIncludePath(@"E:\Somewhere\Else");
+
+        Assert.NotNull(tab.SaveRefusal);
+        Assert.Equal(harness.ViewModel.SaveRefusalReason, tab.SaveRefusal);
+    }
+
+    [Fact]
+    public async Task PendingEdits_SaveAsync_PersistsAndClearsTheDirtyFlag()
+    {
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        Assert.Null(tab.SaveRefusal);
+
+        await tab.SaveAsync();
+        harness.SettleWrites();
+
+        Assert.Contains(Factory.SecondRoot, harness.Stored.ScanRoots);
+        Assert.False(harness.ViewModel.IsDirty);
+        Assert.False(tab.HasPendingEdits);
+    }
+
+    [Fact]
+    public async Task PendingEdits_AnEditDuringAnInFlightSave_StaysDirty()
+    {
+        // The origin bug through the save bar: a folder added while the first save is writing is
+        // not in that save's document, so the save landing must not clear it.
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+        using var release = new ManualResetEventSlim(false);
+        harness.SaveRelease = release;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        var save = tab.SaveAsync();
+        Assert.True(harness.SaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        harness.ViewModel.AddScanRoot(@"E:\Third\Root");
+
+        release.Set();
+        await save;
+        harness.SettleWrites();
+
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.Stored.ScanRoots);
+        Assert.True(harness.ViewModel.IsDirty);
+        Assert.True(tab.HasPendingEdits);
+    }
+
+    [Fact]
+    public async Task PendingEdits_DiscardDuringAnInFlightSave_LandsOnTheSavedDocument()
+    {
+        // Reverting to the pre-save document while the store already holds the saved one would
+        // let the next save silently undo this one. The discard waits for the save instead.
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+        using var release = new ManualResetEventSlim(false);
+        harness.SaveRelease = release;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        var save = tab.SaveAsync();
+        Assert.True(harness.SaveEntered.Wait(TimeSpan.FromSeconds(30)));
+
+        tab.Discard();
+
+        release.Set();
+        await save;
+        harness.SettleWrites();
+
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.Stored.ScanRoots);
+        Assert.Equal([Factory.Root, Factory.SecondRoot], harness.ViewModel.ScanRoots.Select(row => row.Path));
+        Assert.False(tab.HasPendingEdits);
+    }
+
+    [Fact]
+    public void PendingEdits_Discard_RestoresTheStoredRoots()
+    {
+        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
+        IPendingEdits tab = harness.ViewModel;
+
+        harness.ViewModel.AddScanRoot(Factory.SecondRoot);
+        tab.Discard();
+
+        Assert.Equal([Factory.Root], harness.ViewModel.ScanRoots.Select(row => row.Path));
+        Assert.False(tab.HasPendingEdits);
     }
 }

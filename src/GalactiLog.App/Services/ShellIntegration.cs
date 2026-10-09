@@ -129,6 +129,33 @@ public sealed class ShellIntegration
         Launch(info);
     }
 
+    /// <summary>The export wizard's Run script: <c>powershell.exe</c> in its own console window,
+    /// kept open afterwards so the script's own report stays readable, with the script as the
+    /// one <c>-File</c> argument and its folder as the working directory. <c>-ExecutionPolicy
+    /// Bypass</c> makes the Unblock-File step of the pasted command unnecessary. Nothing is
+    /// launched unless the path is an existing file. What the script then writes is the user's
+    /// business, as with <see cref="OpenWithDefaultApplication"/>. Windows only.</summary>
+    public void RunPowerShellScript(string scriptPath)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPath) || !IsWindowsShellAvailable || !File.Exists(scriptPath))
+        {
+            return;
+        }
+
+        var info = new ProcessStartInfo
+        {
+            FileName = "powershell.exe",
+            UseShellExecute = false,
+            WorkingDirectory = Path.GetDirectoryName(scriptPath) ?? "",
+        };
+        foreach (var argument in new[] { "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-NoExit", "-File", scriptPath })
+        {
+            info.ArgumentList.Add(argument);
+        }
+
+        Launch(info);
+    }
+
     /// <summary>Spec 11.5: <c>Process.Start</c> with <c>UseShellExecute = true</c>, which is what
     /// hands the path to the registered application. Writes nothing itself; what the launched
     /// application then does is the user's business and outside this process.</summary>

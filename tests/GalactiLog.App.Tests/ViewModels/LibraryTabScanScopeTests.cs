@@ -123,23 +123,4 @@ public class LibraryTabScanScopeTests
         Assert.Empty(harness.ScanOptions);
         Assert.Equal(0, harness.ScanRuns);
     }
-
-    // Web parity, ScanFiltersPanel.tsx's applyNow: an unsaved rule is exactly what the user expects
-    // the scan to apply, and the scan reads the stored document, so the press is refused with the
-    // reason on the tab. A direct Execute ignores CanExecute (TRACKING section 6 item 13), so the
-    // guard is in the body.
-    [Fact]
-    public async Task RunScanCommand_RefusesWhileTheFilterBlockIsDirty()
-    {
-        using var harness = Factory.Create(general => general with { ScanRoots = [Factory.Root] }).Settle();
-
-        harness.ViewModel.AddNameRuleCommand.Execute(null);
-        Assert.True(harness.ViewModel.IsDirty);
-
-        await harness.ViewModel.RunScanCommand.ExecuteAsync(null);
-
-        Assert.Empty(harness.ScanOptions);
-        Assert.Equal(0, harness.ScanRuns);
-        Assert.Equal(GalactiLog.App.ViewModels.Settings.LibraryTabViewModel.UnsavedFiltersRefusal, harness.ViewModel.ErrorMessage);
-    }
 }

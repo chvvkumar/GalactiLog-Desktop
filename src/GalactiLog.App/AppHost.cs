@@ -890,14 +890,25 @@ public static class AppHost
 
             return scanStatus;
         });
+        // The pending-edits spine (Task 6). One registry for the whole application: the settings
+        // tabs with staged edits register with it as they are built (RegisterPending below), the
+        // shell's save bar binds it, and the manual scan gate reads it.
+        builder.Services.AddSingleton(serviceProvider => new PendingEditsRegistry(
+            serviceProvider.GetRequiredService<ILogger<PendingEditsRegistry>>()));
+        // The one manual-scan delegate. The status bar, the dashboard's empty state and the Library
+        // tab all call this gate, so all three refuse while an edit is staged (a scan reads disk
+        // and would ignore it) and none of them can disagree about what a manual scan is.
+        builder.Services.AddSingleton(serviceProvider => new ManualScanGate(
+            serviceProvider.GetRequiredService<PendingEditsRegistry>(),
+            (options, token) => serviceProvider
+                .GetRequiredService<ScanCoordinator>()
+                .RunAsync(ScanTrigger.Manual, null, token, options)));
         builder.Services.AddSingleton(serviceProvider => new StatusBarViewModel(
             serviceProvider.GetRequiredService<ScanStatusService>(),
             serviceProvider.GetRequiredService<ScanCoordinator>().Cancel,
             // Phase 7 FIXER item 19: the same manual-scan lambda the dashboard's empty-state
             // button uses, so a library with frames in it still has a rescan affordance.
-            token => serviceProvider
-                .GetRequiredService<ScanCoordinator>()
-                .RunAsync(ScanTrigger.Manual, null, token),
+            token => serviceProvider.GetRequiredService<ManualScanGate>().RunAsync(null, token),
             serviceProvider.GetRequiredService<ILogger<StatusBarViewModel>>(),
             // Spec 12's update indicator (Phase 10 Task 4), a trailing optional parameter so no
             // other construction site of this view-model changed. Named, not positional, because
@@ -1065,9 +1076,7 @@ public static class AppHost
                 var roots = settingsStore.GetGeneral().ScanRoots;
                 return [.. roots.Where(root => !UserFiles.DirectoryExists(root))];
             },
-            startScan: token => serviceProvider
-                .GetRequiredService<ScanCoordinator>()
-                .RunAsync(ScanTrigger.Manual, null, token),
+            startScan: token => serviceProvider.GetRequiredService<ManualScanGate>().RunAsync(null, token),
             // Phase 6 Task 5: the process-wide display.columns chain, shared with every frame
             // table, so a dashboard column click and a frame-table column click cannot interleave
             // into a lost update of the one display document. Given the writer, the two delegates
@@ -1666,7 +1675,7 @@ public static class AppHost
                     logger: serviceProvider.GetRequiredService<ILogger<WbppExportViewModel>>()));
 
         // The export wizard over the page factory above: the job
-        // registry for the status bar, one activity row per copy, Copy path and Open folder.
+        // registry for the status bar, one activity row per copy, Copy path, Open folder and Run script.
         builder.Services.AddSingleton(serviceProvider => new WbppExportDialogService(
             (groupKey, targetName, nights) => new WbppExportWizardViewModel(
                 serviceProvider
@@ -1677,6 +1686,7 @@ public static class AppHost
                 message => serviceProvider.GetRequiredService<ActivityRepository>()
                     .EmitStandalone("user_action", "info", "stacking_copy", message),
                 serviceProvider.GetRequiredService<ShellIntegration>().OpenFolderInExplorer,
+                serviceProvider.GetRequiredService<ShellIntegration>().RunPowerShellScript,
                 logger: serviceProvider.GetRequiredService<ILogger<WbppExportWizardViewModel>>()),
             serviceProvider.GetRequiredService<ModalHost>()));
 
@@ -1874,7 +1884,7 @@ public static class AppHost
         // which is the one settings write path and the one place ScanFilterConfig.Validate runs
         // (design-lessons rule 2); runScan is the same manual-scan lambda StatusBarViewModel
         // takes, so the two buttons cannot disagree about what a manual scan is.
-        builder.Services.AddSingleton(serviceProvider => new LibraryTabViewModel(
+        builder.Services.AddSingleton(serviceProvider => RegisterPending(serviceProvider, new LibraryTabViewModel(
             settingsStore.GetGeneral,
             // MutateGeneral, not GetGeneral plus SaveGeneral: the read, the mutation, the
             // validation and the write happen under the store's own gate in one critical section,
@@ -1884,9 +1894,13 @@ public static class AppHost
             settingsStore.MutateGeneral,
             // Spec 10.3's per-run arguments (PAR-013): this tab is the one surface that can set
             // them, so its delegate carries a ScanRunOptions the status bar's does not have.
-            (options, token) => serviceProvider
-                .GetRequiredService<ScanCoordinator>()
-                .RunAsync(ScanTrigger.Manual, null, token, options),
+            // Through the same gate as the other two buttons. The tab's seam wants an outcome and
+            // the gate returns none; the tab discards the outcome, so the placeholder is never read.
+            async (options, token) =>
+            {
+                await serviceProvider.GetRequiredService<ManualScanGate>().RunAsync(options, token);
+                return ScanRunOutcome.AlreadyRunning;
+            },
             // Resolved inside the lambda, like runScan above: capturing the coordinator here would
             // build it while this factory runs, which is exactly what the lazy tab defers.
             () => serviceProvider.GetRequiredService<ScanCoordinator>().Cancel(),
@@ -1908,7 +1922,7 @@ public static class AppHost
             unsubscribeGeneralChanged: handler => settingsStore.GeneralChanged -= handler,
             // Spec 12.1's last sentence: "The wizard is also reachable from Settings as 'Run setup
             // again'." The same SetupWizardService the first-run branch in App.axaml.cs uses.
-            runSetupAgain: () => serviceProvider.GetRequiredService<SetupWizardService>().ShowAsync()));
+            runSetupAgain: () => serviceProvider.GetRequiredService<SetupWizardService>().ShowAsync())));
 
         // Spec 12.7's Filters and Equipment tabs (Phase 9 Task 7). Delegates over
         // SettingsStore's filter and equipment write paths, never the store itself
@@ -1916,7 +1930,7 @@ public static class AppHost
         // AliasSourcesChanged, so AliasMapCache really drops its memo on Save; nothing here pokes
         // the cache directly (design-lessons rule 2). Both tabs share
         // SettingsStore.GetDismissedSuggestions/SaveDismissedSuggestions, per spec 5.8.
-        builder.Services.AddSingleton(serviceProvider => new FiltersTabViewModel(
+        builder.Services.AddSingleton(serviceProvider => RegisterPending(serviceProvider, new FiltersTabViewModel(
             settingsStore.GetFilters,
             settingsStore.SaveFilters,
             settingsStore.GetDismissedSuggestions,
@@ -1925,7 +1939,7 @@ public static class AppHost
                 .Read(DiscoveredNameColumn.Filters)
                 .Select(row => (row.Name, row.FrameCount))
                 .ToList(),
-            logger: serviceProvider.GetRequiredService<ILogger<FiltersTabViewModel>>()));
+            logger: serviceProvider.GetRequiredService<ILogger<FiltersTabViewModel>>())));
         builder.Services.AddSingleton(serviceProvider =>
         {
             // Spec 12.7's PHD2 profiles panel (Phase 15A Task 6), a child of this tab rather than
@@ -2006,7 +2020,7 @@ public static class AppHost
                 handler => settingsStore.GeneralChanged += handler,
                 handler => settingsStore.GeneralChanged -= handler);
 
-            return tab;
+            return RegisterPending(serviceProvider, tab);
         });
 
         // Spec 12.7's rebuild-targets maintenance action (Phase 9 Task 8). The resolve delegate
@@ -2208,7 +2222,7 @@ public static class AppHost
             // down, and a resolve there throws ObjectDisposedException. The same reason every other
             // subscribe pair on this tab closes over settingsStore rather than the provider.
             var customColumns = serviceProvider.GetRequiredService<CustomColumnRepository>();
-            return new DisplayTabViewModel(
+            return RegisterPending(serviceProvider, new DisplayTabViewModel(
             settingsStore.GetGeneral,
             settingsStore.MutateGeneral,
             settingsStore.GetDisplay,
@@ -2251,7 +2265,7 @@ public static class AppHost
             // from here: resolving this tab inside an AppHost handler would build it and read four
             // documents for a reader who never opened it.
             subscribeCustomColumnsChanged: handler => customColumns.Changed += handler,
-            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler);
+            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler));
         });
 
         builder.Services.AddSingleton(serviceProvider => new StorageTabViewModel(
@@ -2739,7 +2753,9 @@ public static class AppHost
             // Spec 12.17's Mosaics page, second on the rail (ruling R3), lazy like the others.
             serviceProvider.GetRequiredService<MosaicsPageViewModel>,
             // Spec 12.17's mosaic detail page, the overlay's second kind of page.
-            serviceProvider.GetRequiredService<Func<Guid, MosaicDetailViewModel>>());
+            serviceProvider.GetRequiredService<Func<Guid, MosaicDetailViewModel>>(),
+            // The pending-edits save bar binds this, the same registry the tabs register with.
+            pendingEdits: serviceProvider.GetRequiredService<PendingEditsRegistry>());
 
             // Phase 9 FIXER item 2 and spec 5.8.1's content_width. The Settings Display tab writes
             // both keys while this shell is alive, so the window's root font size and the content
@@ -2871,6 +2887,15 @@ public static class AppHost
     /// never opens the Statistics page from building a <c>StatsCache</c> at all.
     /// </para>
     /// </remarks>
+    // A settings tab with staged edits joins the save bar's registry the moment it is built. The
+    // tabs are lazy singletons, so an unvisited tab is never registered, which is correct: it
+    // cannot hold an edit.
+    private static T RegisterPending<T>(IServiceProvider serviceProvider, T tab) where T : IPendingEdits
+    {
+        serviceProvider.GetRequiredService<PendingEditsRegistry>().Register(tab);
+        return tab;
+    }
+
     private static void InvalidateDerivedCaches(IServiceProvider serviceProvider)
     {
         serviceProvider.GetRequiredService<StatsCache>().Invalidate();

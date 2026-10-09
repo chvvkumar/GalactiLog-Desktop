@@ -141,7 +141,7 @@ public class ExportFlyoutViewTests
     }
 
     [AvaloniaFact]
-    public void TheOverflowFlyout_HoldsItsFourStandingItems_ThenTheSeparatorAndTwoSubmenus()
+    public void TheOverflowFlyout_HoldsItsFourStandingItems_AndNoSendSubmenus()
     {
         using var harness = Factory.Create().Settle();
         var view = new TargetDetailView { DataContext = harness.ViewModel };
@@ -153,8 +153,10 @@ public class ExportFlyoutViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(
-            ["RenameButton", "MergeButton", "ReResolveButton", "CreateMosaicMenuItem", "SendToNinaMenuItem", "SlewStellariumMenuItem"],
+            ["RenameButton", "MergeButton", "ReResolveButton", "CreateMosaicMenuItem"],
             flyout.Items.OfType<MenuItem>().Select(item => item.Name));
+        // The two sends moved to the night heading, where the night's own pointing is what they carry.
+        Assert.Empty(flyout.Items.OfType<Separator>());
     }
 
     [AvaloniaFact]

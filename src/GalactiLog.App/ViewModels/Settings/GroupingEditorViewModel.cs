@@ -28,7 +28,8 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// <para>
 /// This type holds no notion of "dirty" or "saved": the owning tab view-model decides when to
 /// persist. It only ever mutates its own <see cref="Groups"/> and <see cref="Ungrouped"/>
-/// collections in memory.
+/// collections in memory, and says so through <see cref="Edited"/>, which is what an owning tab
+/// marks itself dirty from.
 /// </para>
 /// </remarks>
 public sealed partial class GroupingEditorViewModel : ObservableObject
@@ -75,6 +76,17 @@ public sealed partial class GroupingEditorViewModel : ObservableObject
     /// so the owning tab can show why the rename was refused.</summary>
     public event EventHandler<string>? RenameRefused;
 
+    /// <summary>
+    /// Raised after any user edit of the groups: a group added or removed (including one deleted
+    /// by losing its last alias), a rename, a colour change, an alias added or removed. One signal
+    /// at the editor rather than a handler per path in each owning tab (design-lessons rule 1:
+    /// three editors, two tabs), so a path added later reports itself by going through
+    /// <see cref="AddGroup"/>, <see cref="RemoveGroup"/> or a wired group. A load
+    /// (<see cref="SetGroups"/>, <see cref="SetDiscovered"/>) never raises it, or every tab would
+    /// open already dirty. May be raised more than once for one edit.
+    /// </summary>
+    public event EventHandler? Edited;
+
     /// <summary>Replaces the discovered-name set for this section (a fresh load or a reload) and
     /// recomputes <see cref="Ungrouped"/> against the current <see cref="Groups"/>.</summary>
     public void SetDiscovered(IReadOnlyList<(string Name, int Count)> discovered)
@@ -111,6 +123,7 @@ public sealed partial class GroupingEditorViewModel : ObservableObject
         Groups.Add(group);
         RefreshUngrouped();
         NotifyCounts();
+        RaiseEdited();
     }
 
     /// <summary>Removes one group outright, with no alias-preservation, for the web's accept-time
@@ -129,12 +142,16 @@ public sealed partial class GroupingEditorViewModel : ObservableObject
         Groups.Remove(group);
         RefreshUngrouped();
         NotifyCounts();
+        RaiseEdited();
     }
+
+    private void RaiseEdited() => Edited?.Invoke(this, EventArgs.Empty);
 
     private void Attach(AliasGroupViewModel group)
     {
         group.AliasesEmptied += OnAliasesEmptied;
         group.RenameRequested += OnRenameRequested;
+        group.PropertyChanged += OnGroupPropertyChanged;
         group.Aliases.CollectionChanged += OnGroupAliasesChanged;
     }
 
@@ -142,11 +159,30 @@ public sealed partial class GroupingEditorViewModel : ObservableObject
     {
         group.AliasesEmptied -= OnAliasesEmptied;
         group.RenameRequested -= OnRenameRequested;
+        group.PropertyChanged -= OnGroupPropertyChanged;
         group.Aliases.CollectionChanged -= OnGroupAliasesChanged;
     }
 
+    // Every alias edit lands here whoever made it (RemoveAlias, AddToGroup, a tab's accepted
+    // suggestion), so this one handler is the alias half of Edited. A group's aliases are only
+    // ever seeded through its constructor, which raises nothing, so a load cannot reach it.
     private void OnGroupAliasesChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-        => RefreshUngrouped();
+    {
+        RefreshUngrouped();
+        RaiseEdited();
+    }
+
+    // The two stored fields of a group. Canonical changes only through OnRenameRequested and
+    // Color only through the picker (TrySetColor); both are user edits. Listening to the property
+    // rather than to those two call sites is what catches a colour set by a binding or by a
+    // caller added later.
+    private void OnGroupPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(AliasGroupViewModel.Canonical) or nameof(AliasGroupViewModel.Color))
+        {
+            RaiseEdited();
+        }
+    }
 
     private void OnAliasesEmptied(object? sender, EventArgs e)
     {
@@ -159,6 +195,7 @@ public sealed partial class GroupingEditorViewModel : ObservableObject
         Groups.Remove(group);
         RefreshUngrouped();
         NotifyCounts();
+        RaiseEdited();
     }
 
     private void OnRenameRequested(object? sender, string newName)

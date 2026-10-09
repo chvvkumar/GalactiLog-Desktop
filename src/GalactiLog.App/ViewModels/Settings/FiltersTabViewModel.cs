@@ -22,7 +22,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// constructs in a unit test with lambdas and no database, the rule every Settings tab in this
 /// phase follows.
 /// </remarks>
-public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
+public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable, IPendingEdits
 {
     private readonly Func<Dictionary<string, FilterSetting>> _loadFilters;
     private readonly Action<Dictionary<string, FilterSetting>> _saveFilters;
@@ -35,6 +35,14 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private int _generation;
     private bool _disposed;
+
+    // Bumped by every edit. A save records the value it snapshotted at and clears IsDirty only if
+    // nothing was edited while it ran: an edit made during an in-flight save is not in that save's
+    // document, so it has to stay pending.
+    private int _editVersion;
+
+    // A Discard that arrived while a save was writing. Its reload runs when the save completes.
+    private bool _reloadAfterSave;
 
     private List<List<string>> _dismissed = [];
     private IReadOnlyList<(string Name, int Count)> _lastDiscovered = [];
@@ -72,6 +80,10 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
         Editor = new GroupingEditorViewModel(showColorPicker: true);
         Editor.RenameRefused += (_, name) => ErrorMessage = $"'{name}' is already a canonical filter name.";
+        // The editor's one change signal covers every group, alias, rename and colour edit,
+        // including the ones AddFilter and AcceptSuggestion make through it. A dismissal touches
+        // only _dismissed and marks itself.
+        Editor.Edited += (_, _) => MarkEdited();
 
         NewFilterName = "";
 
@@ -106,7 +118,70 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool IsSaving { get; private set; }
+
+    /// <summary>An edit exists that the stored filter document and dismissed list do not hold
+    /// yet. Set by every user edit, cleared by a load and by a save that finished with no edit
+    /// made while it ran.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
+    public partial bool IsDirty { get; private set; }
+
+    /// <inheritdoc />
+    public bool HasPendingEdits => IsDirty;
+
+    /// <inheritdoc />
+    public string Label => "Filter names and colours";
+
+    /// <inheritdoc />
+    public string NavigationKey => "filters";
+
+    /// <inheritdoc />
+    public string? SaveRefusal => IsDirty && IsSaving ? "Filters are still saving." : null;
+
+    Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
+
+    /// <summary>
+    /// Re-reads the stored document through the same load the constructor runs, which replaces
+    /// every group and the dismissed list and clears <see cref="IsDirty"/> when it lands.
+    /// </summary>
+    /// <remarks>
+    /// <see cref="IsDirty"/> is deliberately not cleared here: a reload that fails leaves the
+    /// editor holding the edits, and they must stay pending rather than sit on screen with no save
+    /// bar. During an in-flight save the reload waits for that save to finish (see
+    /// <see cref="_reloadAfterSave"/>): read any earlier and it can see the pre-save document,
+    /// which a later save would then write back over the one just saved.
+    /// </remarks>
+    void IPendingEdits.Discard()
+    {
+        if (IsSaving)
+        {
+            _reloadAfterSave = true;
+            return;
+        }
+
+        Load();
+    }
+
+    // Runs a Discard that arrived during a save, on the UI thread, once that save has finished
+    // either way. Called from both of SaveAsync's completion callbacks after IsSaving clears.
+    private void ReloadIfDiscardWaited()
+    {
+        if (_reloadAfterSave)
+        {
+            _reloadAfterSave = false;
+            Load();
+        }
+    }
+
+    private void MarkEdited()
+    {
+        _editVersion++;
+        IsDirty = true;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasErrorMessage))]
@@ -228,6 +303,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
         // suggestion.Names is already sorted (SuggestionGrouper.Group's own contract).
         _dismissed.Add([.. suggestion.Names]);
+        MarkEdited();
         Suggestions.Remove(suggestion);
         OnPropertyChanged(nameof(HasSuggestions));
         OnPropertyChanged(nameof(SuggestionsHeading));
@@ -265,6 +341,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
             },
             StringComparer.Ordinal);
         var dismissed = _dismissed.Select(group => new List<string>(group)).ToList();
+        var savedVersion = _editVersion;
 
         var task = Task.Run(() =>
         {
@@ -279,10 +356,16 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
                         return;
                     }
 
+                    if (_editVersion == savedVersion)
+                    {
+                        IsDirty = false;
+                    }
+
                     IsSaving = false;
                     ErrorMessage = null;
                     StatusMessage = "Filter settings saved";
                     RefreshSuggestions();
+                    ReloadIfDiscardWaited();
                 });
             }
             catch (Exception ex)
@@ -297,6 +380,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
                     IsSaving = false;
                     ErrorMessage = "The filter settings could not be saved. See the log for details.";
+                    ReloadIfDiscardWaited();
                 });
             }
         });
@@ -304,7 +388,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
         await task.ConfigureAwait(false);
     }
 
-    private bool CanSave() => !IsSaving;
+    private bool CanSave() => IsDirty && !IsSaving;
 
     private void Load()
     {
@@ -365,6 +449,9 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
             Editor.SetDiscovered(FoldDiscovered(discovered, filters));
             Editor.SetGroups(filters.Select(entry => new AliasGroupViewModel(entry.Key, entry.Value.Color, entry.Value.Aliases)));
             RefreshSuggestions();
+            // The editor now holds exactly the stored document. Only on a successful read: a
+            // failed one left the editor as it was, edits included, so they stay pending.
+            IsDirty = false;
         }
 
         LoadFailed = filters is null;

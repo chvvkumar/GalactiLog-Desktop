@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:GalactiLog.App.ViewModels"
+             x:Class="GalactiLog.App.Views.SaveBarView"
+             x:DataType="vm:PendingEditsRegistry">
+  <!-- The app-wide unsaved-edits bar, above the status bar. It replaces the per-tab Save buttons:
+       one of those sat four sections below a staged library folder, was never found, and every
+       scan ignored the folder. Shown only while something is pending, so the notice the manual
+       scan gate sets is always visible when the gate refuses. The warn callout is the theme's
+       own composite, so the bar carries no colour of its own. -->
+  <ContentControl x:Name="SaveBarCallout"
+                  Classes="callout warn"
+                  Margin="8,4"
+                  IsVisible="{Binding AnyPending}">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Grid.Column="0" Spacing="2" VerticalAlignment="Center">
+        <TextBlock Text="{Binding Summary}" FontWeight="SemiBold" TextWrapping="Wrap" />
+        <TextBlock Text="{Binding Notice}"
+                   IsVisible="{Binding Notice, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   TextWrapping="Wrap" />
+        <TextBlock Text="{Binding SaveRefusal}"
+                   IsVisible="{Binding SaveRefusal, Converter={x:Static ObjectConverters.IsNotNull}}"
+                   TextWrapping="Wrap" />
+      </StackPanel>
+      <StackPanel Grid.Column="1"
+                  Orientation="Horizontal"
+                  Spacing="8"
+                  Margin="12,0,0,0"
+                  VerticalAlignment="Center">
+        <Button x:Name="SaveAllButton"
+                Classes="primary"
+                Content="Save changes"
+                Command="{Binding SaveAllCommand}" />
+        <Button x:Name="DiscardAllButton"
+                Content="Discard"
+                Command="{Binding DiscardAllCommand}" />
+      </StackPanel>
+    </Grid>
+  </ContentControl>
+</UserControl>

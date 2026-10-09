@@ -89,8 +89,10 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         Func<DiagnosticsViewModel>? diagnostics = null,
         Func<string, DateOnly?, TargetDetailViewModel>? openDetail = null,
         Func<MosaicsPageViewModel>? mosaics = null,
-        Func<Guid, MosaicDetailViewModel>? openMosaic = null)
+        Func<Guid, MosaicDetailViewModel>? openMosaic = null,
+        PendingEditsRegistry? pendingEdits = null)
     {
+        PendingEdits = pendingEdits ?? new PendingEditsRegistry();
         _mosaicsFactory = mosaics;
         _openMosaic = openMosaic;
         StatusBar = statusBar;
@@ -310,6 +312,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     /// <summary>The persistent status bar (design-spec 12): scan state, progress, and cancel.
     /// Phase 5 Task 5's marshalling subscriber lives underneath it.</summary>
     public StatusBarViewModel StatusBar { get; }
+
+    /// <summary>The app-wide unsaved-edits registry the save bar binds. AppHost passes the DI
+    /// singleton the settings tabs register with; the default is an empty one so the existing
+    /// construction sites and tests compile unchanged.</summary>
+    public PendingEditsRegistry PendingEdits { get; }
 
     private NavigationItem _selected;
 
