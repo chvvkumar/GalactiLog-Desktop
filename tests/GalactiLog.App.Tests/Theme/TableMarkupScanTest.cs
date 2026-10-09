@@ -39,7 +39,6 @@ public class TableMarkupScanTest
         "Views/TargetDetail/Parts/CompareTablePart.axaml",
         "Views/Dashboard/TargetListView.axaml",
         "Views/Mosaics/MosaicsView.axaml",
-        "Views/Settings/CustomColumnsTabView.axaml",
         "Views/TargetDetail/FrameTableView.axaml",
     ];
 
