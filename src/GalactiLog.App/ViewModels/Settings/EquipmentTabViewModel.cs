@@ -16,7 +16,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// suggestions banner and one Save (design-lessons rule 1 at the third
 /// <see cref="GroupingEditorViewModel"/> occurrence).
 /// </summary>
-public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposable
+public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposable, IPendingEdits
 {
     private const string TelescopesSection = "telescopes";
     private const string CamerasSection = "cameras";
@@ -34,6 +34,11 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
     private readonly CancellationTokenSource _lifetime = new();
     private int _generation;
     private bool _disposed;
+
+    // Bumped by every edit. A save records the value it snapshotted at and clears IsDirty only if
+    // nothing was edited while it ran: an edit made during an in-flight save is not in that save's
+    // document, so it has to stay pending.
+    private int _editVersion;
 
     private List<List<string>> _dismissed = [];
 
@@ -121,6 +126,12 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
         TelescopesEditor = new GroupingEditorViewModel(showColorPicker: false);
         CamerasEditor.RenameRefused += (_, name) => ErrorMessage = $"'{name}' is already a canonical camera name.";
         TelescopesEditor.RenameRefused += (_, name) => ErrorMessage = $"'{name}' is already a canonical telescope name.";
+        // Each editor's one change signal covers every group, alias and rename edit in its
+        // section, including the ones AcceptSuggestion makes through it. A dismissal touches only
+        // _dismissed and marks itself. The PHD2 profiles panel is not an edit here: it commits each
+        // row through MutateGeneral as it changes, so it never has anything staged.
+        CamerasEditor.Edited += (_, _) => MarkEdited();
+        TelescopesEditor.Edited += (_, _) => MarkEdited();
 
         Load();
     }
@@ -187,7 +198,71 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool IsSaving { get; private set; }
+
+    /// <summary>An edit exists that the stored equipment document and dismissed list do not hold
+    /// yet. Set by every user edit in either section and by a dismissal, cleared by a load and by
+    /// a save that reached the end with no edit made while it ran.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
+    public partial bool IsDirty { get; private set; }
+
+    /// <inheritdoc />
+    public bool HasPendingEdits => IsDirty;
+
+    /// <inheritdoc />
+    public string Label => "Equipment names";
+
+    /// <inheritdoc />
+    public string NavigationKey => "equipment";
+
+    /// <inheritdoc />
+    public string? SaveRefusal => IsDirty && IsSaving ? "Equipment is still saving." : null;
+
+    Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
+
+    /// <summary>Re-reads the stored documents through the same load the constructor runs, which
+    /// replaces both sections' groups, the dismissed list and the loaded names, and clears
+    /// <see cref="IsDirty"/> when it lands.</summary>
+    /// <remarks>
+    /// <see cref="IsDirty"/> is deliberately not cleared here. Publish clears it only on a read
+    /// that succeeded; a failed read leaves the edits on screen, and they must keep the save bar
+    /// up rather than sit there unmarked. While a save is in flight the reload waits for it: a
+    /// pool-thread read started now can reach the store before the save writes, which would leave
+    /// the editors on the pre-save document and let the next save silently revert this one.
+    /// </remarks>
+    void IPendingEdits.Discard()
+    {
+        if (IsSaving)
+        {
+            _discardAfterSave = true;
+            return;
+        }
+
+        Load();
+    }
+
+    // Set by a Discard that arrived while a save was in flight, consumed by that save's own UI
+    // thread callback, which runs the reload once the save has written (or failed).
+    private bool _discardAfterSave;
+
+    private void RunDeferredDiscard()
+    {
+        if (_discardAfterSave)
+        {
+            _discardAfterSave = false;
+            Load();
+        }
+    }
+
+    private void MarkEdited()
+    {
+        _editVersion++;
+        IsDirty = true;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasErrorMessage))]
@@ -352,6 +427,7 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
         }
 
         _dismissed.Add([.. suggestion.Names]);
+        MarkEdited();
         Suggestions.Remove(suggestion);
         OnPropertyChanged(nameof(HasSuggestions));
         OnPropertyChanged(nameof(SuggestionsHeading));
@@ -381,6 +457,7 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
                 StringComparer.Ordinal),
         };
         var dismissed = _dismissed.Select(group => new List<string>(group)).ToList();
+        var savedVersion = _editVersion;
 
         // Built here, on the UI thread, with the rest of the document: the groups are a bound
         // collection and are read where every other read of them happens (TRACKING section 6
@@ -484,6 +561,15 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
                         return;
                     }
 
+                    // Only here, after the profile-map and rig-label rewrites: a save that throws
+                    // in either of them has landed the equipment document but not the loaded
+                    // names, so the next save repeats the rewrite, and the edit has to stay
+                    // pending for that save to be offered.
+                    if (_editVersion == savedVersion)
+                    {
+                        IsDirty = false;
+                    }
+
                     IsSaving = false;
                     ErrorMessage = null;
                     StatusMessage = "Equipment settings saved";
@@ -494,6 +580,7 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
                     Remember(CamerasEditor, _loadedCameraNames, _loadedCameraAliases);
 
                     RefreshSuggestions();
+                    RunDeferredDiscard();
                 });
             }
             catch (Exception ex)
@@ -508,6 +595,7 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
 
                     IsSaving = false;
                     ErrorMessage = "The equipment settings could not be saved. See the log for details.";
+                    RunDeferredDiscard();
                 });
             }
         });
@@ -623,7 +711,7 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
         }
     }
 
-    private bool CanSave() => !IsSaving;
+    private bool CanSave() => IsDirty && !IsSaving;
 
     private void Load()
     {
@@ -695,6 +783,9 @@ public sealed partial class EquipmentTabViewModel : ObservableObject, IDisposabl
             Remember(CamerasEditor, _loadedCameraNames, _loadedCameraAliases);
 
             RefreshSuggestions();
+            // Both editors now hold exactly the stored document. Only on a successful read: a
+            // failed one left the editors as they were, edits included, so they stay pending.
+            IsDirty = false;
         }
 
         LoadFailed = equipment is null;

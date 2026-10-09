@@ -40,6 +40,21 @@ public class EquipmentRigLabelRewriteTests : IDisposable
 
     public void Dispose() => _db.Dispose();
 
+    // The tab only saves with an edit staged (the pending-edits spine), so a case that wants a save
+    // which changes nothing renames a telescope away and back: the tab is dirty, and the document
+    // it writes is the one it loaded.
+    private static void StageAnEditThatChangesNothing(EquipmentTabViewModel tab)
+    {
+        var group = tab.TelescopesEditor.Groups[0];
+        var name = group.Canonical;
+        group.RenameText = name + " (renamed)";
+        group.CommitRenameCommand.Execute(null);
+        group.RenameText = name;
+        group.CommitRenameCommand.Execute(null);
+        Assert.Equal(name, group.Canonical);
+        Assert.True(tab.IsDirty);
+    }
+
     // Case 29, the telescope half. Red against a save that rewrites the profile map alone, which is
     // exactly what ships today: the stored label keeps the old canonical name, so the value renders
     // under a rig row the session pane no longer draws.
@@ -117,6 +132,7 @@ public class EquipmentRigLabelRewriteTests : IDisposable
         };
 
         using var tab = Create();
+        StageAnEditThatChangesNothing(tab);
         tab.SaveCommand.Execute(null);
         await (tab.PendingSave ?? Task.CompletedTask);
 
@@ -286,6 +302,7 @@ public class EquipmentRigLabelRewriteTests : IDisposable
         };
 
         using var tab = Create();
+        StageAnEditThatChangesNothing(tab);
         tab.SaveCommand.Execute(null);
         await (tab.PendingSave ?? Task.CompletedTask);
 

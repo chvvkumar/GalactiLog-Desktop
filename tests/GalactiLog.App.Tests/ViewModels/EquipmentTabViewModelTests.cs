@@ -1,4 +1,5 @@
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data;
@@ -709,5 +710,367 @@ public class EquipmentTabViewModelTests : IDisposable
         vm.Dispose();
 
         Assert.Equal(0, relay.Handlers);
+    }
+
+    // ---- pending-edits spine: dirty tracking ---------------------------------------------------
+    // Before this the Save button was always enabled and nothing knew an edit was staged, so the
+    // app-wide save bar had nothing to read. An edit in either editor, or a dismissal, marks the
+    // tab dirty; a load does not; a save that reached the end clears it.
+
+    private static IPendingEdits Pending(EquipmentTabViewModel vm) => vm;
+
+    [Fact]
+    public void PendingEdits_LabelAndNavigationKey()
+    {
+        using var vm = Create();
+
+        Assert.Equal("Equipment names", Pending(vm).Label);
+        Assert.Equal("equipment", Pending(vm).NavigationKey);
+    }
+
+    [Fact]
+    public void Load_IsNotDirty_AndSaveIsDisabled()
+    {
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Cameras = new Dictionary<string, EquipmentItemSettings>
+            {
+                ["ASI2600MM"] = new EquipmentItemSettings { Aliases = ["ZWO ASI2600MM"] },
+            },
+            Telescopes = new Dictionary<string, EquipmentItemSettings>
+            {
+                ["RC8"] = new EquipmentItemSettings { Aliases = ["rc8"] },
+            },
+        });
+        _discoveredCameras = [("ASI294MC", 6), ("asi294mc", 2)];
+
+        using var vm = Create();
+
+        Assert.False(vm.IsDirty);
+        Assert.False(Pending(vm).HasPendingEdits);
+        Assert.Null(Pending(vm).SaveRefusal);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void TelescopeRename_MarksDirty_AndRaisesHasPendingEdits()
+    {
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Telescopes = new Dictionary<string, EquipmentItemSettings> { ["RC8"] = new EquipmentItemSettings() },
+        });
+        using var vm = Create();
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var group = Assert.Single(vm.TelescopesEditor.Groups);
+
+        group.RenameText = "RC 8 inch";
+        group.CommitRenameCommand.Execute(null);
+
+        Assert.True(Pending(vm).HasPendingEdits);
+        Assert.Contains(nameof(IPendingEdits.HasPendingEdits), raised);
+        Assert.True(vm.SaveCommand.CanExecute(null));
+    }
+
+    // One case per user mutation path the tab reaches, in both editors, so a path that forgets
+    // the signal shows up here by name.
+    [Theory]
+    [InlineData("camera rename")]
+    [InlineData("camera remove alias")]
+    [InlineData("camera remove last alias")]
+    [InlineData("camera group selected")]
+    [InlineData("camera add to group")]
+    [InlineData("telescope remove alias")]
+    [InlineData("telescope group selected")]
+    [InlineData("accept camera suggestion")]
+    [InlineData("accept telescope suggestion")]
+    [InlineData("dismiss suggestion")]
+    public void EveryUserMutation_MarksDirty(string path)
+    {
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Cameras = new Dictionary<string, EquipmentItemSettings>
+            {
+                ["ASI2600MM"] = new EquipmentItemSettings { Aliases = ["ZWO ASI2600MM", "asi2600"] },
+                ["ASI533MC"] = new EquipmentItemSettings { Aliases = ["533"] },
+            },
+            Telescopes = new Dictionary<string, EquipmentItemSettings>
+            {
+                ["RC8"] = new EquipmentItemSettings { Aliases = ["rc8", "RC-8"] },
+            },
+        });
+        _discoveredCameras = [("ASI294MC", 6), ("asi294mc", 2), ("QHY268M", 1)];
+        _discoveredTelescopes = [("FSQ106", 5), ("fsq106", 2)];
+        using var vm = Create();
+        Assert.False(vm.IsDirty);
+        var asi2600 = vm.CamerasEditor.Groups.Single(group => group.Canonical == "ASI2600MM");
+        var asi533 = vm.CamerasEditor.Groups.Single(group => group.Canonical == "ASI533MC");
+        var rc8 = vm.TelescopesEditor.Groups.Single(group => group.Canonical == "RC8");
+
+        switch (path)
+        {
+            case "camera rename":
+                asi2600.RenameText = "ASI 2600";
+                asi2600.CommitRenameCommand.Execute(null);
+                break;
+            case "camera remove alias":
+                asi2600.RemoveAliasCommand.Execute("asi2600");
+                break;
+            case "camera remove last alias":
+                asi533.RemoveAliasCommand.Execute("533");
+                Assert.DoesNotContain(asi533, vm.CamerasEditor.Groups);
+                break;
+            case "camera group selected":
+                vm.CamerasEditor.Ungrouped.Single(row => row.Name == "ASI294MC").IsChecked = true;
+                vm.CamerasEditor.Ungrouped.Single(row => row.Name == "asi294mc").IsChecked = true;
+                Assert.False(vm.IsDirty);
+                vm.CamerasEditor.GroupSelectedCommand.Execute(null);
+                break;
+            case "camera add to group":
+                vm.CamerasEditor.Ungrouped.Single(row => row.Name == "QHY268M").IsChecked = true;
+                vm.CamerasEditor.AddToGroupCommand.Execute(asi2600);
+                break;
+            case "telescope remove alias":
+                rc8.RemoveAliasCommand.Execute("RC-8");
+                break;
+            case "telescope group selected":
+                vm.TelescopesEditor.Ungrouped.Single(row => row.Name == "FSQ106").IsChecked = true;
+                vm.TelescopesEditor.Ungrouped.Single(row => row.Name == "fsq106").IsChecked = true;
+                vm.TelescopesEditor.GroupSelectedCommand.Execute(null);
+                break;
+            case "accept camera suggestion":
+                vm.AcceptSuggestionCommand.Execute(vm.Suggestions.Single(s => s.Section == "cameras"));
+                break;
+            case "accept telescope suggestion":
+                vm.AcceptSuggestionCommand.Execute(vm.Suggestions.Single(s => s.Section == "telescopes"));
+                break;
+            case "dismiss suggestion":
+                vm.DismissSuggestionCommand.Execute(vm.Suggestions.Single(s => s.Section == "cameras"));
+                break;
+        }
+
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
+    public async Task Save_ClearsDirty()
+    {
+        using var vm = Create();
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+        Assert.True(vm.IsDirty);
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.False(vm.IsDirty);
+        Assert.Equal(["ASI2600MM"], _store.GetEquipment().Cameras.Keys);
+    }
+
+    [Fact]
+    public async Task AFailedSave_StaysDirty()
+    {
+        var vm = new EquipmentTabViewModel(
+            _store.GetEquipment,
+            _ => throw new InvalidOperationException("disk full"),
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.TelescopesEditor.AddGroup(new AliasGroupViewModel("RC8", null, []));
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.True(vm.IsDirty);
+        Assert.True(vm.HasErrorMessage);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task AFailedRigLabelRewrite_StaysDirty()
+    {
+        // The rig-label rewrite is the last write of a save. The equipment document has landed by
+        // then, but the loaded names are not remembered, so the next save repeats the rewrite; the
+        // edit has to stay pending for that next save to be offered at all.
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Telescopes = new Dictionary<string, EquipmentItemSettings> { ["RC8"] = new EquipmentItemSettings() },
+        });
+        var vm = new EquipmentTabViewModel(
+            _store.GetEquipment,
+            _store.SaveEquipment,
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action(),
+            rewriteRigLabels: (_, _) => throw new InvalidOperationException("catalogue locked"));
+        vm.PendingLoad?.Wait(Budget);
+        var group = Assert.Single(vm.TelescopesEditor.Groups);
+        group.RenameText = "RC 8 inch";
+        group.CommitRenameCommand.Execute(null);
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.True(vm.IsDirty);
+        Assert.True(vm.HasErrorMessage);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task SaveRefusal_WhileSaving_AndAnEditDuringTheSaveStaysDirty()
+    {
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var vm = new EquipmentTabViewModel(
+            _store.GetEquipment,
+            equipment =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveEquipment(equipment);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+
+        Assert.Equal("Equipment is still saving.", Pending(vm).SaveRefusal);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+
+        // An edit landing while the first save is in flight is not in that save's snapshot, so the
+        // save completing must not clear it.
+        vm.TelescopesEditor.AddGroup(new AliasGroupViewModel("RC8", null, []));
+
+        release.Set();
+        await save;
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.True(vm.IsDirty);
+        Assert.Null(Pending(vm).SaveRefusal);
+        Assert.Equal(["ASI2600MM"], _store.GetEquipment().Cameras.Keys);
+        Assert.Empty(_store.GetEquipment().Telescopes);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task Discard_RestoresTheLoadedGroups_AndClearsDirty()
+    {
+        _store.SaveEquipment(new EquipmentSettings
+        {
+            Telescopes = new Dictionary<string, EquipmentItemSettings>
+            {
+                ["RC8"] = new EquipmentItemSettings { Aliases = ["rc8"] },
+            },
+        });
+        using var vm = Create();
+        var group = Assert.Single(vm.TelescopesEditor.Groups);
+        group.RenameText = "RC 8 inch";
+        group.CommitRenameCommand.Execute(null);
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+        Assert.True(vm.IsDirty);
+
+        Pending(vm).Discard();
+        await (vm.PendingLoad ?? Task.CompletedTask);
+
+        Assert.False(vm.IsDirty);
+        Assert.Empty(vm.CamerasEditor.Groups);
+        var restored = Assert.Single(vm.TelescopesEditor.Groups);
+        Assert.Equal("RC8", restored.Canonical);
+        Assert.Equal(["rc8"], restored.Aliases);
+    }
+
+    [Fact]
+    public async Task Discard_RestoresADismissedSuggestion()
+    {
+        _discoveredCameras = [("asi2600mm", 2), ("ASI2600MM", 9)];
+        using var vm = Create();
+        vm.DismissSuggestionCommand.Execute(Assert.Single(vm.Suggestions));
+        Assert.True(vm.IsDirty);
+
+        Pending(vm).Discard();
+        await (vm.PendingLoad ?? Task.CompletedTask);
+
+        Assert.False(vm.IsDirty);
+        Assert.Single(vm.Suggestions);
+    }
+
+    [Fact]
+    public async Task Discard_DuringAnInFlightSave_ReloadsOnlyAfterTheSaveHasWritten()
+    {
+        // A reload started while the save is still writing could read the pre-save document,
+        // leave the editors on it with IsDirty false, and let the next save silently revert this
+        // one. The reload waits for the save instead.
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var loads = 0;
+        var vm = new EquipmentTabViewModel(
+            () =>
+            {
+                loads++;
+                return _store.GetEquipment();
+            },
+            equipment =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveEquipment(equipment);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+        Pending(vm).Discard();
+        Assert.Equal(1, loads);
+
+        release.Set();
+        await save;
+        await (vm.PendingLoad ?? Task.CompletedTask);
+
+        Assert.Equal(2, loads);
+        Assert.False(vm.IsDirty);
+        Assert.Equal("ASI2600MM", Assert.Single(vm.CamerasEditor.Groups).Canonical);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task Discard_WhoseReloadFails_StaysDirty()
+    {
+        var loads = 0;
+        var vm = new EquipmentTabViewModel(
+            () => ++loads == 1 ? _store.GetEquipment() : throw new InvalidOperationException("locked"),
+            _store.SaveEquipment,
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discoveredCameras,
+            () => _discoveredTelescopes,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.CamerasEditor.AddGroup(new AliasGroupViewModel("ASI2600MM", null, []));
+
+        Pending(vm).Discard();
+        await (vm.PendingLoad ?? Task.CompletedTask);
+
+        // The failed read left the edit on screen, so the save bar has to stay up for it.
+        Assert.True(vm.LoadFailed);
+        Assert.Single(vm.CamerasEditor.Groups);
+        Assert.True(vm.IsDirty);
+        Assert.True(Pending(vm).HasPendingEdits);
+        vm.Dispose();
     }
 }
