@@ -1420,8 +1420,8 @@ public static class AppHost
                 // The live memo, for the frame times and the night band (polish 2 ruling 2).
                 currentGeneral.Value,
                 logger: serviceProvider.GetRequiredService<ILogger<SessionCardViewModel>>(),
-                // P12: the ledger row's filter dots resolve through the same lookup the chart
-                // pills use, so a filter cannot be one colour in the ledger and another in the
+                // P12: the night pane's filter dots resolve through the same lookup the chart
+                // pills use, so a filter cannot be one colour in the pane and another in the
                 // chart. The selection is the process-wide singleton both charts already share.
                 filterTint: serviceProvider.GetRequiredService<ChartSelectionViewModel>().FilterTint,
                 // P13 R5: the two section flags are the holder's, not this card's, so every night
@@ -1441,9 +1441,6 @@ public static class AppHost
                 getGuiding: spec is null ? serviceProvider.GetRequiredService<Phd2NightQuery>().Get : null,
                 anyGuideLogs: spec is null ? () => serviceProvider.GetRequiredService<Phd2NightQuery>().AnyGuideLogs() : null,
                 getFrames: serviceProvider.GetRequiredService<Phd2FramesQuery>().Get,
-                // Polish wave 2 ruling 1: the ledger row's filter order takes the same alias
-                // fallback its dots' colours do.
-                aliases: () => serviceProvider.GetRequiredService<AliasMapCache>().Current,
                 nights: spec?.Nights,
                 noteNights: spec?.NoteNights));
 

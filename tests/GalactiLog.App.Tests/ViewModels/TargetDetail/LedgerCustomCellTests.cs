@@ -175,6 +175,40 @@ public class LedgerCustomCellTests
     }
 
     [Fact]
+    public void BelowTheBreakpoint_EveryShownColumnIsStillDrawn()
+    {
+        // Spec.md, Nights list: fully open shows every custom column, and the divider covers what
+        // does not fit. Red against a narrow page that draws none.
+        var columns = new[]
+        {
+            CustomColumnTestFactory.Define("Notes tag", CustomColumnType.Text, CustomColumnScope.Session, [], order: 0),
+            CustomColumnTestFactory.Define("Seeing", CustomColumnType.Dropdown, CustomColumnScope.Session, ["Good"], order: 1),
+            CustomColumnTestFactory.Define("Done", CustomColumnType.Boolean, CustomColumnScope.Session, [], order: 2),
+        };
+        using var page = LedgerPage.Create(
+            columns: columns, ledgerKeys: [.. columns.Select(column => column.Slug)], wide: false).Settle();
+
+        Assert.False(page.Page.IsWide);
+        Assert.Equal(["Notes tag", "Seeing", "Done"], page.Page.LedgerCustomHeadings.Select(heading => heading.Name));
+        Assert.All(page.Page.Sessions, card => Assert.Equal(3, card.LedgerCells.Count));
+    }
+
+    [Fact]
+    public void PastTheOldCap_EveryShownColumnIsStillDrawn()
+    {
+        // The old wide cap held two cells. Red against a page that still drops past it.
+        var names = Enumerable.Range(1, 5).Select(index => $"Col {index}").ToList();
+        var columns = names
+            .Select((name, index) => CustomColumnTestFactory.Define(name, CustomColumnType.Text, CustomColumnScope.Session, [], order: index))
+            .ToList();
+        using var page = LedgerPage.Create(
+            columns: columns, ledgerKeys: [.. columns.Select(column => column.Slug)]).Settle();
+
+        Assert.Equal(names, page.Page.LedgerCustomHeadings.Select(heading => heading.Name));
+        Assert.All(page.Page.Sessions, card => Assert.Equal(5, card.LedgerCells.Count));
+    }
+
+    [Fact]
     public void TheValuesAreReadOnceForTheWholePage()
     {
         // One ValuesForTarget read per load, whatever the ledger holds. Red against a read per
@@ -276,6 +310,10 @@ internal sealed class LedgerPage : IDisposable
 
     public TargetDetailViewModel Page { get; private set; } = null!;
 
+    /// <summary>The target_page writes, recorded rather than run, as the page factory's harness
+    /// records them.</summary>
+    public List<Func<DisplaySettings, DisplaySettings>> DisplayWrites { get; } = [];
+
     /// <summary>How many times the definition list and the value list were read. One each per page
     /// load is the contract.</summary>
     public int ColumnReads;
@@ -290,7 +328,8 @@ internal sealed class LedgerPage : IDisposable
         DerivedDataSource? derivedData = null,
         Action<Action>? post = null,
         bool withDelegates = true,
-        bool wide = true)
+        bool wide = true,
+        TargetPageSettings? targetPage = null)
     {
         var harness = new LedgerPage();
         var logger = new RecordingLogger();
@@ -315,6 +354,7 @@ internal sealed class LedgerPage : IDisposable
             () => new AliasMap(new Dictionary<string, FilterSetting>(), new EquipmentSettings()));
 
         var detail = Factory.PopulatedDetail(sessions: sessions);
+        var pageState = new TargetPageState(targetPage ?? new TargetPageSettings(), harness.DisplayWrites.Add);
 
         harness.Page = new TargetDetailViewModel(
             Factory.ResolvedGroupKey,
@@ -331,7 +371,8 @@ internal sealed class LedgerPage : IDisposable
                 delay: harness.Delay.Delay,
                 post: post,
                 logger: logger,
-                filterTint: selection.FilterTint),
+                filterTint: selection.FilterTint,
+                targetPage: pageState),
             (_, _) => RenameOutcome.Renamed,
             (_, _) => { },
             (_, _, _) => Task.FromResult<(bool Changed, string Message)>((false, "")),
@@ -344,6 +385,7 @@ internal sealed class LedgerPage : IDisposable
             unsubscribeDerivedDataChanged: derivedData is null ? null : derivedData.Unsubscribe,
             display: display,
             displayColumns: harness.Columns,
+            targetPage: pageState,
             loadCustomColumns: withDelegates
                 ? () =>
                 {
@@ -371,10 +413,9 @@ internal sealed class LedgerPage : IDisposable
     {
         Page.PendingLoad?.Wait(Budget);
 
-        // Ruling C21: custom cells exist on the WIDE ledger and nowhere else, so a page that has
-        // never been measured, which starts narrow, holds none. Reported after the load rather than
-        // at construction, so the republish runs against the loaded definition list and no case
-        // races the background read. This is what the view does on its first SizeChanged.
+        // The page's breakpoint, reported after the load rather than at construction, as the view
+        // does on its first SizeChanged. It decides the Details drawer only; the Nights list draws
+        // every shown custom column either side of it.
         if (_wide)
         {
             Page.ApplyWidth(TargetDetailViewModel.WideBreakpoint);

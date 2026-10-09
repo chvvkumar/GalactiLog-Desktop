@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Controls;
-using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
@@ -811,198 +810,22 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     private void ToggleDetails() => IsDetailsOpen = !IsDetailsOpen;
 
     /// <summary>
-    /// The comp's responsive rule, decided structurally: at 1600 px and above the ledger is
-    /// 640 px and the Details drawer is inline; below, the ledger is 520 px and the drawer
-    /// overlays. Set by the view from <c>SizeChanged</c>, because the breakpoint is a layout fact
-    /// and the view model is what the bindings read (ruling Q12). Starts narrow, so a page that
-    /// has not been measured yet is laid out for the smaller window rather than overflowing it.
+    /// The comp's responsive rule, decided structurally: at 1600 px and above the Details drawer is
+    /// inline; below, it overlays. Set by the view from <c>SizeChanged</c>, because the breakpoint is
+    /// a layout fact and the view model is what the bindings read (ruling Q12). Starts narrow, so a
+    /// page that has not been measured yet is laid out for the smaller window rather than
+    /// overflowing it.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(
-        nameof(LedgerFiltersMaxWidth),
-        nameof(LedgerFiltersSizeGroup),
-        nameof(LedgerCustomMaxWidth),
-        nameof(LedgerCustomSizeGroup),
-        nameof(DetailsDisplayMode),
-        nameof(NightColumnMinWidth))]
+    [NotifyPropertyChangedFor(nameof(DetailsDisplayMode))]
     public partial bool IsWide { get; private set; }
 
-    // The drawn custom column set is the wide set or nothing, so crossing the
-    // breakpoint changes it and the ledger's own width with it.
-    //
-    // Dragging the window under the breakpoint mid-edit therefore takes the cell off screen with the
-    // caret and whatever was in it. The VALUE is not lost: CustomCellGroup.Dispose starts a flush
-    // before it disposes, and AutosaveField.FlushAsync attaches the pending text to its write chain
-    // under the gate before returning, so the write is already on the chain and disposing cancels
-    // only the parked idle window. That ordering is what this depends on; a change to it would turn
-    // a resize into a lost edit.
-    partial void OnIsWideChanged(bool value) => PublishCustomColumns();
-
     /// <summary>
-    /// The maximum width the ledger's filters column may reserve: the comp's 160 px above the
-    /// breakpoint, and nothing at all below it.
+    /// The Nights list's custom column headings: one per switched-on session column, in display
+    /// order; the header strip's items. Empty on every library until the reader switches a column
+    /// on in the Display tab's Nights ledger columns picker.
     /// </summary>
-    /// <remarks>
-    /// Ruling Q12 hides the filter cells below the breakpoint, and that alone left the column
-    /// reserving width for cells it does not draw. Avalonia's shared size groups only grow: once
-    /// the wide ledger has been laid out the <c>LedgerFilters</c> group holds the widest cell it
-    /// ever measured, and an invisible cell does not give it back, so the narrow ledger spent
-    /// about 110 px on an empty column and the star Night column collapsed to about 16 px with no
-    /// date drawn (Phase 12 verification, blocker 1). A column's user maximum clamps the shared
-    /// minimum, so binding this to zero collapses the column definition itself rather than only
-    /// its content. Bound by the three ledger grids in
-    /// <c>Views/TargetDetail/TargetDetailView.axaml</c>, including the night-row template, which
-    /// reaches it through the page rather than through its own <c>SessionCardViewModel</c>.
-    /// </remarks>
-    public double LedgerFiltersMaxWidth => IsWide ? WideLedgerFiltersMaxWidth : 0d;
-
-    /// <summary>
-    /// The shared size group the ledger's filters column joins: the ledger's own group above the
-    /// breakpoint, and none at all below it.
-    /// </summary>
-    /// <remarks>
-    /// The group is what carries the reservation, so the group is what has to go. A user maximum
-    /// does not clamp a shared minimum in Avalonia (measured: the column still reported the 116 px
-    /// the wide ledger had put in the group, with <see cref="LedgerFiltersMaxWidth"/> bound to
-    /// zero), so below the breakpoint the three filters columns leave the group entirely and are
-    /// plain Auto columns whose only content is invisible, which measures nothing. Above it they
-    /// rejoin <c>LedgerFilters</c> and the header cell, the target row's swatches and every night
-    /// row's swatches line up again. The maximum stays bound beside this because it is the comp's
-    /// 160 px cap on the wide column and it costs nothing to keep the two in step.
-    /// </remarks>
-    public string? LedgerFiltersSizeGroup => IsWide ? LedgerFiltersSharedSizeGroup : null;
-
-    /// <summary>The name of the wide ledger's filters size group, as the markup declares it.</summary>
-    public const string LedgerFiltersSharedSizeGroup = "LedgerFilters";
-
-    /// <summary>The comp's filters column, at its widest.</summary>
-    public const double WideLedgerFiltersMaxWidth = 160d;
-
-    /// <summary>
-    /// Exactly what the drawn custom cells need, and nothing below the breakpoint, which is also
-    /// the maximum the column definition may reserve.
-    /// </summary>
-    /// <remarks>
-    /// Spec 12.15: the narrow ledger drops every custom column BEFORE it drops
-    /// the Filters column, so the built-in columns and their minimums and maximums are
-    /// unchanged whatever is switched on. Zero below the breakpoint collapses the column definition
-    /// itself rather than only its content, exactly as <see cref="LedgerFiltersMaxWidth"/> does and
-    /// for the reason written out there. Above it the figure is the strip's own measured width,
-    /// so the column takes no width from any built-in column.
-    /// </remarks>
-    public double LedgerCustomMaxWidth => LedgerCustomStripWidth;
-
-    /// <summary>
-    /// The shared size group the ledger's custom column joins: the ledger's own group while a
-    /// custom column is drawn, and none at all otherwise, which below the breakpoint is always.
-    /// </summary>
-    /// <remarks>
-    /// The group is what carries the reservation, so the group is what has to go: a user maximum
-    /// does not clamp a shared minimum in Avalonia, which <see cref="LedgerFiltersSizeGroup"/>'s own
-    /// remark records as a measurement. Below the breakpoint this column leaves the group entirely
-    /// and is a plain <c>Auto</c> column with no content at all, which measures nothing.
-    /// </remarks>
-    public string? LedgerCustomSizeGroup
-        => LedgerCustomStripWidth > 0d ? LedgerCustomSharedSizeGroup : null;
-
-    /// <summary>The name of the wide ledger's custom column size group, as the markup declares it.
-    /// </summary>
-    public const string LedgerCustomSharedSizeGroup = "LedgerCustom";
-
-    /// <summary>The cap on how much extra width switched-on custom columns may add to the wide
-    /// ledger: the strip plus <see cref="WideLedgerCustomGutter"/> never exceeds this. A column that
-    /// does not fit under it is dropped, last first, by <see cref="RecomputeLedgerCustomColumns"/>.
-    /// It admits a check box beside a text column even when the check box's heading is as wide as
-    /// <see cref="CustomCellWidths.ForHeading"/> allows, so naming a column never drops its
-    /// neighbour: two columns at the heading cap, one gap, and the gutter.
-    /// </summary>
-    public const double WideLedgerCustomWidthCap =
-        WideLedgerCustomGutter + CustomCellWidths.Choice + CustomCellSpacing + CustomCellWidths.Choice;
-
-    /// <summary>The gutter the grown wide ledger adds beside the custom strip: the wide ledger's
-    /// built-in column minimums measure 29 px more than the ledger they sit in at the shipped face,
-    /// so the ledger carries them with the strip or the last cell lands outside.</summary>
-    public const double WideLedgerCustomGutter = 32d;
-
-    /// <summary>What the wide ledger adds to its width while a custom column is drawn, and nothing
-    /// at all while none is.</summary>
-    public double LedgerCustomExtraWidth
-        => LedgerCustomStripWidth > 0d ? LedgerCustomStripWidth + WideLedgerCustomGutter : 0d;
-
-    /// <summary>The gap between two custom cells in a ledger strip, and the figure
-    /// <see cref="RecomputeLedgerCustomColumns"/> adds once per gap.</summary>
-    public const double CustomCellSpacing = 4d;
-
-    /// <summary>
-    /// What the drawn custom cells measure across: the sum of their per-kind widths plus one
-    /// <see cref="CustomCellSpacing"/> per gap, and zero when none is drawn. Computed once, by
-    /// <see cref="RecomputeLedgerCustomColumns"/>, and read by
-    /// <see cref="LedgerCustomMaxWidth"/> and by <see cref="LedgerCustomSizeGroup"/>.
-    /// </summary>
-    public double LedgerCustomStripWidth { get; private set; }
-
-    /// <summary>
-    /// The Nights ledger's Night column floor: higher for the wide ledger than the narrow one
-    /// (phase-review carried observation, phase14c/fixer-list.md item 2), bound by all three
-    /// ledger grids in <c>Views/TargetDetail/TargetDetailView.axaml</c> (the header row, the
-    /// totals row and the night-row template) the same way they already bind
-    /// <see cref="LedgerFiltersMaxWidth"/>.
-    /// </summary>
-    public double NightColumnMinWidth => IsWide ? WideNightColumnMinWidth : NarrowNightColumnMinWidth;
-
-    /// <summary>
-    /// Ten tabular characters, the ISO date the column exists to show ("2025-03-20"), plus the
-    /// cell's own 2 px left and right margin (<c>Grid.ledger-row &gt; TextBlock</c>), measured at
-    /// the shipped face and the default "large" text size and rounded up: about 112. The wide
-    /// ledger has the slack to give it, which <see cref="NarrowNightColumnMinWidth"/> does not.
-    /// </summary>
-    public const double WideNightColumnMinWidth = 112d;
-
-    /// <summary>
-    /// P14A ruling C5's original figure, kept for the narrow ledger only. HANDOFF 5.1 item 7b
-    /// measured the narrow ledger's own slack at this floor as exactly 2 px, with three numeric
-    /// columns already at their declared caps, so the wide ledger's 8 px raise has nowhere to
-    /// come from here.
-    /// </summary>
-    public const double NarrowNightColumnMinWidth = 104d;
-
-    // ---- Spec 12.15's ledger cells -----------------------------------------------------------
-
-    /// <summary>
-    /// The width one check box cell takes in a ledger custom column strip. This name exists because
-    /// the night rows' editors and the header row's labels both have to take the figure and the two
-    /// strips must line up, and the view binds it with <c>x:Static</c>; the figure itself is
-    /// <see cref="CustomCellWidths.Check"/>, which is the one per-kind table the dashboard reads too.
-    /// </summary>
-    public const double CustomCellCheckWidth = CustomCellWidths.Check;
-
-    /// <summary>The width one dropdown cell takes: <see cref="CustomCellWidths.Choice"/>.</summary>
-    public const double CustomCellChoiceWidth = CustomCellWidths.Choice;
-
-    /// <summary>
-    /// The width one text cell takes: <see cref="CustomCellWidths.Text"/>, which is 120 and not the
-    /// 160 a text-bearing dashboard cell otherwise carries. The reason is this page's:
-    /// <see cref="WideLedgerCustomWidthCap"/> does not hold
-    /// a text column and a check box together at 160. The figure is stated once, where both surfaces
-    /// read it.
-    /// </summary>
-    public const double CustomCellTextWidth = CustomCellWidths.Text;
-
-    /// <summary>
-    /// The ledger's custom column headings: one per switched-on session-scope column, in display
-    /// order, each carrying the width its cells take on every night row so the header strip and the
-    /// night strips line up. Empty on every library until the reader switches a column on in the
-    /// Display tab's Nights ledger columns picker.
-    /// </summary>
-    public IReadOnlyList<LedgerCustomHeadingViewModel> LedgerCustomHeadings { get; private set; } = [];
-
-    /// <summary>
-    /// The cell width one column's type takes. This page's name for
-    /// <see cref="CustomCellWidths.For"/>, which is the one place the three figures are chosen, for
-    /// the dashboard as well as for this ledger.
-    /// </summary>
-    public static double CustomCellWidth(CustomColumnType type) => CustomCellWidths.For(type);
-
+    public IReadOnlyList<CustomColumnDefinition> LedgerCustomHeadings { get; private set; } = [];
     /// <summary>
     /// A toggle on the Settings Display tab, arriving through the one writer, so an open
     /// page adopts it without a navigation exactly as a live frame table adopts another table's
@@ -1022,84 +845,24 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>
-    /// The ONE place the ledger's drawn custom column set and its width are decided.
-    /// Below the breakpoint the set is empty, which is the drop custom columns take there; above it the set is
-    /// <c>CustomColumnSet.LedgerRow</c> truncated where the next column would take the strip past
-    /// <see cref="WideLedgerCustomWidthCap"/>, which is the same drop applied one column at a time
-    /// from the end. There is no second mechanism: the header strip, every night row's strip, the
-    /// column definition's maximum, its size group and the ledger's own width all read what this
-    /// computes.
+    /// The ONE place the Nights list's drawn custom column set is decided: every switched-on
+    /// session column, none dropped (spec.md: fully open shows every custom column; the divider
+    /// covers what does not fit). The header strip and every night row's strip read it.
     /// </summary>
     private void RecomputeLedgerCustomColumns()
     {
-        var drawn = new List<CustomColumnDefinition>();
-        var width = 0d;
-
-        if (IsWide)
-        {
-            foreach (var column in CustomColumnSet.LedgerRow(_customColumns, _ledgerColumnKeys))
-            {
-                var next = width
-                    + (drawn.Count == 0 ? 0d : CustomCellSpacing)
-                    + LedgerCellWidth(column);
-
-                // Dropped last first: the first column that does not fit takes every column after
-                // it with it, so the set the reader sees is always a prefix of the display order.
-                // Measured against the extra the LEDGER would have to take, gutter included, which
-                // is the figure the cap bounds.
-                if (next + WideLedgerCustomGutter > WideLedgerCustomWidthCap)
-                {
-                    break;
-                }
-
-                drawn.Add(column);
-                width = next;
-            }
-        }
-
-        _ledgerCustomColumns = drawn;
-        LedgerCustomStripWidth = width;
-        LedgerCustomHeadings =
-            [.. drawn.Select(column => new LedgerCustomHeadingViewModel(column.Name, LedgerCellWidth(column)))];
-
-        OnPropertyChanged(nameof(LedgerCustomStripWidth));
-        OnPropertyChanged(nameof(LedgerCustomExtraWidth));
-        OnPropertyChanged(nameof(LedgerCustomMaxWidth));
-        OnPropertyChanged(nameof(LedgerCustomSizeGroup));
+        _ledgerCustomColumns = CustomColumnSet.LedgerRow(_customColumns, _ledgerColumnKeys);
+        LedgerCustomHeadings = _ledgerCustomColumns;
         OnPropertyChanged(nameof(LedgerCustomHeadings));
-    }
-
-    // The ledger view's type size and family, reported by the view so a heading is measured at
-    // what it is drawn at. Until reported, a cell is its editor's width.
-    private double _headingFontSize;
-    private FontFamily? _headingFontFamily;
-
-    /// <summary>One column's width on the ledger, heading and night cells alike:
-    /// <see cref="CustomCellWidths.ForHeading"/>, the figure the dashboard takes too.</summary>
-    private double LedgerCellWidth(CustomColumnDefinition column)
-        => CustomCellWidths.ForHeading(column.Name, column.Type, _headingFontSize, _headingFontFamily);
-
-    /// <summary>The view's type size and family, which only the view has. The night cells bind the
-    /// same pair through <see cref="CustomCellWidths.HeadingWidth"/>, so the strips line up.</summary>
-    public void ApplyHeadingFont(double fontSize, FontFamily fontFamily)
-    {
-        if (fontSize == _headingFontSize && Equals(fontFamily, _headingFontFamily))
-        {
-            return;
-        }
-
-        _headingFontSize = fontSize;
-        _headingFontFamily = fontFamily;
-        RecomputeLedgerCustomColumns();
     }
 
     // The drawn set, as RecomputeLedgerCustomColumns last computed it.
     private IReadOnlyList<CustomColumnDefinition> _ledgerCustomColumns = [];
 
     // Recomputes the drawn set and hands every card the definition list, the value map and the
-    // write delegate. Called from Publish, before the cards are shown, from the Display tab's
-    // toggle, and from the breakpoint. A card that already holds the same columns reseeds its cells
-    // rather than rebuilding them, which is where typing that has not saved yet survives a refresh.
+    // write delegate. Called from Publish, before the cards are shown, and from the Display tab's
+    // toggle. A card that already holds the same columns reseeds its cells rather than rebuilding
+    // them, which is where typing that has not saved yet survives a refresh.
     private void PublishCustomColumns()
     {
         RecomputeLedgerCustomColumns();
@@ -2641,16 +2404,3 @@ public sealed partial class IntegrationSendItemViewModel : ObservableObject
 
     public IAsyncRelayCommand SendCommand { get; }
 }
-
-/// <summary>
-/// One heading of spec 12.15's ledger custom column strip: the column's name, and the width its
-/// cells take on every night row.
-/// </summary>
-/// <remarks>
-/// The width travels with the name because the header strip and the night strips are three
-/// separate <c>ItemsControl</c>s inside one shared-size column, so nothing but an agreed per-cell
-/// width lines the second heading up with the second cell. The figures come from
-/// <see cref="TargetDetailViewModel.CustomCellWidth"/>, which forwards to
-/// <c>CustomCellWidths</c>, their one home for this page and for the dashboard alike.
-/// </remarks>
-public sealed record LedgerCustomHeadingViewModel(string Name, double Width);

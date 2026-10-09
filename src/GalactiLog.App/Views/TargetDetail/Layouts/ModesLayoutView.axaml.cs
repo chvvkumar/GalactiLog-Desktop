@@ -18,7 +18,8 @@ public partial class ModesLayoutView : TargetLayoutView
 
     private const string LayoutKey = "modes";
 
-    /// <summary>The frames table's floor, the session pane's filter table minimum.</summary>
+    /// <summary>The frames table's floor, the session pane's filter table minimum, and the right
+    /// region's least width beside the sidebar.</summary>
     public const double FramesFloor = 682d;
 
     /// <summary>The Compare table's largest share of its region's height.</summary>
@@ -49,7 +50,7 @@ public partial class ModesLayoutView : TargetLayoutView
         IntegrationButton.Command = SelectMode;
 
         UseSpine(LayoutKey, NightsLedgerPart, LanesRegion, LanesHandle, FramesRegion, FramesPart);
-        SidebarHandle.Attach(LeftColumn, NightsLedgerPart, LayoutKey, () => Page?.TargetPage);
+        SidebarHandle.Attach(LeftColumn, NightsLedgerPart, LayoutKey, () => Page?.TargetPage, SidebarRoom);
         NightsLedgerPart.CollapseToggle.Command = new RelayCommand(SidebarHandle.ToggleCollapsed);
         // The one handle sizes both: its cap on the lanes is applied as the chart's height less what
         // sits above the chart, so a drag trades chart height for frame rows directly.
@@ -66,6 +67,7 @@ public partial class ModesLayoutView : TargetLayoutView
         NightTimelinePart.SizeChanged += (_, _) => RefitLanes();
         CompareNightsRegion.SizeChanged += (_, e) => CompareTableHost.MaxHeight = Math.Floor(CompareTableShare * e.NewSize.Height);
 
+        ReviewGrid.SizeChanged += (_, _) => SidebarHandle.Refresh();
         RightRegion.SizeChanged += (_, e) => ApplyForm(e.NewSize.Width);
         ApplyForm(double.PositiveInfinity);
         NightMetricsSection.PropertyChanged += (_, e) => OnSectionToggled(e, (state, open) => state with { NightMetricsOpen = open });
@@ -107,6 +109,11 @@ public partial class ModesLayoutView : TargetLayoutView
             page.TargetChart.ShowAllSessions = true;
         }
     }
+
+    // The list never takes the right region under the frames table's floor; past that the pane
+    // covers the rest (ruling R7).
+    private double SidebarRoom()
+        => ReviewGrid.Bounds.Width > 0d ? ReviewGrid.Bounds.Width - SidebarHandle.Thickness - FramesFloor : double.PositiveInfinity;
 
     // The frames fill the right column (P24 R22), so the shared width rule decides their form.
     private void ApplyForm(double rightWidth) => FramesColumn.Apply(FramesPart, rightWidth);

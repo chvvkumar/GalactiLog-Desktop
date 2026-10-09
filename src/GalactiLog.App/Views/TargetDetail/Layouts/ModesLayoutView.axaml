@@ -4,11 +4,13 @@
              xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
              xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
              xmlns:layouts="using:GalactiLog.App.Views.TargetDetail.Layouts"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
              x:Class="GalactiLog.App.Views.TargetDetail.Layouts.ModesLayoutView"
              x:Name="Root"
              x:DataType="detail:TargetDetailViewModel">
-  <!-- Layout C, Question Modes (spec 6.1). The nights ledger is a sidebar whose width the handle
-       beside it sets; the findings' and frames' narrow forms follow the right region's width. -->
+  <!-- Layout C, Question Modes (spec 6.1). The nights list is a sidebar; the handle beside it sets
+       how much of the list the pane covers. The frames' narrow form follows the right region's
+       width. -->
   <Grid x:Name="PageRows" RowDefinitions="Auto,Auto,*" Margin="20,18,20,12">
     <parts:TargetHeaderPart x:Name="TargetHeaderPart" Grid.Row="0" />
 
@@ -27,9 +29,10 @@
     <Grid x:Name="ReviewGrid" Grid.Row="2" ColumnDefinitions="Auto,Auto,*" Margin="0,12,0,0">
       <ScrollViewer x:Name="LeftColumn"
                     Grid.Column="0"
-                    VerticalScrollBarVisibility="Auto"
+                    t:Table.Scroller="True"
+                    VerticalScrollBarVisibility="Visible"
                     HorizontalScrollBarVisibility="Disabled">
-        <parts:NightsLedgerPart x:Name="NightsLedgerPart" Classes="host-sized" />
+        <parts:NightsLedgerPart x:Name="NightsLedgerPart" />
       </ScrollViewer>
 
       <layouts:SidebarHandle x:Name="SidebarHandle" Grid.Column="1" />

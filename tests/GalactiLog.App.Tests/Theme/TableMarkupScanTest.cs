@@ -21,7 +21,6 @@ public class TableMarkupScanTest
         "Views/Dashboard/TargetListView.axaml",
         "Views/Mosaics/MosaicsView.axaml",
         "Views/TargetDetail/Parts/IntegrationTablesPart.axaml",
-        "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
         // Form and bar layouts, not tables (ruling R3): these stay.
@@ -36,7 +35,6 @@ public class TableMarkupScanTest
     // they are not listed because nothing here is waiting on them.
     private static readonly string[] PendingTables =
     [
-        "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
         "Views/TargetDetail/Parts/IntegrationTablesPart.axaml",
         "Views/TargetDetail/Parts/CompareTablePart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
