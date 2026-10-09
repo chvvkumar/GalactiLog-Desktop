@@ -141,6 +141,13 @@ public partial class NightsLedgerPart : UserControl
         {
             PlaceLitRowContent();
         }
+        else if (change.Property == FontSizeProperty || change.Property == FontFamilyProperty
+            || change.Property == DataContextProperty)
+        {
+            // The custom headings and the night cells bind the same type size and family, so the
+            // page's strip width is measured at what this part draws.
+            (DataContext as TargetDetailViewModel)?.ApplyHeadingFont(FontSize, FontFamily);
+        }
     }
 
     // A control has one parent, so the content moves to the lit row's slot rather than being bound

@@ -389,8 +389,7 @@ public class TargetListCustomColumnTests
         // The subject is a library whose columns exist and are all switched off, not one with no
         // definition at all: a list with no definition holds exactly the six built-in entries, so
         // the custom arm of the taken loop never runs in either side of the comparison and the
-        // six-column half of this case could not tell the two apart. Switched off is also the state
-        // every reader starts in (user choice 2).
+        // six-column half of this case could not tell the two apart.
         var withColumns = Populated(CheckBoxAndText(), visible: false);
         var view = new TargetListView { DataContext = withColumns };
         Show(view, PageAllotment);
@@ -518,10 +517,9 @@ public class TargetListCustomColumnTests
         IReadOnlyList<CustomColumnDefinition> definitions, bool visible = true)
     {
         var display = new DisplaySettings();
-        display.Columns[DisplaySettings.DashboardTableId] = visible
-            ? [.. DisplaySettings.DefaultColumns[DisplaySettings.DashboardTableId],
-               .. definitions.Select(column => column.Slug)]
-            : [.. DisplaySettings.DefaultColumns[DisplaySettings.DashboardTableId]];
+        display.Columns[DisplaySettings.DashboardHiddenTableId] = visible
+            ? []
+            : [.. definitions.Select(column => column.Slug)];
 
         var stored = new DisplaySettings();
         var list = new TargetListViewModel(

@@ -242,7 +242,7 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
     /// </remarks>
     public ColumnPickerViewModel ColumnPicker { get; }
 
-    /// <summary>Spec 12.15's target-scope custom columns the reader has switched on, in display
+    /// <summary>Spec 12.15's target-scope custom columns the reader has not switched off, in display
     /// order: what the header strip labels and what every row builds a cell for. Empty until a
     /// query brings the definitions back, and empty on every library with no custom column, which
     /// is what makes the custom grid column measure zero.</summary>
@@ -589,14 +589,20 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
 
     // ---- Spec 12.15: the custom column set, the column rows and the cell wiring ----
 
-    // The stored visible-key list this page seeds a custom column's tick from. LastWritten first,
+    // The stored hidden-slug list this page seeds a custom column's tick from. LastWritten first,
     // for the reason ColumnPickerViewModel.ForFrames states: the display document AppHost read at
     // startup is a snapshot, and it is stale the moment any table toggles a column, so a column
     // hidden since then would come back ticked and the next toggle would write the stale list
     // back over the hide.
-    private IReadOnlyList<string> StoredVisibleKeys()
-        => _columns.LastWritten(DisplaySettings.DashboardTableId)
-            ?? _initialDisplay.ColumnsFor(DisplaySettings.DashboardTableId);
+    private IReadOnlyList<string> StoredHiddenKeys()
+        => _columns.LastWritten(DisplaySettings.DashboardHiddenTableId)
+            ?? _initialDisplay.ColumnsFor(DisplaySettings.DashboardHiddenTableId);
+
+    // The live custom ticks as a hidden-slug list, the shape CustomColumnSet takes.
+    private string[] HiddenCustomKeys()
+        => [.. Columns
+            .Where(column => CustomColumnSlug.IsCustom(column.Key) && !column.IsVisible)
+            .Select(column => column.Key)];
 
     private void ApplyCustomColumns(CustomColumnPage custom)
     {
@@ -606,21 +612,21 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
             .GroupBy(value => value.Key.TargetId!.Value)
             .ToDictionary(group => group.Key, group => (IReadOnlyList<CustomValueRow>)[.. group]);
 
-        SyncCustomColumnRows(StoredVisibleKeys());
+        SyncCustomColumnRows(StoredHiddenKeys());
         RefreshCustomColumnSet();
     }
 
     // One ColumnViewModel per target-scope custom column, appended after last_session, so the
-    // column gear and the Display tab's picker can switch one on. CustomColumnSet is the one place
+    // column gear and the Display tab's picker can switch one off. CustomColumnSet is the one place
     // the scope filter and the display order live (design lesson 1); the picker needs a row for a
-    // column that is switched OFF as well, so the gate it is handed here is every slug, and the
-    // shown subset comes from the same member with the stored list in RefreshCustomColumnSet.
+    // column that is switched OFF as well, so the gate it is handed here hides nothing, and the
+    // shown subset comes from the same member with the live ticks in RefreshCustomColumnSet.
     //
     // An entry is reused rather than rebuilt while its slug and its name both still match, so a
     // picker already holding the object keeps holding the one this list holds.
-    private void SyncCustomColumnRows(IReadOnlyList<string> visible)
+    private void SyncCustomColumnRows(IReadOnlyList<string> hidden)
     {
-        var wanted = CustomColumnSet.DashboardRow(_definitions, [.. _definitions.Select(column => column.Slug)]);
+        var wanted = CustomColumnSet.DashboardRow(_definitions, []);
 
         // Nothing changed, which is every query on a library whose columns nobody has just edited.
         // Removing and appending the same entries raises two collection changes per column, and
@@ -648,12 +654,12 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
             Columns.Add(
                 existing.TryGetValue(definition.Slug, out var column) && column.Title == definition.Name
                     ? column
-                    // User choice 2: off by default. A new column's slug is in no stored list, so
-                    // it stays off until the picker adds it. No metric group gates a custom column.
+                    // On by default: a new column's slug is in no hidden list, so it shows until
+                    // the picker switches it off. No metric group gates a custom column.
                     : new ColumnViewModel(
                         definition.Slug,
                         definition.Name,
-                        visible.Contains(definition.Slug, StringComparer.Ordinal),
+                        CustomColumnSet.IsShown(hidden, definition.Slug),
                         canHide: true,
                         isGroupEnabled: true));
         }
@@ -675,8 +681,7 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
     // toggle takes effect without a round trip to the display document.
     private void RefreshCustomColumnSet()
     {
-        CustomColumns = CustomColumnSet.DashboardRow(
-            _definitions, [.. VisibleColumns.Select(column => column.Key)]);
+        CustomColumns = CustomColumnSet.DashboardRow(_definitions, HiddenCustomKeys());
 
         _customContext = _writeValue is null || _loadValuesForTarget is null
             ? null
@@ -817,6 +822,7 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
         // query. Hiding a column disposes its cells, which flushes whatever was being typed.
         if (CustomColumnSlug.IsCustom(column.Key))
         {
+            _columns.Write(DisplaySettings.DashboardHiddenTableId, HiddenCustomKeys());
             RefreshCustomColumnSet();
             foreach (var row in Rows)
             {

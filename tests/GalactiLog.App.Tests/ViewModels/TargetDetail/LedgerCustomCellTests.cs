@@ -52,27 +52,25 @@ public class LedgerCustomCellTests
     }
 
     [Fact]
-    public void OnAFreshProfile_NoLedgerCellIsDrawn()
+    public void OnAFreshProfile_EveryLedgerCellIsDrawn()
     {
-        // User choice 3, read off the real default rather than off a literal: custom columns ship
-        // OFF on the ledger, so a library that has never opened the Display tab draws no cell and
-        // the ledger measures exactly as it did before Phase 20. Red against a
-        // DisplaySettings.DefaultColumns["ledger"] that is not empty.
+        // Read off the real default rather than off a literal: custom columns ship ON on the
+        // ledger, so a library that has never opened the Display tab draws every session column.
         var column = CustomColumnTestFactory.Text("Notes tag", scope: CustomColumnScope.Session);
 
-        // No ledgerKeys at all, so the page reads display.columns.ledger as a fresh document
-        // answers it, which is DisplaySettings.DefaultColumns["ledger"].
+        // No ledgerKeys at all, so the page reads display.columns.ledger_hidden as a fresh
+        // document answers it, which is empty.
         using var page = LedgerPage.Create(columns: [column]).Settle();
 
         Assert.NotEmpty(page.Page.Sessions);
-        Assert.All(page.Page.Sessions, card => Assert.Empty(card.LedgerCells));
-        Assert.Empty(page.Page.LedgerCustomHeadings);
+        Assert.All(page.Page.Sessions, card => Assert.Single(card.LedgerCells));
+        Assert.Equal(["Notes tag"], page.Page.LedgerCustomHeadings.Select(heading => heading.Name));
     }
 
     [Fact]
     public void AToggleOnTheDisplayTabReachesAnOpenPage()
     {
-        // Ruling C4: `ledger` is a third table id on the one display.columns writer, and the page
+        // Ruling C4: `ledger_hidden` is a table id on the one display.columns writer, and the page
         // follows that writer's Changed event. Red against a page that reads the display document
         // once at construction, which would leave the reader looking at a ledger with no cells
         // until they navigated away and back.
@@ -81,7 +79,7 @@ public class LedgerCustomCellTests
 
         Assert.All(page.Page.Sessions, card => Assert.Empty(card.LedgerCells));
 
-        page.Columns.Write(DisplaySettings.LedgerTableId, [column.Slug]);
+        page.Columns.Write(DisplaySettings.LedgerHiddenTableId, []);
 
         Assert.All(page.Page.Sessions, card => Assert.Single(card.LedgerCells));
         Assert.Equal(["Notes tag"], page.Page.LedgerCustomHeadings.Select(heading => heading.Name));
@@ -298,10 +296,13 @@ internal sealed class LedgerPage : IDisposable
         var logger = new RecordingLogger();
         post ??= action => action();
 
+        // ledgerKeys names the slugs the ledger shows; the document stores the rest as hidden. Null
+        // stores nothing, which is a fresh profile.
         var display = new DisplaySettings();
         if (ledgerKeys is not null)
         {
-            display.Columns[DisplaySettings.LedgerTableId] = [.. ledgerKeys];
+            display.Columns[DisplaySettings.LedgerHiddenTableId] =
+                [.. (columns ?? []).Select(column => column.Slug).Where(slug => !ledgerKeys.Contains(slug))];
         }
 
         harness.Columns = new DisplayColumnWriter(() => display, _ => { }, logger);

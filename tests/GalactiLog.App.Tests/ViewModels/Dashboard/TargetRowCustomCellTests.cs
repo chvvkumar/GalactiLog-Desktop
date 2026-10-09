@@ -26,14 +26,14 @@ public class TargetRowCustomCellTests
     [Fact]
     public void ARow_CarriesOneCellPerVisibleTargetScopeColumn_InDisplayOrder()
     {
-        // A failure is a filter on the visible list alone: the session-scope column below is in the
-        // stored list too, and a cell for it on the target row would write a session-scope value
+        // A failure is a filter on the hidden list alone: the session-scope column below is not in
+        // it either, and a cell for it on the target row would write a session-scope value
         // with no night in its key. The two target columns are declared out of display order so a
         // list that takes them as given also fails.
         var priority = CustomColumnTestFactory.Dropdown("High", "Low");
         var done = CustomColumnTestFactory.Boolean("Done", order: 2);
         var notes = CustomColumnTestFactory.Text("Notes", order: 1, scope: CustomColumnScope.Session);
-        var harness = new Harness([done, priority, notes]) { Visible = [done.Slug, priority.Slug, notes.Slug] };
+        var harness = new Harness([done, priority, notes]);
 
         var row = harness.LoadOneRow();
 
@@ -41,12 +41,12 @@ public class TargetRowCustomCellTests
     }
 
     [Fact]
-    public void AColumnNotInTheStoredList_DrawsNoCell()
+    public void AColumnInTheHiddenList_DrawsNoCell()
     {
-        // User choice 2: off by default. A new column's slug is in no stored list, so the row draws
-        // nothing until the picker adds it, while the picker itself still has a row to tick.
+        // On by default, so only a slug the picker switched off draws nothing, while the picker
+        // itself still has a row to tick back on.
         var priority = CustomColumnTestFactory.Dropdown("High");
-        var harness = new Harness([priority]);
+        var harness = new Harness([priority]) { Hidden = [priority.Slug] };
 
         var row = harness.LoadOneRow();
 
@@ -64,7 +64,7 @@ public class TargetRowCustomCellTests
         // from one, and a cell that silently writes nothing looks like a working control that has
         // lost the reader's input. The resolved row beside it proves the column is switched on.
         var priority = CustomColumnTestFactory.Dropdown("High");
-        var harness = new Harness([priority]) { Visible = [priority.Slug] };
+        var harness = new Harness([priority]);
 
         harness.Load(Resolved(FirstTarget, "M 31"), Unresolved("obj:Widget"));
 
@@ -78,7 +78,7 @@ public class TargetRowCustomCellTests
         // Spec 12.15's screen reader rule: the column name, then what the cell is about. A failure
         // is a subject built from the slug or from the group key.
         var priority = CustomColumnTestFactory.Dropdown("High");
-        var harness = new Harness([priority]) { Visible = [priority.Slug] };
+        var harness = new Harness([priority]);
 
         var row = harness.LoadOneRow();
 
@@ -96,7 +96,6 @@ public class TargetRowCustomCellTests
             "Priority", CustomColumnType.Dropdown, CustomColumnScope.Target, ["High", "Low"], order: 1);
         var harness = new Harness([done, priority])
         {
-            Visible = [done.Slug, priority.Slug],
             TargetValues = [new CustomValueRow(done.Id, CustomValueKey.ForTarget(FirstTarget), CustomColumnSlug.True)],
         };
 
@@ -118,7 +117,7 @@ public class TargetRowCustomCellTests
         // window still parked, and releasing the window afterwards adds no second write.
         var notes = CustomColumnTestFactory.Text("Notes");
         var delay = new FakeDelay();
-        var harness = new Harness([notes]) { Visible = [notes.Slug], Delay = delay.Delay };
+        var harness = new Harness([notes]) { Delay = delay.Delay };
 
         var row = harness.LoadOneRow();
         var cell = Assert.Single(row.CustomCells);
@@ -167,7 +166,6 @@ public class TargetRowCustomCellTests
         var received = new ConcurrentQueue<string?>();
         var harness = new Harness([notes])
         {
-            Visible = [notes.Slug],
             Delay = delay.Delay,
             OnWrite = value =>
             {
@@ -207,20 +205,36 @@ public class TargetRowCustomCellTests
     {
         // The defect ColumnPickerViewModel records for the frame table: the display document the
         // host read at startup is a snapshot and is stale the moment any table toggles a column.
-        // Seeded from the snapshot alone, the column below reads as hidden although this process
-        // has already queued it as shown, and the list's own next write would revert the show.
+        // Seeded from the snapshot alone, the column below reads as shown although this process
+        // has already queued it as hidden, and the list's own next write would revert the hide.
         var priority = CustomColumnTestFactory.Dropdown("High");
         var stored = new DisplaySettings();
         var writer = new DisplayColumnWriter(() => stored, value => stored = value, NullLogger.Instance);
-        writer.Write(
-            DisplaySettings.DashboardTableId,
-            [.. DisplaySettings.DefaultColumns[DisplaySettings.DashboardTableId], priority.Slug]);
+        writer.Write(DisplaySettings.DashboardHiddenTableId, [priority.Slug]);
 
         var harness = new Harness([priority]) { Writer = writer };
         var row = harness.LoadOneRow();
 
-        Assert.True(Assert.Single(harness.List.Columns, column => column.Key == priority.Slug).IsVisible);
-        Assert.Single(row.CustomCells);
+        Assert.False(Assert.Single(harness.List.Columns, column => column.Key == priority.Slug).IsVisible);
+        Assert.Empty(row.CustomCells);
+    }
+
+    [Fact]
+    public void SwitchingACustomColumnOff_WritesItToTheHiddenList()
+    {
+        // The stored half of the default: a column the reader switches off has to be told apart
+        // from one created later, so the hide is written as a hidden slug.
+        var priority = CustomColumnTestFactory.Dropdown("High");
+        var stored = new DisplaySettings();
+        var writer = new DisplayColumnWriter(() => stored, value => stored = value, NullLogger.Instance);
+        var harness = new Harness([priority]) { Writer = writer };
+        harness.LoadOneRow();
+
+        harness.List.ToggleColumnCommand.Execute(
+            harness.List.Columns.Single(column => column.Key == priority.Slug));
+
+        Assert.Equal([priority.Slug], writer.LastWritten(DisplaySettings.DashboardHiddenTableId)!);
+        Assert.Empty(harness.List.Rows[0].CustomCells);
     }
 
     [Fact]
@@ -343,7 +357,7 @@ public class TargetRowCustomCellTests
         // cell below is a new instance and the typing is gone.
         var notes = CustomColumnTestFactory.Text("Notes");
         var delay = new FakeDelay();
-        var harness = new Harness([notes]) { Visible = [notes.Slug], Delay = delay.Delay };
+        var harness = new Harness([notes]) { Delay = delay.Delay };
 
         var row = harness.LoadOneRow();
         var cell = Assert.Single(row.CustomCells);
@@ -373,7 +387,7 @@ public class TargetRowCustomCellTests
         var notes = CustomColumnTestFactory.Text("Notes", scope: CustomColumnScope.Session);
         var done = CustomColumnTestFactory.Boolean("Done", order: 1, scope: CustomColumnScope.Session);
         var priority = CustomColumnTestFactory.Dropdown("High");
-        var harness = new Harness([notes, done, priority]) { Visible = [] };
+        var harness = new Harness([notes, done, priority]);
 
         var row = harness.LoadOneRow();
         row.ToggleSessionsCommand.Execute(null);
@@ -468,7 +482,7 @@ public class TargetRowCustomCellTests
         // strip and resets any control bound to Columns, the open column gear flyout included,
         // which is the Phase 16 flyout trap in another shape.
         var priority = CustomColumnTestFactory.Dropdown("High");
-        var harness = new Harness([priority]) { Visible = [priority.Slug] };
+        var harness = new Harness([priority]);
         harness.LoadOneRow();
 
         var changes = 0;
@@ -531,7 +545,8 @@ public class TargetRowCustomCellTests
 
         public Harness(IReadOnlyList<CustomColumnDefinition> definitions) => _definitions = definitions;
 
-        public IReadOnlyList<string> Visible { get; init; } = [];
+        /// <summary>The custom slugs stored as switched off; empty shows every column.</summary>
+        public IReadOnlyList<string> Hidden { get; init; } = [];
 
         public IReadOnlyList<CustomValueRow> TargetValues { get; init; } = [];
 
@@ -581,7 +596,11 @@ public class TargetRowCustomCellTests
         /// every row, and the rows whose own columns did not move must keep their cells.
         /// </summary>
         public CustomCellContext SameWiring() => new(
-            CustomColumnSet.DashboardRow(_definitions, [.. List.VisibleColumns.Select(column => column.Key)]),
+            CustomColumnSet.DashboardRow(
+                _definitions,
+                [.. List.Columns
+                    .Where(column => CustomColumnSlug.IsCustom(column.Key) && !column.IsVisible)
+                    .Select(column => column.Key)]),
             CustomColumnSet.NightExpander(_definitions),
             _ => PerTargetValuesSource?.Invoke() ?? PerTargetValues,
             Writes.Write,
@@ -606,8 +625,7 @@ public class TargetRowCustomCellTests
         private TargetListViewModel Build()
         {
             var display = new DisplaySettings();
-            display.Columns[DisplaySettings.DashboardTableId] =
-                [.. DisplaySettings.DefaultColumns[DisplaySettings.DashboardTableId], .. Visible];
+            display.Columns[DisplaySettings.DashboardHiddenTableId] = [.. Hidden];
 
             return new TargetListViewModel(
                 display,

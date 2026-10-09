@@ -141,7 +141,7 @@ public class DisplayTabLedgerPickerTests
     // a column read through loadCustomColumns on this tab's own background pass reaches
     // LedgerColumns before the tab is shown, with no restart.
     [AvaloniaFact]
-    public async Task ALoadedCustomColumn_AppearsInTheLedgerPickerOff()
+    public async Task ALoadedCustomColumn_AppearsInTheLedgerPickerOn()
     {
         var column = new CustomColumnDefinition(
             Guid.NewGuid(), "Notes tag", "custom_notes_tag", CustomColumnType.Text,
@@ -159,7 +159,7 @@ public class DisplayTabLedgerPickerTests
 
         var box = list.GetVisualDescendants().OfType<CheckBox>().Single();
         Assert.Equal("Notes tag", box.Content as string);
-        Assert.False(box.IsChecked);
+        Assert.True(box.IsChecked);
     }
 
     // ---- ruling C22 with C32: the tab was frozen for the life of the process -------------------
@@ -260,7 +260,7 @@ public class DisplayTabLedgerPickerTests
 
         Assert.False(tab.LedgerColumns.IsEmpty);
         Assert.Equal("Night note", tab.LedgerColumns.Columns.Single().Title);
-        Assert.False(tab.LedgerColumns.Columns.Single().IsVisible);
+        Assert.True(tab.LedgerColumns.Columns.Single().IsVisible);
 
         var list = view.GetControl<ItemsControl>("LedgerColumnList");
         Assert.True(list.IsEffectivelyVisible);

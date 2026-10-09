@@ -1,3 +1,6 @@
+using System.Globalization;
+using Avalonia.Data.Converters;
+using Avalonia.Media;
 using GalactiLog.Core.Settings;
 
 namespace GalactiLog.App.ViewModels.CustomColumns;
@@ -47,4 +50,53 @@ public static class CustomCellWidths
         CustomColumnType.Dropdown => Choice,
         _ => Text,
     };
+
+    /// <summary>The cell gutter a measured heading carries, 8 left and 8 right.</summary>
+    public const double HeadingGutter = 16d;
+
+    /// <summary>
+    /// The width one custom column takes, its heading and its cells alike: what its editor needs,
+    /// or what its own heading needs when that is more, and never more than <see cref="Choice"/>
+    /// so one long name cannot take the row. Both surfaces read this, so a check box column's name
+    /// is read rather than drawn as an ellipsis on the dashboard and on the Nights ledger alike.
+    /// Measured at the caller's type size and family, because the root size is a setting.
+    /// </summary>
+    public static double ForHeading(string? name, CustomColumnType type, double fontSize, FontFamily? family)
+    {
+        var editor = For(type);
+        if (string.IsNullOrEmpty(name) || family is null || fontSize <= 0d)
+        {
+            return editor;
+        }
+
+        var heading = Math.Ceiling(
+            new FormattedText(
+                name,
+                CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface(family, FontStyle.Normal, FontWeight.SemiBold),
+                fontSize,
+                null).Width
+            + HeadingGutter);
+
+        return Math.Max(editor, Math.Min(Choice, heading));
+    }
+
+    /// <summary>How markup reaches <see cref="ForHeading"/>: name, type, then the view's own type
+    /// size and family, so a root text size change re-measures the heading and its cells together.
+    /// </summary>
+    public static readonly FuncMultiValueConverter<object?, double> HeadingWidth = new(values =>
+    {
+        var parts = values.ToArray();
+        if (parts.Length < 2 || parts[0] is not string name || parts[1] is not CustomColumnType type)
+        {
+            return 0d;
+        }
+
+        return ForHeading(
+            name,
+            type,
+            parts.Length > 2 && parts[2] is double size ? size : 0d,
+            parts.Length > 3 ? parts[3] as FontFamily : null);
+    });
 }

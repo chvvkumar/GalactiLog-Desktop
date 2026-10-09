@@ -36,7 +36,7 @@ public class LedgerColumnPickerTests
     // ---- the third factory ---------------------------------------------------------------
 
     [Fact]
-    public async Task ForLedger_WritesTheLedgerTableId()
+    public async Task ForLedger_WritesTheLedgerHiddenTableId()
     {
         // Red against a copy of ForFrames that kept "frames": the toggle would silently rewrite
         // the frame table's own list instead of the ledger's.
@@ -47,7 +47,7 @@ public class LedgerColumnPickerTests
         picker.ToggleCommand.Execute(picker.Columns[0]);
         await writer.Pending;
 
-        Assert.NotNull(writer.LastWritten(DisplaySettings.LedgerTableId));
+        Assert.Equal([session.Slug], writer.LastWritten(DisplaySettings.LedgerHiddenTableId)!);
         Assert.Null(writer.LastWritten(DisplaySettings.FramesTableId));
     }
 
@@ -66,17 +66,17 @@ public class LedgerColumnPickerTests
     }
 
     [Fact]
-    public void ForLedger_IsEmptyOnAFreshProfile()
+    public void ForLedger_ShowsEveryColumnOnAFreshProfile()
     {
-        // User choice 3: a custom column ships off on the ledger. Not the picker's own row count
-        // (a column still gets a row so it can be switched on) but its visibility.
+        // A custom column starts shown on the ledger: a fresh profile hides nothing, and the row
+        // is there so the column can be switched off.
         var (get, _, writer) = NewWriter();
         var session = Def("Notes", CustomColumnScope.Session);
 
         var picker = ColumnPickerViewModel.ForLedger(get(), writer, [session]);
 
         var column = Assert.Single(picker.Columns);
-        Assert.False(column.IsVisible);
+        Assert.True(column.IsVisible);
     }
 
     [Fact]
@@ -88,13 +88,13 @@ public class LedgerColumnPickerTests
         var (get, _, writer) = NewWriter();
         var session = Def("Notes", CustomColumnScope.Session);
 
-        writer.Write(DisplaySettings.LedgerTableId, [session.Slug]);
+        writer.Write(DisplaySettings.LedgerHiddenTableId, [session.Slug]);
 
         // The stored document is untouched (Write only queues), so a picker seeded from it alone
-        // would show the column off.
+        // would show the column on.
         var picker = ColumnPickerViewModel.ForLedger(get(), writer, [session]);
 
-        Assert.True(Assert.Single(picker.Columns).IsVisible);
+        Assert.False(Assert.Single(picker.Columns).IsVisible);
         await writer.Pending;
     }
 
@@ -110,7 +110,7 @@ public class LedgerColumnPickerTests
         first.ToggleCommand.Execute(first.Columns[0]);
         await writer.Pending;
 
-        Assert.True(second.Columns[0].IsVisible);
+        Assert.False(second.Columns[0].IsVisible);
 
         second.Dispose();
 
@@ -119,7 +119,7 @@ public class LedgerColumnPickerTests
 
         // second stopped following after Dispose, so it still shows the state from before the
         // second toggle.
-        Assert.True(second.Columns[0].IsVisible);
+        Assert.False(second.Columns[0].IsVisible);
     }
 
     [Fact]
@@ -131,7 +131,7 @@ public class LedgerColumnPickerTests
         var kept = Def("Notes", CustomColumnScope.Session, order: 0);
         var deleted = Def("Old", CustomColumnScope.Session, order: 1);
 
-        writer.Write(DisplaySettings.LedgerTableId, [kept.Slug, deleted.Slug]);
+        writer.Write(DisplaySettings.LedgerHiddenTableId, [kept.Slug, deleted.Slug]);
         await writer.Pending;
 
         // The column catalogue no longer carries "deleted": the picker is rebuilt from the live
@@ -143,7 +143,7 @@ public class LedgerColumnPickerTests
         picker.ToggleCommand.Execute(picker.Columns[0]);
         await writer.Pending;
 
-        var written = writer.LastWritten(DisplaySettings.LedgerTableId)!;
+        var written = writer.LastWritten(DisplaySettings.LedgerHiddenTableId)!;
         Assert.DoesNotContain(deleted.Slug, written);
     }
 

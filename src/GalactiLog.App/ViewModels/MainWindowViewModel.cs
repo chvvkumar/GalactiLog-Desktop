@@ -452,11 +452,11 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
         _shownPage = CurrentPage;
         if (!_disposed && ReferenceEquals(CurrentPage, _dashboard))
         {
-            _dashboard.RequestQuery();
+            _dashboard.RequestQuery(quiet: true);
         }
     }
 
-    private void OnDetailTargetRenamed(object? sender, EventArgs e) => _dashboard.RequestQuery();
+    private void OnDetailTargetRenamed(object? sender, EventArgs e) => _dashboard.RequestQuery(quiet: true);
 
     // questions.md Q16, which amends spec 12.5: the Statistics timeline's bar click lands on the
     // dashboard with that period's date range. The filter panel's own two date properties raise

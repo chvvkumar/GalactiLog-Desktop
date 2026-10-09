@@ -407,7 +407,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     /// <summary>
     /// Spec 12.15's session-scope cells on this night's ledger row. Empty when no session-scope
-    /// column is switched on, which is every library until the reader switches one on in the
+    /// column is shown, which is every library that has none or has switched them all off in the
     /// Display tab's Nights ledger columns picker, and empty on an <c>obj:</c>
     /// group, which has no target id to key a value on.
     /// </summary>

@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using Avalonia.Controls;
+using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
@@ -156,8 +157,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     private IReadOnlyDictionary<(Guid ColumnId, CustomValueKey Key), string> _customValues =
         new Dictionary<(Guid, CustomValueKey), string>();
 
-    // display.columns.ledger, which holds custom slugs only and is empty on a fresh profile:
-    // custom columns ship off on this surface. Seeded through the writer's last queued list first and the display
+    // display.columns.ledger_hidden, the custom slugs switched OFF, empty on a fresh profile:
+    // custom columns ship on. Seeded through the writer's last queued list first and the display
     // document second, the rule ColumnPickerViewModel.ForFrames states and for the reason recorded
     // there: the document is a snapshot and is stale the moment any picker toggles a column.
     private IReadOnlyList<string> _ledgerColumnKeys = [];
@@ -358,8 +359,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         // snapshot AppHost read on Program.Main's thread, and it is stale the moment the Display
         // tab's picker toggles a column. LastWritten reads no settings, which is what keeps it
         // legal on a construction path.
-        _ledgerColumnKeys = displayColumns?.LastWritten(DisplaySettings.LedgerTableId)
-            ?? (display ?? new DisplaySettings()).ColumnsFor(DisplaySettings.LedgerTableId);
+        _ledgerColumnKeys = displayColumns?.LastWritten(DisplaySettings.LedgerHiddenTableId)
+            ?? (display ?? new DisplaySettings()).ColumnsFor(DisplaySettings.LedgerHiddenTableId);
 
         if (displayColumns is not null)
         {
@@ -911,9 +912,12 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// <summary>The cap on how much extra width switched-on custom columns may add to the wide
     /// ledger: the strip plus <see cref="WideLedgerCustomGutter"/> never exceeds this. A column that
     /// does not fit under it is dropped, last first, by <see cref="RecomputeLedgerCustomColumns"/>.
-    /// 208 still admits a check box beside a text column, the widest pair spec 12.15 can produce.
+    /// It admits a check box beside a text column even when the check box's heading is as wide as
+    /// <see cref="CustomCellWidths.ForHeading"/> allows, so naming a column never drops its
+    /// neighbour: two columns at the heading cap, one gap, and the gutter.
     /// </summary>
-    public const double WideLedgerCustomWidthCap = 208d;
+    public const double WideLedgerCustomWidthCap =
+        WideLedgerCustomGutter + CustomCellWidths.Choice + CustomCellSpacing + CustomCellWidths.Choice;
 
     /// <summary>The gutter the grown wide ledger adds beside the custom strip: the wide ledger's
     /// built-in column minimums measure 29 px more than the ledger they sit in at the shipped face,
@@ -1008,7 +1012,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// on a picker click, so this runs there too and must stay a cheap in-memory update.</remarks>
     private void OnDisplayColumnsChanged(string tableId, string[] keys)
     {
-        if (_disposed || !string.Equals(tableId, DisplaySettings.LedgerTableId, StringComparison.Ordinal))
+        if (_disposed || !string.Equals(tableId, DisplaySettings.LedgerHiddenTableId, StringComparison.Ordinal))
         {
             return;
         }
@@ -1037,7 +1041,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
             {
                 var next = width
                     + (drawn.Count == 0 ? 0d : CustomCellSpacing)
-                    + CustomCellWidth(column.Type);
+                    + LedgerCellWidth(column);
 
                 // Dropped last first: the first column that does not fit takes every column after
                 // it with it, so the set the reader sees is always a prefix of the display order.
@@ -1056,13 +1060,37 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         _ledgerCustomColumns = drawn;
         LedgerCustomStripWidth = width;
         LedgerCustomHeadings =
-            [.. drawn.Select(column => new LedgerCustomHeadingViewModel(column.Name, CustomCellWidth(column.Type)))];
+            [.. drawn.Select(column => new LedgerCustomHeadingViewModel(column.Name, LedgerCellWidth(column)))];
 
         OnPropertyChanged(nameof(LedgerCustomStripWidth));
         OnPropertyChanged(nameof(LedgerCustomExtraWidth));
         OnPropertyChanged(nameof(LedgerCustomMaxWidth));
         OnPropertyChanged(nameof(LedgerCustomSizeGroup));
         OnPropertyChanged(nameof(LedgerCustomHeadings));
+    }
+
+    // The ledger view's type size and family, reported by the view so a heading is measured at
+    // what it is drawn at. Until reported, a cell is its editor's width.
+    private double _headingFontSize;
+    private FontFamily? _headingFontFamily;
+
+    /// <summary>One column's width on the ledger, heading and night cells alike:
+    /// <see cref="CustomCellWidths.ForHeading"/>, the figure the dashboard takes too.</summary>
+    private double LedgerCellWidth(CustomColumnDefinition column)
+        => CustomCellWidths.ForHeading(column.Name, column.Type, _headingFontSize, _headingFontFamily);
+
+    /// <summary>The view's type size and family, which only the view has. The night cells bind the
+    /// same pair through <see cref="CustomCellWidths.HeadingWidth"/>, so the strips line up.</summary>
+    public void ApplyHeadingFont(double fontSize, FontFamily fontFamily)
+    {
+        if (fontSize == _headingFontSize && Equals(fontFamily, _headingFontFamily))
+        {
+            return;
+        }
+
+        _headingFontSize = fontSize;
+        _headingFontFamily = fontFamily;
+        RecomputeLedgerCustomColumns();
     }
 
     // The drawn set, as RecomputeLedgerCustomColumns last computed it.

@@ -369,7 +369,7 @@
                bind a ColumnDefinitions collection (AVLN3000, recorded in
                TargetDetailViewModel.cs), so the strip is an ItemsControl of fixed-width cells
                inside a single Auto column. It measures nothing at all while no custom column is
-               switched on, which is every library until the reader switches one on. -->
+               shown, which is every library that has none or has switched them all off. -->
           <ColumnDefinition Width="Auto" SharedSizeGroup="DashCustom" />
           <ColumnDefinition Width="Auto" SharedSizeGroup="DashSessions" />
         </Grid.ColumnDefinitions>

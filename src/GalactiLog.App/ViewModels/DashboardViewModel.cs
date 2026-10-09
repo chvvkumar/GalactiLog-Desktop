@@ -53,7 +53,13 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// figure; one shared window for every input, not a fast path and a slow path.</summary>
     internal static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(250);
 
+    /// <summary>How long a dimming query may run before the rows dim. A query that lands inside
+    /// this never dims at all, so a fast filter change swaps the rows without a grey flash.</summary>
+    internal static readonly TimeSpan RefetchDimDelay = TimeSpan.FromMilliseconds(300);
+
     private readonly Func<TargetListingCriteria, TargetListingPage> _list;
+    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
+    private readonly TimeSpan _refetchDimDelay;
     private readonly Action<Action> _post;
     private readonly Func<string, IReadOnlyList<TargetSearchResult>> _search;
     private readonly Func<IReadOnlyList<string>> _probeRoots;
@@ -83,6 +89,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     private readonly Debouncer _probeWindow;
 
     private bool _disposed;
+
+    // Whether the query window now open owes the reader the refetch dim. Sticky until a current
+    // generation lands or fails, so a quiet refresh coalescing into a filter change's window does
+    // not take the dim away from that change. UI thread only, like Debouncer.Restart.
+    private bool _dimOwed;
 
     /// <param name="list">Normally <c>TargetListingQuery.List</c>. A delegate rather than the
     /// query object, matching how <c>WatcherService</c> and <c>ScanScheduler</c> already take
@@ -155,13 +166,16 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Func<IReadOnlyCollection<Guid>, IReadOnlyList<CustomValueRow>>? loadTargetValues = null,
         Func<Guid, IReadOnlyList<CustomValueRow>>? loadValuesForTarget = null,
         Func<Guid, CustomValueKey, string?, CustomWriteResult>? writeCustomValue = null,
-        Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings>? mutateGeneral = null)
+        Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings>? mutateGeneral = null,
+        TimeSpan? refetchDimDelay = null)
     {
         _logger = logger ?? NullLogger.Instance;
         _list = list;
         _mutateGeneral = mutateGeneral;
         _post = post ?? UiPost.Default;
         var debounce = delay ?? Task.Delay;
+        _delay = debounce;
+        _refetchDimDelay = refetchDimDelay ?? RefetchDimDelay;
 
         // FIXER LIST F11. One window each, all three on the shared Debouncer, all three linked to
         // the page lifetime (the F6 fix) so a window opened just before shutdown cannot publish
@@ -248,8 +262,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         Filters.Reload();
 
         // The first page is fetched through the same debounced path as every later one, so there
-        // is exactly one call site.
-        RequestQuery();
+        // is exactly one call site. Quiet: there are no rows yet to dim.
+        RequestQuery(quiet: true);
 
         // Ruling Q18: on dashboard load and after each ScanFinished, never on a timer, always off
         // the UI thread.
@@ -636,7 +650,16 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// <summary>Opens (or restarts) the debounce window. Every change reaches the query through
     /// here: N rapid keystrokes, a pill toggle, a combo selection and Reset all take the same
     /// path, so they coalesce into exactly one query.</summary>
-    internal void RequestQuery() => PendingQuery = _queryWindow.Restart(RunQueryAsync);
+    /// <param name="quiet">True for a background re-read whose criteria did not change (returning
+    /// to the page, a scan landing, a write elsewhere): the rows on screen are still the answer to
+    /// what the reader asked, so they stay lit and clickable while the new page is fetched. False
+    /// for a reader's own filter, search or paging change, which takes the refetch dim.</param>
+    internal void RequestQuery(bool quiet = false)
+    {
+        _dimOwed |= !quiet;
+        var dim = _dimOwed;
+        PendingQuery = _queryWindow.Restart((generation, token) => RunQueryAsync(generation, dim, token));
+    }
 
     private void OnFiltersChanged(object? sender, EventArgs e)
     {
@@ -862,14 +885,14 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     internal void RefreshCustomColumns()
     {
         Filters.Reload();
-        RequestQuery();
+        RequestQuery(quiet: true);
     }
 
     /// <summary>A mosaic write committed somewhere else in the application (accept, delete, the
     /// Create mosaic dialog, a removed night or panel). The listing query carries spec 12.2's
     /// mosaic links, so the page re-runs it, debounced, as it does after a scan. Called on the UI
     /// thread by the composition root's own route.</summary>
-    internal void RefreshMosaicLinks() => RequestQuery();
+    internal void RefreshMosaicLinks() => RequestQuery(quiet: true);
 
     private void OnScanFinished(object? sender, EventArgs e)
     {
@@ -881,10 +904,10 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         // option lists are refreshed alongside the page. Reload does its own queries on a
         // background thread; nothing here blocks the UI thread.
         Filters.Reload();
-        RequestQuery();
+        RequestQuery(quiet: true);
     }
 
-    private async Task RunQueryAsync(int generation, CancellationToken cancellationToken)
+    private async Task RunQueryAsync(int generation, bool dim, CancellationToken cancellationToken)
     {
         try
         {
@@ -892,15 +915,15 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
             var criteria = Targets.ApplyTo(Filters.BuildCriteria(Seed));
 
-            // Spec 12.2's refetch dim: the rows already on screen dim and stop taking input for
-            // as long as this query runs. Posted, not written directly, because everything past
-            // the debounce wait above runs off the UI thread (TRACKING section 5's threading
-            // rule; ConfigureAwait(false) belongs below this view-model, never above it).
-            _post(() => Targets.SetRefetching(true));
-
             // The query itself never runs on the UI thread: a slow dashboard query must not
             // freeze the window.
-            var page = await Task.Run(() => _list(criteria), cancellationToken).ConfigureAwait(false);
+            var listing = Task.Run(() => _list(criteria), cancellationToken);
+            if (dim)
+            {
+                await DimIfSlowAsync(generation, listing, cancellationToken).ConfigureAwait(false);
+            }
+
+            var page = await listing.ConfigureAwait(false);
             if (cancellationToken.IsCancellationRequested)
             {
                 return;
@@ -936,9 +959,38 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
                     // table): without this a query that throws leaves the list dimmed with
                     // nothing further in flight to ever clear it.
                     Targets.SetRefetching(false);
+                    _dimOwed = false;
                 }
             });
         }
+    }
+
+    // Spec 12.2's refetch dim: the rows already on screen dim and stop taking input while this
+    // query runs, but only once it has run for RefetchDimDelay, so a quick answer never flashes
+    // grey. A zero delay dims at once. Posted, not written directly, because everything here runs
+    // off the UI thread (TRACKING section 5's threading rule), and guarded by the generation so a
+    // superseded window cannot dim a page a newer one already settled.
+    private async Task DimIfSlowAsync(int generation, Task listing, CancellationToken cancellationToken)
+    {
+        if (_refetchDimDelay > TimeSpan.Zero)
+        {
+            using var grace = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            var elapsed = _delay(_refetchDimDelay, grace.Token);
+            var first = await Task.WhenAny(listing, elapsed).ConfigureAwait(false);
+            await grace.CancelAsync().ConfigureAwait(false);
+            if (first == listing || !elapsed.IsCompletedSuccessfully)
+            {
+                return;
+            }
+        }
+
+        _post(() =>
+        {
+            if (_queryWindow.IsCurrent(generation))
+            {
+                Targets.SetRefetching(true);
+            }
+        });
     }
 
     /// <summary>
@@ -1020,6 +1072,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
         // rest of this method: a stale response that lands after a newer window opened must not
         // clear a dim the newer window is still holding.
         Targets.SetRefetching(false);
+        _dimOwed = false;
 
         LastQueryFailure = null;
 

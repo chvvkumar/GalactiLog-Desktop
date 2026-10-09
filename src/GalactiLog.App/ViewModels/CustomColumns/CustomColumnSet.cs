@@ -12,19 +12,19 @@ namespace GalactiLog.App.ViewModels.CustomColumns;
 /// <remarks>
 /// Every member is pure and takes the full list, so a caller that filtered or reordered its input
 /// cannot reach a different answer. Each sorts by <c>DisplayOrder</c>, then <c>CreatedAt</c>, then
-/// <c>Id</c>, which is the repository's own order. Membership in <c>visibleKeys</c> is
+/// <c>Id</c>, which is the repository's own order. Membership in <c>hiddenKeys</c> is
 /// <see cref="StringComparer.Ordinal"/>, the same comparer <c>DisplaySettings.ColumnsFor</c> and
 /// <c>ColumnPickerViewModel</c> already use.
 /// </remarks>
 public static class CustomColumnSet
 {
-    /// <summary>Spec 12.15's dashboard target row: every <c>target</c>-scope column whose slug is
-    /// in <paramref name="visibleKeys"/>, in display order. <paramref name="visibleKeys"/> is
-    /// <c>display.columns.dashboard</c>.</summary>
+    /// <summary>Spec 12.15's dashboard target row: every <c>target</c>-scope column
+    /// <see cref="IsShown"/> answers true for, in display order. <paramref name="hiddenKeys"/> is
+    /// <c>display.columns.dashboard_hidden</c>.</summary>
     public static IReadOnlyList<CustomColumnDefinition> DashboardRow(
-        IReadOnlyList<CustomColumnDefinition> all, IReadOnlyList<string> visibleKeys)
+        IReadOnlyList<CustomColumnDefinition> all, IReadOnlyList<string> hiddenKeys)
         => Ordered(all.Where(column =>
-            column.Scope is CustomColumnScope.Target && Visible(visibleKeys, column.Slug)));
+            column.Scope is CustomColumnScope.Target && IsShown(hiddenKeys, column.Slug)));
 
     /// <summary>Spec 12.15's dashboard night expander: every <c>session</c>-scope column, in
     /// display order. Ungated (user choice 4): the expander has no picker today and this phase does
@@ -33,14 +33,13 @@ public static class CustomColumnSet
         IReadOnlyList<CustomColumnDefinition> all)
         => Ordered(all.Where(column => column.Scope is CustomColumnScope.Session));
 
-    /// <summary>Spec 12.15's Nights ledger row: every <c>session</c>-scope column whose slug is in
-    /// <paramref name="visibleKeys"/>, in display order. <paramref name="visibleKeys"/> is
-    /// <c>display.columns.ledger</c>, which defaults to empty (user choice 3), so a fresh profile
-    /// draws no ledger cell at all.</summary>
+    /// <summary>Spec 12.15's Nights ledger row: every <c>session</c>-scope column
+    /// <see cref="IsShown"/> answers true for, in display order. <paramref name="hiddenKeys"/> is
+    /// <c>display.columns.ledger_hidden</c>.</summary>
     public static IReadOnlyList<CustomColumnDefinition> LedgerRow(
-        IReadOnlyList<CustomColumnDefinition> all, IReadOnlyList<string> visibleKeys)
+        IReadOnlyList<CustomColumnDefinition> all, IReadOnlyList<string> hiddenKeys)
         => Ordered(all.Where(column =>
-            column.Scope is CustomColumnScope.Session && Visible(visibleKeys, column.Slug)));
+            column.Scope is CustomColumnScope.Session && IsShown(hiddenKeys, column.Slug)));
 
     /// <summary>Spec 12.15's session pane rig rows: every <c>rig</c>-scope column, in display
     /// order. Ungated.</summary>
@@ -62,8 +61,12 @@ public static class CustomColumnSet
     public static bool AnyRigScope(IReadOnlyList<CustomColumnDefinition> all)
         => all.Any(column => column.Scope is CustomColumnScope.Rig);
 
-    private static bool Visible(IReadOnlyList<string> visibleKeys, string slug)
-        => visibleKeys.Contains(slug, StringComparer.Ordinal);
+    /// <summary>The one default for a gated custom column, read by both surfaces and both pickers:
+    /// shown unless the user switched it off, so a new column starts shown and a hidden slug stays
+    /// hidden. <paramref name="hiddenKeys"/> is a <c>*_hidden</c> entry of
+    /// <c>display.columns</c>.</summary>
+    public static bool IsShown(IReadOnlyList<string> hiddenKeys, string slug)
+        => !hiddenKeys.Contains(slug, StringComparer.Ordinal);
 
     private static IReadOnlyList<CustomColumnDefinition> Ordered(
         IEnumerable<CustomColumnDefinition> columns)

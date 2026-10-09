@@ -23,6 +23,11 @@
          general.text_size "x-large" (TargetDetailViewTests' ledger-fit case). -->
     <sys:Double x:Key="LedgerRmsValueWidth">44</sys:Double>
     <sys:Double x:Key="LedgerRmsMarkWidth">9</sys:Double>
+    <!-- The Night column is a star so it still shrinks to its floor in a tight ledger, but it
+         stops here: room enough for the totals row's "All 25 nights" label, which measures 124 at
+         the shipped root. Width past that goes to the empty trailing star column, at the row's
+         right edge, rather than opening a gap between the date and its figures. -->
+    <sys:Double x:Key="LedgerNightMaxWidth">140</sys:Double>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -302,7 +307,7 @@
             <Grid Grid.Row="1" x:Name="LedgerHeaderRow" Classes="ledger-row" MinHeight="28">
               <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="20" />
-                <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" MaxWidth="{StaticResource LedgerNightMaxWidth}" />
                 <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
                 <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
                 <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
@@ -312,8 +317,9 @@
                 <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="64" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerStars}" />
                 <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersSizeGroup}" />
                 <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+                <ColumnDefinition Width="*" />
               </Grid.ColumnDefinitions>
-              <Border Grid.Column="0" Grid.ColumnSpan="11"
+              <Border Grid.Column="0" Grid.ColumnSpan="12"
                       BorderBrush="{DynamicResource ColorBorderEmphasis}"
                       BorderThickness="0,0,0,1" />
               <!-- Spec 12.4: a tri-state box that selects all nights when it is clear and clears
@@ -328,7 +334,10 @@
                         Command="{Binding ToggleAllNightsCommand}"
                         ToolTip.Tip="Select every night, or clear the selection" />
               <TextBlock Grid.Column="1" x:Name="LedgerNightHead" Classes="t-label ledger-head" />
-              <TextBlock Grid.Column="2" Classes="t-label ledger-head num ledger-metric" Text="h" />
+              <!-- "Hours" is wider than the column's 46 px floor, and the narrow ledger has 2 px of slack.
+                   The negative left margin lets the right-aligned word reach into the empty space
+                   under the short "Night" head instead of widening the shared Hours column. -->
+              <TextBlock Grid.Column="2" Classes="t-label ledger-head num ledger-metric" Text="Hours" Margin="-6,0,2,0" />
               <TextBlock Grid.Column="3" Classes="t-label ledger-head num ledger-frames ledger-metric" Text="Frames" />
               <!-- R4: every comparison this page draws between a night and the target is
                    labelled, because a night median against a target mean is not like for like. -->
@@ -382,7 +391,7 @@
               <Grid Classes="ledger-row" MinHeight="36" TextElement.Foreground="{DynamicResource ColorTextSecondary}">
                 <Grid.ColumnDefinitions>
                   <ColumnDefinition Width="20" />
-                  <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                  <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" MaxWidth="{StaticResource LedgerNightMaxWidth}" />
                   <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
                   <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
                   <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
@@ -396,6 +405,7 @@
                        row is the target's own averages, not a night, and a session-scope value has
                        no slot on it. -->
                   <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+                  <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="1" Classes="figure" x:Name="TotalsRowLabel" Text="{Binding Totals.LedgerRowLabelText}" />
                 <TextBlock Grid.Column="2" Classes="num ledger-metric" Text="{Binding Totals.LedgerIntegrationText}" />
@@ -453,7 +463,7 @@
                   <Grid Classes="ledger-row" MinHeight="34">
                     <Grid.ColumnDefinitions>
                       <ColumnDefinition Width="20" />
-                      <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" />
+                      <ColumnDefinition Width="*" MinWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).NightColumnMinWidth}" MaxWidth="{StaticResource LedgerNightMaxWidth}" />
                       <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=46}" MaxWidth="52" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHours}" />
                       <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="62" SharedSizeGroup="{Binding #Root.IsCompact, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerFrames}" />
                       <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=60}" MaxWidth="97" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerHfr}" />
@@ -463,8 +473,9 @@
                       <ColumnDefinition Width="Auto" MinWidth="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.Unless}, ConverterParameter=52}" MaxWidth="64" SharedSizeGroup="{Binding #Root.IsCollapsed, Converter={x:Static parts:NightsLedgerPart.GroupUnless}, ConverterParameter=LedgerStars}" />
                       <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerFiltersSizeGroup}" />
                       <ColumnDefinition Width="Auto" MinWidth="0" MaxWidth="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomMaxWidth}" SharedSizeGroup="{Binding #Root.((detail:TargetDetailViewModel)DataContext).LedgerCustomSizeGroup}" />
+                      <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Grid.Column="0" Grid.ColumnSpan="11" Classes="rule" />
+                    <Border Grid.Column="0" Grid.ColumnSpan="12" Classes="rule" />
                     <!-- Spec 12.4: checking a night does not select it. The lit row names the
                          night the pane is showing and the check names a night an action will act
                          on, so the box swallows its own pointer press rather than letting the
@@ -544,10 +555,22 @@
                                header strip directly above, so a text cell repeating it on every night
                                row says nothing the reader cannot already see. The automation name is
                                untouched and still names the column and the night. -->
+                          <!-- As wide as the column's heading when that needs more than the
+                               editor, the figure TargetDetailViewModel.LedgerCellWidth gives the
+                               header strip, so the label sits over its own boxes. -->
                           <controls:CustomCellEditor ShowWatermark="False"
                                                      Classes.cell-check="{Binding IsCheckBox}"
                                                      Classes.cell-choice="{Binding IsComboBox}"
-                                                     Classes.cell-text="{Binding IsTextBox}" />
+                                                     Classes.cell-text="{Binding IsTextBox}">
+                            <controls:CustomCellEditor.Width>
+                              <MultiBinding Converter="{x:Static cc:CustomCellWidths.HeadingWidth}">
+                                <Binding Path="Column.Name" />
+                                <Binding Path="Column.Type" />
+                                <Binding Path="#Root.FontSize" />
+                                <Binding Path="#Root.FontFamily" />
+                              </MultiBinding>
+                            </controls:CustomCellEditor.Width>
+                          </controls:CustomCellEditor>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>

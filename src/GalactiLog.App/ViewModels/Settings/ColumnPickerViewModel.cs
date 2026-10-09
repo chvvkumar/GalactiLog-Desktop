@@ -54,6 +54,10 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
     private readonly Action<Action<string, string[]>>? _unsubscribeChanged;
     private readonly ObservableCollection<ColumnGroupViewModel> _groups = [];
     private readonly INotifyCollectionChanged? _liveColumns;
+
+    // True for ForLedger, whose table id lists the slugs switched OFF, so a written list is read
+    // inverted in OnColumnsChanged.
+    private readonly bool _keysAreHidden;
     private bool _disposed;
 
     private ColumnPickerViewModel(
@@ -62,9 +66,11 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
         IReadOnlyList<ColumnViewModel> columns,
         Action<ColumnViewModel> toggle,
         Action<Action<string, string[]>>? subscribeChanged = null,
-        Action<Action<string, string[]>>? unsubscribeChanged = null)
+        Action<Action<string, string[]>>? unsubscribeChanged = null,
+        bool keysAreHidden = false)
     {
         TableId = tableId;
+        _keysAreHidden = keysAreHidden;
         Title = title;
         Columns = columns;
         RebuildGroups();
@@ -199,11 +205,11 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
     }
 
     /// <summary>
-    /// Spec 12.4 and 12.15's "Nights ledger columns" (ruling C4). The one <c>display.columns</c>
-    /// entry whose list holds custom slugs alone: the ledger's built-in columns are not
-    /// hideable and are not in it (spec 5.8.2's Phase 20 note). Off by default on a fresh profile
-    /// (user choice 3), because <see cref="DisplaySettings.ColumnsFor"/> answers empty for
-    /// <see cref="DisplaySettings.LedgerTableId"/>.
+    /// Spec 12.4 and 12.15's "Nights ledger columns" (ruling C4). Writes
+    /// <see cref="DisplaySettings.LedgerHiddenTableId"/>, the custom slugs switched off: the
+    /// ledger's built-in columns are not hideable and are not in it (spec 5.8.2's Phase 20 note).
+    /// Every column starts shown, because <see cref="CustomColumnSet.IsShown"/> answers true for a
+    /// slug in no hidden list.
     /// </summary>
     /// <param name="all">Every custom column definition, of every scope. Filtered to session scope
     /// here through <see cref="CustomColumnSet.NightExpander"/>, the same filter the ledger row
@@ -216,31 +222,32 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
     {
         // LastWritten first, the same reason ForFrames states: the display document a tab read is
         // a snapshot, and it is stale the moment any table toggles a column.
-        var visible = writer.LastWritten(DisplaySettings.LedgerTableId)
-            ?? display.ColumnsFor(DisplaySettings.LedgerTableId);
+        var hidden = writer.LastWritten(DisplaySettings.LedgerHiddenTableId)
+            ?? display.ColumnsFor(DisplaySettings.LedgerHiddenTableId);
 
         var columns = CustomColumnSet.NightExpander(all)
             .Select(column => new ColumnViewModel(
                 column.Slug,
                 column.Name,
-                visible.Contains(column.Slug, StringComparer.Ordinal),
+                CustomColumnSet.IsShown(hidden, column.Slug),
                 canHide: true))
             .ToArray();
 
         ColumnPickerViewModel? picker = null;
         picker = new ColumnPickerViewModel(
-            DisplaySettings.LedgerTableId,
+            DisplaySettings.LedgerHiddenTableId,
             "Nights list columns",
             columns,
             column =>
             {
                 column.IsVisible = !column.IsVisible;
                 writer.Write(
-                    DisplaySettings.LedgerTableId,
-                    [.. picker!.Columns.Where(entry => entry.IsVisible).Select(entry => entry.Key)]);
+                    DisplaySettings.LedgerHiddenTableId,
+                    [.. picker!.Columns.Where(entry => !entry.IsVisible).Select(entry => entry.Key)]);
             },
             subscribeChanged: handler => writer.Changed += handler,
-            unsubscribeChanged: handler => writer.Changed -= handler);
+            unsubscribeChanged: handler => writer.Changed -= handler,
+            keysAreHidden: true);
 
         return picker;
     }
@@ -409,7 +416,9 @@ public sealed partial class ColumnPickerViewModel : ObservableObject, IDisposabl
 
         foreach (var column in Columns)
         {
-            column.IsVisible = keys.Contains(column.Key, StringComparer.Ordinal);
+            column.IsVisible = _keysAreHidden
+                ? CustomColumnSet.IsShown(keys, column.Key)
+                : keys.Contains(column.Key, StringComparer.Ordinal);
         }
     }
 }
