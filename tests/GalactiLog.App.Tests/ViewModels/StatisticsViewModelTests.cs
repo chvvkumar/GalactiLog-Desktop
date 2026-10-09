@@ -512,6 +512,51 @@ public class StatisticsViewModelTests
     }
 
     [Fact]
+    public void Inventory_FiguresCarryNoUnitSuffix()
+    {
+        // The unit is in the column header once (spec.md item 3).
+        using var page = Factory.Create(loadStats: () => Factory.Sample(
+            cameras: [Factory.Inventory("ASI2600MM") with { MedianFwhmArcsec = 2.31d, MedianGuidingRmsArcsec = 0.52d }]));
+
+        Assert.Equal("2.31", page.Inventory.Cameras[0].MedianFwhm);
+        Assert.Equal("0.52", page.Inventory.Cameras[0].MedianGuidingRms);
+    }
+
+    [Fact]
+    public void FwhmFrameCount_WithNoFwhmFrames_IsMissing()
+    {
+        using var page = Factory.Create(loadStats: () => Factory.Sample(
+            performance: [Factory.Combo() with { FwhmFrameCount = 0 }],
+            cameras: [Factory.Inventory("ASI2600MM") with { FwhmFrameCount = 0 }]));
+
+        Assert.Equal(MetricText.Missing, page.Performance.Rows[0].FwhmFrameCount);
+        Assert.Equal(MetricText.Missing, page.Inventory.Cameras[0].FwhmFrameCount);
+    }
+
+    [Fact]
+    public void Performance_FiltersWithNoBreakdown_IsMissing()
+    {
+        using var page = Factory.Create(loadStats: () => Factory.Sample(
+            performance: [Factory.Combo(breakdown: [])]));
+
+        Assert.Equal(MetricText.Missing, page.Performance.Rows[0].Filters);
+    }
+
+    [AvaloniaFact]
+    public void GradedCell_ForAMissingValue_TakesTheFaintInk()
+    {
+        // The view binds a graded cell's Foreground locally, which outranks the table's faint-dash
+        // style, so the cell's own brush must be the faint one.
+        ChartTheme.Apply();
+        var brushes = new BandBrushes();
+
+        var cell = MetricGrading.Grade(null, MetricBaseline.Of([0.4d]), "Ecc", brushes);
+
+        Assert.Equal(MetricText.Missing, cell.Text);
+        Assert.Same(brushes.Missing, cell.Brush);
+    }
+
+    [Fact]
     public void FilterUsage_IsOrderedByIntegrationDescending()
     {
         using var page = Factory.Create(loadStats: () => Factory.Sample(filterUsage:

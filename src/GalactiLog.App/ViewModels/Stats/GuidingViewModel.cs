@@ -163,6 +163,11 @@ public sealed partial class GuidingViewModel : ObservableObject
     /// legend and its table view when <see cref="HasArcs"/> is false.</summary>
     public const string NoRowsText = "No guiding data available";
 
+    /// <summary>The Rig column header's hover text, on the scorecard and the altitude table.
+    /// </summary>
+    public const string RigTooltip =
+        "The telescope mapped to the PHD2 profile. Cameras used under one telescope share a row.";
+
     /// <summary>
     /// The times sign both the wedge ratio and the legend print, the web's own <c>TIMES</c>
     /// (<c>GuidingAltitude.tsx:35</c>). Spelled as its code point rather than pasted, so a later

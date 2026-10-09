@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:stats="using:GalactiLog.App.ViewModels.Stats"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              x:Class="GalactiLog.App.Views.StatisticsView"
              x:DataType="stats:StatisticsViewModel">
@@ -15,11 +16,10 @@
        which fires on a structural edit to a page still in the old one): there is no Border.card
        style and no non-zero CornerRadius anywhere in this file. Containment is alignment and the
        shared Border.rule hairline, section headings are TextBlock Classes="t-label section", and
-       every type tier, figure and numeric alignment comes from Theme/Controls.axaml. Two local
-       styles remain, TextBlock.cell and TextBlock.cell-left, and each is a shared class plus one
-       ink setter: `num` carries the alignment and the tabular figures but no ink, and this page
-       renders about seventy data cells, so spelling a Foreground on each of them is the ledger's
-       shape for five cells and not for seventy. -->
+       every type tier, figure and numeric alignment comes from Theme/Controls.axaml. The four
+       tables are on the shared table spine (Theme/Table.axaml). Two local styles remain for the
+       lists and cards outside them, TextBlock.cell and TextBlock.cell-left, and each is a shared
+       class plus one ink setter: `num` carries the alignment and the tabular figures but no ink. -->
   <UserControl.Resources>
     <!-- Ruling Q3. Three of the six cards this template serves carry a spec 12.12 topic on their
          card title (stats.filter-usage, stats.top-targets and stats.ingest), and a glyph inside a
@@ -56,6 +56,81 @@
          was written; the shape is the same pair, a Button.chevron beside a drawn Path. -->
     <StreamGeometry x:Key="IconChevronRight">M6,3 L11,8 L6,13</StreamGeometry>
     <StreamGeometry x:Key="IconChevronDown">M3,6 L8,11 L13,6</StreamGeometry>
+
+    <!-- The four tables (spec.md items 1 to 9). Figures are Auto Number columns that never trim;
+         the one star column is the name, capped and trimmed with a tooltip. Each table sits in a
+         horizontal table scroller, so a narrow window scrolls the table sideways rather than
+         clipping a figure, while a vertical wheel still reaches the page. -->
+    <t:TableColumns x:Key="PerfCols" Id="Perf">
+      <t:TableColumn Key="name" Width="*" MaxWidth="360" />
+      <t:TableColumn Key="frames" Kind="Number" />
+      <t:TableColumn Key="avg" Kind="Number" />
+      <t:TableColumn Key="integration" Kind="Number" />
+      <t:TableColumn Key="hfr" Kind="Number" />
+      <t:TableColumn Key="besthfr" Kind="Number" />
+      <t:TableColumn Key="ecc" Kind="Number" />
+      <t:TableColumn Key="fwhm" Kind="Number" />
+      <t:TableColumn Key="fwhmn" Kind="Number" />
+      <t:TableColumn Key="filters" MaxWidth="200" />
+    </t:TableColumns>
+
+    <t:TableColumns x:Key="ScoreCols" Id="Score">
+      <t:TableColumn Key="rig" Width="*" MaxWidth="320" />
+      <t:TableColumn Key="sessions" Kind="Number" />
+      <t:TableColumn Key="gated" />
+      <t:TableColumn Key="hours" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+      <t:TableColumn Key="ra" Kind="Number" />
+      <t:TableColumn Key="dec" Kind="Number" />
+      <t:TableColumn Key="filtered" Kind="Number" />
+      <t:TableColumn Key="ratio" Kind="Number" />
+      <t:TableColumn Key="settle" Kind="Number" />
+    </t:TableColumns>
+
+    <t:TableColumns x:Key="AltCols" Id="Alt">
+      <t:TableColumn Key="rig" Width="*" MaxWidth="320" />
+      <t:TableColumn Key="band" />
+      <t:TableColumn Key="sessions" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+      <t:TableColumn Key="ra" Kind="Number" />
+      <t:TableColumn Key="dec" Kind="Number" />
+    </t:TableColumns>
+
+    <t:TableColumns x:Key="InvCols" Id="Inv">
+      <t:TableColumn Key="name" Width="*" MaxWidth="360" />
+      <t:TableColumn Key="frames" Kind="Number" />
+      <t:TableColumn Key="nights" Kind="Number" />
+      <t:TableColumn Key="targets" Kind="Number" />
+      <t:TableColumn Key="avg" Kind="Number" />
+      <t:TableColumn Key="integration" Kind="Number" />
+      <t:TableColumn Key="fwhm" Kind="Number" />
+      <t:TableColumn Key="fwhmn" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+    </t:TableColumns>
+
+    <!-- One camera or telescope row, for both inventory tables. -->
+    <DataTemplate x:Key="InventoryRowTemplate" x:DataType="stats:EquipmentInventoryRow">
+      <t:TableRow Columns="{StaticResource InvCols}">
+        <DockPanel t:TableRow.Col="name" ToolTip.Tip="{Binding Name}">
+          <TextBlock DockPanel.Dock="Right"
+                     Margin="4,0,0,0"
+                     Text="(grouped)"
+                     IsVisible="{Binding Grouped}"
+                     Foreground="{DynamicResource ColorTextTertiary}"
+                     ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.GroupedTooltip}" />
+          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" />
+        </DockPanel>
+        <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCount}" />
+        <TextBlock t:TableRow.Col="nights" Text="{Binding Nights}" />
+        <TextBlock t:TableRow.Col="targets" Text="{Binding TargetCount}" />
+        <TextBlock t:TableRow.Col="avg" Text="{Binding AvgSession}" />
+        <TextBlock t:TableRow.Col="integration" Text="{Binding Integration}" />
+        <TextBlock t:TableRow.Col="fwhm" Text="{Binding MedianFwhm}" />
+        <!-- The web's FwhmValue annotation (review finding M2). -->
+        <TextBlock t:TableRow.Col="fwhmn" Text="{Binding FwhmFrameCount}" Classes="t-caption" />
+        <TextBlock t:TableRow.Col="rms" Text="{Binding MedianGuidingRms}" />
+      </t:TableRow>
+    </DataTemplate>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -153,91 +228,99 @@
                      Classes="t-caption"
                      TextWrapping="Wrap"
                      IsVisible="{Binding Performance.IsEmpty}" />
-          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*,1.5*" IsVisible="{Binding !Performance.IsEmpty}">
-            <TextBlock Grid.Column="0" Text="Equipment" Classes="t-label" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="3" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="4"
-                       Text="Med HFR (px)"
-                       Classes="t-label num"
-                       TextTrimming="CharacterEllipsis"
-                       ToolTip.Tip="Pixel HFR; only comparable within one optical train" />
-            <TextBlock Grid.Column="5"
-                       Text="Best HFR (px)"
-                       Classes="t-label num"
-                       TextTrimming="CharacterEllipsis"
-                       ToolTip.Tip="Pixel HFR; only comparable within one optical train" />
-            <TextBlock Grid.Column="6" Text="Med Ecc" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="7" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="8" Text="Filters" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-          </Grid>
-          <ItemsControl x:Name="PerformanceRows" ItemsSource="{Binding Performance.Rows}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="stats:EquipmentComboRowViewModel">
-                <StackPanel>
-                  <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*,1.5*">
-                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                      <ToggleButton IsChecked="{Binding IsExpanded, Mode=TwoWay}"
-                                    Padding="6,0"
-                                    Content="+" />
-                      <TextBlock Text="{Binding Name}" Classes="cell-left" VerticalAlignment="Center" />
-                      <TextBlock Text="(grouped)"
-                                 VerticalAlignment="Center"
-                                 IsVisible="{Binding Grouped}"
-                                 Foreground="{DynamicResource ColorTextTertiary}"
-                                 ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled"
+                        t:Table.Scroller="True"
+                        IsVisible="{Binding !Performance.IsEmpty}">
+            <StackPanel Grid.IsSharedSizeScope="True">
+              <t:TableRow Kind="Header" Columns="{StaticResource PerfCols}">
+                <TextBlock t:TableRow.Col="name" Text="Equipment" ToolTip.Tip="Telescope + camera" />
+                <TextBlock t:TableRow.Col="frames" Text="{x:Static t:TableHeads.Frames}" />
+                <TextBlock t:TableRow.Col="avg" Text="Avg session" />
+                <TextBlock t:TableRow.Col="integration" Text="Integration" />
+                <TextBlock t:TableRow.Col="hfr"
+                           Text="{x:Static t:TableHeads.Hfr}"
+                           ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.MedianHfrTooltip}" />
+                <TextBlock t:TableRow.Col="besthfr"
+                           Text="Best HFR px"
+                           ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.HfrNotGradedTooltip}" />
+                <TextBlock t:TableRow.Col="ecc" Text="{x:Static t:TableHeads.Ecc}" ToolTip.Tip="Median eccentricity" />
+                <TextBlock t:TableRow.Col="fwhm"
+                           Text="{x:Static t:TableHeads.Fwhm}"
+                           ToolTip.Tip="Median full width at half maximum, arcseconds" />
+                <TextBlock t:TableRow.Col="filters" Text="Filters" ToolTip.Tip="The filters this rig shot" />
+              </t:TableRow>
+              <ItemsControl x:Name="PerformanceRows" Classes="table" ItemsSource="{Binding Performance.Rows}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate x:DataType="stats:EquipmentComboRowViewModel">
+                    <!-- One item holds a row and its expanded filter rows, so one zebra band covers
+                         the group. -->
+                    <StackPanel>
+                      <t:TableRow Columns="{StaticResource PerfCols}">
+                        <DockPanel t:TableRow.Col="name" ToolTip.Tip="{Binding Name}">
+                          <ToggleButton DockPanel.Dock="Left"
+                                        Margin="0,0,4,0"
+                                        IsChecked="{Binding IsExpanded, Mode=TwoWay}"
+                                        Padding="6,0"
+                                        Content="+" />
+                          <TextBlock DockPanel.Dock="Right"
+                                     Margin="4,0,0,0"
+                                     Text="(grouped)"
+                                     VerticalAlignment="Center"
+                                     IsVisible="{Binding Grouped}"
+                                     Foreground="{DynamicResource ColorTextTertiary}"
+                                     ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.GroupedTooltip}" />
+                          <TextBlock Text="{Binding Name}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+                        </DockPanel>
+                        <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCount}" />
+                        <TextBlock t:TableRow.Col="avg" Text="{Binding AvgSession}" />
+                        <TextBlock t:TableRow.Col="integration" Text="{Binding Integration}" />
+                        <TextBlock t:TableRow.Col="hfr"
+                                   Text="{Binding MedianHfr}"
+                                   ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.HfrNotGradedTooltip}" />
+                        <TextBlock t:TableRow.Col="besthfr"
+                                   Text="{Binding BestHfr}"
+                                   ToolTip.Tip="{x:Static stats:EquipmentComboRowViewModel.HfrNotGradedTooltip}" />
+                        <TextBlock t:TableRow.Col="ecc"
+                                   Text="{Binding MedianEccentricity.Text}"
+                                   Foreground="{Binding MedianEccentricity.Brush}"
+                                   ToolTip.Tip="{Binding MedianEccentricity.Tooltip}" />
+                        <TextBlock t:TableRow.Col="fwhm"
+                                   Text="{Binding MedianFwhm.Text}"
+                                   Foreground="{Binding MedianFwhm.Brush}"
+                                   ToolTip.Tip="{Binding MedianFwhm.Tooltip}" />
+                        <!-- The web's FwhmValue annotation, and spec 12.5's "the count of frames
+                             carrying a fwhm value": a median over four frames must not read like a
+                             median over four hundred. -->
+                        <TextBlock t:TableRow.Col="fwhmn" Text="{Binding FwhmFrameCount}" Classes="t-caption" />
+                        <TextBlock t:TableRow.Col="filters" Text="{Binding Filters}" ToolTip.Tip="{Binding Filters}" />
+                      </t:TableRow>
+                      <!-- A filter row has no Avg session, FWHM count or Filters cell: those do not
+                           apply to one filter, which is not a missing value. -->
+                      <ItemsControl ItemsSource="{Binding FilterRows}" IsVisible="{Binding IsExpanded}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="stats:EquipmentFilterRow">
+                            <t:TableRow Columns="{StaticResource PerfCols}">
+                              <StackPanel t:TableRow.Col="name" Orientation="Horizontal" ToolTip.Tip="{Binding FilterName}">
+                                <Border Width="{x:Static t:TableMetrics.SubRowIndent}" />
+                                <TextBlock Text="{Binding FilterName}" />
+                              </StackPanel>
+                              <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCount}" />
+                              <TextBlock t:TableRow.Col="integration" Text="{Binding Integration}" />
+                              <TextBlock t:TableRow.Col="hfr" Text="{Binding MedianHfr}" />
+                              <TextBlock t:TableRow.Col="besthfr" Text="{Binding BestHfr}" />
+                              <TextBlock t:TableRow.Col="ecc" Text="{Binding MedianEccentricity}" />
+                              <TextBlock t:TableRow.Col="fwhm" Text="{Binding MedianFwhm}" />
+                            </t:TableRow>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
                     </StackPanel>
-                    <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
-                    <TextBlock Grid.Column="2" Text="{Binding AvgSession}" Classes="num cell" />
-                    <TextBlock Grid.Column="3" Text="{Binding Integration}" Classes="num cell" />
-                    <TextBlock Grid.Column="4"
-                               Text="{Binding MedianHfr}"
-                               Classes="num cell"
-                               ToolTip.Tip="Pixel HFR; only comparable within this optical train, not graded across rigs" />
-                    <TextBlock Grid.Column="5"
-                               Text="{Binding BestHfr}"
-                               Classes="num cell"
-                               ToolTip.Tip="Pixel HFR; only comparable within this optical train, not graded across rigs" />
-                    <TextBlock Grid.Column="6"
-                               Text="{Binding MedianEccentricity.Text}"
-                               Foreground="{Binding MedianEccentricity.Brush}"
-                               ToolTip.Tip="{Binding MedianEccentricity.Tooltip}"
-                               Classes="num cell" />
-                    <StackPanel Grid.Column="7" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                      <TextBlock Text="{Binding MedianFwhm.Text}"
-                                 Foreground="{Binding MedianFwhm.Brush}"
-                                 ToolTip.Tip="{Binding MedianFwhm.Tooltip}"
-                                 Classes="num cell" />
-                      <!-- The web's FwhmValue annotation, and spec 12.5's "the count of frames carrying a
-                           fwhm value": a median over four frames must not read like a median over four
-                           hundred. -->
-                      <TextBlock Text="{Binding FwhmFrameCount}"
-                                 Classes="t-caption"
-                                 FontFeatures="tnum=1"
-                                 VerticalAlignment="Center" />
-                    </StackPanel>
-                    <TextBlock Grid.Column="8" Text="{Binding Filters}" Classes="num cell" />
-                  </Grid>
-                  <ItemsControl ItemsSource="{Binding FilterRows}" IsVisible="{Binding IsExpanded}" Margin="24,0,0,0">
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="stats:EquipmentFilterRow">
-                        <Grid ColumnDefinitions="2*,*,*,*,*,*,*">
-                          <TextBlock Grid.Column="0" Text="{Binding FilterName}" Classes="cell-left" />
-                          <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
-                          <TextBlock Grid.Column="2" Text="{Binding Integration}" Classes="num cell" />
-                          <TextBlock Grid.Column="3" Text="{Binding MedianHfr}" Classes="num cell" />
-                          <TextBlock Grid.Column="4" Text="{Binding BestHfr}" Classes="num cell" />
-                          <TextBlock Grid.Column="5" Text="{Binding MedianEccentricity}" Classes="num cell" />
-                          <TextBlock Grid.Column="6" Text="{Binding MedianFwhm}" Classes="num cell" />
-                        </Grid>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-                </StackPanel>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </StackPanel>
+          </ScrollViewer>
         </StackPanel>
 
         <!-- 3. Guiding (spec 12.5's "The Guiding section (Phase 15B)"), placed immediately after
@@ -270,131 +353,78 @@
           </StackPanel>
 
           <StackPanel Spacing="10" IsVisible="{Binding Guiding.ShowCards}">
-            <!-- The scorecard. Nine columns on the proportional-star shape the Equipment
-                 performance grid above already uses, with a floor on every one of them: an Auto
-                 column does not shrink when the arranged width is smaller than the sum
-                 (TargetDetailView.axaml:114, HANDOFF item 48), and nine Auto columns are how a
-                 header clips in a narrow window. Stars shrink together and the floors stop them
-                 collapsing into one another. -->
             <TextBlock Text="Guiding scorecard" Classes="t-label" />
-            <Grid>
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="2*" MinWidth="120" />
-                <ColumnDefinition Width="*" MinWidth="76" />
-                <ColumnDefinition Width="*" MinWidth="52" />
-                <ColumnDefinition Width="*" MinWidth="60" />
-                <ColumnDefinition Width="*" MinWidth="56" />
-                <ColumnDefinition Width="*" MinWidth="60" />
-                <ColumnDefinition Width="*" MinWidth="56" />
-                <ColumnDefinition Width="*" MinWidth="52" />
-                <ColumnDefinition Width="*" MinWidth="56" />
-              </Grid.ColumnDefinitions>
-              <TextBlock Grid.Column="0"
-                         Text="Rig"
-                         Classes="t-label"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="The telescope mapped to the PHD2 profile. Cameras used under one telescope share a row." />
-              <TextBlock Grid.Column="1"
-                         Text="Sessions"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Guiding sessions catalogued for the rig. The smaller figure is the sessions with fewer than 100 guide frames, left out of the RMS figures." />
-              <TextBlock Grid.Column="2"
-                         Text="Hours"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Total guided time." />
-              <TextBlock Grid.Column="3"
-                         Text="RMS Total"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Typical guide error in arcseconds across both axes, weighted by frames. Lower is better; compare it against your image scale." />
-              <TextBlock Grid.Column="4"
-                         Text="RMS RA"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Guide error on the right ascension axis, in arcseconds. A high figure points at periodic error or polar alignment drift." />
-              <TextBlock Grid.Column="5"
-                         Text="RMS Dec"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Guide error on the declination axis, in arcseconds. A high figure points at balance or backlash." />
-              <TextBlock Grid.Column="6"
-                         Text="Filtered"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="RMS after short excursions are removed, so a gust or a cable snag does not dominate. The gap to RMS Total is how much of the error is spikes." />
-              <TextBlock Grid.Column="7"
-                         Text="Dec:RA"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Dec error divided by RA error. Near 1 is balanced; far from 1 says which axis to work on." />
-              <TextBlock Grid.Column="8"
-                         Text="Settle s"
-                         Classes="t-label num"
-                         TextTrimming="CharacterEllipsis"
-                         ToolTip.Tip="Median time after a dither before guiding is back within limits. High values cost imaging time." />
-            </Grid>
-            <ItemsControl x:Name="GuidingScorecardRows" ItemsSource="{Binding Guiding.Rows}">
-              <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="stats:GuidingScorecardRow">
-                  <StackPanel>
-                    <Grid>
-                      <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="2*" MinWidth="120" />
-                        <ColumnDefinition Width="*" MinWidth="76" />
-                        <ColumnDefinition Width="*" MinWidth="52" />
-                        <ColumnDefinition Width="*" MinWidth="60" />
-                        <ColumnDefinition Width="*" MinWidth="56" />
-                        <ColumnDefinition Width="*" MinWidth="60" />
-                        <ColumnDefinition Width="*" MinWidth="56" />
-                        <ColumnDefinition Width="*" MinWidth="52" />
-                        <ColumnDefinition Width="*" MinWidth="56" />
-                      </Grid.ColumnDefinitions>
-                      <TextBlock Grid.Column="0"
-                                 Text="{Binding Rig}"
-                                 Classes="cell-left"
-                                 TextTrimming="CharacterEllipsis" />
-                      <StackPanel Grid.Column="1"
-                                  Orientation="Horizontal"
-                                  HorizontalAlignment="Right"
-                                  Spacing="4">
-                        <TextBlock Text="{Binding Sessions}" Classes="num cell" />
-                        <TextBlock Text="{Binding GatedNote}"
+            <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                          VerticalScrollBarVisibility="Disabled"
+                          t:Table.Scroller="True">
+              <StackPanel Grid.IsSharedSizeScope="True">
+                <t:TableRow Kind="Header" Columns="{StaticResource ScoreCols}">
+                  <TextBlock t:TableRow.Col="rig" Text="Rig" ToolTip.Tip="{x:Static stats:GuidingViewModel.RigTooltip}" />
+                  <TextBlock t:TableRow.Col="sessions"
+                             Text="Sessions"
+                             ToolTip.Tip="Guiding sessions catalogued for the rig. The smaller figure is the sessions with fewer than 100 guide frames, left out of the RMS figures." />
+                  <TextBlock t:TableRow.Col="hours"
+                             Text="{x:Static t:TableHeads.Hours}"
+                             ToolTip.Tip="Total guided time." />
+                  <TextBlock t:TableRow.Col="rms"
+                             Text="RMS total &quot;"
+                             ToolTip.Tip="Typical guide error in arcseconds across both axes, weighted by frames. Lower is better; compare it against your image scale." />
+                  <TextBlock t:TableRow.Col="ra"
+                             Text="RMS RA &quot;"
+                             ToolTip.Tip="Guide error on the right ascension axis, in arcseconds. A high figure points at periodic error or polar alignment drift." />
+                  <TextBlock t:TableRow.Col="dec"
+                             Text="RMS Dec &quot;"
+                             ToolTip.Tip="Guide error on the declination axis, in arcseconds. A high figure points at balance or backlash." />
+                  <TextBlock t:TableRow.Col="filtered"
+                             Text="Filtered &quot;"
+                             ToolTip.Tip="RMS after short excursions are removed, so a gust or a cable snag does not dominate. The gap to RMS Total is how much of the error is spikes." />
+                  <TextBlock t:TableRow.Col="ratio"
+                             Text="Dec:RA"
+                             ToolTip.Tip="Dec error divided by RA error. Near 1 is balanced; far from 1 says which axis to work on." />
+                  <TextBlock t:TableRow.Col="settle"
+                             Text="Settle s"
+                             ToolTip.Tip="Median time after a dither before guiding is back within limits. High values cost imaging time." />
+                </t:TableRow>
+                <ItemsControl x:Name="GuidingScorecardRows" Classes="table" ItemsSource="{Binding Guiding.Rows}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="stats:GuidingScorecardRow">
+                      <StackPanel>
+                        <t:TableRow Columns="{StaticResource ScoreCols}">
+                          <TextBlock t:TableRow.Col="rig" Text="{Binding Rig}" ToolTip.Tip="{Binding Rig}" />
+                          <TextBlock t:TableRow.Col="sessions" Text="{Binding Sessions}" />
+                          <TextBlock t:TableRow.Col="gated"
+                                     Text="{Binding GatedNote}"
+                                     Classes="t-caption"
+                                     IsVisible="{Binding HasGatedNote}" />
+                          <TextBlock t:TableRow.Col="hours" Text="{Binding Hours}" />
+                          <TextBlock t:TableRow.Col="rms"
+                                     Text="{Binding RmsTotal.Text}"
+                                     Foreground="{Binding RmsTotal.Brush}"
+                                     ToolTip.Tip="{Binding RmsTotal.Tooltip}" />
+                          <TextBlock t:TableRow.Col="ra"
+                                     Text="{Binding RmsRa.Text}"
+                                     Foreground="{Binding RmsRa.Brush}"
+                                     ToolTip.Tip="{Binding RmsRa.Tooltip}" />
+                          <TextBlock t:TableRow.Col="dec"
+                                     Text="{Binding RmsDec.Text}"
+                                     Foreground="{Binding RmsDec.Brush}"
+                                     ToolTip.Tip="{Binding RmsDec.Tooltip}" />
+                          <TextBlock t:TableRow.Col="filtered" Text="{Binding Filtered}" />
+                          <TextBlock t:TableRow.Col="ratio" Text="{Binding DecRaRatio}" />
+                          <TextBlock t:TableRow.Col="settle" Text="{Binding SettleSeconds}" />
+                        </t:TableRow>
+                        <!-- The guide-exposure sub-row. Absent, not blank, when no session of the
+                             rig carried an exposure. -->
+                        <TextBlock Text="{Binding GuideExposure}"
                                    Classes="t-caption"
-                                   IsVisible="{Binding HasGatedNote}"
-                                   VerticalAlignment="Center" />
+                                   IsVisible="{Binding HasGuideExposure}"
+                                   Margin="{x:Static t:TableMetrics.CellPadding}" />
                       </StackPanel>
-                      <TextBlock Grid.Column="2" Text="{Binding Hours}" Classes="num cell" />
-                      <TextBlock Grid.Column="3"
-                                 Text="{Binding RmsTotal.Text}"
-                                 Foreground="{Binding RmsTotal.Brush}"
-                                 ToolTip.Tip="{Binding RmsTotal.Tooltip}"
-                                 Classes="num cell" />
-                      <TextBlock Grid.Column="4"
-                                 Text="{Binding RmsRa.Text}"
-                                 Foreground="{Binding RmsRa.Brush}"
-                                 ToolTip.Tip="{Binding RmsRa.Tooltip}"
-                                 Classes="num cell" />
-                      <TextBlock Grid.Column="5"
-                                 Text="{Binding RmsDec.Text}"
-                                 Foreground="{Binding RmsDec.Brush}"
-                                 ToolTip.Tip="{Binding RmsDec.Tooltip}"
-                                 Classes="num cell" />
-                      <TextBlock Grid.Column="6" Text="{Binding Filtered}" Classes="num cell" />
-                      <TextBlock Grid.Column="7" Text="{Binding DecRaRatio}" Classes="num cell" />
-                      <TextBlock Grid.Column="8" Text="{Binding SettleSeconds}" Classes="num cell" />
-                    </Grid>
-                    <!-- The guide-exposure sub-row. Absent, not blank, when no session of the rig
-                         carried an exposure. -->
-                    <TextBlock Text="{Binding GuideExposure}"
-                               Classes="t-caption"
-                               IsVisible="{Binding HasGuideExposure}"
-                               Margin="0,0,0,2" />
-                  </StackPanel>
-                </DataTemplate>
-              </ItemsControl.ItemTemplate>
-            </ItemsControl>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
 
             <!-- RMS by altitude band. One quarter dome per rig in a wrapping grid: the arcs wrap
                  through the WrapPanel's own behaviour and no width is measured to choose a
@@ -536,28 +566,34 @@
                   <Binding Path="Guiding.IsTableExpanded" />
                 </MultiBinding>
               </StackPanel.IsVisible>
-              <Grid ColumnDefinitions="2*,2*,*,*,*,*">
-                <TextBlock Grid.Column="0" Text="Rig" Classes="t-label" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="1" Text="Band" Classes="t-label" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="2" Text="Sessions" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="3" Text="RMS Total" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="4" Text="RMS RA" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-                <TextBlock Grid.Column="5" Text="RMS Dec" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-              </Grid>
-              <ItemsControl x:Name="AltitudeTableRows" ItemsSource="{Binding Guiding.TableRows}">
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="stats:AltitudeTableRow">
-                    <Grid ColumnDefinitions="2*,2*,*,*,*,*">
-                      <TextBlock Grid.Column="0" Text="{Binding Rig}" Classes="cell-left" />
-                      <TextBlock Grid.Column="1" Text="{Binding Band}" Classes="cell-left" />
-                      <TextBlock Grid.Column="2" Text="{Binding Sessions}" Classes="num cell" />
-                      <TextBlock Grid.Column="3" Text="{Binding RmsTotal}" Classes="num cell" />
-                      <TextBlock Grid.Column="4" Text="{Binding RmsRa}" Classes="num cell" />
-                      <TextBlock Grid.Column="5" Text="{Binding RmsDec}" Classes="num cell" />
-                    </Grid>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
+              <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                            VerticalScrollBarVisibility="Disabled"
+                            t:Table.Scroller="True">
+                <StackPanel Grid.IsSharedSizeScope="True">
+                  <t:TableRow Kind="Header" Columns="{StaticResource AltCols}">
+                    <TextBlock t:TableRow.Col="rig" Text="Rig" ToolTip.Tip="{x:Static stats:GuidingViewModel.RigTooltip}" />
+                    <TextBlock t:TableRow.Col="band" Text="Band" />
+                    <TextBlock t:TableRow.Col="sessions" Text="Sessions" />
+                    <TextBlock t:TableRow.Col="rms" Text="RMS total &quot;" />
+                    <TextBlock t:TableRow.Col="ra" Text="RMS RA &quot;" />
+                    <TextBlock t:TableRow.Col="dec" Text="RMS Dec &quot;" />
+                  </t:TableRow>
+                  <ItemsControl x:Name="AltitudeTableRows" Classes="table" ItemsSource="{Binding Guiding.TableRows}">
+                    <ItemsControl.ItemTemplate>
+                      <DataTemplate x:DataType="stats:AltitudeTableRow">
+                        <t:TableRow Columns="{StaticResource AltCols}">
+                          <TextBlock t:TableRow.Col="rig" Text="{Binding Rig}" ToolTip.Tip="{Binding Rig}" />
+                          <TextBlock t:TableRow.Col="band" Text="{Binding Band}" />
+                          <TextBlock t:TableRow.Col="sessions" Text="{Binding Sessions}" />
+                          <TextBlock t:TableRow.Col="rms" Text="{Binding RmsTotal}" />
+                          <TextBlock t:TableRow.Col="ra" Text="{Binding RmsRa}" />
+                          <TextBlock t:TableRow.Col="dec" Text="{Binding RmsDec}" />
+                        </t:TableRow>
+                      </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+                </StackPanel>
+              </ScrollViewer>
             </StackPanel>
           </StackPanel>
         </StackPanel>
@@ -574,86 +610,51 @@
                      Classes="t-caption"
                      TextWrapping="Wrap"
                      IsVisible="{Binding Inventory.IsEmpty}" />
-          <TextBlock Text="Cameras" Classes="t-label" />
-          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
-            <TextBlock Grid.Column="0" Text="Name" Classes="t-label" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="Nights" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="3" Text="Targets" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="4" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="5" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="6" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="7" Text="Guiding" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-          </Grid>
-          <ItemsControl x:Name="CameraRows" ItemsSource="{Binding Inventory.Cameras}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="stats:EquipmentInventoryRow">
-                <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
-                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{Binding Name}" Classes="cell-left" />
-                    <TextBlock Text="(grouped)"
-                               IsVisible="{Binding Grouped}"
-                               Foreground="{DynamicResource ColorTextTertiary}"
-                               ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
-                  </StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
-                  <TextBlock Grid.Column="2" Text="{Binding Nights}" Classes="num cell" />
-                  <TextBlock Grid.Column="3" Text="{Binding TargetCount}" Classes="num cell" />
-                  <TextBlock Grid.Column="4" Text="{Binding AvgSession}" Classes="num cell" />
-                  <TextBlock Grid.Column="5" Text="{Binding Integration}" Classes="num cell" />
-                  <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                    <TextBlock Text="{Binding MedianFwhm}" Classes="num cell" />
-                    <!-- The web's FwhmValue annotation (review finding M2). -->
-                    <TextBlock Text="{Binding FwhmFrameCount}"
-                               Classes="t-caption"
-                               FontFeatures="tnum=1"
-                               VerticalAlignment="Center" />
-                  </StackPanel>
-                  <TextBlock Grid.Column="7" Text="{Binding MedianGuidingRms}" Classes="num cell" />
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
-          <TextBlock Text="Telescopes" Classes="t-label" />
-          <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
-            <TextBlock Grid.Column="0" Text="Name" Classes="t-label" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="1" Text="Frames" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="2" Text="Nights" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="3" Text="Targets" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="4" Text="Avg Session" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="5" Text="Integration" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="6" Text="Med FWHM (arcsec)" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-            <TextBlock Grid.Column="7" Text="Guiding" Classes="t-label num" TextTrimming="CharacterEllipsis" />
-          </Grid>
-          <ItemsControl x:Name="TelescopeRows" ItemsSource="{Binding Inventory.Telescopes}">
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="stats:EquipmentInventoryRow">
-                <Grid ColumnDefinitions="2*,*,*,*,*,*,*,*">
-                  <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{Binding Name}" Classes="cell-left" />
-                    <TextBlock Text="(grouped)"
-                               IsVisible="{Binding Grouped}"
-                               Foreground="{DynamicResource ColorTextTertiary}"
-                               ToolTip.Tip="Grouped: multiple equipment aliases are combined under this name" />
-                  </StackPanel>
-                  <TextBlock Grid.Column="1" Text="{Binding FrameCount}" Classes="num cell" />
-                  <TextBlock Grid.Column="2" Text="{Binding Nights}" Classes="num cell" />
-                  <TextBlock Grid.Column="3" Text="{Binding TargetCount}" Classes="num cell" />
-                  <TextBlock Grid.Column="4" Text="{Binding AvgSession}" Classes="num cell" />
-                  <TextBlock Grid.Column="5" Text="{Binding Integration}" Classes="num cell" />
-                  <StackPanel Grid.Column="6" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="4">
-                    <TextBlock Text="{Binding MedianFwhm}" Classes="num cell" />
-                    <!-- The web's FwhmValue annotation (review finding M2). -->
-                    <TextBlock Text="{Binding FwhmFrameCount}"
-                               Classes="t-caption"
-                               FontFeatures="tnum=1"
-                               VerticalAlignment="Center" />
-                  </StackPanel>
-                  <TextBlock Grid.Column="7" Text="{Binding MedianGuidingRms}" Classes="num cell" />
-                </Grid>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+          <!-- One column set for both tables, so Cameras and Telescopes line up with each other. -->
+          <ScrollViewer HorizontalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Disabled"
+                        t:Table.Scroller="True">
+            <StackPanel Grid.IsSharedSizeScope="True" Spacing="{x:Static t:TableMetrics.SectionGap}">
+              <StackPanel>
+                <TextBlock Text="Cameras" Classes="t-label" />
+                <t:TableRow Kind="Header" Columns="{StaticResource InvCols}">
+                  <TextBlock t:TableRow.Col="name" Text="Name" ToolTip.Tip="Camera name" />
+                  <TextBlock t:TableRow.Col="frames" Text="{x:Static t:TableHeads.Frames}" />
+                  <TextBlock t:TableRow.Col="nights" Text="Nights" />
+                  <TextBlock t:TableRow.Col="targets" Text="Targets" />
+                  <TextBlock t:TableRow.Col="avg" Text="Avg session" />
+                  <TextBlock t:TableRow.Col="integration" Text="Integration" />
+                  <TextBlock t:TableRow.Col="fwhm"
+                             Text="{x:Static t:TableHeads.Fwhm}"
+                             ToolTip.Tip="Median full width at half maximum, arcseconds" />
+                  <TextBlock t:TableRow.Col="rms" Text="{x:Static t:TableHeads.Rms}" ToolTip.Tip="Median guiding RMS, arcseconds" />
+                </t:TableRow>
+                <ItemsControl x:Name="CameraRows"
+                              Classes="table"
+                              ItemsSource="{Binding Inventory.Cameras}"
+                              ItemTemplate="{StaticResource InventoryRowTemplate}" />
+              </StackPanel>
+              <StackPanel>
+                <TextBlock Text="Telescopes" Classes="t-label" />
+                <t:TableRow Kind="Header" Columns="{StaticResource InvCols}">
+                  <TextBlock t:TableRow.Col="name" Text="Name" ToolTip.Tip="Telescope name" />
+                  <TextBlock t:TableRow.Col="frames" Text="{x:Static t:TableHeads.Frames}" />
+                  <TextBlock t:TableRow.Col="nights" Text="Nights" />
+                  <TextBlock t:TableRow.Col="targets" Text="Targets" />
+                  <TextBlock t:TableRow.Col="avg" Text="Avg session" />
+                  <TextBlock t:TableRow.Col="integration" Text="Integration" />
+                  <TextBlock t:TableRow.Col="fwhm"
+                             Text="{x:Static t:TableHeads.Fwhm}"
+                             ToolTip.Tip="Median full width at half maximum, arcseconds" />
+                  <TextBlock t:TableRow.Col="rms" Text="{x:Static t:TableHeads.Rms}" ToolTip.Tip="Median guiding RMS, arcseconds" />
+                </t:TableRow>
+                <ItemsControl x:Name="TelescopeRows"
+                              Classes="table"
+                              ItemsSource="{Binding Inventory.Telescopes}"
+                              ItemTemplate="{StaticResource InventoryRowTemplate}" />
+              </StackPanel>
+            </StackPanel>
+          </ScrollViewer>
         </StackPanel>
 
         <!-- Spec 13's Equipment performance comparison, a grouped column over the same rigs -->
