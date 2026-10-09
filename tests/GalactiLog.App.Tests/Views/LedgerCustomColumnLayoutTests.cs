@@ -212,11 +212,13 @@ public class LedgerCustomColumnLayoutTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(harness.Page.IsWide);
-        var grown = WideLedgerWidth
-            + TargetDetailViewModel.CustomCellCheckWidth
-            + TargetDetailViewModel.WideLedgerCustomGutter;
 
-        Assert.Equal(TargetDetailViewModel.CustomCellCheckWidth, harness.Page.LedgerCustomStripWidth);
+        // The check box column is as wide as its heading, so "Col 1" is read rather than trimmed.
+        var cell = HeadingWidth(view, "Col 1", CustomColumnType.Boolean);
+        Assert.True(cell > TargetDetailViewModel.CustomCellCheckWidth, $"the heading measured {cell}");
+        var grown = WideLedgerWidth + cell + TargetDetailViewModel.WideLedgerCustomGutter;
+
+        Assert.Equal(cell, harness.Page.LedgerCustomStripWidth);
 
         var ledger = view.Named<Grid>("Ledger");
         Assert.Equal(grown, ledger.Bounds.Width, 3);
@@ -247,8 +249,8 @@ public class LedgerCustomColumnLayoutTests
     [AvaloniaFact]
     public void ColumnsBeyondTheCap_AreDroppedLastFirst_AndTheLedgerStopsAtTheCap()
     {
-        // Four text columns want 120 each, 492 with their gutters, against a 208 px cap that the
-        // ledger's own 32 px gutter eats into first. One fits and the rest are dropped from the END,
+        // Four text columns want 120 each, 524 with their gaps and gutter, against a 276 px cap that
+        // the ledger's own 32 px gutter eats into first. Two fit and the rest are dropped from the END,
         // so the set the reader sees is always a prefix of the display order. Red against a ledger
         // that grows without a cap (the cap exceeded, and the session pane squeezed out), and red
         // against a drop that takes the first column instead of the last.
@@ -260,12 +262,13 @@ public class LedgerCustomColumnLayoutTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.True(harness.Page.IsWide);
-        Assert.Equal(["Col 1"], harness.Page.LedgerCustomHeadings.Select(heading => heading.Name));
-        Assert.Equal(TargetDetailViewModel.CustomCellTextWidth, harness.Page.LedgerCustomStripWidth);
-        Assert.All(harness.Page.Sessions, card => Assert.Single(card.LedgerCells));
+        Assert.Equal(["Col 1", "Col 2"], harness.Page.LedgerCustomHeadings.Select(heading => heading.Name));
+        Assert.Equal(
+            2 * TargetDetailViewModel.CustomCellTextWidth + TargetDetailViewModel.CustomCellSpacing,
+            harness.Page.LedgerCustomStripWidth);
+        Assert.All(harness.Page.Sessions, card => Assert.Equal(2, card.LedgerCells.Count));
 
-        // Four check boxes reach the cap: 4 * 36 plus 3 gaps of 4 is 156, and 156 plus the ledger's
-        // own 32 px gutter is 188, where a fifth would make it 228 against the 208 cap.
+        // Check boxes as wide as their "Col n" headings fill the cap, and the drop takes the rest.
         var (capped, cappedView) = WithColumns(
             [.. Enumerable.Repeat(CustomColumnType.Boolean, 12)]);
         using var __ = capped;
@@ -276,9 +279,22 @@ public class LedgerCustomColumnLayoutTests
         Assert.True(
             capped.Page.LedgerCustomExtraWidth <= TargetDetailViewModel.WideLedgerCustomWidthCap,
             $"the ledger took {capped.Page.LedgerCustomExtraWidth} extra, past the {TargetDetailViewModel.WideLedgerCustomWidthCap} cap");
+        var check = HeadingWidth(cappedView, "Col 1", CustomColumnType.Boolean);
+        var fits = (int)Math.Floor(
+            (TargetDetailViewModel.WideLedgerCustomWidthCap - TargetDetailViewModel.WideLedgerCustomGutter
+                + TargetDetailViewModel.CustomCellSpacing)
+            / (check + TargetDetailViewModel.CustomCellSpacing));
+        Assert.InRange(fits, 2, 11);
         Assert.Equal(
-            ["Col 1", "Col 2", "Col 3", "Col 4"],
+            Enumerable.Range(1, fits).Select(index => $"Col {index}"),
             capped.Page.LedgerCustomHeadings.Select(heading => heading.Name));
+    }
+
+    // What one column measures on the ledger, at the hosted part's own type size and family.
+    private static double HeadingWidth(Control view, string name, CustomColumnType type)
+    {
+        var part = view.GetVisualDescendants().OfType<NightsLedgerPart>().First();
+        return CustomCellWidths.ForHeading(name, type, part.FontSize, part.FontFamily);
     }
 
     [AvaloniaFact]

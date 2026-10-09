@@ -173,25 +173,7 @@ public partial class TargetListView : UserControl
     /// </remarks>
     internal static double CustomCellWidthFor(
         string? name, CustomColumnType type, double fontSize, FontFamily? family)
-    {
-        var editor = WidthFor(type);
-        if (string.IsNullOrEmpty(name) || family is null || fontSize <= 0d)
-        {
-            return editor;
-        }
-
-        var heading = Math.Ceiling(
-            new FormattedText(
-                name,
-                CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight,
-                new Typeface(family, FontStyle.Normal, FontWeight.SemiBold),
-                fontSize,
-                null).Width
-            + CellGutter);
-
-        return Math.Max(editor, Math.Min(DropdownCellWidth, heading));
-    }
+        => CustomCellWidths.ForHeading(name, type, fontSize, family);
 
     /// <summary>How the markup reaches <see cref="CustomCellWidthFor"/>, on the header entry and on
     /// the row cell, with the view's own type size and family as the last two values so a root text
@@ -202,22 +184,7 @@ public partial class TargetListView : UserControl
     /// <c>Width="&lt;digit&gt;"</c> in this view and is the case that stopped the seven retired
     /// fixed cell widths coming back.
     /// </para></summary>
-    public static readonly FuncMultiValueConverter<object?, double> CellWidth = new(CellWidthFromBinding);
-
-    private static double CellWidthFromBinding(IEnumerable<object?> values)
-    {
-        var parts = values.ToArray();
-        if (parts.Length < 2 || parts[0] is not string name || parts[1] is not CustomColumnType type)
-        {
-            return 0d;
-        }
-
-        return CustomCellWidthFor(
-            name,
-            type,
-            parts.Length > 2 && parts[2] is double size ? size : 0d,
-            parts.Length > 3 ? parts[3] as FontFamily : null);
-    }
+    public static readonly FuncMultiValueConverter<object?, double> CellWidth = CustomCellWidths.HeadingWidth;
 
     /// <summary>What one column contributes to the fit width. Keyed by the column key rather than
     /// by position, so the shown set can be summed in any order.</summary>
