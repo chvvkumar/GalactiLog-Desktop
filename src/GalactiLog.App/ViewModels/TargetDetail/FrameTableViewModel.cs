@@ -133,8 +133,8 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     };
 
     /// <summary>One formatted cell text per column key, what the view measures for R5's auto-fit.
-    /// The same texts the row template binds, so the fit and the rendering cannot disagree; the
-    /// RMS cell carries its source mark, which shares the column.</summary>
+    /// The same texts the row template binds, so the fit and the rendering cannot disagree. The
+    /// RMS cell's source mark sits in the column's right gutter, so it is not measured.</summary>
     private static readonly Dictionary<string, Func<FrameRowViewModel, string>> CellTexts =
         new(StringComparer.Ordinal)
         {
@@ -148,7 +148,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
             ["fwhm"] = row => row.FwhmCell.Text,
             ["detected_stars"] = row => row.DetectedStarsCell.Text,
 
-            ["guiding_rms_arcsec"] = row => row.GuidingRmsCell.Text + row.GuidingRmsSourceGlyph,
+            ["guiding_rms_arcsec"] = row => row.GuidingRmsCell.Text,
             ["guiding_rms_ra_arcsec"] = row => row.GuidingRmsRaText,
             ["guiding_rms_dec_arcsec"] = row => row.GuidingRmsDecText,
 

@@ -4,6 +4,8 @@ using Avalonia.Automation;
 using Avalonia.Controls;
 using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Shapes;
+using Avalonia.Data;
+using Avalonia.Diagnostics;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -124,7 +126,7 @@ public class FrameTableViewTests
     public void FrameTableView_Constructs_AndRendersAPopulatedViewModel()
     {
         var view = new FrameTableView { DataContext = CreateTable() };
-        ShowTable(view);
+        var window = ShowTable(view);
 
         Assert.True(view.Bounds.Width > 0);
         Assert.True(view.Bounds.Height > 0);
@@ -144,16 +146,23 @@ public class FrameTableViewTests
         // ruling F4 holds in the actual control tree and not only on paper.
         Assert.Contains("Time (GMT+00:00)", texts);
         Assert.Contains("†", texts);
+
+        // The spine's census at 1280x800 and at the x-large root size. The frame table has no
+        // TableRow (ruling R1), so its row clauses apply by class: no figure trimmed or blank,
+        // every dash faint, the rows' scroller never auto-hiding.
+        TableAssert.Conventions(view);
+        window.FontSize = 20d;
+        Dispatcher.UIThread.RunJobs();
+        TableAssert.Conventions(view);
     }
 
     [AvaloniaFact]
     public void FrameTableView_GuidingRmsDagger_SitsWithNoSpaceAndDigitsShareOneRightEdge()
     {
-        // Review P2-1: TextBlock.cell.num's inherited 6 px trailing margin put a visible gap
-        // between the digits and the dagger, against spec 12.4's "with no space before it", and
-        // moved a marked row's digits out of line with an unmarked row's. Margin="0" on the value
-        // cell fixes both at once, because the column's own trailing inset comes from the
-        // enclosing StackPanel's FrameColNumberWidth rather than from the value cell's margin.
+        // Review P2-1: spec 12.4's dagger sits "with no space before it", and a marked row's
+        // digits stay in line with an unmarked row's. The value fills the cell with the gutter
+        // padding every number has, so its digits end at Width - Gutter, and the mark sits in the
+        // right gutter, starting exactly where the digits end.
         var frames = new[]
         {
             FrameTableViewModelTests.Frame(
@@ -166,7 +175,7 @@ public class FrameTableViewTests
                 guidingRmsSource: "phd2"),
         };
         var view = new FrameTableView { DataContext = CreateTable(frames: frames) };
-        ShowTable(view);
+        var window = ShowTable(view);
 
         var rows = RowBorders(view);
         Assert.Equal(2, rows.Count);
@@ -179,15 +188,32 @@ public class FrameTableViewTests
         Assert.False(csvMark.IsVisible);
         Assert.True(phd2Mark.IsVisible);
 
-        // Both values' right edges land at the same x translated to the view, whether or not the
-        // row is marked: the value cell's own fixed width is unaffected by the mark beside it.
-        var csvValueRight = csvValue.TranslatePoint(new Point(csvValue.Bounds.Width, 0), view)!.Value.X;
-        var phd2ValueRight = phd2Value.TranslatePoint(new Point(phd2Value.Bounds.Width, 0), view)!.Value.X;
+        // Both values' content right edges land at the same x translated to the view, whether
+        // or not the row is marked: the mark overlays the gutter and takes no width from the value.
+        static double ContentRight(TextBlock value, Visual view)
+            => value.TranslatePoint(new Point(value.Bounds.Width - value.Padding.Right, 0), view)!.Value.X;
+        var csvValueRight = ContentRight(csvValue, view);
+        var phd2ValueRight = ContentRight(phd2Value, view);
         Assert.Equal(csvValueRight, phd2ValueRight, 1);
 
-        // No space before the dagger: the mark's left edge is exactly the value's right edge.
+        // No space before the dagger: the mark's left edge is exactly the digits' right edge.
         var markLeft = phd2Mark.TranslatePoint(new Point(0, 0), view)!.Value.X;
         Assert.Equal(phd2ValueRight, markLeft, 1);
+
+        // The dagger starts in the column's right gutter and, at the default and the x-large root
+        // size alike, ends before the next column's text starts: it may draw on into that
+        // column's left gutter (two gutters of air between the digits and the next figure), never
+        // onto its figure.
+        foreach (var rootSize in new[] { 14d, 20d })
+        {
+            window.FontSize = rootSize;
+            Dispatcher.UIThread.RunJobs();
+            var next = (TextBlock)RowCellsAt(view, 1)[9];
+            var daggerRight = phd2Mark.TranslatePoint(new Point(MeasuredWidth(phd2Mark, phd2Mark.Text!), 0), view)!.Value.X;
+            var nextTextLeft = next.TranslatePoint(new Point(next.Padding.Left, 0), view)!.Value.X;
+            Assert.True(daggerRight <= nextTextLeft,
+                $"at {rootSize}: the dagger ends at {daggerRight:F1}, the next column's text starts at {nextTextLeft:F1}");
+        }
     }
 
     [AvaloniaFact]
@@ -388,10 +414,10 @@ public class FrameTableViewTests
     [AvaloniaFact]
     public void FrameTableView_NumericCells_CarryTheTabularFigureClass()
     {
-        // Review finding 3: FrameColumn.IsNumeric had no consumer, and the num class is assigned
-        // by hand 27 times in the markup. This is the join, so the two cannot drift: every
-        // numeric column's cell carries the class that supplies tabular figures and right
-        // alignment (spec 14.4), and no textual column's does.
+        // Review finding 3: FrameColumn.IsNumeric had no consumer, and the spine's kind class is
+        // assigned by hand in the markup. This is the join, so the two cannot drift: every
+        // numeric column's cell carries tc-num (tabular figures, right alignment, never trimmed:
+        // spec.md item 3) and every textual column's carries tc-text.
         var view = new FrameTableView { DataContext = CreateTable() };
         ShowTable(view);
 
@@ -408,11 +434,13 @@ public class FrameTableViewTests
                 ?? cells[index].GetVisualDescendants().OfType<TextBlock>().First();
 
             Assert.Contains("cell", text.Classes);
-            Assert.Equal(column.IsNumeric, text.Classes.Contains("num"));
+            Assert.Equal(column.IsNumeric, text.Classes.Contains("tc-num"));
+            Assert.Equal(!column.IsNumeric, text.Classes.Contains("tc-text"));
 
             if (column.IsNumeric)
             {
                 Assert.Equal(TextAlignment.Right, text.TextAlignment);
+                Assert.Equal(TextTrimming.None, text.TextTrimming);
             }
         }
     }
@@ -619,22 +647,34 @@ public class FrameTableViewTests
         var view = new FrameTableView { DataContext = table };
         ShowTable(view);
 
-        var timeTitle = HeaderCell(view, table.Columns.Single(entry => entry.Key == "time"))
-            .GetVisualDescendants().OfType<TextBlock>().First();
+        var timeTitle = HeaderTitle(HeaderCell(view, table.Columns.Single(entry => entry.Key == "time")));
         Assert.NotEqual(TextAlignment.Right, timeTitle.TextAlignment);
 
-        foreach (var (key, index) in new[] { ("exposure_time", 3), ("median_hfr", 4) })
+        // Twice: the second pass with HFR as the sort key, whose glyph leads the title rather
+        // than sitting between it and the column's right edge.
+        foreach (var sorted in new[] { false, true })
         {
-            var column = table.Columns.Single(entry => entry.Key == key);
-            var title = HeaderCell(view, column).GetVisualDescendants().OfType<TextBlock>().First();
-            var value = RowCells(view)[index];
-            var titleRight = title.TranslatePoint(new Point(title.Bounds.Width, 0), view)!.Value.X;
-            Assert.Equal(TextAlignment.Right, title.TextAlignment);
-            var valueRight = value.TranslatePoint(new Point(value.Bounds.Width, 0), view)!.Value.X - ((TextBlock)value).Padding.Right;
-            Assert.True(
-                Math.Abs(titleRight - valueRight) < 1d,
-                $"{key}: header right edge {titleRight:F1} against its values' {valueRight:F1}");
+            if (sorted)
+            {
+                table.SortByCommand.Execute("median_hfr");
+                Dispatcher.UIThread.RunJobs();
+            }
+
+            foreach (var (key, index) in new[] { ("exposure_time", 3), ("median_hfr", 4) })
+            {
+                var column = table.Columns.Single(entry => entry.Key == key);
+                var title = HeaderTitle(HeaderCell(view, column));
+                var value = RowCells(view)[index];
+                var titleRight = title.TranslatePoint(new Point(title.Bounds.Width, 0), view)!.Value.X;
+                Assert.Equal(TextAlignment.Right, title.TextAlignment);
+                var valueRight = value.TranslatePoint(new Point(value.Bounds.Width, 0), view)!.Value.X - ((TextBlock)value).Padding.Right;
+                Assert.True(
+                    Math.Abs(titleRight - valueRight) < 1d,
+                    $"{key} (sorted {sorted}): header right edge {titleRight:F1} against its values' {valueRight:F1}");
+            }
         }
+
+        Assert.NotEqual("", table.Columns.Single(entry => entry.Key == "median_hfr").SortGlyph);
     }
 
     // Red if a header title's left inset differs from its row text's, so the two sit apart in a column.
@@ -647,8 +687,7 @@ public class FrameTableViewTests
 
         foreach (var (key, index) in new[] { ("time", 0), ("file_name", 1), ("filter_used", 2) })
         {
-            var title = HeaderCell(view, table.Columns.Single(entry => entry.Key == key))
-                .GetVisualDescendants().OfType<TextBlock>().First();
+            var title = HeaderTitle(HeaderCell(view, table.Columns.Single(entry => entry.Key == key)));
             var cell = (TextBlock)RowCells(view)[index];
             var titleLeft = title.TranslatePoint(new Point(0, 0), view)!.Value.X;
             var textLeft = cell.TranslatePoint(new Point(cell.Padding.Left, 0), view)!.Value.X;
@@ -675,7 +714,7 @@ public class FrameTableViewTests
 
         var timeColumn = table.Columns.Single(column => column.Key == "time");
         var cell = HeaderCell(view, timeColumn);
-        var title = cell.GetVisualDescendants().OfType<TextBlock>().First();
+        var title = HeaderTitle(cell);
 
         Assert.True(cell.Bounds.Width > 0);
         var titleRight = title.TranslatePoint(new Point(title.Bounds.Width, 0), cell)!.Value.X;
@@ -1041,10 +1080,10 @@ public class FrameTableViewTests
         {
             FrameTableViewModelTests.Frame(
                 fileName: "flagged.fits", filterUsed: "L", medianHfr: 3.4d, eccentricity: 0.41d,
-                airmass: 1.23d, isHfrOutlier: true),
+                airmass: 1.23d, isHfrOutlier: true, captureDate: SampleFrame.CaptureDate),
             FrameTableViewModelTests.Frame(
                 fileName: "clean.fits", filterUsed: "L", medianHfr: 2.0d, eccentricity: 0.30d,
-                airmass: 1.24d),
+                airmass: 1.24d, captureDate: SampleFrame.CaptureDate),
         };
         var view = new FrameTableView { DataContext = CreateTable(frames: frames) };
         ShowTable(view);
@@ -1255,8 +1294,8 @@ public class FrameTableViewTests
         // R5. The auto-fit on load is the widest cell of the loaded night plus the header, the
         // one formula FrameTableView.AutoFitWidth states, measured here with the same
         // FormattedText the implementation uses in the cell's own typeface and the header's
-        // semibold one. Red if the column is wider or narrower than that formula, for the file
-        // name (mono, no padding) and for a numeric column (6 px trailing padding).
+        // label-tier one. Red if the column is wider or narrower than that formula, for the file
+        // name (mono) and for a numeric column, both padded by the gutter on each side.
         var table = CreateTable(frames: LongNamedFrames());
         var view = new FrameTableView { DataContext = table };
         ShowTable(view);
@@ -1272,7 +1311,7 @@ public class FrameTableViewTests
 
         var hfr = table.Columns.Single(column => column.Key == "median_hfr");
         var hfrCell = (TextBlock)RowCells(view)[4];
-        Assert.Equal(6d, hfrCell.Padding.Right);
+        Assert.Equal(TableMetrics.Gutter, hfrCell.Padding.Right);
         Assert.Equal(ExpectedFit(view, hfr, hfrCell, "2.00", "3.40"), hfr.Width);
         Assert.Equal(hfr.Width, hfrCell.Bounds.Width);
     }
@@ -1407,8 +1446,8 @@ public class FrameTableViewTests
     [AvaloniaFact]
     public void FrameTableView_TheFileNameCell_DoesNotTrim()
     {
-        // R6: the file name is never cut. TextTrimming stays on TextBlock.cell for the other 31
-        // columns, and the file name cell overrides it with a local value.
+        // R6: the file name is never cut. TextTrimming stays on TextBlock.cell.tc-text for the
+        // other text columns, and the file name cell overrides it with a local value.
         var view = new FrameTableView { DataContext = CreateTable(frames: LongNamedFrames()) };
         ShowTable(view);
 
@@ -1423,8 +1462,9 @@ public class FrameTableViewTests
     [AvaloniaFact]
     public void FrameTableView_TheFileNameColumn_LeavesAGapBeforeTheFilterCell()
     {
-        // Red if the longest name's drawn right edge is under 12 px from the Filter cell, the name
-        // flush against "Ha", or the header and the cell disagree on the column's width.
+        // Red if the longest name's drawn right edge is under two gutters from the Filter cell's
+        // text (the content-to-content gap the spine's T1 pins), the name flush against "Ha", or
+        // the header and the cell disagree on the column's width.
         const string name = "M99_2031-01-02_Ha_300s_f_00012.fits";
         Assert.Equal(35, name.Length);
         var table = CreateTable(frames:
@@ -1437,9 +1477,10 @@ public class FrameTableViewTests
 
         var cells = RowCells(view);
         var fileName = (TextBlock)cells[1];
-        var drawnRight = fileName.TranslatePoint(new Point(MeasuredWidth(fileName, name), 0), view)!.Value.X;
-        var filterLeft = cells[2].TranslatePoint(new Point(0, 0), view)!.Value.X;
-        Assert.True(filterLeft - drawnRight >= 12d, $"the name ends at {drawnRight}, the Filter cell starts at {filterLeft}");
+        var drawnRight = fileName.TranslatePoint(
+            new Point(fileName.Padding.Left + MeasuredWidth(fileName, name), 0), view)!.Value.X;
+        var filterLeft = cells[2].TranslatePoint(new Point(((TextBlock)cells[2]).Padding.Left, 0), view)!.Value.X;
+        Assert.True(filterLeft - drawnRight >= 2 * TableMetrics.Gutter, $"the name ends at {drawnRight}, the Filter text starts at {filterLeft}");
         Assert.Equal(HeaderCell(view, table.Columns.Single(column => column.Key == "file_name")).Bounds.Width, fileName.Bounds.Width);
     }
 
@@ -1699,24 +1740,22 @@ public class FrameTableViewTests
             cell.FontSize,
             null).Width;
 
-    /// <summary>The header title's width in the view's family at semibold, which is what the
-    /// header cell renders and the auto-fit measures.</summary>
+    /// <summary>The header title's width in the view's family at the label tier (t-label: Medium
+    /// at FontSizeLabel x root), which is what the header cell renders and the auto-fit measures.
+    /// </summary>
     private static double HeaderWidth(FrameTableView view, ColumnViewModel column)
         => new FormattedText(
             column.Title,
             CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
-            new Typeface(view.FontFamily, view.FontStyle, FontWeight.SemiBold),
-            view.FontSize,
+            new Typeface(view.FontFamily, view.FontStyle, FontWeight.Medium),
+            view.FontSize * (double)view.FindResource("FontSizeLabel")!,
             null).Width;
 
     /// <summary>R5's auto-fit a column should report: the formula over the header and the widest
-    /// of the given cell texts in the cell's own typeface plus the cell's padding and margin.</summary>
+    /// of the given cell texts in the cell's own typeface; the formula adds the two gutters.</summary>
     private static double ExpectedFit(FrameTableView view, ColumnViewModel column, TextBlock cell, params string[] texts)
-        => FrameTableView.AutoFitWidth(
-            HeaderWidth(view, column),
-            texts.Max(text => MeasuredWidth(cell, text))
-                + cell.Padding.Left + cell.Padding.Right + cell.Margin.Left + cell.Margin.Right);
+        => FrameTableView.AutoFitWidth(HeaderWidth(view, column), texts.Max(text => MeasuredWidth(cell, text)));
 
     private static Border Divider(ContentControl header)
         => header.GetVisualDescendants().OfType<Border>().Single(border => border.Classes.Contains("column-divider"));
@@ -1815,6 +1854,10 @@ public class FrameTableViewTests
     private static ContentControl HeaderCell(FrameTableView view, ColumnViewModel column)
         => HeaderCells(view).Single(cell => ReferenceEquals(cell.Content, column));
 
+    // The title TextBlock of a header cell; the sort glyphs either side of it are TextBlocks too.
+    private static TextBlock HeaderTitle(ContentControl cell)
+        => cell.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Classes.Contains("header-title"));
+
     private static IReadOnlyList<string> VisibleHeaderTitles(FrameTableView view)
         => [.. HeaderCells(view)
             .Where(cell => cell.IsEffectivelyVisible)
@@ -1868,7 +1911,7 @@ public class FrameTableViewTests
     private static TextBlock HfrCell(FrameTableView view)
         => view.GetVisualDescendants()
             .OfType<TextBlock>()
-            .First(block => block.Classes.Contains("num") && block.Text == "2.35");
+            .First(block => block.Classes.Contains("tc-num") && block.Text == "2.35");
 
     [AvaloniaFact]
     public void FrameTableView_AGradedCell_RendersItsBandInk()
@@ -2004,16 +2047,187 @@ public class FrameTableViewTests
         Assert.Equal(0, Assert.IsAssignableFrom<ISolidColorBrush>(row.Background).Color.A);
     }
 
-    // D211: red if a row template still carries the brush bar, or the rows and the header keep
-    // the 4 px the bar needed instead of the lit edge's 2 px.
+    // D211 and ruling R16: red if a row template still carries the brush bar, or the rows and the
+    // header reserve layout room for the lit edge, which now lands inside the Time cell's gutter.
     [AvaloniaFact]
-    public void FrameTableView_ARow_HasNoBrushBar_AndTheRowsAndHeaderTake2Px()
+    public void FrameTableView_ARow_HasNoBrushBar_AndTheRailSitsInTheGutter()
     {
         var view = new FrameTableView { DataContext = CreateTable() };
         ShowTable(view);
 
         Assert.DoesNotContain(view.GetVisualDescendants().OfType<Rectangle>(), r => r.Name is "BrushBar" or "BrushBarBase");
-        Assert.All(RowBorders(view), row => Assert.Equal(2d, row.Padding.Left));
-        Assert.Equal(2d, view.GetControl<StackPanel>("FrameTableHeader").Margin.Left);
+        Assert.All(RowBorders(view), row => Assert.Equal(0d, row.Padding.Left));
+        Assert.Equal(0d, view.GetControl<StackPanel>("FrameTableHeader").Margin.Left);
+        Assert.All(LitEdges(view), edge => Assert.True(edge.Width <= TableMetrics.Gutter));
+
+        // A selection moves no text: Time's text starts where it did.
+        var time = (TextBlock)RowCells(view)[0];
+        double TextLeft() => time.TranslatePoint(new Point(time.Padding.Left, 0), view)!.Value.X;
+        var before = TextLeft();
+        view.GetControl<ListBox>("FrameRows").SelectedIndex = 0;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(LitEdges(view).Single().IsEffectivelyVisible);
+        Assert.Equal(before, TextLeft());
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_AlternateRows_TakeTheZebraFill()
+    {
+        // Spec.md item 7: a light fill on alternate rows, by index, so a re-sort keeps the bands
+        // where they are while the frames move through them.
+        var frames = new[]
+        {
+            FrameTableViewModelTests.Frame(fileName: "a.fits", medianHfr: 1.0d),
+            FrameTableViewModelTests.Frame(fileName: "b.fits", medianHfr: 2.0d),
+            FrameTableViewModelTests.Frame(fileName: "c.fits", medianHfr: 3.0d),
+        };
+        var table = CreateTable(frames: frames);
+        var view = new FrameTableView { DataContext = table };
+        ShowTable(view);
+        var list = view.GetControl<ListBox>("FrameRows");
+        var zebra = ThemeColor("ColorBorderDefault");
+
+        void AssertZebra()
+        {
+            for (var index = 0; index < 3; index++)
+            {
+                var fill = Assert.IsAssignableFrom<ISolidColorBrush>(((ListBoxItem)list.ContainerFromIndex(index)!).Background);
+                if (index % 2 == 1)
+                {
+                    Assert.Equal(zebra, fill.Color);
+                }
+                else
+                {
+                    Assert.Equal(0, fill.Color.A);
+                }
+            }
+        }
+
+        AssertZebra();
+
+        table.SortByCommand.Execute("median_hfr");
+        table.SortByCommand.Execute("median_hfr");
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(table.Descending);
+        Assert.Equal("c.fits", table.Rows[0].FileName);
+
+        AssertZebra();
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_AMissingValue_RendersTheFaintDash()
+    {
+        // Spec.md item 6: an absent value is "-" in the faintest ink, and a real zero is a figure
+        // in the ordinary ink.
+        var frames = new[]
+        {
+            FrameTableViewModelTests.Frame(fileName: "bare.fits", cameraGain: 0),
+        };
+        var view = new FrameTableView { DataContext = CreateTable(frames: frames) };
+        ShowTable(view);
+
+        var cells = RowCells(view);
+        var hfr = (TextBlock)cells[4];
+        var gain = (TextBlock)cells[31];
+
+        Assert.Equal(MetricText.Missing, hfr.Text);
+        Assert.Equal(ThemeColor("ColorTextTertiary"), Assert.IsAssignableFrom<ISolidColorBrush>(hfr.Foreground).Color);
+        Assert.Equal("0", gain.Text);
+        Assert.Equal(ThemeColor("ColorTextSecondary"), Assert.IsAssignableFrom<ISolidColorBrush>(gain.Foreground).Color);
+    }
+
+    [AvaloniaFact]
+    public async Task FrameTableView_ANarrowedNumericColumn_NeverCollapsesItsFigure()
+    {
+        // Spec.md item 3: a drag 2000 px left stops a numeric column at its auto-fit, and no
+        // realised figure is cut.
+        DisplayColumnWriter? writer = null;
+        var table = CreateTable(writerSink: w => writer = w);
+        var view = new FrameTableView { DataContext = table };
+        var window = ShowTable(view);
+        var hfr = table.Columns.Single(column => column.Key == "median_hfr");
+        var fit = hfr.Width;
+
+        var from = DividerPoint(window, view, hfr);
+        window.MouseDown(from, MouseButton.Left);
+        window.MouseMove(from - new Point(2000d, 0d));
+        window.MouseUp(from - new Point(2000d, 0d), MouseButton.Left);
+        Dispatcher.UIThread.RunJobs();
+        await writer!.Pending;
+
+        Assert.Equal(fit, hfr.Width);
+        Assert.All(
+            view.GetVisualDescendants().OfType<TextBlock>().Where(block => block.Classes.Contains("tc-num")),
+            block => Assert.DoesNotContain(block.TextLayout.TextLines, line => line.HasCollapsed));
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_HeaderTitles_UseTheLabelTier()
+    {
+        // Spec.md item 5: one header style, the shared t-label tier, and every title has a tip.
+        var view = new FrameTableView { DataContext = CreateTable() };
+        ShowTable(view);
+
+        Assert.All(HeaderCells(view), cell =>
+        {
+            var title = HeaderTitle(cell);
+            Assert.Contains("t-label", title.Classes);
+            Assert.NotEqual(BindingPriority.LocalValue, title.GetDiagnostic(TextBlock.FontWeightProperty).Priority);
+            Assert.NotEqual(BindingPriority.LocalValue, title.GetDiagnostic(TextBlock.ForegroundProperty).Priority);
+            Assert.NotNull(ToolTip.GetTip(title));
+        });
+        Assert.Contains("t-label", view.GetControl<TextBlock>("RigColumnHeader").Classes);
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_TheHeaderRow_HasARuleUnderIt()
+    {
+        // Spec.md item 7: one rule under the header row, in TableRow's header-edge brush.
+        var view = new FrameTableView { DataContext = CreateTable() };
+        ShowTable(view);
+
+        var rule = Assert.IsType<Border>(view.GetControl<ScrollViewer>("FrameHeaderScroller").Parent);
+        Assert.Equal(new Thickness(0, 0, 0, 1), rule.BorderThickness);
+        Assert.Equal(
+            ThemeColor("ColorBorderEmphasis"),
+            Assert.IsAssignableFrom<ISolidColorBrush>(rule.BorderBrush).Color);
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_ScrollBars_AreAlwaysVisibleAndFullWidth()
+    {
+        // Spec.md item 8: the rows' bars never auto-hide, and the vertical bar is drawn at the
+        // table width even on a table too short to scroll.
+        var view = new FrameTableView { DataContext = CreateTable(frames: TwoFrames()) };
+        ShowTable(view);
+
+        var rows = view.GetControl<ListBox>("FrameRows").GetVisualDescendants().OfType<ScrollViewer>().First();
+        Assert.False(rows.AllowAutoHide);
+        var bar = rows.GetVisualDescendants().OfType<Avalonia.Controls.Primitives.ScrollBar>()
+            .Single(scroll => scroll.Orientation == Orientation.Vertical);
+        Assert.True(bar.IsEffectivelyVisible);
+        Assert.Equal(TableMetrics.ScrollBarSize, bar.Bounds.Width);
+    }
+
+    [AvaloniaFact]
+    public void FrameTableView_PannedToTheFarRight_TheHeaderStaysInStep()
+    {
+        // The rows' viewport is one bar width narrower than the window onto the header would be;
+        // the header's ScrollInset keeps the two equal, so at the far right the header's offset
+        // does not clamp short of the rows'.
+        var (view, rows, header, table) = ShowNarrow();
+        rows.Offset = new Vector(rows.Extent.Width - rows.Viewport.Width, 0);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(rows.Offset.X > 0d);
+        Assert.Equal(rows.Offset.X, header.Offset.X);
+
+        var last = table.Columns.Last(column => column.IsShown);
+        var headerCell = HeaderCell(view, last);
+        var rowCell = RowCells(view)[table.Columns.ToList().IndexOf(last)];
+        Assert.Equal(
+            headerCell.TranslatePoint(new Point(headerCell.Bounds.Width, 0), view)!.Value.X,
+            rowCell.TranslatePoint(new Point(rowCell.Bounds.Width, 0), view)!.Value.X,
+            1);
     }
 }
