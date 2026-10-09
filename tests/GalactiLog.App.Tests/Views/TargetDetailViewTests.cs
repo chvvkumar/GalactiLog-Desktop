@@ -64,11 +64,11 @@ public class TargetDetailViewTests
         Assert.Contains("NGC 224", texts);
         Assert.Contains("Messier", texts);
 
-        // The log line, as its runs, and the ledger's target row beneath it. "12.4 h" and "148"
-        // used to come from the uppercase stat grid, which Phase 12 deleted.
+        // The log line, as its runs. "12.4 h" and "148" used to come from the uppercase stat grid,
+        // which Phase 12 deleted. The Nights list has no totals row (spec.md, Nights list).
         Assert.Contains("12.4 h", texts);
         Assert.Contains("148", texts);
-        Assert.Contains("All 2 nights", texts);
+        Assert.DoesNotContain("All 2 nights", texts);
         Assert.Contains(texts, text => text.Contains("23 frames without a plate scale"));
         Assert.Contains(texts, text => text.Contains("measured by header"));
 
@@ -176,12 +176,11 @@ public class TargetDetailViewTests
         Show(view);
 
         // Ruling Q4: the callout names the group key, the Back button is still there, and the
-        // header block and totals row are gone rather than blank.
+        // header block is gone rather than blank.
         Assert.True(view.Named<ContentControl>("MissingCallout").IsVisible);
         Assert.Contains(VisibleTexts(view), text => text.Contains(Factory.ResolvedGroupKey));
         Assert.True(view.Named<Button>("BackButton").IsVisible);
         Assert.False(view.Named<Border>("HeaderBlock").IsVisible);
-        Assert.False(view.Named<Border>("TotalsRow").IsVisible);
     }
 
     [AvaloniaFact]

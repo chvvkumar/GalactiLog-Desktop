@@ -61,7 +61,7 @@
                IsVisible="{Binding IsLoading}" />
 
     <!-- A failed session query is a line on the pane, never an exception on the UI thread and
-         never a blank page: the ledger row beside it still holds every collapsed figure. -->
+         never a blank page: the Nights list beside it still lists the night. -->
     <ContentControl x:Name="FailureCallout"
             Classes="callout warn"
             IsVisible="{Binding HasFailure}">

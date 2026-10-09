@@ -210,7 +210,7 @@ public class LayoutFirstLoadTests
         Assert.NotNull(night);
         var ledger = opened.Layout.Named<ListBox>("NightsLedger");
         var row = LedgerRowAt(opened.Layout, opened.Page.Sessions.IndexOf(night));
-        Assert.Contains(row, HitAtCentre(opened.Window, row)!.GetSelfAndVisualAncestors());
+        Assert.Contains(ledger.ContainerFromItem(night!)!, HitAtCentre(opened.Window, row)!.GetSelfAndVisualAncestors());
 
         Click(opened.Window, row, Avalonia.Input.RawInputModifiers.Control);
         SettleLoads(opened.Page, []);

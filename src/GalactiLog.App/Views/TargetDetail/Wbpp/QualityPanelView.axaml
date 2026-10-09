@@ -48,11 +48,9 @@
          launched-app look's D1. At 86 the cell had 78 px for a string that measures 98.6 px in
          Atkinson Hyperlegible Next Regular at the shipped 18 px root, the same face and size the
          Nights ledger's own Night cell uses and the same measurement its markup records, so every
-         row on the page read "2025-03-..." at the window's opening width. 112 is the Nights
-         ledger's own floor (TargetDetailViewModel.NightColumnMinWidth on the wide ledger) and
-         leaves the same class of headroom here, 5.4 px over 98.6 plus the 8 px inset, which these
-         rows need for the same reason that ledger does: they are realised by a
-         VirtualizingStackPanel and a row realised in a different measure pass can keep that
+         row on the page read "2025-03-..." at the window's opening width. 112 leaves 5.4 px of
+         headroom over 98.6 plus the 8 px inset, which these rows need because they are realised
+         by a VirtualizingStackPanel and a row realised in a different measure pass can keep that
          pass's remainder. -->
     <Thickness x:Key="QualityNightInset">0,0,8,0</Thickness>
 

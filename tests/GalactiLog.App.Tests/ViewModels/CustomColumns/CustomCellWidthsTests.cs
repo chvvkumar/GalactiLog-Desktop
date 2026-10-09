@@ -1,5 +1,4 @@
 using GalactiLog.App.ViewModels.CustomColumns;
-using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.Views.Dashboard;
 using GalactiLog.Core.Settings;
 using Xunit;
@@ -23,7 +22,6 @@ public class CustomCellWidthsTests
         // Red against the tree before ruling C31: the dashboard answered 160 for a text cell while
         // the ledger answered 120. The theory covers all three kinds rather than the one that
         // differed, because the point is that the two surfaces cannot answer differently at all.
-        Assert.Equal(CustomCellWidths.For(type), TargetDetailViewModel.CustomCellWidth(type));
         Assert.Equal(CustomCellWidths.For(type), TargetListView.WidthFor(type));
     }
 
@@ -33,9 +31,6 @@ public class CustomCellWidthsTests
         // The named constants both surfaces' markup and arithmetic read are aliases of the table,
         // not second copies of the figures. Ruling C31 fixes the text cell at 120.
         Assert.Equal(120d, CustomCellWidths.Text);
-        Assert.Equal(CustomCellWidths.Check, TargetDetailViewModel.CustomCellCheckWidth);
-        Assert.Equal(CustomCellWidths.Choice, TargetDetailViewModel.CustomCellChoiceWidth);
-        Assert.Equal(CustomCellWidths.Text, TargetDetailViewModel.CustomCellTextWidth);
         Assert.Equal(CustomCellWidths.Check, TargetListView.BooleanCellWidth);
         Assert.Equal(CustomCellWidths.Choice, TargetListView.DropdownCellWidth);
         Assert.Equal(CustomCellWidths.Text, TargetListView.TextCellWidth);
