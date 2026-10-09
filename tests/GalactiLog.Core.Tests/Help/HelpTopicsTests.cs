@@ -228,8 +228,12 @@ public class HelpTopicsTests
         var paragraph = HelpTopics.Get("settings.display.ledger-columns").Paragraph;
 
         Assert.Contains(
-            "so the columns already on that list never lose room", paragraph, StringComparison.Ordinal);
-        Assert.Contains("The built-in columns are always shown", paragraph, StringComparison.Ordinal);
+            "The Nights list shows every column switched on here when its divider is fully open",
+            paragraph,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The check boxes and the date are always shown and are not in this list", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("narrow", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("eight", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("ten ", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain(" nine", paragraph, StringComparison.Ordinal);
@@ -330,6 +334,8 @@ public class HelpTopicsTests
         Assert.Contains("Shift and click adds the range", nights, StringComparison.Ordinal);
         Assert.Contains("several nights are checked they show here as one night", night, StringComparison.Ordinal);
         Assert.Contains("a dashed line at the start of each night", night, StringComparison.Ordinal);
+        Assert.DoesNotContain("median", nights, StringComparison.Ordinal);
+        Assert.DoesNotContain("marked", nights, StringComparison.Ordinal);
 
         var longestIds = FiveLongest().Select(topic => topic.Id).ToList();
         Assert.DoesNotContain("target.nights", longestIds);

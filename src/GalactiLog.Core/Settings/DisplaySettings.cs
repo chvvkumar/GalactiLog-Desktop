@@ -84,7 +84,7 @@ public sealed record TargetLayoutState
     /// document round-trips.</summary>
     [JsonPropertyName("chart_height")] public double? ChartHeight { get; init; }
 
-    /// <summary>The nights sidebar's last open width; null is the wide form at the ledger's own width.</summary>
+    /// <summary>The nights sidebar's last open width; null is fully open, every custom column shown.</summary>
     [JsonPropertyName("sidebar_width")] public double? SidebarWidth { get; init; }
 
     [JsonPropertyName("sidebar_collapsed")] public bool SidebarCollapsed { get; init; }
