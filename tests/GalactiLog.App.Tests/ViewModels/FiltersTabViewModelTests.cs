@@ -813,4 +813,78 @@ public class FiltersTabViewModelTests : IDisposable
         Assert.False(vm.IsDirty);
         Assert.Single(vm.Suggestions);
     }
+
+    // Review fix round 1, item 1: a Discard during an in-flight save must not read the store
+    // before the save writes. Reading early installs the pre-save document with IsDirty false,
+    // and the next edit plus save then writes that stale document over the one just saved.
+    [Fact]
+    public async Task Discard_DuringASave_ReloadsOnlyAfterTheSaveWrites()
+    {
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var loads = 0;
+        var vm = new FiltersTabViewModel(
+            () =>
+            {
+                Interlocked.Increment(ref loads);
+                return _store.GetFilters();
+            },
+            filters =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveFilters(filters);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+
+        Pending(vm).Discard();
+        Assert.Equal(1, Volatile.Read(ref loads));
+
+        release.Set();
+        await save;
+        await (vm.PendingSave ?? Task.CompletedTask);
+        await SettleAsync(vm);
+
+        Assert.Equal(2, Volatile.Read(ref loads));
+        Assert.False(vm.IsDirty);
+        Assert.Equal("Lum", Assert.Single(vm.Editor.Groups).Canonical);
+        Assert.Equal(["Lum"], _store.GetFilters().Keys);
+        vm.Dispose();
+    }
+
+    // Review fix round 1, item 2: a Discard whose reload fails leaves the edits in the editor,
+    // so they must stay pending. Clearing IsDirty would leave them on screen with no save bar.
+    [Fact]
+    public async Task Discard_WhoseReloadFails_StaysDirty()
+    {
+        var calls = 0;
+        var vm = new FiltersTabViewModel(
+            () => ++calls == 1 ? _store.GetFilters() : throw new InvalidOperationException("locked"),
+            _store.SaveFilters,
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        Pending(vm).Discard();
+        await SettleAsync(vm);
+
+        Assert.True(vm.LoadFailed);
+        Assert.True(vm.IsDirty);
+        Assert.True(Pending(vm).HasPendingEdits);
+        Assert.Equal("Lum", Assert.Single(vm.Editor.Groups).Canonical);
+        vm.Dispose();
+    }
 }

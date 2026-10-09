@@ -41,6 +41,9 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable,
     // document, so it has to stay pending.
     private int _editVersion;
 
+    // A Discard that arrived while a save was writing. Its reload runs when the save completes.
+    private bool _reloadAfterSave;
+
     private List<List<string>> _dismissed = [];
     private IReadOnlyList<(string Name, int Count)> _lastDiscovered = [];
 
@@ -141,14 +144,37 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable,
 
     Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
 
-    /// <summary>Re-reads the stored document through the same load the constructor runs, which
-    /// replaces every group and the dismissed list and clears <see cref="IsDirty"/> again when it
-    /// lands. Cleared here as well so the save bar drops at once rather than after the read.
+    /// <summary>
+    /// Re-reads the stored document through the same load the constructor runs, which replaces
+    /// every group and the dismissed list and clears <see cref="IsDirty"/> when it lands.
     /// </summary>
+    /// <remarks>
+    /// <see cref="IsDirty"/> is deliberately not cleared here: a reload that fails leaves the
+    /// editor holding the edits, and they must stay pending rather than sit on screen with no save
+    /// bar. During an in-flight save the reload waits for that save to finish (see
+    /// <see cref="_reloadAfterSave"/>): read any earlier and it can see the pre-save document,
+    /// which a later save would then write back over the one just saved.
+    /// </remarks>
     void IPendingEdits.Discard()
     {
-        IsDirty = false;
+        if (IsSaving)
+        {
+            _reloadAfterSave = true;
+            return;
+        }
+
         Load();
+    }
+
+    // Runs a Discard that arrived during a save, on the UI thread, once that save has finished
+    // either way. Called from both of SaveAsync's completion callbacks after IsSaving clears.
+    private void ReloadIfDiscardWaited()
+    {
+        if (_reloadAfterSave)
+        {
+            _reloadAfterSave = false;
+            Load();
+        }
     }
 
     private void MarkEdited()
@@ -339,6 +365,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable,
                     ErrorMessage = null;
                     StatusMessage = "Filter settings saved";
                     RefreshSuggestions();
+                    ReloadIfDiscardWaited();
                 });
             }
             catch (Exception ex)
@@ -353,6 +380,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable,
 
                     IsSaving = false;
                     ErrorMessage = "The filter settings could not be saved. See the log for details.";
+                    ReloadIfDiscardWaited();
                 });
             }
         });

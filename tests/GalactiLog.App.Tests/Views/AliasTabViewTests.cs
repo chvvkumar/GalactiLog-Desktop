@@ -405,4 +405,44 @@ public class AliasTabViewTests
         var swatch = Assert.IsType<Border>(button.Content);
         Assert.Equal(Color.Parse("#c44040"), Assert.IsAssignableFrom<ISolidColorBrush>(swatch.Background).Color);
     }
+
+    // Review fix round 1, item 3: the picker is bound one way to the swatch and its inbound
+    // assignment raises ColorChanged. If ColorView's HSV round trip moved that value by one step,
+    // the equality guard in OnGroupColorChanged would let it through, and merely opening the
+    // flyout would store a colour and raise the save bar. Off-palette and seeded colours both,
+    // opened, closed and reopened (a rebind), must leave the tab clean.
+    [AvaloniaTheory]
+    [InlineData("#123457")]
+    [InlineData("#7f7f80")]
+    [InlineData("#010203")]
+    [InlineData("#fefdfc")]
+    [InlineData("#a1b2c3")]
+    [InlineData(null)]
+    public void GroupingEditorView_OpeningThePicker_RaisesNoEdit(string? stored)
+    {
+        using var vm = BuildFilters(
+            filters: new Dictionary<string, FilterSetting> { ["Ha"] = new FilterSetting { Color = stored } },
+            discovered: [("Ha", 5), ("OIII", 3)]);
+        var edited = 0;
+        vm.Editor.Edited += (_, _) => edited++;
+        var view = new FiltersTabView { DataContext = vm };
+        Show(view);
+
+        foreach (var name in new[] { "ColorSwatchButton", "UngroupedColorSwatchButton" })
+        {
+            var button = Assert.Single(Named(view, name));
+            var flyout = Assert.IsType<Flyout>(button.Flyout);
+            for (var i = 0; i < 2; i++)
+            {
+                flyout.ShowAt(button);
+                Dispatcher.UIThread.RunJobs();
+                flyout.Hide();
+                Dispatcher.UIThread.RunJobs();
+            }
+        }
+
+        Assert.Equal(0, edited);
+        Assert.False(vm.IsDirty);
+        Assert.Equal(stored, Assert.Single(vm.Editor.Groups).Color);
+    }
 }
