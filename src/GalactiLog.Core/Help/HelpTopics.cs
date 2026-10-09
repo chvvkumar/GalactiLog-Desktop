@@ -575,7 +575,8 @@ public static class HelpTopics
 
         new("settings.display.ledger-columns", "Nights list columns",
             "Chooses which of your own night columns appear on the Nights list of a target "
-            + "page. Every custom night column starts switched off here. When the window is "
+            + "page. Every custom night column starts switched on here; clear one to hide it. "
+            + "When the window is "
             + "narrow these columns are the first thing dropped, so the columns already on that "
             + "list never lose room. The built-in columns are always shown and are not in this "
             + "list. With no night column defined the list reads No custom columns yet."),
@@ -583,15 +584,16 @@ public static class HelpTopics
         // The gates are stated per scope, not as one blanket sentence: spec 12.15's "Where the
         // cells appear" table puts a night column in the dashboard's night expander and a rig
         // column on a night's rig lines with no picker at all, so only the target and night
-        // columns wait to be switched on.
+        // columns can be switched off.
         new("settings.custom-columns.add", "Add a column",
             "A field of your own for something no header records: Type is Checkbox, Text or "
             + "Dropdown, and Applies to is Target, Night or Rig. Type and scope are fixed once "
             + "the column exists. A second column with the same name is refused. A new Target "
-            + "column stays hidden on the dashboard until you switch it on in the column picker, "
-            + "and a new Night column stays hidden on the Nights list until you switch it on in "
-            + "Settings, under Display. Night columns appear in the dashboard's night expander "
-            + "and Rig columns appear on a night's rig lines straight away."),
+            + "column shows on the dashboard straight away and can be switched off in the column "
+            + "picker, and a new Night column shows on the Nights list straight away and can be "
+            + "switched off in Settings, under Display. Night columns also appear in the "
+            + "dashboard's night expander and Rig columns appear on a night's rig lines straight "
+            + "away."),
 
         // The Delete sentence says that the first press states the count, which is spec 12.15's
         // two-press pattern and matches the removed-choice sentence in the same paragraph.

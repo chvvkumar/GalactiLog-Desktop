@@ -157,8 +157,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     private IReadOnlyDictionary<(Guid ColumnId, CustomValueKey Key), string> _customValues =
         new Dictionary<(Guid, CustomValueKey), string>();
 
-    // display.columns.ledger, which holds custom slugs only and is empty on a fresh profile:
-    // custom columns ship off on this surface. Seeded through the writer's last queued list first and the display
+    // display.columns.ledger_hidden, the custom slugs switched OFF, empty on a fresh profile:
+    // custom columns ship on. Seeded through the writer's last queued list first and the display
     // document second, the rule ColumnPickerViewModel.ForFrames states and for the reason recorded
     // there: the document is a snapshot and is stale the moment any picker toggles a column.
     private IReadOnlyList<string> _ledgerColumnKeys = [];
@@ -359,8 +359,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         // snapshot AppHost read on Program.Main's thread, and it is stale the moment the Display
         // tab's picker toggles a column. LastWritten reads no settings, which is what keeps it
         // legal on a construction path.
-        _ledgerColumnKeys = displayColumns?.LastWritten(DisplaySettings.LedgerTableId)
-            ?? (display ?? new DisplaySettings()).ColumnsFor(DisplaySettings.LedgerTableId);
+        _ledgerColumnKeys = displayColumns?.LastWritten(DisplaySettings.LedgerHiddenTableId)
+            ?? (display ?? new DisplaySettings()).ColumnsFor(DisplaySettings.LedgerHiddenTableId);
 
         if (displayColumns is not null)
         {
@@ -1012,7 +1012,7 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
     /// on a picker click, so this runs there too and must stay a cheap in-memory update.</remarks>
     private void OnDisplayColumnsChanged(string tableId, string[] keys)
     {
-        if (_disposed || !string.Equals(tableId, DisplaySettings.LedgerTableId, StringComparison.Ordinal))
+        if (_disposed || !string.Equals(tableId, DisplaySettings.LedgerHiddenTableId, StringComparison.Ordinal))
         {
             return;
         }

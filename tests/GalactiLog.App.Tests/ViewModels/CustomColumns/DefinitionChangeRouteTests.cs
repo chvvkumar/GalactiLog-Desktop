@@ -123,12 +123,12 @@ public class DefinitionChangeRouteTests
         Assert.Equal(sectionsBefore + 1, dashboard.Filters.Sections.Count);
         Assert.Contains("Custom", dashboard.Filters.Sections.Select(section => section.Title));
 
-        // The list's own entry, off by default (user choice 2), which is what puts it in the gear
-        // and in the Settings picker rather than straight on screen.
+        // The list's own entry, on by default, which puts it straight on screen and in the gear
+        // and the Settings picker to switch off.
         Assert.Equal(columnsBefore + 1, dashboard.Targets.Columns.Count);
         var entry = dashboard.Targets.Columns[^1];
         Assert.Equal("Processed", entry.Title);
-        Assert.False(entry.IsVisible);
+        Assert.True(entry.IsVisible);
 
         // Both halves really re-read, and the list really re-queried: neither surface is showing a
         // cached answer.
