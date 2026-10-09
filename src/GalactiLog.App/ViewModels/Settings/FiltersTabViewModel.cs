@@ -22,7 +22,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// constructs in a unit test with lambdas and no database, the rule every Settings tab in this
 /// phase follows.
 /// </remarks>
-public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
+public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable, IPendingEdits
 {
     private readonly Func<Dictionary<string, FilterSetting>> _loadFilters;
     private readonly Action<Dictionary<string, FilterSetting>> _saveFilters;
@@ -35,6 +35,11 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private int _generation;
     private bool _disposed;
+
+    // Bumped by every edit. A save records the value it snapshotted at and clears IsDirty only if
+    // nothing was edited while it ran: an edit made during an in-flight save is not in that save's
+    // document, so it has to stay pending.
+    private int _editVersion;
 
     private List<List<string>> _dismissed = [];
     private IReadOnlyList<(string Name, int Count)> _lastDiscovered = [];
@@ -72,6 +77,10 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
         Editor = new GroupingEditorViewModel(showColorPicker: true);
         Editor.RenameRefused += (_, name) => ErrorMessage = $"'{name}' is already a canonical filter name.";
+        // The editor's one change signal covers every group, alias, rename and colour edit,
+        // including the ones AddFilter and AcceptSuggestion make through it. A dismissal touches
+        // only _dismissed and marks itself.
+        Editor.Edited += (_, _) => MarkEdited();
 
         NewFilterName = "";
 
@@ -106,7 +115,47 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool IsSaving { get; private set; }
+
+    /// <summary>An edit exists that the stored filter document and dismissed list do not hold
+    /// yet. Set by every user edit, cleared by a load and by a save that finished with no edit
+    /// made while it ran.</summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
+    public partial bool IsDirty { get; private set; }
+
+    /// <inheritdoc />
+    public bool HasPendingEdits => IsDirty;
+
+    /// <inheritdoc />
+    public string Label => "Filter names and colours";
+
+    /// <inheritdoc />
+    public string NavigationKey => "filters";
+
+    /// <inheritdoc />
+    public string? SaveRefusal => IsDirty && IsSaving ? "Filters are still saving." : null;
+
+    Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
+
+    /// <summary>Re-reads the stored document through the same load the constructor runs, which
+    /// replaces every group and the dismissed list and clears <see cref="IsDirty"/> again when it
+    /// lands. Cleared here as well so the save bar drops at once rather than after the read.
+    /// </summary>
+    void IPendingEdits.Discard()
+    {
+        IsDirty = false;
+        Load();
+    }
+
+    private void MarkEdited()
+    {
+        _editVersion++;
+        IsDirty = true;
+    }
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasErrorMessage))]
@@ -228,6 +277,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
 
         // suggestion.Names is already sorted (SuggestionGrouper.Group's own contract).
         _dismissed.Add([.. suggestion.Names]);
+        MarkEdited();
         Suggestions.Remove(suggestion);
         OnPropertyChanged(nameof(HasSuggestions));
         OnPropertyChanged(nameof(SuggestionsHeading));
@@ -265,6 +315,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
             },
             StringComparer.Ordinal);
         var dismissed = _dismissed.Select(group => new List<string>(group)).ToList();
+        var savedVersion = _editVersion;
 
         var task = Task.Run(() =>
         {
@@ -277,6 +328,11 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
                     if (_disposed)
                     {
                         return;
+                    }
+
+                    if (_editVersion == savedVersion)
+                    {
+                        IsDirty = false;
                     }
 
                     IsSaving = false;
@@ -304,7 +360,7 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
         await task.ConfigureAwait(false);
     }
 
-    private bool CanSave() => !IsSaving;
+    private bool CanSave() => IsDirty && !IsSaving;
 
     private void Load()
     {
@@ -365,6 +421,9 @@ public sealed partial class FiltersTabViewModel : ObservableObject, IDisposable
             Editor.SetDiscovered(FoldDiscovered(discovered, filters));
             Editor.SetGroups(filters.Select(entry => new AliasGroupViewModel(entry.Key, entry.Value.Color, entry.Value.Aliases)));
             RefreshSuggestions();
+            // The editor now holds exactly the stored document. Only on a successful read: a
+            // failed one left the editor as it was, edits included, so they stay pending.
+            IsDirty = false;
         }
 
         LoadFailed = filters is null;
