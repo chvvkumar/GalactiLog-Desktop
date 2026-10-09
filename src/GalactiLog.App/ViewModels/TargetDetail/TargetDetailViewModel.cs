@@ -483,7 +483,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
         NightFilterMatrix = new NightFilterMatrixViewModel(
             _nightFilters,
             Totals.FilterSwatches,
-            TargetChart.PlottedNights);
+            TargetChart.PlottedNights,
+            Totals.Totals);
     }
 
     /// <summary>The session cards, newest session first (Task 4). Task 8 reads this collection

@@ -295,7 +295,9 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
             view.Mode = mode;
             mounted.Settle();
             Assert.True(Overflow(view) <= 0.5, $"{mode} runs {Overflow(view)} past the layout's {view.Bounds.Height}");
-            foreach (var region in new[] { "LeftColumn", "LanesRegion", "FramesRegion", "CompareNightsRegion", "IntegrationRegion" })
+            // Compare nights holds two scrollers side by side in time, the lanes and the table, whose
+            // bar is always shown (spec.md item 8), so each is counted on its own.
+            foreach (var region in new[] { "LeftColumn", "LanesRegion", "FramesRegion", "TrendChartPart", "CompareTableHost", "IntegrationRegion" })
             {
                 var bars = VerticalBars(view.Named<Control>(region));
                 Assert.True(bars <= 1, $"{region} in {mode} shows {bars} vertical scroll bars");
@@ -536,6 +538,33 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         mounted.Settle();
 
         Assert.Equal(3, page.TargetChart.PlottedSessionCount);
+    }
+
+    [AvaloniaFact]
+    public void CompareNights_ANightWithNoMetrics_IsHidden_AndTheLineShowsIt()
+    {
+        // Red if the empty night is plotted, the line is missing or disabled with nothing checked
+        // (the switch beside it is), or its button does not bring the night back.
+        var middle = new DateOnly(2025, 6, 1);
+        using var mounted = Mount(get: _ => Factory.PopulatedDetail(
+            sessions: [Factory.Session(Factory.LastSession), Factory.SessionWithoutMetrics(middle), Factory.Session(Factory.FirstSession)]));
+        var page = mounted.Harness.ViewModel;
+        var button = mounted.View.Named<ToggleButton>("CompareNightsButton");
+        button.Command!.Execute(button.CommandParameter);
+        mounted.Settle();
+
+        Assert.Equal(2, page.TargetChart.PlottedSessionCount);
+        var line = mounted.View.Named<Control>("EmptyNightsLine");
+        Assert.True(line.IsEffectivelyVisible);
+        Assert.True(line.IsEffectivelyEnabled);
+        Assert.Contains("1 night has no metrics.", line.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+
+        var show = mounted.View.Named<Button>("EmptyNightsButton");
+        show.Command!.Execute(null);
+        mounted.Settle();
+
+        Assert.Equal(3, page.TargetChart.PlottedSessionCount);
+        Assert.Equal("Hide them", show.Content);
     }
 
     [AvaloniaFact]
@@ -784,7 +813,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     [AvaloniaTheory]
     [InlineData(1280d, 720d)]
     [InlineData(1600d, 900d)]
-    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenBothTables(double width, double height)
+    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenTheTables(double width, double height)
     {
         // Red if the bars are not in their full form, the tables are not below them in
         // the same scroll viewer, or the hours table at the end cannot be reached by its one bar.
@@ -803,8 +832,8 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.True(LayoutParityCensusTests.IsShown(tables), "the Integration tables are not on screen");
         Assert.Equal(1, VerticalBars(view.Named<Control>("IntegrationRegion")));
 
-        var exposure = tables.Named<Control>("ExposureTable");
-        Assert.True(BoundsIn(exposure, scroll).Top < scroll.Bounds.Height, "the exposure table starts below the viewport at rest");
+        var overall = tables.Named<Control>("OverallTable");
+        Assert.True(BoundsIn(overall, scroll).Top < scroll.Bounds.Height, "the Overall metrics table starts below the viewport at rest");
         scroll.Offset = new Vector(0, scroll.Extent.Height);
         mounted.Settle();
         var hours = BoundsIn(tables.Named<Control>("HoursTable"), scroll);
@@ -849,7 +878,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         var view = mounted.View;
         foreach (var (mode, viewers) in new[]
         {
-            (TargetPageMode.CompareNights, new[] { "LanesScroll", "CompareTableHost" }),
+            (TargetPageMode.CompareNights, new[] { "LanesScroll", "CompareScroll" }),
             (TargetPageMode.Integration, new[] { "IntegrationScroll" }),
         })
         {

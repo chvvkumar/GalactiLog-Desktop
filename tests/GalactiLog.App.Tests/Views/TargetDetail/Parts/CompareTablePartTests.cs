@@ -1,8 +1,11 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
+using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
+using Avalonia.Layout;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Views.TargetDetail.Parts;
 using GalactiLog.Data.Queries;
@@ -28,104 +31,113 @@ public class CompareTablePartTests
     private static Factory.Harness Page()
         => Factory.Create(get: _ => Factory.PopulatedDetail() with { NightFilters = TwoNights() }).Settle().SettleCards();
 
-    private static (CompareTablePart View, Window Window) Host(Factory.Harness harness, double width = 1100)
+    private static (CompareTablePart View, Window Window) Host(Factory.Harness harness, double width = 1280, double height = 800)
     {
         var view = new CompareTablePart { DataContext = harness.ViewModel };
-        return (view, Show(view, width, 400));
+        return (view, Show(view, width, height));
     }
 
+    private static List<TableRow> DataRows(Control view)
+        => [.. view.Named<ItemsControl>("CompareRowList").GetVisualDescendants().OfType<TableRow>()];
+
+    private static string? Cell(TableRow row, string key)
+        => row.Children.OfType<TextBlock>().First(block => TableRow.GetCol(block) == key).Text;
+
     [AvaloniaTheory]
-    // 14 px is left out: its widths are pinned, and the headless font draws "HFR px" 2 px past 64.
+    [InlineData(14d)]
     [InlineData(16d)]
     [InlineData(18d)]
     [InlineData(20d)]
-    public void AtEveryTextSize_NoLabelRunsPastItsColumn_AndNoRowClips(double textSize)
+    public void AtEveryTextSize_TheTableKeepsTheConventions(double textSize)
     {
-        // A failure is a header or a number drawn past its column, or a row whose text is taller
-        // than the row.
+        // A failure is a header or a number drawn past its column, a row whose text is taller than
+        // the row, or a cell off the table convention.
         using var harness = Page();
+        harness.ViewModel.TargetChart.ShowAllSessions = true;
         var (view, window) = Host(harness);
         window.FontSize = textSize;
+        Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
 
         TextFit.AssertTextFitsItsBox(view);
-        Assert.Equal(110d * textSize / 14d, view.Named<Grid>("CompareTable").ColumnDefinitions[0].Width.Value, 0.01);
+        TableAssert.Conventions(view);
     }
 
     [AvaloniaFact]
-    public void FilterColumnIsPinnedAt110_AndEachNightGroupIs289WithItsLabel()
+    public void RowsAreGroupedPerNight_NewestFirst_TheNightOnItsFirstRowOnly()
     {
-        // A failure is a filter column that is not 110 wide, a group that is not 289 wide, or a
-        // group with no night label above it.
+        // A failure is the older night first, the date on every row, a row for OIII on the night
+        // that shot none, or a blank for a missing median.
         using var harness = Page();
         harness.ViewModel.TargetChart.ShowAllSessions = true;
         var (view, _) = Host(harness);
 
-        var table = view.Named<Grid>("CompareTable");
-        Assert.Equal(110d, table.ColumnDefinitions[0].Width.Value);
-        var headers = view.Named<ItemsControl>("CompareNightHeaders")
-            .GetVisualDescendants().OfType<StackPanel>().Where(panel => panel.Width == 289d).ToList();
-        Assert.Equal(2, headers.Count);
-        Assert.All(headers, header => Assert.Equal(289d, header.Bounds.Width));
-        var texts = VisibleTexts(view);
-        Assert.Contains("2025-12-07", texts);
-        Assert.Contains("2024-01-05", texts);
-        Assert.Contains("Ha", texts);
+        var rows = DataRows(view);
+        Assert.Equal(["2025-12-07", "", "2024-01-05"], rows.Select(row => Cell(row, "night")));
+        Assert.Equal(["Ha", "OIII", "Ha"], rows.Select(row => row.Children.OfType<DockPanel>().Single().Children.OfType<TextBlock>().Single().Text));
+        Assert.All(["hfr", "ecc", "fwhm", "rms", "stars"], key => Assert.Equal("-", Cell(rows[1], key)));
+        Assert.Equal("2.10", Cell(rows[0], "hfr"));
+        Assert.Equal("2.40", Cell(rows[2], "hfr"));
     }
 
     [AvaloniaFact]
-    public void CellWidthsAre64_52_62_57_54_AndANullMedianIsAnEmptyCell()
+    public void NightGroupsAlternate_TheBandNotTheRow()
     {
-        // A failure is another width, or text in the OIII cell of the night it has no row on.
+        // A failure is per-row zebra, which would split one night's filters into two bands.
         using var harness = Page();
         harness.ViewModel.TargetChart.ShowAllSessions = true;
         var (view, _) = Host(harness);
 
-        var firstRow = view.Named<ItemsControl>("CompareRowList")
-            .GetVisualDescendants().OfType<StackPanel>().First(panel => panel.Width == 289d && panel.Height == 26d);
-        Assert.Equal([64d, 52d, 62d, 57d, 54d], firstRow.Children.OfType<TextBlock>().Select(block => block.Width));
-        Assert.Equal("2.40", firstRow.Children.OfType<TextBlock>().First().Text);
-
-        var rows = view.Named<ItemsControl>("CompareRowList")
-            .GetVisualDescendants().OfType<StackPanel>().Where(panel => panel.Width == 289d && panel.Height == 26d).ToList();
-        Assert.Equal(4, rows.Count);
-        Assert.All(rows[2].Children.OfType<TextBlock>(), block => Assert.Equal("", block.Text));
+        Assert.Equal([false, false, true], DataRows(view).Select(row => row.Classes.Contains("alt")));
     }
 
     [AvaloniaFact]
-    public void FewNightsFitAndManyScrollSideways_InsideThePart()
+    public void TheHeaderStaysPut_TheBarIsAlwaysShown_AndNothingScrollsSideways()
     {
-        // A failure is a scroller that is not the part width less the 110 px filter column, no
-        // horizontal range, or a Filter header that moves when the groups scroll.
-        using var harness = Page();
-        var (view, window) = Host(harness, width: 330);
+        // A failure is a header that scrolls away with the rows, a bar that hides at rest or at the
+        // app's thin size, or a table wider than its viewport.
+        DateOnly[] nights = [new(2025, 12, 7), new(2025, 11, 30), new(2025, 11, 23), new(2025, 11, 16)];
+        using var harness = Factory.Create(get: _ => Factory.PopulatedDetail(sessions: [.. nights.Select(Factory.Session)]) with
+        {
+            NightFilters =
+            [
+                .. nights.Select(night => Rows.Row(night, "Ha", 3_600d, 12, [(300d, 12)], hfr: 2.1d)),
+                .. nights.Select(night => Rows.Row(night, "OIII", 3_600d, 12, [(300d, 12)], hfr: 2.3d)),
+            ],
+        }).Settle().SettleCards();
+        harness.ViewModel.TargetChart.ShowAllSessions = true;
+        var (view, window) = Host(harness, height: 120);
 
         var scroll = view.Named<ScrollViewer>("CompareScroll");
-        Assert.True(scroll.Extent.Width > scroll.Viewport.Width);
-        Assert.Equal(view.Bounds.Width - 110d, scroll.Viewport.Width, 0.5);
-        var header = view.GetVisualDescendants().OfType<TextBlock>().First(block => block.Text == "Filter");
-        var before = header.TranslatePoint(new Avalonia.Point(0, 0), window)!.Value.X;
-        scroll.Offset = new Avalonia.Vector(60, 0);
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
-        Assert.Equal(60d, scroll.Offset.X);
-        Assert.Equal(before, header.TranslatePoint(new Avalonia.Point(0, 0), window)!.Value.X, 0.5);
+        Assert.Equal(ScrollBarVisibility.Visible, scroll.VerticalScrollBarVisibility);
+        Assert.False(scroll.AllowAutoHide);
+        var bar = scroll.GetVisualDescendants().OfType<ScrollBar>().Single(each => each.Orientation == Orientation.Vertical);
+        Assert.True(bar.IsEffectivelyVisible);
+        Assert.Equal(TableMetrics.ScrollBarSize, bar.Bounds.Width, 0.5);
+        Assert.True(scroll.Extent.Height > scroll.Viewport.Height);
+        Assert.True(scroll.Extent.Width <= scroll.Viewport.Width + 0.5, $"extent {scroll.Extent.Width} in a {scroll.Viewport.Width} viewport");
+
+        var header = view.GetVisualDescendants().OfType<TextBlock>().First(block => block.Text == TableHeads.Night);
+        var before = header.TranslatePoint(default, window)!.Value.Y;
+        scroll.Offset = new Vector(0, 40);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(40d, scroll.Offset.Y);
+        Assert.Equal(before, header.TranslatePoint(default, window)!.Value.Y, 0.5);
     }
 
     [AvaloniaFact]
     public void CheckedOnly_ShowsOnlyTheCheckedNights()
     {
-        // A failure is two night groups with the switch on Checked.
+        // A failure is the unchecked night's rows with the switch on Checked.
         using var harness = Page();
         var (view, _) = Host(harness);
 
         harness.ViewModel.Sessions.First(card => card.SessionDate == Factory.FirstSession).IsChecked = true;
         harness.ViewModel.TargetChart.CheckedOnly = true;
-        Avalonia.Threading.Dispatcher.UIThread.RunJobs();
+        Dispatcher.UIThread.RunJobs();
 
-        var headers = view.Named<ItemsControl>("CompareNightHeaders")
-            .GetVisualDescendants().OfType<StackPanel>().Where(panel => panel.Width == 289d).ToList();
-        Assert.Single(headers);
-        Assert.Contains("2024-01-05", VisibleTexts(view));
-        Assert.DoesNotContain("2025-12-07", VisibleTexts(view));
+        var nights = DataRows(view).Select(row => Cell(row, "night")).ToList();
+        Assert.Contains("2024-01-05", nights);
+        Assert.DoesNotContain("2025-12-07", nights);
     }
 }

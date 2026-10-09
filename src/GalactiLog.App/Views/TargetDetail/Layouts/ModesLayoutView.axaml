@@ -72,29 +72,41 @@
           </Grid>
         </Grid>
 
-        <!-- Compare nights: the All or Checked switch above both, the chart with its lanes scrolling
-             inside it, then the table at its natural height up to the share the code-behind sets,
-             scrolling inside its host beyond that. -->
+        <!-- Compare nights: the All or Checked switch and the no-metrics line above both, the chart
+             with its lanes scrolling inside it, then the table at its natural height up to the
+             share the code-behind sets; beyond that its header stays pinned and its rows scroll
+             inside the part. -->
         <Grid x:Name="CompareNightsRegion" RowDefinitions="Auto,*,Auto" IsVisible="False">
-          <StackPanel x:Name="CheckedSwitch"
-                      Orientation="Horizontal"
-                      Spacing="4"
-                      IsEnabled="{Binding !!SelectedNights.Count}">
-            <ToggleButton x:Name="AllNightsToggle"
-                          Content="All nights"
-                          IsChecked="{Binding !TargetChart.CheckedOnly, Mode=TwoWay}" />
-            <ToggleButton x:Name="CheckedNightsToggle"
-                          Content="Checked nights"
-                          IsChecked="{Binding TargetChart.CheckedOnly, Mode=TwoWay}" />
-          </StackPanel>
+          <DockPanel x:Name="CompareControls">
+            <StackPanel x:Name="CheckedSwitch"
+                        DockPanel.Dock="Left"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        IsEnabled="{Binding !!SelectedNights.Count}">
+              <ToggleButton x:Name="AllNightsToggle"
+                            Content="All nights"
+                            IsChecked="{Binding !TargetChart.CheckedOnly, Mode=TwoWay}" />
+              <ToggleButton x:Name="CheckedNightsToggle"
+                            Content="Checked nights"
+                            IsChecked="{Binding TargetChart.CheckedOnly, Mode=TwoWay}" />
+            </StackPanel>
+            <StackPanel x:Name="EmptyNightsLine"
+                        Orientation="Horizontal"
+                        Spacing="4"
+                        Margin="16,0,0,0"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding TargetChart.HasEmptyNights}">
+              <TextBlock Classes="t-caption" VerticalAlignment="Center" Text="{Binding TargetChart.EmptyNightsText}" />
+              <Button x:Name="EmptyNightsButton"
+                      Classes="quiet sm"
+                      Content="{Binding TargetChart.EmptyNightsAction}"
+                      Command="{Binding TargetChart.ToggleEmptyNightsCommand}" />
+            </StackPanel>
+          </DockPanel>
           <parts:TrendChartPart x:Name="TrendChartPart" Grid.Row="1" Margin="0,8,0,0" IsLaned="True" />
-          <ScrollViewer x:Name="CompareTableHost"
-                        Grid.Row="2"
-                        Margin="0,8,0,0"
-                        VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Disabled">
+          <Border x:Name="CompareTableHost" Grid.Row="2" Margin="0,8,0,0">
             <parts:CompareTablePart x:Name="CompareTablePart" />
-          </ScrollViewer>
+          </Border>
         </Grid>
 
         <!-- Integration: one scroll viewer holding the full bars, then the tables, at

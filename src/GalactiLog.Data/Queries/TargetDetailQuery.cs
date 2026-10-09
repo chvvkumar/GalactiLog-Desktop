@@ -355,6 +355,7 @@ public sealed class TargetDetailQuery(
     {
         var integration = 0d;
         var integrationByFilter = new Dictionary<string, double>(StringComparer.OrdinalIgnoreCase);
+        var framesByFilter = new Dictionary<string, List<OverviewFrame>>(StringComparer.OrdinalIgnoreCase);
         var sessionDates = new HashSet<DateOnly>();
         DateOnly? first = null;
         DateOnly? last = null;
@@ -364,6 +365,12 @@ public sealed class TargetDetailQuery(
             if (map.CanonicalFilter(frame.FilterUsed) is { } filter && !string.IsNullOrWhiteSpace(filter))
             {
                 integrationByFilter[filter] = integrationByFilter.GetValueOrDefault(filter) + frame.ExposureSeconds;
+                if (!framesByFilter.TryGetValue(filter, out var bucket))
+                {
+                    framesByFilter[filter] = bucket = [];
+                }
+
+                bucket.Add(frame);
             }
 
             if (frame.SessionDate is not { } date)
@@ -385,6 +392,8 @@ public sealed class TargetDetailQuery(
 
         var arcsec = HfrArcsec(frames);
         var eccentricity = ModalSourceEccentricity(frames);
+        var pooled = PooledEccentricity(frames);
+        var all = Means(frames, pooled);
 
         return new TargetTotals(
             integration,
@@ -394,16 +403,15 @@ public sealed class TargetDetailQuery(
             sessionDates.Count,
             first,
             last,
-            Statistics.Mean(frames.Select(frame => frame.MedianHfr)),
+            all.Hfr,
             Statistics.Mean(arcsec.Values),
             arcsec.ExcludedCount,
-            Statistics.Mean(eccentricity.Values),
+            all.Eccentricity,
             eccentricity.ModalSource,
             eccentricity.ExcludedCount,
-            // fwhm is already arcseconds (spec 7.1.1) and never passes through the plate scale.
-            Statistics.Mean(frames.Select(frame => frame.Fwhm)),
-            Statistics.Mean(frames.Select(frame => frame.GuidingRmsArcsec)),
-            Statistics.Mean(frames.Select(frame => frame.DetectedStars)),
+            all.Fwhm,
+            all.GuidingRmsArcsec,
+            all.DetectedStars,
             CanonicalFilters(frames, map),
             integrationByFilter,
             // Rule 6: the totals row's equipment is the flat set of canonical telescope and
@@ -417,8 +425,24 @@ public sealed class TargetDetailQuery(
                 .Where(name => !string.IsNullOrWhiteSpace(name))
                 .Select(name => name!)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)]);
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)])
+        {
+            MeansByFilter = framesByFilter.ToDictionary(
+                pair => pair.Key, pair => Means(pair.Value, pooled), StringComparer.OrdinalIgnoreCase),
+        };
     }
+
+    /// <summary>The five means over a group's frames; the All frames row and every filter row come
+    /// from here, so they cannot drift. Eccentricity reads <paramref name="eccentricity"/>, the
+    /// target's modal source pool.</summary>
+    private static MetricMeans Means(IEnumerable<OverviewFrame> frames, Func<OverviewFrame, double?> eccentricity)
+        => new(
+            Statistics.Mean(frames.Select(frame => frame.MedianHfr)),
+            Statistics.Mean(frames.Select(eccentricity)),
+            // fwhm is already arcseconds (spec 7.1.1) and never passes through the plate scale.
+            Statistics.Mean(frames.Select(frame => frame.Fwhm)),
+            Statistics.Mean(frames.Select(frame => frame.GuidingRmsArcsec)),
+            Statistics.Mean(frames.Select(frame => frame.DetectedStars)));
 
     /// <summary>Rule 1. A frame with an HFR and a strictly positive plate scale contributes the
     /// converted value; one with an HFR and no usable plate scale is counted as excluded; one
@@ -609,8 +633,9 @@ public sealed class TargetDetailQuery(
         return buckets;
     }
 
-    /// <summary>The night's eccentricity for one frame, null unless the frame is in the night's
-    /// modal source pool, so a night row and a frame point pool what the night's median pools.</summary>
+    /// <summary>A frame's eccentricity, null unless the frame is in the group's modal source pool, so
+    /// a night row and a frame point pool what the night's median pools, and a filter row pools what
+    /// the target's mean pools.</summary>
     private static Func<OverviewFrame, double?> PooledEccentricity(List<OverviewFrame> night)
     {
         if (!EccentricitySources.TryGetModalSource(

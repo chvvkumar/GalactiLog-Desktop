@@ -1,94 +1,129 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<parts:NightFilterTablePart xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
              xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
              xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
              x:Class="GalactiLog.App.Views.TargetDetail.Parts.IntegrationTablesPart"
              x:Name="Root"
              x:DataType="detail:TargetDetailViewModel">
-  <UserControl.Resources>
+  <parts:NightFilterTablePart.Resources>
+    <t:TableColumns x:Key="OverallCols" Id="Overall">
+      <t:TableColumn Key="label" Group="IntLabel" />
+      <t:TableColumn Key="hfr" Kind="Number" />
+      <t:TableColumn Key="ecc" Kind="Number" />
+      <t:TableColumn Key="fwhm" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+      <t:TableColumn Key="stars" Kind="Number" />
+      <t:TableColumn Key="spare" Width="*" />
+    </t:TableColumns>
+
+    <!-- One set for both matrices, so their strip groups (Matrix_f0_g{n}...) are shared and a
+         filter's column sits at one x in both. -->
+    <t:TableColumns x:Key="MatrixCols" Id="Matrix">
+      <t:TableColumn Key="label" Group="IntLabel" />
+      <t:TableColumn Key="filters" Kind="Strip" />
+      <t:TableColumn Key="total" Kind="Number" RuleBefore="True" />
+      <t:TableColumn Key="spare" Width="*" />
+    </t:TableColumns>
+
+    <DataTemplate x:Key="MatrixCellTemplate" x:DataType="detail:MatrixCellViewModel">
+      <t:TableStripCell Group="{Binding ColumnId}">
+        <TextBlock Text="{Binding Text}" />
+      </t:TableStripCell>
+    </DataTemplate>
+
     <DataTemplate x:Key="MatrixRowTemplate" x:DataType="detail:MatrixRowViewModel">
-      <Grid MinHeight="26">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-          <ColumnDefinition Width="Auto" />
-          <ColumnDefinition Width="Auto" />
-        </Grid.ColumnDefinitions>
-        <TextBlock MinWidth="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=117}" Padding="6,0,0,0" VerticalAlignment="Center" Text="{Binding Label}" />
-        <ItemsControl Grid.Column="1" ItemsSource="{Binding Cells}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="x:String">
-              <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding}" />
+      <t:TableRow Columns="{StaticResource MatrixCols}">
+        <TextBlock t:TableRow.Col="label" Text="{Binding Label}" />
+        <ItemsControl t:TableRow.Col="filters" ItemsSource="{Binding Cells}" ItemTemplate="{StaticResource MatrixCellTemplate}" />
+        <TextBlock t:TableRow.Col="total" Text="{Binding Total}" />
+      </t:TableRow>
+    </DataTemplate>
+
+    <DataTemplate x:Key="MatrixTotalTemplate" x:DataType="detail:MatrixRowViewModel">
+      <t:TableRow Kind="Total" Columns="{StaticResource MatrixCols}">
+        <TextBlock t:TableRow.Col="label" Text="{Binding Label}" />
+        <ItemsControl t:TableRow.Col="filters" ItemsSource="{Binding Cells}" ItemTemplate="{StaticResource MatrixCellTemplate}" />
+        <TextBlock t:TableRow.Col="total" Text="{Binding Total}" />
+      </t:TableRow>
+    </DataTemplate>
+
+    <DataTemplate x:Key="OverallRowTemplate" x:DataType="detail:MetricRowViewModel">
+      <t:TableRow Columns="{StaticResource OverallCols}">
+        <TextBlock t:TableRow.Col="label" Text="{Binding Label}" ToolTip.Tip="{Binding Label}" />
+        <TextBlock t:TableRow.Col="hfr" Text="{Binding HfrText}" />
+        <TextBlock t:TableRow.Col="ecc" Text="{Binding EccentricityText}" />
+        <TextBlock t:TableRow.Col="fwhm" Text="{Binding FwhmText}" />
+        <TextBlock t:TableRow.Col="rms" Text="{Binding GuidingRmsText}" />
+        <TextBlock t:TableRow.Col="stars" Text="{Binding DetectedStarsText}" />
+      </t:TableRow>
+    </DataTemplate>
+  </parts:NightFilterTablePart.Resources>
+
+  <!-- Three sections in one scroll viewer: Overall metrics (target-wide means, All frames then one
+       row per filter), Frames by exposure and Hours by night. The three share the IntLabel column,
+       so their figures start at one x, and the two matrices share MatrixCols, so a filter's strip
+       column lines up in both and a wide set of filters scrolls them together. -->
+  <ScrollViewer t:Table.Scroller="True" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+    <StackPanel Grid.IsSharedSizeScope="True"
+                Spacing="{x:Static t:TableMetrics.SectionGap}"
+                IsVisible="{Binding NightFilterMatrix.HasRows, FallbackValue=False}">
+      <StackPanel x:Name="OverallTable">
+        <TextBlock Classes="t-label section" Text="Overall metrics" ToolTip.Tip="Means over every light frame" />
+        <t:TableRow Kind="Header" Columns="{StaticResource OverallCols}">
+          <TextBlock t:TableRow.Col="label" Text="{x:Static t:TableHeads.Filter}" />
+          <TextBlock t:TableRow.Col="hfr" Text="{x:Static t:TableHeads.Hfr}" ToolTip.Tip="{x:Static t:TableHeads.HfrTip}" />
+          <TextBlock t:TableRow.Col="ecc" Text="{x:Static t:TableHeads.Ecc}" ToolTip.Tip="{x:Static t:TableHeads.EccTip}" />
+          <TextBlock t:TableRow.Col="fwhm" Text="{x:Static t:TableHeads.Fwhm}" ToolTip.Tip="{x:Static t:TableHeads.FwhmTip}" />
+          <TextBlock t:TableRow.Col="rms" Text="{x:Static t:TableHeads.Rms}" ToolTip.Tip="{x:Static t:TableHeads.RmsTip}" />
+          <TextBlock t:TableRow.Col="stars" Text="{x:Static t:TableHeads.Stars}" />
+        </t:TableRow>
+        <ContentControl Content="{Binding NightFilterMatrix.Overall.AllFrames}">
+          <ContentControl.ContentTemplate>
+            <DataTemplate x:DataType="detail:MetricRowViewModel">
+              <t:TableRow Kind="LeadTotal" Columns="{StaticResource OverallCols}">
+                <TextBlock t:TableRow.Col="label" Text="{Binding Label}" />
+                <TextBlock t:TableRow.Col="hfr" Text="{Binding HfrText}" />
+                <TextBlock t:TableRow.Col="ecc" Text="{Binding EccentricityText}" />
+                <TextBlock t:TableRow.Col="fwhm" Text="{Binding FwhmText}" />
+                <TextBlock t:TableRow.Col="rms" Text="{Binding GuidingRmsText}" />
+                <TextBlock t:TableRow.Col="stars" Text="{Binding DetectedStarsText}" />
+              </t:TableRow>
             </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        <TextBlock Grid.Column="2" Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding Total}" />
-      </Grid>
-    </DataTemplate>
+          </ContentControl.ContentTemplate>
+        </ContentControl>
+        <ItemsControl Classes="table"
+                      ItemsSource="{Binding NightFilterMatrix.Overall.Filters}"
+                      ItemTemplate="{StaticResource OverallRowTemplate}" />
+      </StackPanel>
 
-    <DataTemplate x:Key="MatrixHeaderTemplate" x:DataType="detail:NightFilterMatrixViewModel">
-      <ItemsControl ItemsSource="{Binding Filters}">
-        <ItemsControl.ItemsPanel>
-          <ItemsPanelTemplate>
-            <StackPanel Orientation="Horizontal" />
-          </ItemsPanelTemplate>
-        </ItemsControl.ItemsPanel>
-        <ItemsControl.ItemTemplate>
-          <DataTemplate x:DataType="detail:FilterSwatchViewModel">
-            <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}"
-                       Classes="t-label num"
-                       Padding="0,0,6,0"
-                       Text="{Binding FilterName}"
-                       TextTrimming="CharacterEllipsis"
-                       ToolTip.Tip="{Binding FilterName}" />
-          </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
-    </DataTemplate>
-  </UserControl.Resources>
-
-  <!-- Frames by exposure length, then hours by night. Filter columns of 64 px and a
-       label column as wide as its widest label (never under 117 px), both widened with the text size, shared by both tables, inside one scroll viewer, so the filter columns line
-       up and a wide set of filters scrolls both together. -->
-  <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-    <StackPanel Spacing="16" Grid.IsSharedSizeScope="True" IsVisible="{Binding NightFilterMatrix.HasRows, FallbackValue=False}">
       <StackPanel x:Name="ExposureTable">
-        <Grid MinHeight="20">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <TextBlock MinWidth="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=117}" Classes="t-label" Padding="6,0,0,0" Text="Frames by exposure" />
-          <ContentControl Grid.Column="1" Content="{Binding NightFilterMatrix}" ContentTemplate="{StaticResource MatrixHeaderTemplate}" />
-          <TextBlock Grid.Column="2" Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="t-label num" Padding="0,0,6,0" Text="Total" />
-        </Grid>
-        <ItemsControl ItemsSource="{Binding NightFilterMatrix.ExposureRows}"
+        <TextBlock Classes="t-label section" Text="Frames by exposure" />
+        <t:TableRow Kind="Header" Columns="{StaticResource MatrixCols}">
+          <TextBlock t:TableRow.Col="label" Text="{x:Static t:TableHeads.Exposure}" ToolTip.Tip="{x:Static t:TableHeads.ExposureTip}" />
+          <ItemsControl t:TableRow.Col="filters" ItemsSource="{Binding NightFilterMatrix.FilterHeads}" ItemTemplate="{StaticResource MatrixCellTemplate}" />
+          <TextBlock t:TableRow.Col="total" Text="{x:Static t:TableHeads.Total}" />
+        </t:TableRow>
+        <ItemsControl Classes="table"
+                      ItemsSource="{Binding NightFilterMatrix.ExposureRows}"
                       ItemTemplate="{StaticResource MatrixRowTemplate}" />
         <ContentControl Content="{Binding NightFilterMatrix.ExposureTotalRow}"
-                        ContentTemplate="{StaticResource MatrixRowTemplate}" />
+                        ContentTemplate="{StaticResource MatrixTotalTemplate}" />
       </StackPanel>
 
       <StackPanel x:Name="HoursTable">
-        <Grid MinHeight="20">
-          <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
-            <ColumnDefinition Width="Auto" />
-            <ColumnDefinition Width="Auto" />
-          </Grid.ColumnDefinitions>
-          <TextBlock MinWidth="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=117}" Classes="t-label" Padding="6,0,0,0" Text="Hours by night" />
-          <ContentControl Grid.Column="1" Content="{Binding NightFilterMatrix}" ContentTemplate="{StaticResource MatrixHeaderTemplate}" />
-          <TextBlock Grid.Column="2" Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="t-label num" Padding="0,0,6,0" Text="Total" />
-        </Grid>
-        <ItemsControl ItemsSource="{Binding NightFilterMatrix.HoursRows}"
+        <TextBlock Classes="t-label section" Text="Hours by night" />
+        <t:TableRow Kind="Header" Columns="{StaticResource MatrixCols}">
+          <TextBlock t:TableRow.Col="label" Text="{x:Static t:TableHeads.Night}" />
+          <ItemsControl t:TableRow.Col="filters" ItemsSource="{Binding NightFilterMatrix.FilterHeads}" ItemTemplate="{StaticResource MatrixCellTemplate}" />
+          <TextBlock t:TableRow.Col="total" Text="{x:Static t:TableHeads.Total}" />
+        </t:TableRow>
+        <ItemsControl Classes="table"
+                      ItemsSource="{Binding NightFilterMatrix.HoursRows}"
                       ItemTemplate="{StaticResource MatrixRowTemplate}" />
         <ContentControl Content="{Binding NightFilterMatrix.HoursTotalRow}"
-                        ContentTemplate="{StaticResource MatrixRowTemplate}" />
+                        ContentTemplate="{StaticResource MatrixTotalTemplate}" />
       </StackPanel>
     </StackPanel>
   </ScrollViewer>
-</UserControl>
+</parts:NightFilterTablePart>

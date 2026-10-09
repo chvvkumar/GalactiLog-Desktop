@@ -144,6 +144,17 @@ internal static class TargetDetailViewModelTestFactory
         HasNotes: true,
         GuidingProvenance: GuidingRmsProvenance.None);
 
+    /// <summary>A night with none of the five medians, which Compare nights hides until shown.</summary>
+    public static SessionOverview SessionWithoutMetrics(DateOnly date) => Session(date) with
+    {
+        MedianHfr = null,
+        MedianHfrArcsec = null,
+        MedianEccentricity = null,
+        MedianFwhm = null,
+        MedianGuidingRmsArcsec = null,
+        MedianDetectedStars = null,
+    };
+
     public static string[] FramePaths =>
     [
         @"C:\Astro\M 31\2024-01-05\frame_0001.fits",
