@@ -966,7 +966,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
 
     /// <summary>The filter block is the one part of this tab behind a Save button, so an edit in it
     /// is what a reload would throw away.</summary>
-    protected override bool HasPendingEdits => IsDirty;
+    public override bool HasPendingEdits => IsDirty;
 
     /// <summary>
     /// Another writer changed the <c>general</c> document while the filter block was dirty (review

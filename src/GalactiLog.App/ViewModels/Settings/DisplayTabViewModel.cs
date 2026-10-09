@@ -309,7 +309,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     internal Task? PendingCustomColumnsRead { get; private set; }
 
     /// <inheritdoc />
-    protected override bool HasPendingEdits => GroupsDirty;
+    public override bool HasPendingEdits => GroupsDirty;
 
     /// <inheritdoc />
     protected override void OnStoredDocumentChangedElsewhere() => GroupsChangedElsewhere = true;

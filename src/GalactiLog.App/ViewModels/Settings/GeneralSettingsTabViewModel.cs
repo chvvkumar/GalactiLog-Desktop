@@ -212,7 +212,7 @@ public abstract partial class GeneralSettingsTabViewModel : ObservableObject, ID
     /// is right for a tab whose every control saves immediately; the Display tab overrides it for
     /// its metric-group block, which is the one part behind a Save button.
     /// </summary>
-    protected virtual bool HasPendingEdits => false;
+    public virtual bool HasPendingEdits => false;
 
     /// <summary>Called instead of a reload when <see cref="HasPendingEdits"/> is true. The edit is
     /// neither overwritten nor discarded; the tab says so.</summary>
