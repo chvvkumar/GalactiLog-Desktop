@@ -1,89 +1,74 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<parts:NightFilterTablePart xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
              xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
              xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
              x:Class="GalactiLog.App.Views.TargetDetail.Parts.CompareTablePart"
              x:Name="Root"
              x:DataType="detail:TargetDetailViewModel">
-  <!-- One row per filter, one column group per night of the five medians at 64, 52, 62, 57
-       and 54 px (289 px a night). The filter column is pinned; the groups scroll sideways.
-       Widths and heights grow with the text size and stay exact so the pinned rows match. -->
+  <parts:NightFilterTablePart.Resources>
+    <t:TableColumns x:Key="CompareCols" Id="Compare">
+      <t:TableColumn Key="night" />
+      <t:TableColumn Key="filter" MaxWidth="160" />
+      <t:TableColumn Key="hfr" Kind="Number" />
+      <t:TableColumn Key="ecc" Kind="Number" />
+      <t:TableColumn Key="fwhm" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+      <t:TableColumn Key="stars" Kind="Number" />
+      <t:TableColumn Key="spare" Width="*" />
+    </t:TableColumns>
+  </parts:NightFilterTablePart.Resources>
+
+  <!-- Nights as rows, newest first as the night list orders them, one row per filter the night
+       shot and one zebra band per night; the five medians as columns. The header stays put above a
+       scroller that moves the rows vertically only, under an always shown table bar.
+
+       ponytail: a filterless row's "-" sits in the filter cell's inner TextBlock, which the faint
+       dash rule (TextBlock.tc-text[Text=-]) does not reach, so it draws in normal ink. The rows are
+       unvirtualised, fine for tens of nights times a handful of filters; switch to a ListBox if a
+       target passes a few hundred rows. -->
   <Grid x:Name="CompareTable"
-        ColumnDefinitions="110,*"
-        IsVisible="{Binding NightFilterMatrix.HasRows, FallbackValue=False}">
-    <StackPanel Grid.Column="0">
-      <TextBlock Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=20}" />
-      <TextBlock Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=20}" Classes="t-label" Text="Filter" />
-      <ItemsControl ItemsSource="{Binding NightFilterMatrix.CompareRows}">
+        RowDefinitions="Auto,*"
+        Grid.IsSharedSizeScope="True"
+        IsVisible="{Binding NightFilterMatrix.HasCompareRows, FallbackValue=False}">
+    <t:TableRow Kind="Header" Columns="{StaticResource CompareCols}">
+      <TextBlock t:TableRow.Col="night" Text="{x:Static t:TableHeads.Night}" />
+      <TextBlock t:TableRow.Col="filter" Text="{x:Static t:TableHeads.Filter}" ToolTip.Tip="{x:Static t:TableHeads.Filter}" />
+      <TextBlock t:TableRow.Col="hfr" Text="{x:Static t:TableHeads.Hfr}" ToolTip.Tip="{x:Static t:TableHeads.HfrTip}" />
+      <TextBlock t:TableRow.Col="ecc" Text="{x:Static t:TableHeads.Ecc}" ToolTip.Tip="{x:Static t:TableHeads.EccTip}" />
+      <TextBlock t:TableRow.Col="fwhm" Text="{x:Static t:TableHeads.Fwhm}" ToolTip.Tip="{x:Static t:TableHeads.FwhmTip}" />
+      <TextBlock t:TableRow.Col="rms" Text="{x:Static t:TableHeads.Rms}" ToolTip.Tip="{x:Static t:TableHeads.RmsTip}" />
+      <TextBlock t:TableRow.Col="stars" Text="{x:Static t:TableHeads.Stars}" />
+    </t:TableRow>
+
+    <ScrollViewer Grid.Row="1"
+                  x:Name="CompareScroll"
+                  t:Table.Scroller="True"
+                  VerticalScrollBarVisibility="Visible"
+                  HorizontalScrollBarVisibility="Disabled">
+      <ItemsControl x:Name="CompareRowList" ItemsSource="{Binding NightFilterMatrix.CompareRows}">
         <ItemsControl.ItemTemplate>
           <DataTemplate x:DataType="detail:CompareRowViewModel">
-            <StackPanel Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=26}" Orientation="Horizontal">
-              <Ellipse Width="7"
-                       Height="7"
-                       Margin="0,0,5,0"
-                       VerticalAlignment="Center"
-                       Fill="{Binding Filter.Brush}" />
-              <TextBlock Text="{Binding Filter.FilterName}"
-                         MaxWidth="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=90}"
-                         TextTrimming="CharacterEllipsis"
-                         VerticalAlignment="Center" />
-            </StackPanel>
+            <t:TableRow Columns="{StaticResource CompareCols}" Classes.alt="{Binding IsAltGroup}">
+              <TextBlock t:TableRow.Col="night" Text="{Binding NightText}" />
+              <DockPanel t:TableRow.Col="filter" ToolTip.Tip="{Binding Metrics.Label}">
+                <Ellipse DockPanel.Dock="Left"
+                         Width="7"
+                         Height="7"
+                         Margin="0,0,5,0"
+                         VerticalAlignment="Center"
+                         Fill="{Binding Filter.Brush}" />
+                <TextBlock Text="{Binding Metrics.Label}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center" />
+              </DockPanel>
+              <TextBlock t:TableRow.Col="hfr" Text="{Binding Metrics.HfrText}" />
+              <TextBlock t:TableRow.Col="ecc" Text="{Binding Metrics.EccentricityText}" />
+              <TextBlock t:TableRow.Col="fwhm" Text="{Binding Metrics.FwhmText}" />
+              <TextBlock t:TableRow.Col="rms" Text="{Binding Metrics.GuidingRmsText}" />
+              <TextBlock t:TableRow.Col="stars" Text="{Binding Metrics.DetectedStarsText}" />
+            </t:TableRow>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>
-    </StackPanel>
-
-    <ScrollViewer Grid.Column="1"
-                  x:Name="CompareScroll"
-                  HorizontalScrollBarVisibility="Auto"
-                  VerticalScrollBarVisibility="Disabled">
-      <StackPanel>
-        <ItemsControl x:Name="CompareNightHeaders" ItemsSource="{Binding NightFilterMatrix.CompareNights}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="detail:CompareNightViewModel">
-              <StackPanel Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=289}">
-                <TextBlock Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=20}" Classes="t-label" Padding="6,0,0,0" Text="{Binding Label}" />
-                <StackPanel Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=20}" Orientation="Horizontal">
-                  <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="t-label num" Padding="0,0,6,0" Text="HFR px" />
-                  <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=52}" Classes="t-label num" Padding="0,0,6,0" Text="Ecc" />
-                  <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=62}" Classes="t-label num" Padding="0,0,6,0" Text="FWHM &quot;" />
-                  <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=57}" Classes="t-label num" Padding="0,0,6,0" Text="RMS &quot;" />
-                  <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=54}" Classes="t-label num" Padding="0,0,6,0" Text="Stars" />
-                </StackPanel>
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-        <ItemsControl x:Name="CompareRowList" ItemsSource="{Binding NightFilterMatrix.CompareRows}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="detail:CompareRowViewModel">
-              <ItemsControl ItemsSource="{Binding Cells}">
-                <ItemsControl.ItemsPanel>
-                  <ItemsPanelTemplate>
-                    <StackPanel Orientation="Horizontal" />
-                  </ItemsPanelTemplate>
-                </ItemsControl.ItemsPanel>
-                <ItemsControl.ItemTemplate>
-                  <DataTemplate x:DataType="detail:CompareCellViewModel">
-                    <StackPanel Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=289}" Height="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=26}" Orientation="Horizontal">
-                      <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=64}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding Hfr}" />
-                      <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=52}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding Eccentricity}" />
-                      <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=62}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding Fwhm}" />
-                      <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=57}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding GuidingRms}" />
-                      <TextBlock Width="{Binding $parent[UserControl].FontSize, Converter={x:Static parts:FontScale.Instance}, ConverterParameter=54}" Classes="num" Padding="0,0,6,0" VerticalAlignment="Center" Text="{Binding DetectedStars}" />
-                    </StackPanel>
-                  </DataTemplate>
-                </ItemsControl.ItemTemplate>
-              </ItemsControl>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
     </ScrollViewer>
   </Grid>
-</UserControl>
+</parts:NightFilterTablePart>

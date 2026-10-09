@@ -1,11 +1,12 @@
-<UserControl xmlns="https://github.com/avaloniaui"
+<parts:NightFilterTablePart xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:t="using:GalactiLog.App.Controls.Table"
+             xmlns:parts="using:GalactiLog.App.Views.TargetDetail.Parts"
              xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
              x:Class="GalactiLog.App.Views.TargetDetail.Parts.IntegrationTablesPart"
              x:Name="Root"
              x:DataType="detail:TargetDetailViewModel">
-  <UserControl.Resources>
+  <parts:NightFilterTablePart.Resources>
     <t:TableColumns x:Key="OverallCols" Id="Overall">
       <t:TableColumn Key="label" Group="IntLabel" />
       <t:TableColumn Key="hfr" Kind="Number" />
@@ -57,7 +58,7 @@
         <TextBlock t:TableRow.Col="stars" Text="{Binding DetectedStarsText}" />
       </t:TableRow>
     </DataTemplate>
-  </UserControl.Resources>
+  </parts:NightFilterTablePart.Resources>
 
   <!-- Three sections in one scroll viewer: Overall metrics (target-wide means, All frames then one
        row per filter), Frames by exposure and Hours by night. The three share the IntLabel column,
@@ -125,4 +126,4 @@
       </StackPanel>
     </StackPanel>
   </ScrollViewer>
-</UserControl>
+</parts:NightFilterTablePart>

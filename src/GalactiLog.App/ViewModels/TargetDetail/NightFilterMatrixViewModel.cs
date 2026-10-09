@@ -3,17 +3,14 @@ using GalactiLog.Data.Queries;
 
 namespace GalactiLog.App.ViewModels.TargetDetail;
 
-/// <summary>One night of the Compare table's column groups.</summary>
-public sealed record CompareNightViewModel(DateOnly Night)
+/// <summary>One filter of one night in the Compare table: the five medians under the filter's
+/// name. The night prints on its group's first row only; a blank there is a group label, not a
+/// missing value, so it is not a dash.</summary>
+public sealed record CompareRowViewModel(
+    DateOnly Night, bool IsFirstOfNight, bool IsAltGroup, FilterSwatchViewModel? Filter, MetricRowViewModel Metrics)
 {
-    public string Label => MetricText.Date(Night);
+    public string NightText => IsFirstOfNight ? MetricText.Date(Night) : "";
 }
-
-/// <summary>One night and filter of the Compare table: the five medians, empty text for a null.</summary>
-public sealed record CompareCellViewModel(string Hfr, string Eccentricity, string Fwhm, string GuidingRms, string DetectedStars);
-
-/// <summary>One filter of the Compare table, one cell per night in <see cref="NightFilterMatrixViewModel.CompareNights"/>.</summary>
-public sealed record CompareRowViewModel(FilterSwatchViewModel Filter, IReadOnlyList<CompareCellViewModel> Cells);
 
 /// <summary>One filter's cell of a matrix row; <paramref name="ColumnId"/> names the filter's strip
 /// column (<c>f0</c>, <c>f1</c>...), so the cells of one filter line up across rows and tables.</summary>
@@ -32,8 +29,8 @@ public sealed class NightFilterMatrixViewModel
 
     /// <param name="rows">The query's rows.</param>
     /// <param name="filters">The filter columns, in bar order; a row of another filter is dropped.</param>
-    /// <param name="compareNights">The Compare table's nights in their column order; null is
-    /// <see cref="Nights"/>.</param>
+    /// <param name="compareNights">The Compare table's nights, any order; rows come out newest
+    /// first, the night list's order. Null is <see cref="Nights"/>.</param>
     /// <param name="totals">The target's totals, for <see cref="Overall"/>; null leaves it null.</param>
     public NightFilterMatrixViewModel(
         IReadOnlyList<NightFilterOverview> rows,
@@ -54,10 +51,8 @@ public sealed class NightFilterMatrixViewModel
 
         Nights = [.. kept.Select(row => row.SessionDate).Distinct().OrderDescending()];
 
-        CompareNights = [.. (compareNights ?? Nights).Select(night => new CompareNightViewModel(night))];
-        CompareRows = [.. filters.Select(filter => new CompareRowViewModel(
-            filter,
-            [.. CompareNights.Select(night => CompareCell(Cell(night.Night, filter.FilterName)))]))];
+        CompareRows = [.. (compareNights ?? Nights).OrderDescending()
+            .SelectMany((night, index) => CompareGroup(night, index % 2 == 1))];
 
         var lengths = kept.SelectMany(row => row.Exposures).Select(exposure => exposure.Seconds).Distinct().Order().ToList();
         // The unit is in the "Exp s" heading, so a label is the bare figure (ruling R12).
@@ -92,11 +87,11 @@ public sealed class NightFilterMatrixViewModel
     /// <summary>The Integration tab's Overall metrics; null when the page passed no totals.</summary>
     public OverallMetricsViewModel? Overall { get; }
 
-    /// <summary>The column groups: the nights the trend chart plots, in its order, oldest first,
-    /// so each group sits under its night's band.</summary>
-    public IReadOnlyList<CompareNightViewModel> CompareNights { get; }
-
+    /// <summary>The Compare table: one group per night the trend chart plots, newest first, one
+    /// row per filter the night shot, in bar order.</summary>
     public IReadOnlyList<CompareRowViewModel> CompareRows { get; }
+
+    public bool HasCompareRows => CompareRows.Count > 0;
 
     /// <summary>One row per exposure length, ascending, cells are frame counts.</summary>
     public IReadOnlyList<MatrixRowViewModel> ExposureRows { get; }
@@ -140,12 +135,30 @@ public sealed class NightFilterMatrixViewModel
     private static string Hours(double? seconds)
         => seconds is { } present ? MetricText.HourFigure(present) : MetricText.Missing;
 
-    private static CompareCellViewModel CompareCell(NightFilterOverview? row) => new(
-        MetricText.Format(row?.MedianHfr, "0.00"),
-        MetricText.Format(row?.MedianEccentricity, "0.00"),
-        MetricText.Format(row?.MedianFwhm, "0.00"),
-        MetricText.Format(row?.MedianGuidingRms, "0.00"),
-        MetricText.Format(row?.MedianDetectedStars, "N0"));
+    // A night with no row of a known filter keeps one row of dashes, so a night the chart plots
+    // is never silently absent from the table.
+    private IEnumerable<CompareRowViewModel> CompareGroup(DateOnly night, bool alt)
+    {
+        List<(FilterSwatchViewModel? Filter, NightFilterOverview? Row)> shot =
+            [.. Filters.Select(filter => (filter, Cell(night, filter.FilterName))).Where(pair => pair.Item2 is not null)];
+        if (shot.Count == 0)
+        {
+            shot.Add((null, null));
+        }
+
+        return shot.Select((pair, index) => new CompareRowViewModel(
+            night,
+            index == 0,
+            alt,
+            pair.Filter,
+            MetricRowViewModel.Of(
+                MetricText.Cell(pair.Filter?.FilterName),
+                pair.Row?.MedianHfr,
+                pair.Row?.MedianEccentricity,
+                pair.Row?.MedianFwhm,
+                pair.Row?.MedianGuidingRms,
+                pair.Row?.MedianDetectedStars)));
+    }
 
     private sealed class CellKeyComparer : IEqualityComparer<(DateOnly Night, string Filter)>
     {

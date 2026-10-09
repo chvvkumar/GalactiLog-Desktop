@@ -3,6 +3,7 @@ using Avalonia.Media.Immutable;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Data.Queries;
 using Xunit;
+using Factory = GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory;
 
 namespace GalactiLog.App.Tests.ViewModels;
 
@@ -119,16 +120,20 @@ public class NightFilterMatrixViewModelTests
     }
 
     [Fact]
-    public void CompareRows_HoldTheFiveMedians_AndAnEmptyCellForANull()
+    public void CompareRows_AreGroupedPerNight_NewestFirst_OneRowPerFilterTheNightHas()
     {
+        // A failure is a row for a filter the night did not shoot, the date on every row, the
+        // older night first, or a silent blank for a null median.
         var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"));
 
-        Assert.Equal([Newer, Older], matrix.CompareNights.Select(night => night.Night));
-        var ha = matrix.CompareRows[0].Cells[0];
-        Assert.Equal("2.35", ha.Hfr);
-        Assert.Equal("", ha.Eccentricity);
-        Assert.Equal("1,234", ha.DetectedStars);
-        Assert.Equal(new CompareCellViewModel("", "", "", "", ""), matrix.CompareRows[1].Cells[1]);
+        var rows = matrix.CompareRows;
+        Assert.Equal([(Newer, "Ha"), (Newer, "OIII"), (Older, "Ha")], rows.Select(row => (row.Night, row.Metrics.Label)));
+        Assert.Equal(["2025-03-09", "", "2025-03-02"], rows.Select(row => row.NightText));
+        Assert.Equal([false, false, true], rows.Select(row => row.IsAltGroup));
+        Assert.Equal("2.35", rows[0].Metrics.HfrText);
+        Assert.Equal("-", rows[0].Metrics.EccentricityText);
+        Assert.Equal("1,234", rows[0].Metrics.DetectedStarsText);
+        Assert.Equal(new MetricRowViewModel("OIII", "-", "-", "-", "-", "-"), rows[1].Metrics);
     }
 
     [Fact]
@@ -137,10 +142,39 @@ public class NightFilterMatrixViewModelTests
         // A failure is the hours table losing its unchecked night.
         var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), new HashSet<DateOnly> { Older });
 
-        Assert.Equal([Older], matrix.CompareNights.Select(night => night.Night));
-        Assert.All(matrix.CompareRows, row => Assert.Single(row.Cells));
+        Assert.Equal([Older], matrix.CompareRows.Select(row => row.Night).Distinct());
         Assert.Equal(2, matrix.HoursRows.Count);
         Assert.Equal([Newer, Older], matrix.Nights);
+    }
+
+    [Fact]
+    public void ACompareNightWithNoFilterRows_KeepsOneRow_OfDashes()
+    {
+        // A failure is a shown night silently absent from the table.
+        var middle = new DateOnly(2025, 3, 5);
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), [Newer, middle]);
+
+        var row = Assert.Single(matrix.CompareRows, row => row.Night == middle);
+        Assert.Null(row.Filter);
+        Assert.Equal("2025-03-05", row.NightText);
+        Assert.Equal(new MetricRowViewModel("-", "-", "-", "-", "-", "-"), row.Metrics);
+    }
+
+    [Fact]
+    public void CompareRows_FollowTheNightsGiven_NewestFirst_WhateverTheirOrder()
+    {
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), [Older, Newer]);
+
+        Assert.Equal([Newer, Older], matrix.CompareRows.Select(row => row.Night).Distinct());
+    }
+
+    [Fact]
+    public void HasCompareRows_IsFalse_WithNoCompareNights()
+    {
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), new HashSet<DateOnly>());
+
+        Assert.False(matrix.HasCompareRows);
+        Assert.True(matrix.HasRows);
     }
 
     private static GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory.Harness Page()
@@ -164,29 +198,54 @@ public class NightFilterMatrixViewModelTests
         page.TargetChart.ShowAllSessions = true;
         page.Sessions[0].IsChecked = true;
         page.TargetChart.CheckedOnly = true;
-        Assert.Equal([page.Sessions[0].SessionDate], page.NightFilterMatrix!.CompareNights.Select(night => night.Night));
+        Assert.Equal([page.Sessions[0].SessionDate], page.NightFilterMatrix!.CompareRows.Select(row => row.Night).Distinct());
 
         page.Sessions[1].IsChecked = true;
 
-        Assert.Equal(2, page.NightFilterMatrix!.CompareNights.Count);
+        Assert.Equal(2, page.NightFilterMatrix!.CompareRows.Select(row => row.Night).Distinct().Count());
     }
 
     [Fact]
-    public void TheCompareNights_AreTheChartsPlottedNights_InTheChartsOrder()
+    public void TheCompareRows_AreTheChartsPlottedNights_NewestFirst()
     {
-        // A failure is the first column group under another night than the first lane band, or a
-        // group for a night the chart does not plot.
+        // A failure is a group for a night the chart does not plot, or the chart's oldest-first
+        // order in place of the night list's newest first.
         using var harness = Page();
         var page = harness.ViewModel;
         var first = GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory.FirstSession;
         var last = GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory.LastSession;
 
         page.TargetChart.ShowAllSessions = true;
-        Assert.Equal([first, last], page.NightFilterMatrix!.CompareNights.Select(night => night.Night));
+        Assert.Equal([last, first], page.NightFilterMatrix!.CompareRows.Select(row => row.Night).Distinct());
 
         page.TargetChart.ShowAllSessions = false;
-        Assert.Equal([last], page.NightFilterMatrix!.CompareNights.Select(night => night.Night));
+        Assert.Equal([last], page.NightFilterMatrix!.CompareRows.Select(row => row.Night).Distinct());
         Assert.Equal(2, page.NightFilterMatrix.HoursRows.Count);
+    }
+
+    [Fact]
+    public void ANightWithNoMetrics_LeavesTheTable_UntilShown()
+    {
+        // A failure is the empty night's rows in the table while the chart hides it.
+        var first = Factory.FirstSession;
+        var last = Factory.LastSession;
+        using var harness = Factory.Create(
+            get: _ => Factory.PopulatedDetail(sessions: [Factory.Session(last), Factory.SessionWithoutMetrics(first)]) with
+            {
+                NightFilters =
+                [
+                    Row(last, "Ha", 3_600d, 12, [(300d, 12)]),
+                    Row(first, "Ha", 1_800d, 6, [(300d, 6)]),
+                ],
+            }).Settle().SettleCards();
+        var page = harness.ViewModel;
+        page.TargetChart.ShowAllSessions = true;
+
+        Assert.DoesNotContain(first, page.NightFilterMatrix!.CompareRows.Select(row => row.Night));
+
+        page.TargetChart.ShowEmptyNights = true;
+
+        Assert.Contains(first, page.NightFilterMatrix!.CompareRows.Select(row => row.Night));
     }
 
     [Fact]

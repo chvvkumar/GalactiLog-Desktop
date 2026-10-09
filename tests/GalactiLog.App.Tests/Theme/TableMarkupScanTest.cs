@@ -36,7 +36,6 @@ public class TableMarkupScanTest
     private static readonly string[] PendingTables =
     [
         "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
-        "Views/TargetDetail/Parts/CompareTablePart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
         "Views/Dashboard/TargetListView.axaml",

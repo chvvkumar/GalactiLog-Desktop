@@ -777,6 +777,94 @@ public class TargetChartViewModelTests
         Assert.Equal(3, chart.PlottedSessionCount);
     }
 
+    // ---- nights with no metrics --------------------------------------------------------------
+
+    private static Fixture WithEmpty(params DateOnly[] empty)
+        => ThreeNights(overview: night => empty.Contains(night) ? Page.SessionWithoutMetrics(night) : Page.Session(night));
+
+    [Fact]
+    public void ANightWithNoMetrics_IsLeftOffTheAxis_AndCounted()
+    {
+        // Red if the empty night still takes an axis slot, or the line does not count it.
+        using var fixture = WithEmpty(Nights[1]);
+        var chart = fixture.Build();
+
+        Assert.Equal(2, chart.PlottedSessionCount);
+        Assert.Equal([Nights[0], Nights[2]], chart.PlottedNights);
+        Assert.Equal(["11-01", "11-15"], Printed(Assert.IsType<Axis>(Assert.Single(chart.XAxes)), 2));
+        Assert.Equal(1, chart.EmptyNightCount);
+        Assert.True(chart.HasEmptyNights);
+        Assert.Equal("1 night has no metrics.", chart.EmptyNightsText);
+        Assert.Equal("Show them", chart.EmptyNightsAction);
+    }
+
+    [Fact]
+    public void ShowEmptyNights_PutsThemBack_AndTheLineStays()
+    {
+        using var fixture = WithEmpty(Nights[1]);
+        var chart = fixture.Build();
+
+        chart.ToggleEmptyNightsCommand.Execute(null);
+
+        Assert.Equal(3, chart.PlottedSessionCount);
+        Assert.Equal(1, chart.EmptyNightCount);
+        Assert.Equal("Hide them", chart.EmptyNightsAction);
+
+        chart.ToggleEmptyNightsCommand.Execute(null);
+
+        Assert.Equal(2, chart.PlottedSessionCount);
+    }
+
+    [Fact]
+    public void TwoEmptyNights_ArePlural()
+    {
+        using var fixture = WithEmpty(Nights[0], Nights[1]);
+        var chart = fixture.Build();
+
+        Assert.Equal("2 nights have no metrics.", chart.EmptyNightsText);
+    }
+
+    [Fact]
+    public void EveryNightMeasured_HasNoLine()
+    {
+        using var fixture = ThreeNights();
+        var chart = fixture.Build();
+
+        Assert.False(chart.HasEmptyNights);
+        Assert.Equal(0, chart.EmptyNightCount);
+    }
+
+    [Fact]
+    public void CheckedOnly_CountsOnlyTheCheckedEmptyNights()
+    {
+        // Red if the count includes an empty night the Checked switch has already left out.
+        using var fixture = WithEmpty(Nights[1]);
+        var chart = fixture.Build();
+        fixture.Sessions[2].IsChecked = true;
+        fixture.Sessions[1].IsChecked = true;
+        chart.CheckedOnly = true;
+
+        Assert.Equal(1, chart.PlottedSessionCount);
+        Assert.Equal(1, chart.EmptyNightCount);
+
+        fixture.Sessions[1].IsChecked = false;
+
+        Assert.Equal(0, chart.EmptyNightCount);
+    }
+
+    [Fact]
+    public void TheNewestNCap_CountsMeasuredNightsOnly()
+    {
+        // Red if the cap spends its one night on the empty newest night and plots nothing.
+        using var fixture = ThreeNights(
+            defaultChartSessions: 1,
+            overview: night => night == Nights[2] ? Page.SessionWithoutMetrics(night) : Page.Session(night));
+        var chart = fixture.Build();
+
+        Assert.Equal([Nights[1]], chart.PlottedNights);
+        Assert.True(chart.HasSessionScope);
+    }
+
     // ---- the laned form ----------------------------------------------------------------------
 
     private static IReadOnlyList<NightFramePoint> FourFramesANight()
