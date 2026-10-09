@@ -423,6 +423,20 @@ public class ShellNavigationTests : IDisposable
             text => text.Text == "Statistics");
     }
 
+    // The pending-edits save bar sits on its own row between the content region and the status
+    // bar, full width, bound to the shell's one registry.
+    [AvaloniaFact]
+    public void SaveBar_SitsBetweenTheContentAndTheStatusBar_BoundToTheRegistry()
+    {
+        var (window, viewModel) = ShowShell();
+        var bar = window.GetControl<SaveBarView>("SaveBar");
+
+        Assert.Same(viewModel.PendingEdits, bar.DataContext);
+        Assert.Equal(1, Grid.GetRow(bar));
+        Assert.Equal(2, Grid.GetColumnSpan(bar));
+        Assert.Equal(2, Grid.GetRow(window.GetControl<Border>("StatusBar")));
+    }
+
     // Roadmap Phase 5 row 4, second and third clauses of the Verify line, at the view level:
     // the status bar renders a progress envelope pushed from a (fake, in the sense of never
     // touching a real database) coordinator, and the cancel button's enablement follows scan

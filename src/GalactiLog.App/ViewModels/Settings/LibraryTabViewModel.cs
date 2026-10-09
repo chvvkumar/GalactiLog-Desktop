@@ -119,17 +119,18 @@ public static class IntervalChoices
 /// </para>
 /// <para>
 /// Two save shapes, matching the web. The filter block (roots, include and exclude paths, name
-/// rules) has one explicit Save with dirty tracking and Revert, because those four lists are
-/// edited together and a half-applied filter set is not a state anyone wants persisted. The four
-/// scalar controls save immediately and optimistically, and a save that fails rolls its control
-/// back: a checkbox that stays ticked after a failed save is a lie.
+/// rules) is staged with dirty tracking until Save changes or Discard in the app-wide save bar,
+/// because those four lists are edited together and a half-applied filter set is not a state
+/// anyone wants persisted. The four scalar controls save immediately and optimistically, and a
+/// save that fails rolls its control back: a checkbox that stays ticked after a failed save is a
+/// lie.
 /// </para>
 /// <para>
 /// FIXER LIST F18. The read, the publish, the serialized write chain, the immediate-save shape
 /// with its roll-back, the <c>GeneralChanged</c> follow and the tab lifetime all belong to
 /// <see cref="GeneralSettingsTabViewModel"/>, which this tab wrote first and Task 6 extracted
 /// (design-lessons rule 1). What is left here is the Library tab's own material: the four lists,
-/// the dirty filter block with its Save and Revert, the inline validation, the scan buttons and
+/// the dirty filter block behind the save bar, the inline validation, the scan buttons and
 /// the "Run setup again" link.
 /// </para>
 /// <para>
@@ -147,7 +148,7 @@ public static class IntervalChoices
 /// what keeps the tab constructible with no window (HANDOFF.md section 5).
 /// </para>
 /// </remarks>
-public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
+public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, IPendingEdits
 {
     private readonly Func<ScanRunOptions, CancellationToken, Task<ScanRunOutcome>> _runScan;
     private readonly Action _cancelScan;
@@ -157,6 +158,16 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     // SetupWizardService rather than a second wizard built here. Null on a tab that was not given
     // one, which hides the link.
     private readonly Func<Task>? _runSetupAgain;
+
+    // Bumped by every edit. A save records the value it snapshotted at and clears IsDirty only if
+    // nothing was edited while it ran: an edit made during an in-flight save is not in that save's
+    // document, so it has to stay pending (the Filters and Equipment tabs' rule).
+    private int _editVersion;
+
+    // A Discard that arrived while a save was writing. Saved is still the pre-save document until
+    // the save lands, so reverting then would show what disk no longer holds; the revert runs from
+    // the save's own completion callback instead.
+    private bool _discardAfterSave;
 
     /// <param name="load">Normally <c>SettingsStore.GetGeneral</c>. Called off the UI thread.
     /// </param>
@@ -189,7 +200,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     /// <c>handler =&gt; settingsStore.GeneralChanged += handler</c>. The tab is a DI singleton whose
     /// state outlives a visit to the Settings page, and the setup wizard writes the same document
     /// from a link on this very tab, so without this the tab shows stale lists indefinitely and
-    /// the next "Save rules" writes them back over the wizard's (Task 5 review finding I3). A pair
+    /// the next save writes them back over the wizard's (Task 5 review finding I3). A pair
     /// of delegates rather than the store itself, the rule every view-model here follows. Null
     /// leaves the tab on its single constructor load, which is what a unit test that is not about
     /// external changes wants.</param>
@@ -307,8 +318,8 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
 
     /// <summary>
     /// Another writer changed the stored document under an edit in progress (review finding I3).
-    /// The tab does not overwrite the edit and does not discard it; it says so and leaves Revert as
-    /// the way to take the stored values.
+    /// The tab does not overwrite the edit and does not discard it; it says so and leaves Discard in
+    /// the save bar as the way to take the stored values.
     /// </summary>
     /// <remarks>
     /// FIXER LIST F13: raised only by a write this tab did not make. The first read landing over an
@@ -340,20 +351,23 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     /// <summary>The notice itself, which names the actual reason rather than assuming one.
     /// </summary>
     public string StoredValuesNotice => ChangedElsewhere
-        ? "The stored library settings changed elsewhere. Revert to load them; saving now keeps what is on screen."
-        : "The stored library settings finished loading after you started editing. Revert to load them; saving now keeps what is on screen.";
+        ? "The stored library settings changed elsewhere. Discard the unsaved changes to load them; saving now keeps what is on screen."
+        : "The stored library settings finished loading after you started editing. Discard the unsaved changes to load them; saving now keeps what is on screen.";
 
     /// <summary>Whether the filter block has unsaved edits.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyCanExecuteChangedFor(nameof(RevertCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
     public partial bool IsDirty { get; private set; }
 
     /// <summary>True while a filter-block save is in flight.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool IsSaving { get; private set; }
 
     /// <summary>True when at least one include or exclude path is outside every configured scan
@@ -361,6 +375,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool HasInvalidPath { get; private set; }
 
     /// <summary>True when at least one name rule has an empty pattern or an uncompilable regex.
@@ -368,6 +383,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveCommand))]
     [NotifyPropertyChangedFor(nameof(SaveRefusalReason))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool HasInvalidRule { get; private set; }
 
     /// <summary>Spec 7.5's calibration frames. Saves immediately.</summary>
@@ -552,6 +568,40 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         }
     }
 
+    /// <inheritdoc />
+    public string Label => "Library folders, paths and rules";
+
+    /// <inheritdoc />
+    public string NavigationKey => "library";
+
+    /// <summary>The save bar's refusal: the Save tooltip text, but only while there is something
+    /// to save and saving is not possible, so a clean tab or a savable one reports null.</summary>
+    public string? SaveRefusal => IsDirty && !CanSave() ? SaveRefusalReason : null;
+
+    Task IPendingEdits.SaveAsync() => SaveCommand.ExecuteAsync(null);
+
+    void IPendingEdits.Discard()
+    {
+        if (IsSaving)
+        {
+            _discardAfterSave = true;
+            return;
+        }
+
+        Revert();
+    }
+
+    // Runs a Discard that arrived during a save, on the UI thread, once that save has finished
+    // either way. Called from both of SaveAsync's completion callbacks after IsSaving clears.
+    private void RevertIfDiscardWaited()
+    {
+        if (_discardAfterSave)
+        {
+            _discardAfterSave = false;
+            Revert();
+        }
+    }
+
     // PendingLoad, PendingWrite and IsDisposed belong to the spine (FIXER LIST F18).
 
     /// <summary>
@@ -569,6 +619,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         {
             SaveCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(SaveRefusalReason));
+            OnPropertyChanged(nameof(SaveRefusal));
 
             // ShowScanFilterNotice is gated on IsReady, which these two derive, so a read that
             // fails after the view has bound must take the notice down with the sections.
@@ -707,6 +758,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         var includePaths = IncludePaths.Select(row => row.Path).ToArray();
         var excludePaths = ExcludePaths.Select(row => row.Path).ToArray();
         var rules = NameRules.Select(row => row.ToRule()).ToArray();
+        var savedVersion = _editVersion;
 
         await Write(
             general => general with
@@ -726,16 +778,22 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             onSuccess: () =>
             {
                 IsSaving = false;
-                IsDirty = false;
+                if (_editVersion == savedVersion)
+                {
+                    IsDirty = false;
+                }
+
                 StatusMessage = "Library folders, paths and rules saved";
                 ChangedElsewhere = false;
                 EditedBeforeFirstLoad = false;
+                RevertIfDiscardWaited();
             },
             onFailure: () =>
             {
                 // The edits stay on screen. The store refused them, and throwing away what the
                 // user typed is not a way to report that.
                 IsSaving = false;
+                RevertIfDiscardWaited();
             }).ConfigureAwait(false);
     }
 
@@ -796,15 +854,6 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             return;
         }
 
-        // Web parity, ScanFiltersPanel.tsx's applyNow: a scan reads the stored filters, so an
-        // unsaved rule is the one thing the user expects it to apply and the one thing it cannot
-        // see. Refused with the reason on the tab rather than run against the old rules.
-        if (IsDirty)
-        {
-            ErrorMessage = UnsavedFiltersRefusal;
-            return;
-        }
-
         try
         {
             // Spec 10.3's two per-run arguments, built at the press and carried no further: the
@@ -829,10 +878,6 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
             Post(ClearPerRunOptions);
         }
     }
-
-    /// <summary>Why a scan was refused while the filter block is dirty.</summary>
-    public const string UnsavedFiltersRefusal =
-        "Save the library folders, paths and rules before scanning. A scan uses the last saved filters, not unsaved edits.";
 
     private bool CanRunScan()
         => _scanStatus is null || (!_scanStatus.IsRunning && !_scanStatus.ResolutionInProgress);
@@ -964,14 +1009,14 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         OnPropertyChanged(nameof(ShowScanFilterNotice));
     }
 
-    /// <summary>The filter block is the one part of this tab behind a Save button, so an edit in it
-    /// is what a reload would throw away.</summary>
-    protected override bool HasPendingEdits => IsDirty;
+    /// <summary>The filter block is the one part of this tab staged until Save changes in the save
+    /// bar, so an edit in it is what a reload would throw away.</summary>
+    public override bool HasPendingEdits => IsDirty;
 
     /// <summary>
     /// Another writer changed the <c>general</c> document while the filter block was dirty (review
-    /// finding I3). The edit is never overwritten and never discarded; Revert is the way to take
-    /// the stored values, and it is already enabled because the tab is dirty.
+    /// finding I3). The edit is never overwritten and never discarded; Discard in the save bar is the
+    /// way to take the stored values, and it is already enabled because the tab is dirty.
     /// </summary>
     /// <remarks>
     /// The tab is a DI singleton whose state outlives a visit to the Settings page, and Task 9's
@@ -1077,6 +1122,7 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel
         }
 
         StatusMessage = null;
+        _editVersion++;
         IsDirty = true;
         Validate();
     }

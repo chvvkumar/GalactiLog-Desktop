@@ -62,8 +62,8 @@ public sealed partial class DisplayMetricFieldViewModel : ObservableObject
 /// <c>MetricGroups_HfrStdev_RendersACheckboxThatGatesNothing</c> asserts it.
 /// </para>
 /// <para>
-/// This block is the one part of the Display tab behind a Save button, matching the web's own
-/// split. Everything else on that tab saves immediately.
+/// This block is the one part of the Display tab staged until Save changes in the app-wide save
+/// bar, matching the web's own split. Everything else on that tab saves immediately.
 /// </para>
 /// </remarks>
 public sealed partial class DisplayMetricGroupViewModel : ObservableObject
@@ -206,7 +206,7 @@ public sealed partial class DisplayMetricGroupViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsExpanded { get; set; }
 
-    /// <summary>What the Save button writes for this group.</summary>
+    /// <summary>What a save of the metric groups writes for this group.</summary>
     public MetricGroupSettings ToSettings()
         => new(IsEnabled, Fields.ToDictionary(field => field.Key, field => field.IsChecked, StringComparer.Ordinal));
 

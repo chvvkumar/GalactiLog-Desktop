@@ -272,4 +272,131 @@ public class GroupingEditorViewModelTests
         Assert.Equal(GalactiLog.Core.Aliases.FilterColor.Fallback, row.Color);
         Assert.Equal(Avalonia.Media.Color.Parse("#808080"), row.SwatchBrush.Color);
     }
+
+    // ---- the Edited signal (pending-edits spine) ------------------------------------------------
+    // One signal for every user mutation, so an owning tab marks itself dirty from one handler and
+    // cannot miss a path. A load (SetGroups, SetDiscovered) must stay silent, or every tab would
+    // open already dirty.
+
+    private static (GroupingEditorViewModel Editor, Func<int> Count) Watched(params (string Name, int Count)[] discovered)
+    {
+        var vm = Create(true, discovered);
+        var raised = 0;
+        vm.Edited += (_, _) => raised++;
+        return (vm, () => raised);
+    }
+
+    [Fact]
+    public void Edited_IsNotRaisedByALoad()
+    {
+        var (vm, count) = Watched(("Ha", 5), ("ha", 3));
+
+        vm.SetGroups([new AliasGroupViewModel("OIII", "#00ff00", ["O3"])]);
+        vm.SetDiscovered([("Ha", 5), ("SII", 2)]);
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, ["ha"])]);
+
+        Assert.Equal(0, count());
+    }
+
+    [Fact]
+    public void Edited_IsRaisedByARename()
+    {
+        var (vm, count) = Watched();
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, ["H-alpha"])]);
+        var group = vm.Groups[0];
+
+        group.RenameText = "Halpha";
+        group.CommitRenameCommand.Execute(null);
+
+        Assert.True(count() > 0);
+    }
+
+    [Fact]
+    public void Edited_IsNotRaisedByARefusedRename()
+    {
+        var (vm, count) = Watched();
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, []), new AliasGroupViewModel("OIII", null, [])]);
+        var group = vm.Groups[1];
+
+        group.RenameText = "Ha";
+        group.CommitRenameCommand.Execute(null);
+
+        Assert.Equal(0, count());
+    }
+
+    [Fact]
+    public void Edited_IsRaisedByAColourChange()
+    {
+        var (vm, count) = Watched();
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, [])]);
+
+        Assert.True(vm.Groups[0].TrySetColor("#123456"));
+
+        Assert.True(count() > 0);
+    }
+
+    [Fact]
+    public void Edited_IsRaisedByAnAliasRemoval_AndByTheGroupItEmpties()
+    {
+        var (vm, count) = Watched();
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, ["H-alpha", "ha"])]);
+        var group = vm.Groups[0];
+
+        group.RemoveAliasCommand.Execute("ha");
+        Assert.True(count() > 0);
+
+        var before = count();
+        group.RemoveAliasCommand.Execute("H-alpha");
+        Assert.Empty(vm.Groups);
+        Assert.True(count() > before);
+    }
+
+    [Fact]
+    public void Edited_IsRaisedByGroupSelected_AddToGroup_AndAnUngroupedColour()
+    {
+        var (vm, count) = Watched(("Ha", 5), ("ha", 3), ("OIII", 2), ("SII", 1));
+
+        vm.Ungrouped.Single(row => row.Name == "Ha").IsChecked = true;
+        Assert.Equal(0, count());
+        vm.Ungrouped.Single(row => row.Name == "ha").IsChecked = true;
+        vm.GroupSelectedCommand.Execute(null);
+        var afterGroup = count();
+        Assert.True(afterGroup > 0);
+
+        vm.Ungrouped.Single(row => row.Name == "OIII").IsChecked = true;
+        vm.AddToGroupCommand.Execute(vm.Groups[0]);
+        var afterAdd = count();
+        Assert.True(afterAdd > afterGroup);
+
+        vm.SetUngroupedColor("SII", "#123456");
+        Assert.True(count() > afterAdd);
+    }
+
+    [Fact]
+    public void Edited_IsRaisedByAddGroupAndRemoveGroup()
+    {
+        var (vm, count) = Watched();
+        var group = new AliasGroupViewModel("Ha", null, []);
+
+        vm.AddGroup(group);
+        var afterAdd = count();
+        Assert.True(afterAdd > 0);
+
+        vm.RemoveGroup(group);
+        Assert.True(count() > afterAdd);
+    }
+
+    [Fact]
+    public void Edited_IsNotRaisedByAGroupAfterALoadReplacedIt()
+    {
+        var (vm, count) = Watched();
+        vm.SetGroups([new AliasGroupViewModel("Ha", null, ["ha"])]);
+        var stale = vm.Groups[0];
+        vm.SetGroups([new AliasGroupViewModel("OIII", null, [])]);
+
+        Assert.True(stale.TrySetColor("#123456"));
+        stale.Aliases.Add("H-alpha");
+
+        Assert.Equal(0, count());
+    }
 }

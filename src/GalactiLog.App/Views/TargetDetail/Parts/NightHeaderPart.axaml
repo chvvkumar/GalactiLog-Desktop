@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
              xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:layouts="using:GalactiLog.App.Views.TargetDetail.Layouts"
              x:Class="GalactiLog.App.Views.TargetDetail.Parts.NightHeaderPart"
              x:Name="Root"
              x:DataType="detail:SessionCardViewModel">
@@ -10,7 +11,7 @@
        the top of the night rather than in the middle of it. The notes disclosure is the Session
        notes section at the bottom of the lanes (P24 R17), not a button here. -->
   <StackPanel Spacing="6">
-    <Grid ColumnDefinitions="Auto,*" ColumnSpacing="16">
+    <Grid ColumnDefinitions="Auto,*,Auto" ColumnSpacing="16">
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
         <TextBlock x:Name="NightHeader"
                    Classes="t-stat"
@@ -25,6 +26,33 @@
                  Text="{Binding FactsLineText}"
                  TextTrimming="CharacterEllipsis"
                  VerticalAlignment="Center" />
+      <!-- Spec 12.16, rulings B5 and B9: the NINA and Stellarium sends, at the right end of the
+           night's own line because what they carry is this night's pointing and rotation
+           (TargetDetailViewModel.CurrentPointing). The lists and the flag live on the page, two
+           DataContexts up, so the bindings reach the layout view and cast its DataContext; each
+           submenu is hidden while its own list is empty and its leaf items are built by
+           Theme/Controls.axaml's IntegrationSendItemTheme. -->
+      <Button x:Name="SendButton"
+              Grid.Column="2"
+              Content="Send to"
+              VerticalAlignment="Center"
+              ToolTip.Tip="Send this night's coordinates and rotation to NINA, or slew Stellarium to them"
+              IsVisible="{Binding $parent[layouts:ModesLayoutView].((detail:TargetDetailViewModel)DataContext).HasSendItems, FallbackValue=False}">
+        <Button.Flyout>
+          <MenuFlyout>
+            <MenuItem x:Name="SendToNinaMenuItem"
+                      Header="NINA"
+                      ItemsSource="{Binding $parent[layouts:ModesLayoutView].((detail:TargetDetailViewModel)DataContext).NinaSendItems}"
+                      ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
+                      IsVisible="{Binding $parent[layouts:ModesLayoutView].((detail:TargetDetailViewModel)DataContext).HasNinaSendItems, FallbackValue=False}" />
+            <MenuItem x:Name="SlewStellariumMenuItem"
+                      Header="Stellarium"
+                      ItemsSource="{Binding $parent[layouts:ModesLayoutView].((detail:TargetDetailViewModel)DataContext).StellariumSendItems}"
+                      ItemContainerTheme="{StaticResource IntegrationSendItemTheme}"
+                      IsVisible="{Binding $parent[layouts:ModesLayoutView].((detail:TargetDetailViewModel)DataContext).HasStellariumSendItems, FallbackValue=False}" />
+          </MenuFlyout>
+        </Button.Flyout>
+      </Button>
     </Grid>
 
     <TextBlock x:Name="LoadingIndicator"

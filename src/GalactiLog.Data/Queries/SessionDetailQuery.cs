@@ -356,7 +356,8 @@ public sealed class SessionDetailQuery(
                    i.guiding_rms_source, i.adu_mean, i.adu_median, i.adu_stdev, i.adu_min, i.adu_max,
                    i.focuser_position, i.focuser_temp, i.ambient_temp, i.dew_point, i.humidity, i.pressure,
                    i.wind_speed, i.wind_direction, i.wind_gust, i.cloud_cover, i.sky_quality, i.airmass,
-                   i.pier_side, i.rotator_position, i.sensor_temp, i.camera_gain, i.telescope, i.camera
+                   i.pier_side, i.rotator_position, i.sensor_temp, i.camera_gain, i.telescope, i.camera,
+                   i.ra_deg, i.dec_deg
             FROM images i
             WHERE i.{SqlFragments.LightFrameOnly}
               AND i.session_date = {dateParam}
@@ -383,7 +384,7 @@ public sealed class SessionDetailQuery(
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
-            // A 39 column reader is where an ordinal slips, so every ordinal is written out in
+            // A 41 column reader is where an ordinal slips, so every ordinal is written out in
             // order and Get_FrameRows_CarryEveryFrameTableColumn asserts all of them field by
             // field against one fully populated frame.
             var telescope = map.CanonicalTelescope(SqlReaders.ReadText(reader, 37));
@@ -437,7 +438,9 @@ public sealed class SessionDetailQuery(
                     // P25 R3: the merge pools eccentricity and recomputes arcsecond HFR over the
                     // union, so the two inputs ride on the frame row as well as on Row.
                     EccentricitySource: eccentricitySource,
-                    ArcsecPerPixel: arcsecPerPixel),
+                    ArcsecPerPixel: arcsecPerPixel,
+                    RaDeg: SqlReaders.ReadNullableDouble(reader, 39),
+                    DecDeg: SqlReaders.ReadNullableDouble(reader, 40)),
                 arcsecPerPixel,
                 eccentricitySource,
                 telescope,

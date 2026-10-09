@@ -88,6 +88,13 @@ internal static class LibraryTabViewModelTestFactory
         /// </summary>
         public List<bool> ScanOnUiThread { get; } = [];
 
+        /// <summary>Parks the save delegate until a test releases it, so a case can act while a
+        /// save is genuinely in flight.</summary>
+        public ManualResetEventSlim? SaveRelease { get; set; }
+
+        /// <summary>Set each time the save delegate is entered.</summary>
+        public ManualResetEventSlim SaveEntered { get; } = new(false);
+
         /// <summary>Parks the scan delegate until a test releases it.</summary>
         public ManualResetEventSlim? ScanRelease { get; set; }
 
@@ -192,6 +199,7 @@ internal static class LibraryTabViewModelTestFactory
         {
             ViewModel.Dispose();
             ScanEntered.Dispose();
+            SaveEntered.Dispose();
             _database.Dispose();
         }
     }
@@ -241,7 +249,11 @@ internal static class LibraryTabViewModelTestFactory
                 Interlocked.Increment(ref harness.Loads);
                 return harness.LoadThrows is null ? harness.Store.GetGeneral() : throw harness.LoadThrows;
             },
-            mutate => harness.Store.MutateGeneral(current =>
+            mutate =>
+            {
+                harness.SaveEntered.Set();
+                harness.SaveRelease?.Wait(Budget);
+                return harness.Store.MutateGeneral(current =>
             {
                 var next = mutate(current);
                 lock (harness.Saves)
@@ -257,7 +269,8 @@ internal static class LibraryTabViewModelTestFactory
                 }
 
                 return next;
-            }),
+            });
+            },
             (options, token) =>
             {
                 Interlocked.Increment(ref harness.ScanRuns);

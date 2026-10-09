@@ -8,7 +8,7 @@
   <!-- Design-spec 12.7's Equipment tab: "the same shape for cameras and telescopes", so this is
        FiltersTabView's layout minus the colour swatch and the add row: suggestions banner, a
        Cameras card and a Telescopes card each hosting a GroupingEditorView with ShowColorPicker
-       false, and Save. Every colour is a theme token and nothing here sets FontSize. -->
+       false, and the save outcome. Every colour is a theme token and nothing here sets FontSize. -->
   <!-- The suggestion pill is Theme/Controls.axaml's Button.pill, which P12 Task 5 lifted out of
        this file, FiltersTabView.axaml and ActivityView.axaml. The rule the local copy existed for
        still holds and now holds in one place: the base background is a style setter and never an
@@ -291,11 +291,10 @@
         </StackPanel>
       </Border>
 
+      <!-- No Save button: the app-wide save bar above the status bar saves this tab through
+           IPendingEdits, so a staged edit is never stranded behind a button the user did not
+           scroll to. The error callout stays, because a failed save is reported here. -->
       <StackPanel Orientation="Horizontal" Spacing="12">
-        <Button x:Name="SaveButton"
-                Content="Save"
-                Padding="10,3"
-                Command="{Binding SaveCommand}" />
         <ContentControl Classes="callout error inline"
                         IsVisible="{Binding HasErrorMessage}">
           <TextBlock x:Name="EquipmentErrorText"

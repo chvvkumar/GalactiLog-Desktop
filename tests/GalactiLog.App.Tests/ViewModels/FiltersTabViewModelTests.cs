@@ -1,4 +1,5 @@
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Settings;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data;
@@ -577,5 +578,313 @@ public class FiltersTabViewModelTests : IDisposable
         await (vm.PendingSave ?? Task.CompletedTask);
 
         Assert.Equal("#7f7f7f", Assert.Single(_store.GetFilters()).Value.Color);
+    }
+
+    // ---- pending-edits spine: dirty tracking ---------------------------------------------------
+    // Before this the Save button was always enabled and nothing knew an edit was staged, so the
+    // app-wide save bar had nothing to read. Every user mutation marks the tab dirty; a load does
+    // not; a successful save clears it.
+
+    private static IPendingEdits Pending(FiltersTabViewModel vm) => vm;
+
+    [Fact]
+    public void PendingEdits_LabelAndNavigationKey()
+    {
+        using var vm = Create();
+
+        Assert.Equal("Filter names and colours", Pending(vm).Label);
+        Assert.Equal("filters", Pending(vm).NavigationKey);
+    }
+
+    [Fact]
+    public void Load_IsNotDirty_AndSaveIsDisabled()
+    {
+        _store.SaveFilters(new Dictionary<string, FilterSetting>
+        {
+            ["Ha"] = new FilterSetting { Color = "#ff0000", Aliases = ["H-alpha"] },
+        });
+        _discovered = [("Ha", 5), ("H-alpha", 3), ("OIII", 2), ("oiii", 2)];
+
+        using var vm = Create();
+
+        Assert.False(vm.IsDirty);
+        Assert.False(Pending(vm).HasPendingEdits);
+        Assert.Null(Pending(vm).SaveRefusal);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+    }
+
+    [Fact]
+    public void Rename_MarksDirty_AndRaisesHasPendingEdits()
+    {
+        _store.SaveFilters(new Dictionary<string, FilterSetting> { ["Ha"] = new FilterSetting() });
+        using var vm = Create();
+        var raised = new List<string?>();
+        vm.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        var group = Assert.Single(vm.Editor.Groups);
+
+        group.RenameText = "Halpha";
+        group.CommitRenameCommand.Execute(null);
+
+        Assert.True(Pending(vm).HasPendingEdits);
+        Assert.Contains(nameof(IPendingEdits.HasPendingEdits), raised);
+        Assert.True(vm.SaveCommand.CanExecute(null));
+    }
+
+    // One case per user mutation path the tab reaches, so a path that forgets the signal shows up
+    // here by name.
+    [Theory]
+    [InlineData("add filter")]
+    [InlineData("remove alias")]
+    [InlineData("remove last alias")]
+    [InlineData("colour")]
+    [InlineData("accept suggestion")]
+    [InlineData("dismiss suggestion")]
+    [InlineData("group selected")]
+    [InlineData("add to group")]
+    [InlineData("ungrouped colour")]
+    public void EveryUserMutation_MarksDirty(string path)
+    {
+        _store.SaveFilters(new Dictionary<string, FilterSetting>
+        {
+            ["Ha"] = new FilterSetting { Aliases = ["H-alpha", "Halpha"] },
+            ["Lum"] = new FilterSetting { Aliases = ["L"] },
+        });
+        _discovered = [("OIII", 4), ("oiii", 2), ("SII", 1)];
+        using var vm = Create();
+        Assert.False(vm.IsDirty);
+        var ha = vm.Editor.Groups.Single(group => group.Canonical == "Ha");
+        var lum = vm.Editor.Groups.Single(group => group.Canonical == "Lum");
+
+        switch (path)
+        {
+            case "add filter":
+                vm.NewFilterName = "SII";
+                vm.AddFilterCommand.Execute(null);
+                break;
+            case "remove alias":
+                ha.RemoveAliasCommand.Execute("Halpha");
+                break;
+            case "remove last alias":
+                lum.RemoveAliasCommand.Execute("L");
+                Assert.DoesNotContain(lum, vm.Editor.Groups);
+                break;
+            case "colour":
+                Assert.True(ha.TrySetColor("#123456"));
+                break;
+            case "accept suggestion":
+                vm.AcceptSuggestionCommand.Execute(Assert.Single(vm.Suggestions));
+                break;
+            case "dismiss suggestion":
+                vm.DismissSuggestionCommand.Execute(Assert.Single(vm.Suggestions));
+                break;
+            case "group selected":
+                vm.Editor.Ungrouped.Single(row => row.Name == "OIII").IsChecked = true;
+                vm.Editor.Ungrouped.Single(row => row.Name == "oiii").IsChecked = true;
+                Assert.False(vm.IsDirty);
+                vm.Editor.GroupSelectedCommand.Execute(null);
+                break;
+            case "add to group":
+                vm.Editor.Ungrouped.Single(row => row.Name == "SII").IsChecked = true;
+                vm.Editor.AddToGroupCommand.Execute(ha);
+                break;
+            case "ungrouped colour":
+                vm.Editor.SetUngroupedColor("SII", "#123456");
+                break;
+        }
+
+        Assert.True(vm.IsDirty);
+    }
+
+    [Fact]
+    public async Task Save_ClearsDirty()
+    {
+        using var vm = Create();
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+        Assert.True(vm.IsDirty);
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.False(vm.IsDirty);
+        Assert.Equal(["Lum"], _store.GetFilters().Keys);
+    }
+
+    [Fact]
+    public async Task AFailedSave_StaysDirty()
+    {
+        var vm = new FiltersTabViewModel(
+            _store.GetFilters,
+            _ => throw new InvalidOperationException("disk full"),
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        await Pending(vm).SaveAsync();
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.True(vm.IsDirty);
+        Assert.True(vm.HasErrorMessage);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task SaveRefusal_WhileSaving_AndAnEditDuringTheSaveStaysDirty()
+    {
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var vm = new FiltersTabViewModel(
+            _store.GetFilters,
+            filters =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveFilters(filters);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+
+        Assert.Equal("Filters are still saving.", Pending(vm).SaveRefusal);
+        Assert.False(vm.SaveCommand.CanExecute(null));
+
+        // An edit landing while the first save is in flight is not in that save's snapshot, so the
+        // save completing must not clear it.
+        vm.NewFilterName = "OIII";
+        vm.AddFilterCommand.Execute(null);
+
+        release.Set();
+        await save;
+        await (vm.PendingSave ?? Task.CompletedTask);
+
+        Assert.True(vm.IsDirty);
+        Assert.Null(Pending(vm).SaveRefusal);
+        Assert.Equal(["Lum"], _store.GetFilters().Keys);
+        vm.Dispose();
+    }
+
+    [Fact]
+    public async Task Discard_RestoresTheLoadedGroups_AndClearsDirty()
+    {
+        _store.SaveFilters(new Dictionary<string, FilterSetting>
+        {
+            ["Ha"] = new FilterSetting { Color = "#ff0000", Aliases = ["H-alpha"] },
+        });
+        using var vm = Create();
+        var group = Assert.Single(vm.Editor.Groups);
+        group.RenameText = "Halpha";
+        group.CommitRenameCommand.Execute(null);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+        Assert.True(vm.IsDirty);
+
+        Pending(vm).Discard();
+        await SettleAsync(vm);
+
+        Assert.False(vm.IsDirty);
+        var restored = Assert.Single(vm.Editor.Groups);
+        Assert.Equal("Ha", restored.Canonical);
+        Assert.Equal("#ff0000", restored.Color);
+        Assert.Equal(["H-alpha"], restored.Aliases);
+    }
+
+    [Fact]
+    public async Task Discard_RestoresADismissedSuggestion()
+    {
+        _discovered = [("ha", 2), ("Ha", 9)];
+        using var vm = Create();
+        vm.DismissSuggestionCommand.Execute(Assert.Single(vm.Suggestions));
+        Assert.True(vm.IsDirty);
+
+        Pending(vm).Discard();
+        await SettleAsync(vm);
+
+        Assert.False(vm.IsDirty);
+        Assert.Single(vm.Suggestions);
+    }
+
+    // Review fix round 1, item 1: a Discard during an in-flight save must not read the store
+    // before the save writes. Reading early installs the pre-save document with IsDirty false,
+    // and the next edit plus save then writes that stale document over the one just saved.
+    [Fact]
+    public async Task Discard_DuringASave_ReloadsOnlyAfterTheSaveWrites()
+    {
+        var started = new ManualResetEventSlim(false);
+        var release = new ManualResetEventSlim(false);
+        var loads = 0;
+        var vm = new FiltersTabViewModel(
+            () =>
+            {
+                Interlocked.Increment(ref loads);
+                return _store.GetFilters();
+            },
+            filters =>
+            {
+                started.Set();
+                release.Wait(Budget);
+                _store.SaveFilters(filters);
+            },
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        var save = Pending(vm).SaveAsync();
+        Assert.True(started.Wait(Budget));
+
+        Pending(vm).Discard();
+        Assert.Equal(1, Volatile.Read(ref loads));
+
+        release.Set();
+        await save;
+        await (vm.PendingSave ?? Task.CompletedTask);
+        await SettleAsync(vm);
+
+        Assert.Equal(2, Volatile.Read(ref loads));
+        Assert.False(vm.IsDirty);
+        Assert.Equal("Lum", Assert.Single(vm.Editor.Groups).Canonical);
+        Assert.Equal(["Lum"], _store.GetFilters().Keys);
+        vm.Dispose();
+    }
+
+    // Review fix round 1, item 2: a Discard whose reload fails leaves the edits in the editor,
+    // so they must stay pending. Clearing IsDirty would leave them on screen with no save bar.
+    [Fact]
+    public async Task Discard_WhoseReloadFails_StaysDirty()
+    {
+        var calls = 0;
+        var vm = new FiltersTabViewModel(
+            () => ++calls == 1 ? _store.GetFilters() : throw new InvalidOperationException("locked"),
+            _store.SaveFilters,
+            _store.GetDismissedSuggestions,
+            _store.SaveDismissedSuggestions,
+            () => _discovered,
+            post: action => action());
+        vm.PendingLoad?.Wait(Budget);
+        vm.NewFilterName = "Lum";
+        vm.AddFilterCommand.Execute(null);
+
+        Pending(vm).Discard();
+        await SettleAsync(vm);
+
+        Assert.True(vm.LoadFailed);
+        Assert.True(vm.IsDirty);
+        Assert.True(Pending(vm).HasPendingEdits);
+        Assert.Equal("Lum", Assert.Single(vm.Editor.Groups).Canonical);
+        vm.Dispose();
     }
 }

@@ -34,9 +34,9 @@ public sealed record ChartSessionsOption(int Sessions, string Label);
 /// <remarks>
 /// <para>
 /// Two save shapes, matching the web. Everything except the metric groups saves immediately and
-/// optimistically, with a roll-back on failure. The metric groups are the one part behind a Save
-/// button, because six groups and 27 field checkboxes are edited together and a half-applied set
-/// is not a state anyone wants persisted.
+/// optimistically, with a roll-back on failure. The metric groups are the one part staged until
+/// Save changes in the app-wide save bar, because six groups and 27 field checkboxes are edited
+/// together and a half-applied set is not a state anyone wants persisted.
 /// </para>
 /// <para>
 /// Three documents are written from this one tab and each goes through its own single writer:
@@ -48,7 +48,7 @@ public sealed record ChartSessionsOption(int Sessions, string Label);
 /// a metric toggled on a chart cannot lose one another (design-lessons rule 2).
 /// </para>
 /// </remarks>
-public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
+public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, IPendingEdits
 {
     /// <summary>
     /// Design-spec 14.4's four root font sizes, with the web's labels. The pixel figures come from
@@ -117,6 +117,18 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     // The display document as it was last read or written, so a groups save never overwrites the
     // columns half with a snapshot taken before some table toggled a column.
     private DisplaySettings _display = new();
+
+    // Bumped by every metric group edit. A groups save records the value it snapshotted at and
+    // clears GroupsDirty only if nothing was edited while it ran: an edit made during an in-flight
+    // save is not in that save's document, so it has to stay pending (the Filters and Equipment
+    // tabs' rule).
+    private int _groupsEditVersion;
+
+    // True from a groups save's start until its completion callback has run. _display is still the
+    // pre-save document until then, so a Discard arriving meanwhile is deferred to that callback
+    // rather than reverting to what disk no longer holds.
+    private bool _savingGroups;
+    private bool _discardAfterSave;
 
     // The custom columns as they were on this tab's one background pass (task6c-report.md).
     // RevertGroups reuses this rather than reading again: reverting the metric groups touches
@@ -261,8 +273,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     public partial ChartSessionsOption SelectedChartSessions { get; set; }
 
-    /// <summary>The six metric groups (design-spec 5.8.2). The one part of this tab behind a Save
-    /// button.</summary>
+    /// <summary>The six metric groups (design-spec 5.8.2). The one part of this tab staged until
+    /// Save changes in the save bar.</summary>
     public ObservableCollection<DisplayMetricGroupViewModel> Groups { get; } = [];
 
     /// <summary>Design-spec 12.2's dashboard column picker, or null on a surface with no
@@ -286,10 +298,13 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveGroupsCommand))]
     [NotifyCanExecuteChangedFor(nameof(RevertGroupsCommand))]
+    [NotifyPropertyChangedFor(nameof(HasPendingEdits))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool GroupsDirty { get; private set; }
 
     /// <summary>The stored display document changed under an unsaved metric group edit. The edit
-    /// is neither overwritten nor discarded; Revert is the way to take the stored values.
+    /// is neither overwritten nor discarded; Discard in the save bar is the way to take the stored
+    /// values.
     /// </summary>
     [ObservableProperty]
     public partial bool GroupsChangedElsewhere { get; private set; }
@@ -297,11 +312,11 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     /// <summary>
     /// A read of the display document that threw. Cleared by the next successful apply of that
     /// document, whether from the first read or from another writer's <c>DisplayChanged</c>
-    /// (review minor 4): a latched flag left a populated editor whose Save button could never be
-    /// pressed again.
+    /// (review minor 4): a latched flag left a populated editor whose save could never run again.
     /// </summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(SaveGroupsCommand))]
+    [NotifyPropertyChangedFor(nameof(SaveRefusal))]
     public partial bool DisplayLoadFailed { get; private set; }
 
     /// <summary>The in-flight definition re-read, so a case awaits it instead of sleeping. Null
@@ -309,7 +324,42 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
     internal Task? PendingCustomColumnsRead { get; private set; }
 
     /// <inheritdoc />
-    protected override bool HasPendingEdits => GroupsDirty;
+    public override bool HasPendingEdits => GroupsDirty;
+
+    /// <inheritdoc />
+    public string Label => "Display metric groups";
+
+    /// <inheritdoc />
+    public string NavigationKey => "display";
+
+    /// <inheritdoc />
+    public string? SaveRefusal =>
+        GroupsDirty && DisplayLoadFailed ? "The display settings could not be read." : null;
+
+    Task IPendingEdits.SaveAsync() => SaveGroupsCommand.ExecuteAsync(null);
+
+    void IPendingEdits.Discard()
+    {
+        if (_savingGroups)
+        {
+            _discardAfterSave = true;
+            return;
+        }
+
+        RevertGroups();
+    }
+
+    // Ends a groups save, on the UI thread, and runs a Discard that arrived during it now that the
+    // save has finished either way. Called from both of SaveGroupsAsync's completion callbacks.
+    private void EndGroupsSave()
+    {
+        _savingGroups = false;
+        if (_discardAfterSave)
+        {
+            _discardAfterSave = false;
+            RevertGroups();
+        }
+    }
 
     /// <inheritdoc />
     protected override void OnStoredDocumentChangedElsewhere() => GroupsChangedElsewhere = true;
@@ -454,6 +504,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
         }
 
         var groups = DisplayMetricGroupViewModel.ToDocument(Groups);
+        var savedVersion = _groupsEditVersion;
+        _savingGroups = true;
 
         // No cancellation token on Task.Run (review minor 9): a dispose between the guard above
         // and the scheduling here would cancel the task before it starts, and AsyncRelayCommand
@@ -491,7 +543,11 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
                     Post(() =>
                     {
                         _display = next;
-                        GroupsDirty = false;
+                        if (_groupsEditVersion == savedVersion)
+                        {
+                            GroupsDirty = false;
+                        }
+
                         GroupsChangedElsewhere = false;
                         ErrorMessage = null;
                         StatusMessage = "Metric visibility saved";
@@ -499,6 +555,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
                         // The tab's own frame column picker re-gates from what was just written.
                         // Live frame tables re-gate through SettingsStore.DisplayChanged.
                         FramesColumns.ApplyGroupGates(next);
+                        EndGroupsSave();
                     });
                 }
                 catch (Exception ex)
@@ -508,6 +565,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
                     {
                         StatusMessage = null;
                         ErrorMessage = "The metric visibility could not be saved. See the log for details.";
+                        EndGroupsSave();
                     });
                 }
             }).ConfigureAwait(false);
@@ -737,6 +795,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel
         }
 
         StatusMessage = null;
+        _groupsEditVersion++;
         GroupsDirty = true;
     }
 
