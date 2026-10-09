@@ -20,6 +20,20 @@ internal static class MetricText
             ? present.ToString(format, CultureInfo.InvariantCulture) + suffix
             : "";
 
+    /// <summary>A table cell's figure: <see cref="Format"/>, or <see cref="Missing"/> where
+    /// <see cref="Format"/> answers empty, so a table never shows a silent blank (spec.md item 6).
+    /// A real zero formats as <c>0</c>. <see cref="Format"/> itself keeps its empty string, which
+    /// its non-table callers test for.</summary>
+    public static string Cell(double? value, string format, string suffix = "")
+        => Format(value, format, suffix) is { Length: > 0 } text ? text : Missing;
+
+    /// <inheritdoc cref="Cell(double?, string, string)"/>
+    public static string Cell(string? text) => string.IsNullOrEmpty(text) ? Missing : text;
+
+    /// <summary>Hours as a table figure: one decimal, thousands separators, no unit (the heading
+    /// carries it).</summary>
+    public static string HourFigure(double seconds) => Cell(seconds / 3600d, "N1");
+
     /// <summary>Hours with one decimal, for example <c>3.2 h</c>. The same rendering
     /// <c>TargetRowViewModel</c> and <c>TargetTotalsViewModel</c> use, so a dashboard row, a
     /// totals row and a session card cannot disagree on the same integration.</summary>

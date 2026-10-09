@@ -346,7 +346,7 @@ public class CustomCellEditorTests
     }
 
     [AvaloniaFact]
-    public void WithTheWatermarkOff_TheCellIsEmptyAndStillNamesItselfToAScreenReader()
+    public void WithTheWatermarkOff_TheCellShowsTheDashAndStillNamesItselfToAScreenReader()
     {
         // The Nights ledger's own row strip. It prints the column's name once in the header strip
         // directly above the rows, so every empty text cell under it repeated a word already on
@@ -361,12 +361,12 @@ public class CustomCellEditorTests
         Dispatcher.UIThread.RunJobs();
 
         var box = Editor<TextBox>(editor);
-        Assert.True(string.IsNullOrEmpty(box.Watermark));
+        Assert.Equal(MetricText.Missing, box.Watermark);
         Assert.Equal("Notes tag, 2026-03-14", AutomationProperties.GetName(box));
     }
 
     [AvaloniaFact]
-    public void WithTheWatermarkOff_ARecycledCellStaysEmpty()
+    public void WithTheWatermarkOff_ARecycledCellKeepsTheDash()
     {
         // A row's editor is realized once and handed one cell after another as the list scrolls, so
         // the watermark follows the DataContext, not the construction. A failure here is an editor
@@ -377,7 +377,7 @@ public class CustomCellEditorTests
         editor.DataContext = Factory.Cell(Factory.Text("Another column"));
         Dispatcher.UIThread.RunJobs();
 
-        Assert.True(string.IsNullOrEmpty(Editor<TextBox>(editor).Watermark));
+        Assert.Equal(MetricText.Missing, Editor<TextBox>(editor).Watermark);
 
         editor.ShowWatermark = true;
         Dispatcher.UIThread.RunJobs();

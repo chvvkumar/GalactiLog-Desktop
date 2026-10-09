@@ -4,6 +4,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
 using GalactiLog.App.ViewModels.CustomColumns;
+using GalactiLog.App.ViewModels.TargetDetail;
 
 namespace GalactiLog.App.Controls;
 
@@ -40,12 +41,13 @@ public partial class CustomCellEditor : UserControl
     /// Whether the text kind draws the column's name as its watermark. True by default, which is what
     /// the dashboard target row, the dashboard night expander and the session pane's rig line need:
     /// none of them has a heading over the cell, so the watermark is the only thing naming the column
-    /// on an empty cell. The Nights ledger sets it false, because it does have a heading, one row
-    /// above, and repeating the name in every empty cell under it is noise.
+    /// on an empty cell. A table cell sets it false, because it does have a heading, one row above,
+    /// and repeating the name in every empty cell under it is noise: the empty cell shows the table's
+    /// missing-value dash instead (spec.md item 6), which the placeholder ink already draws faint.
     /// </summary>
     /// <remarks>A styled property rather than a class, because it carries a value the markup sets per
     /// surface and the automation name is deliberately not affected: a screen reader still hears the
-    /// column and the night on a ledger cell with no watermark.</remarks>
+    /// column and the night on a table cell under a dash.</remarks>
     public static readonly StyledProperty<bool> ShowWatermarkProperty =
         AvaloniaProperty.Register<CustomCellEditor, bool>(nameof(ShowWatermark), defaultValue: true);
 
@@ -69,8 +71,8 @@ public partial class CustomCellEditor : UserControl
 
         if (change.Property == ShowWatermarkProperty || change.Property == DataContextProperty)
         {
-            TextEditor.Watermark = ShowWatermark && DataContext is CustomValueViewModel cell
-                ? cell.Label
+            TextEditor.Watermark = !ShowWatermark ? MetricText.Missing
+                : DataContext is CustomValueViewModel cell ? cell.Label
                 : null;
         }
     }

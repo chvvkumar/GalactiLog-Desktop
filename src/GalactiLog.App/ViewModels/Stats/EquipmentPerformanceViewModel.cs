@@ -163,7 +163,8 @@ internal static class MetricGrading
 }
 
 /// <summary>
-/// The four band colours, resolved once from the theme rather than per cell.
+/// The four band colours and the missing-value ink, resolved once from the theme rather than per
+/// cell.
 /// </summary>
 /// <remarks>
 /// Spec 14.5: a view-model that holds a brush holds an <see cref="ImmutableSolidColorBrush"/>.
@@ -177,6 +178,11 @@ internal sealed class BandBrushes
     /// assert against the dictionary rather than against a hard-coded hex string.</summary>
     internal static readonly string[] TokenKeys = ["ColorTextPrimary", "ColorSuccess", "ColorWarning", "ColorError"];
 
+    /// <summary>The faint ink of a missing value (spec.md item 6). A graded cell binds its brush
+    /// locally, which outranks the table's faint-dash style, so an absent figure takes this instead.
+    /// Not one of <see cref="TokenKeys"/>, which are the bands in order.</summary>
+    internal const string MissingKey = "ColorTextTertiary";
+
     public BandBrushes()
     {
         // Review finding I1: the first implementation named the ColorSuccessValue, ColorWarningValue
@@ -188,6 +194,7 @@ internal sealed class BandBrushes
         Better = Resolve(TokenKeys[1]);
         Watch = Resolve(TokenKeys[2]);
         Reject = Resolve(TokenKeys[3]);
+        Missing = Resolve(MissingKey);
     }
 
     public IImmutableSolidColorBrush Neutral { get; }
@@ -197,6 +204,8 @@ internal sealed class BandBrushes
     public IImmutableSolidColorBrush Watch { get; }
 
     public IImmutableSolidColorBrush Reject { get; }
+
+    public IImmutableSolidColorBrush Missing { get; }
 
     public IImmutableSolidColorBrush For(QualityBand band) => band switch
     {

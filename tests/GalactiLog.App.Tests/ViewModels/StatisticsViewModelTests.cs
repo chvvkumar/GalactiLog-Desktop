@@ -449,6 +449,11 @@ public class StatisticsViewModelTests
             Assert.Equal(token.Green, all[index].Color.G);
             Assert.Equal(token.Blue, all[index].Color.B);
         }
+
+        // The missing-value ink is the faint token, outside the band order.
+        var faint = ChartTheme.Read(BandBrushes.MissingKey, ChartTheme.Fallback);
+        Assert.Equal((faint.Red, faint.Green, faint.Blue), (brushes.Missing.Color.R, brushes.Missing.Color.G, brushes.Missing.Color.B));
+        Assert.DoesNotContain(BandBrushes.MissingKey, BandBrushes.TokenKeys);
     }
 
     [Fact]

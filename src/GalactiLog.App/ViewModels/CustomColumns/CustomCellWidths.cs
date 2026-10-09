@@ -1,6 +1,7 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
 using Avalonia.Media;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.Core.Settings;
 
 namespace GalactiLog.App.ViewModels.CustomColumns;
@@ -26,9 +27,9 @@ namespace GalactiLog.App.ViewModels.CustomColumns;
 /// </remarks>
 public static class CustomCellWidths
 {
-    /// <summary>A check box cell. An empty <c>CheckBox</c> measures 18, plus the cell's two 8 pixel
-    /// gutters.</summary>
-    public const double Check = 36d;
+    /// <summary>A check box cell: the table spine's check column, a box plus the two cell gutters.
+    /// </summary>
+    public const double Check = TableMetrics.CheckColumnWidth;
 
     /// <summary>A dropdown cell: the widest option plus the combo's chevron, bounded so one long
     /// option cannot take the row.</summary>
@@ -51,8 +52,8 @@ public static class CustomCellWidths
         _ => Text,
     };
 
-    /// <summary>The cell gutter a measured heading carries, 8 left and 8 right.</summary>
-    public const double HeadingGutter = 16d;
+    /// <summary>The cell gutter a measured heading carries, one table gutter each side.</summary>
+    public const double HeadingGutter = 2 * TableMetrics.Gutter;
 
     /// <summary>
     /// The width one custom column takes, its heading and its cells alike: what its editor needs,

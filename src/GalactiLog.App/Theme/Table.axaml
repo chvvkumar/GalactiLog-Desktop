@@ -1,0 +1,191 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:t="using:GalactiLog.App.Controls.Table"
+        xmlns:controls="using:GalactiLog.App.Controls"
+        xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
+        xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+        xmlns:q="using:GalactiLog.Data.Queries">
+  <!-- The table spine's styles (spec.md items 1 to 9, spine-spec section 4). Included once from
+       App.axaml directly after Theme/Controls.axaml. Every rule keys on the tc-* classes TableRow
+       and TableStripCell put on their cells, not on t|TableRow >, so the frame table, which keeps
+       its own StackPanel rows (ruling R1), takes the same rules by carrying the classes itself.
+
+       A cell sets none of these itself: no Grid.Column, alignment, margin, trimming, weight or type
+       class. Its column's Kind decides.
+
+       The faint dash rule: a cell that can show MetricText.Missing must not set a local Foreground.
+       A local value outranks the "-" style below, so the dash would draw in full ink. A cell that
+       needs its own ink takes it from TextElement.Foreground on the row instead (inherited, so the
+       style still wins on a "-"), and a graded cell whose brush comes from its view model gets
+       BandBrushes.Missing for an absent value. -->
+  <Styles.Resources>
+    <!-- One custom column's heading and cell (spec 12.15), shared by every table with a custom
+         strip. Both are measured by CustomCellWidths.HeadingWidth at the view's own type size, so
+         a heading and its cells are one width. -->
+    <DataTemplate x:Key="TableCustomHead" x:DataType="q:CustomColumnDefinition">
+      <TextBlock Classes="t-label"
+                 Padding="{x:Static t:TableMetrics.CellPadding}"
+                 Text="{Binding Name}"
+                 ToolTip.Tip="{Binding Name}"
+                 AutomationProperties.Name="{Binding Name}"
+                 TextTrimming="CharacterEllipsis"
+                 VerticalAlignment="Center"
+                 HorizontalAlignment="{Binding Type, Converter={x:Static t:Table.CustomAlign}}">
+        <TextBlock.Width>
+          <MultiBinding Converter="{x:Static cc:CustomCellWidths.HeadingWidth}">
+            <Binding Path="Name" />
+            <Binding Path="Type" />
+            <Binding Path="$parent[UserControl].FontSize" />
+            <Binding Path="$parent[UserControl].FontFamily" />
+          </MultiBinding>
+        </TextBlock.Width>
+      </TextBlock>
+    </DataTemplate>
+
+    <DataTemplate x:Key="TableCustomCell" x:DataType="cc:CustomValueViewModel">
+      <Border Padding="{x:Static t:TableMetrics.CellPadding}" VerticalAlignment="Center">
+        <Border.Width>
+          <MultiBinding Converter="{x:Static cc:CustomCellWidths.HeadingWidth}">
+            <Binding Path="Column.Name" />
+            <Binding Path="Column.Type" />
+            <Binding Path="$parent[UserControl].FontSize" />
+            <Binding Path="$parent[UserControl].FontFamily" />
+          </MultiBinding>
+        </Border.Width>
+        <controls:CustomCellEditor ShowWatermark="False" Classes.cell-check="{Binding IsCheckBox}" />
+      </Border>
+    </DataTemplate>
+
+    <!-- A sort header's title over a ColumnViewModel (Title plus SortGlyph), for a Button cell in a
+         Header row; the view keeps its own Command. TableRow puts tc-head and the column's kind
+         class on the Button. -->
+    <DataTemplate x:Key="TableSortTitle" x:DataType="dash:ColumnViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis" />
+        <TextBlock Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
+      </StackPanel>
+    </DataTemplate>
+    <!-- Numeric: the glyph leads, so the title's right edge is the figures' right edge whether the
+         column is the sort key or not. -->
+    <DataTemplate x:Key="TableSortTitleNumeric" x:DataType="dash:ColumnViewModel">
+      <StackPanel Orientation="Horizontal" Spacing="4">
+        <TextBlock Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
+        <TextBlock Classes="t-label" Text="{Binding Title}" />
+      </StackPanel>
+    </DataTemplate>
+  </Styles.Resources>
+
+  <!-- Rows. -->
+  <Style Selector="t|TableRow">
+    <Setter Property="MinHeight" Value="{x:Static t:TableMetrics.RowMinHeight}" />
+    <Setter Property="RuleBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="EmphasisRuleBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+  </Style>
+  <!-- Grouped zebra (Compare nights: one band per night), bound per row by the view. -->
+  <Style Selector="t|TableRow.alt">
+    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+  </Style>
+
+  <!-- Cells by kind. -->
+  <Style Selector=":is(Control).tc-text, :is(Control).tc-num">
+    <Setter Property="Margin" Value="{x:Static t:TableMetrics.CellPadding}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <!-- Avalonia centres a Stretch element that a MaxWidth clamps, so a capped text cell would sit
+       mid-column without this. -->
+  <Style Selector=":is(Control).tc-text">
+    <Setter Property="HorizontalAlignment" Value="Left" />
+  </Style>
+  <Style Selector="TextBlock.tc-text, TextBlock.tc-num">
+    <Setter Property="FontFeatures" Value="tnum=1" />
+  </Style>
+  <Style Selector="TextBlock.tc-text">
+    <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+  </Style>
+  <!-- A figure never trims (spec.md item 3): its column widens instead. -->
+  <Style Selector="TextBlock.tc-num">
+    <Setter Property="TextAlignment" Value="Right" />
+    <Setter Property="TextTrimming" Value="None" />
+  </Style>
+  <!-- Fluent's Button sits left at its content width; a figure's heading fills its column so the
+       title ends where the figures end. -->
+  <Style Selector="Button.tc-num">
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="HorizontalContentAlignment" Value="Right" />
+  </Style>
+  <Style Selector=":is(Panel).tc-num, ContentControl.tc-num">
+    <Setter Property="HorizontalAlignment" Value="Right" />
+  </Style>
+  <Style Selector=":is(Control).tc-check">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+  <Style Selector="CheckBox.tc-check">
+    <Setter Property="MinWidth" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <!-- A strip's items carry their own gutter. -->
+  <Style Selector=":is(Control).tc-strip">
+    <Setter Property="Margin" Value="0" />
+  </Style>
+  <Style Selector="ItemsControl.tc-strip">
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <StackPanel Orientation="Horizontal" Spacing="0" />
+      </ItemsPanelTemplate>
+    </Setter>
+  </Style>
+  <Style Selector=":is(Control).tc-dropped">
+    <Setter Property="IsVisible" Value="False" />
+  </Style>
+  <Style Selector="TextBlock.tc-total">
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <!-- Spec.md item 6: a missing value is "-" in the faintest ink. -->
+  <Style Selector="TextBlock.tc-num[Text=-], TextBlock.tc-text[Text=-]">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+
+  <!-- Sort headers. The Button is chrome-free; its cell gutter is the tc-text or tc-num margin. -->
+  <Style Selector="Button.tc-head">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+  </Style>
+  <Style Selector="Button.tc-head.tc-text">
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+  </Style>
+  <Style Selector="TextBlock.tc-sortglyph">
+    <Setter Property="Foreground" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+  </Style>
+
+  <!-- Items hosts with Classes="table" (t:Table.Scroller adds it): zebra on the item index, which
+       :nth-child reads from the ItemsControl even under virtualisation (gate T7). -->
+  <Style Selector="ListBox.table > ListBoxItem">
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="ListBox.table > ListBoxItem:nth-child(2n)">
+    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+  </Style>
+  <Style Selector="ItemsControl.table > ContentPresenter:nth-child(2n)">
+    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+  </Style>
+  <Style Selector="ListBox.table ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+  </Style>
+  <!-- Selection is light, not colour: a lighter field and the lit ink. -->
+  <Style Selector="ListBox.table ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccent}" />
+  </Style>
+
+  <!-- A check box custom cell centres its box (CustomCellEditor's CheckBox sets no alignment). -->
+  <Style Selector="controls|CustomCellEditor.cell-check CheckBox">
+    <Setter Property="HorizontalAlignment" Value="Center" />
+  </Style>
+</Styles>
