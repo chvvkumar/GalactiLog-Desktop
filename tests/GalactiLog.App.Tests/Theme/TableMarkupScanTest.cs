@@ -20,7 +20,6 @@ public class TableMarkupScanTest
         // Tables, removed by their migration.
         "Views/Dashboard/TargetListView.axaml",
         "Views/Mosaics/MosaicsView.axaml",
-        "Views/TargetDetail/Parts/IntegrationTablesPart.axaml",
         "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
@@ -37,7 +36,6 @@ public class TableMarkupScanTest
     private static readonly string[] PendingTables =
     [
         "Views/TargetDetail/Parts/NightsLedgerPart.axaml",
-        "Views/TargetDetail/Parts/IntegrationTablesPart.axaml",
         "Views/TargetDetail/Parts/CompareTablePart.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",

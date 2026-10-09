@@ -15,8 +15,12 @@ public sealed record CompareCellViewModel(string Hfr, string Eccentricity, strin
 /// <summary>One filter of the Compare table, one cell per night in <see cref="NightFilterMatrixViewModel.CompareNights"/>.</summary>
 public sealed record CompareRowViewModel(FilterSwatchViewModel Filter, IReadOnlyList<CompareCellViewModel> Cells);
 
+/// <summary>One filter's cell of a matrix row; <paramref name="ColumnId"/> names the filter's strip
+/// column (<c>f0</c>, <c>f1</c>...), so the cells of one filter line up across rows and tables.</summary>
+public sealed record MatrixCellViewModel(string ColumnId, string Text);
+
 /// <summary>One row of the exposure or hours table: a label, one cell per filter in bar order and a total.</summary>
-public sealed record MatrixRowViewModel(string Label, IReadOnlyList<string> Cells, string Total);
+public sealed record MatrixRowViewModel(string Label, IReadOnlyList<MatrixCellViewModel> Cells, string Total);
 
 /// <summary>
 /// The spine of the three per-night, per-filter tables. Every figure is summed from the
@@ -30,12 +34,16 @@ public sealed class NightFilterMatrixViewModel
     /// <param name="filters">The filter columns, in bar order; a row of another filter is dropped.</param>
     /// <param name="compareNights">The Compare table's nights in their column order; null is
     /// <see cref="Nights"/>.</param>
+    /// <param name="totals">The target's totals, for <see cref="Overall"/>; null leaves it null.</param>
     public NightFilterMatrixViewModel(
         IReadOnlyList<NightFilterOverview> rows,
         IReadOnlyList<FilterSwatchViewModel> filters,
-        IEnumerable<DateOnly>? compareNights = null)
+        IEnumerable<DateOnly>? compareNights = null,
+        TargetTotals? totals = null)
     {
         Filters = filters;
+        FilterHeads = Cells(filter => filter);
+        Overall = totals is null ? null : new OverallMetricsViewModel(totals, filters);
         var known = filters.Select(filter => filter.FilterName).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var kept = rows.Where(row => known.Contains(row.Filter)).ToList();
         _cells = new(new CellKeyComparer());
@@ -52,26 +60,23 @@ public sealed class NightFilterMatrixViewModel
             [.. CompareNights.Select(night => CompareCell(Cell(night.Night, filter.FilterName)))]))];
 
         var lengths = kept.SelectMany(row => row.Exposures).Select(exposure => exposure.Seconds).Distinct().Order().ToList();
-        ExposureRows = [.. lengths.Select(seconds =>
-        {
-            var byFilter = filters.Select(filter => ExposureFrames(filter.FilterName, seconds)).ToList();
-            return new MatrixRowViewModel(
-                string.Create(CultureInfo.InvariantCulture, $"{seconds:0.##} s"),
-                [.. byFilter.Select(Frames)],
-                MetricText.Count(byFilter.Sum()));
-        })];
+        // The unit is in the "Exp s" heading, so a label is the bare figure (ruling R12).
+        ExposureRows = [.. lengths.Select(seconds => new MatrixRowViewModel(
+            MetricText.Format(seconds, "0.##"),
+            Cells(filter => Frames(ExposureFrames(filter, seconds))),
+            MetricText.Count(filters.Sum(filter => ExposureFrames(filter.FilterName, seconds)))))];
         ExposureTotalRow = new MatrixRowViewModel(
             "Total",
-            [.. filters.Select(filter => MetricText.Count(FrameCount(filter.FilterName)))],
+            Cells(filter => MetricText.Count(FrameCount(filter))),
             MetricText.Count(kept.Sum(row => row.FrameCount)));
 
         HoursRows = [.. Nights.Select(night => new MatrixRowViewModel(
             MetricText.Date(night),
-            [.. filters.Select(filter => Hours(Cell(night, filter.FilterName)?.IntegrationSeconds))],
+            Cells(filter => Hours(Cell(night, filter)?.IntegrationSeconds)),
             Hours(RowSeconds(night))))];
         HoursTotalRow = new MatrixRowViewModel(
             "Total",
-            [.. filters.Select(filter => Hours(ColumnSeconds(filter.FilterName)))],
+            Cells(filter => Hours(ColumnSeconds(filter))),
             Hours(TotalSeconds));
     }
 
@@ -80,6 +85,12 @@ public sealed class NightFilterMatrixViewModel
 
     /// <summary>The filter columns in bar order.</summary>
     public IReadOnlyList<FilterSwatchViewModel> Filters { get; }
+
+    /// <summary>The matrices' filter headings, one strip cell per filter.</summary>
+    public IReadOnlyList<MatrixCellViewModel> FilterHeads { get; }
+
+    /// <summary>The Integration tab's Overall metrics; null when the page passed no totals.</summary>
+    public OverallMetricsViewModel? Overall { get; }
 
     /// <summary>The column groups: the nights the trend chart plots, in its order, oldest first,
     /// so each group sits under its night's band.</summary>
@@ -119,10 +130,15 @@ public sealed class NightFilterMatrixViewModel
             .Where(exposure => exposure.Seconds == seconds)
             .Sum(exposure => exposure.Frames);
 
-    private static string Frames(int frames) => frames == 0 ? "" : MetricText.Count(frames);
+    /// <summary>One row's strip cells, one per filter in bar order, from each filter's text.</summary>
+    private List<MatrixCellViewModel> Cells(Func<string, string> text)
+        => [.. Filters.Select((filter, index) => new MatrixCellViewModel(
+            string.Create(CultureInfo.InvariantCulture, $"f{index}"), text(filter.FilterName)))];
+
+    private static string Frames(int frames) => frames == 0 ? MetricText.Missing : MetricText.Count(frames);
 
     private static string Hours(double? seconds)
-        => seconds is { } present ? MetricText.Format(present / 3600d, "0.0") : "";
+        => seconds is { } present ? MetricText.HourFigure(present) : MetricText.Missing;
 
     private static CompareCellViewModel CompareCell(NightFilterOverview? row) => new(
         MetricText.Format(row?.MedianHfr, "0.00"),

@@ -61,11 +61,11 @@ public class NightFilterMatrixViewModelTests
         Assert.Equal(7_200d, matrix.ColumnSeconds("OIII"));
         Assert.Equal(12_600d, matrix.TotalSeconds);
 
-        Assert.Equal(["0.5", "2.0"], matrix.HoursRows[0].Cells);
+        Assert.Equal(["0.5", "2.0"], Texts(matrix.HoursRows[0]));
         Assert.Equal("2.5", matrix.HoursRows[0].Total);
-        Assert.Equal(["1.0", ""], matrix.HoursRows[1].Cells);
+        Assert.Equal(["1.0", "-"], Texts(matrix.HoursRows[1]));
         Assert.Equal("1.0", matrix.HoursRows[1].Total);
-        Assert.Equal(["1.5", "2.0"], matrix.HoursTotalRow.Cells);
+        Assert.Equal(["1.5", "2.0"], Texts(matrix.HoursTotalRow));
         Assert.Equal("3.5", matrix.HoursTotalRow.Total);
     }
 
@@ -76,12 +76,37 @@ public class NightFilterMatrixViewModelTests
         // is not the frames of the rows.
         var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"));
 
-        Assert.Equal(["300 s", "600 s"], matrix.ExposureRows.Select(row => row.Label));
-        Assert.Equal(["15", "24"], matrix.ExposureRows[0].Cells);
+        Assert.Equal(["300", "600"], matrix.ExposureRows.Select(row => row.Label));
+        Assert.Equal(["15", "24"], Texts(matrix.ExposureRows[0]));
         Assert.Equal("39", matrix.ExposureRows[0].Total);
-        Assert.Equal(["3", ""], matrix.ExposureRows[1].Cells);
-        Assert.Equal(["18", "24"], matrix.ExposureTotalRow.Cells);
+        Assert.Equal(["3", "-"], Texts(matrix.ExposureRows[1]));
+        Assert.Equal(["18", "24"], Texts(matrix.ExposureTotalRow));
         Assert.Equal("42", matrix.ExposureTotalRow.Total);
+    }
+
+    [Fact]
+    public void MatrixCells_CarryOneColumnIdPerFilter_InBarOrder()
+    {
+        // A failure is a strip cell in another filter's column group, which misaligns the matrices.
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"));
+
+        Assert.Equal(
+            [new MatrixCellViewModel("f0", "Ha"), new MatrixCellViewModel("f1", "OIII")],
+            matrix.FilterHeads);
+        var rows = matrix.ExposureRows.Concat(matrix.HoursRows).Append(matrix.ExposureTotalRow).Append(matrix.HoursTotalRow);
+        Assert.All(rows, row => Assert.Equal(["f0", "f1"], row.Cells.Select(cell => cell.ColumnId)));
+    }
+
+    [Fact]
+    public void Overall_IsBuiltFromTheTotals_AndNullWithout()
+    {
+        var totals = GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory.PopulatedTotals();
+
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("OIII", "Ha"), totals: totals);
+
+        Assert.Equal("2.34", matrix.Overall!.AllFrames.HfrText);
+        Assert.Equal(["OIII", "Ha"], matrix.Overall.Filters.Select(row => row.Label));
+        Assert.Null(new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha")).Overall);
     }
 
     [Fact]
@@ -165,6 +190,14 @@ public class NightFilterMatrixViewModelTests
     }
 
     [Fact]
+    public void ThePagesMatrix_CarriesTheOverallMetrics()
+    {
+        using var harness = Page();
+
+        Assert.Equal("All frames", harness.ViewModel.NightFilterMatrix!.Overall!.AllFrames.Label);
+    }
+
+    [Fact]
     public void TheMatrix_IsNotRebuilt_ByAnUnrelatedChange_OrByATickWithCheckedOnlyOff()
     {
         // A failure is a new matrix reference on either change.
@@ -179,6 +212,8 @@ public class NightFilterMatrixViewModelTests
 
         Assert.Equal(0, rebuilds);
     }
+
+    private static IEnumerable<string> Texts(MatrixRowViewModel row) => row.Cells.Select(cell => cell.Text);
 
     [Fact]
     public void NoRows_IsEmpty()

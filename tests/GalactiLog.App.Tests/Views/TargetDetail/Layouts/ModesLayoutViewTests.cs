@@ -831,7 +831,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     [AvaloniaTheory]
     [InlineData(1280d, 720d)]
     [InlineData(1600d, 900d)]
-    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenBothTables(double width, double height)
+    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenTheTables(double width, double height)
     {
         // Red if the bars are not in their full form, the tables are not below them in
         // the same scroll viewer, or the hours table at the end cannot be reached by its one bar.
@@ -850,8 +850,8 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.True(LayoutParityCensusTests.IsShown(tables), "the Integration tables are not on screen");
         Assert.Equal(1, VerticalBars(view.Named<Control>("IntegrationRegion")));
 
-        var exposure = tables.Named<Control>("ExposureTable");
-        Assert.True(BoundsIn(exposure, scroll).Top < scroll.Bounds.Height, "the exposure table starts below the viewport at rest");
+        var overall = tables.Named<Control>("OverallTable");
+        Assert.True(BoundsIn(overall, scroll).Top < scroll.Bounds.Height, "the Overall metrics table starts below the viewport at rest");
         scroll.Offset = new Vector(0, scroll.Extent.Height);
         mounted.Settle();
         var hours = BoundsIn(tables.Named<Control>("HoursTable"), scroll);

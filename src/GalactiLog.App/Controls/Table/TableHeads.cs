@@ -22,4 +22,6 @@ public static class TableHeads
     public const string Exposure = "Exp s";
     public const string ExposureTip = "Exposure, seconds";
     public const string Total = "Total";
+    public const string Filter = "Filter";
+    public const string Night = "Night";
 }
