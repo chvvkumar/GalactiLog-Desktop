@@ -110,6 +110,9 @@ public sealed partial class ColumnViewModel : ObservableObject
     [ObservableProperty]
     private string _sortGlyph = "";
 
+    /// <summary>The header's tooltip: what an abbreviated title stands for, or null.</summary>
+    public string? Tip { get; init; }
+
     /// <summary>The frame table's column width in device-independent pixels, bound by its header
     /// cell and every row cell (Phase 24 R5). Owned by <c>FrameTableViewModel</c>, which seeds it
     /// and applies the auto-fit, the drag and the stored width. NaN, Avalonia's automatic width,

@@ -12,7 +12,9 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
+using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -262,8 +264,8 @@ public class FrameTableViewTests
         var view = new FrameTableView { DataContext = table };
         ShowTable(view);
 
-        // P12 Task 6: the unit lives in the header now, so the title is "FWHM arcsec".
-        Assert.Contains("FWHM arcsec", VisibleHeaderTitles(view));
+        // P12 Task 6: the unit lives in the header now, in the inch-mark style.
+        Assert.Contains(TableHeads.Fwhm, VisibleHeaderTitles(view));
         Assert.Contains("1.88", VisibleCellTexts(view));
 
         var fwhm = table.Columns.Single(column => column.Key == "fwhm");
@@ -276,7 +278,7 @@ public class FrameTableViewTests
         table.ToggleColumnCommand.Execute(fwhm);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.DoesNotContain("FWHM arcsec", VisibleHeaderTitles(view));
+        Assert.DoesNotContain(TableHeads.Fwhm, VisibleHeaderTitles(view));
         Assert.DoesNotContain("1.88", VisibleCellTexts(view));
 
         // Phase 5 review item 2, ported: the whole header cell collapses, not just the button
@@ -364,7 +366,7 @@ public class FrameTableViewTests
         // The rest of the table is untouched, including the other gated-by-default groups that
         // this document turned on.
         Assert.Contains("Airmass", titles);
-        Assert.Contains("ADU Mean", titles);
+        Assert.Contains("ADU mean", titles);
     }
 
     [AvaloniaFact]

@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
@@ -1524,28 +1526,50 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public void Columns_SevenHeadersCarryTheirUnit()
+    public void Columns_HeadersUseTheSharedUnitsAndSentenceCase()
     {
-        // The comp puts the unit in the header and never in the cell, so a column of figures
-        // shares one decimal axis. FrameColumns.All is Core and keeps spec 12.4's verbatim
-        // titles; the rewrite is a display concern and sits beside the zone-label rewrite.
+        // Spec items 4 and 5: the unit in the header in the inch-mark style, the six shared
+        // headings from TableHeads, sentence case, and a tooltip on every header. FrameColumns.All
+        // is Core and keeps spec 12.4's verbatim titles; the rewrite is a display concern.
         var harness = Harness.Create(display: EveryGroup());
 
-        string Title(string key) => harness.Table.Columns.Single(column => column.Key == key).Title;
+        ColumnViewModel Column(string key) => harness.Table.Columns.Single(column => column.Key == key);
+        string Title(string key) => Column(key).Title;
 
-        Assert.Equal("Exp s", Title("exposure_time"));
-        Assert.Equal("HFR px", Title("median_hfr"));
-        Assert.Equal("FWHM arcsec", Title("fwhm"));
-        Assert.Equal("RMS arcsec", Title("guiding_rms_arcsec"));
-        Assert.Equal("RMS RA arcsec", Title("guiding_rms_ra_arcsec"));
-        Assert.Equal("RMS Dec arcsec", Title("guiding_rms_dec_arcsec"));
+        Assert.Equal(TableHeads.Hfr, Title("median_hfr"));
+        Assert.Equal(TableHeads.Ecc, Title("eccentricity"));
+        Assert.Equal(TableHeads.Fwhm, Title("fwhm"));
+        Assert.Equal(TableHeads.Rms, Title("guiding_rms_arcsec"));
+        Assert.Equal(TableHeads.Stars, Title("detected_stars"));
+        Assert.Equal(TableHeads.Exposure, Title("exposure_time"));
+        Assert.Equal("RMS RA \"", Title("guiding_rms_ra_arcsec"));
+        Assert.Equal("RMS Dec \"", Title("guiding_rms_dec_arcsec"));
+
+        Assert.Equal("ADU mean", Title("adu_mean"));
+        Assert.Equal("ADU median", Title("adu_median"));
+        Assert.Equal("ADU min", Title("adu_min"));
+        Assert.Equal("ADU max", Title("adu_max"));
+        Assert.Equal("Focus temp", Title("focuser_temp"));
+        Assert.Equal("Ambient temp", Title("ambient_temp"));
+        Assert.Equal("Dew point", Title("dew_point"));
+        Assert.Equal("Wind dir", Title("wind_direction"));
         Assert.Equal("Temp C", Title("sensor_temp"));
 
-        // Everything else keeps FrameColumns.All's title, and the Time column keeps its zone's
-        // GMT offset (fixer-list item 20, re-pointed from the bare "UTC" id).
-        Assert.Equal("Ecc", Title("eccentricity"));
-        Assert.Equal("Stars", Title("detected_stars"));
+        // The Time column keeps its zone's GMT offset (fixer-list item 20).
         Assert.Equal("Time (GMT+00:00)", Title("time"));
+
+        Assert.All(harness.Table.Columns, column => Assert.DoesNotContain("arcsec", column.Title));
+
+        // Every header has a tip: an abbreviation says what it stands for, and any other title
+        // carries itself, so a text title dragged narrow enough to trim still reads in full.
+        Assert.All(harness.Table.Columns, column => Assert.NotNull(column.Tip));
+        Assert.Equal(TableHeads.HfrTip, Column("median_hfr").Tip);
+        Assert.Equal(TableHeads.EccTip, Column("eccentricity").Tip);
+        Assert.Equal(TableHeads.FwhmTip, Column("fwhm").Tip);
+        Assert.Equal(TableHeads.RmsTip, Column("guiding_rms_arcsec").Tip);
+        Assert.Equal(TableHeads.ExposureTip, Column("exposure_time").Tip);
+        Assert.Equal("File name", Column("file_name").Tip);
+        Assert.Equal("Time (GMT+00:00)", Column("time").Tip);
     }
 
     [Fact]

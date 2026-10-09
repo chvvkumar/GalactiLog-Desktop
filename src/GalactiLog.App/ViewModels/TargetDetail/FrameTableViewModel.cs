@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Settings;
@@ -80,24 +81,55 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         };
 
     /// <summary>
-    /// The six frame columns whose header carries a unit, plus the exposure column. The comp puts
-    /// the unit in the header and never in the cell, so a column of figures shares one decimal
-    /// axis; the cells carry no unit at all now that <c>ExposureText</c> has dropped its suffix.
+    /// The display titles: units in the inch-mark style from <see cref="TableHeads"/>, sentence
+    /// case; <c>FrameColumns.All</c> keeps spec 12.4's verbatim titles. The comp puts the unit in
+    /// the header and never in the cell, so a column of figures shares one decimal axis.
     /// </summary>
     /// <remarks>
     /// <c>FrameColumns.All</c> is not touched: it is Core, and its <c>Title</c> is documented as
     /// verbatim from design-spec 12.4's table. The rewrite is a display concern and belongs here,
     /// beside the Time column's zone-label rewrite. The persisted key is untouched either way.
     /// </remarks>
-    private static readonly Dictionary<string, string> HeaderUnits = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string> HeaderTitles = new(StringComparer.Ordinal)
     {
-        ["exposure_time"] = "Exp s",
-        ["median_hfr"] = "HFR px",
-        ["fwhm"] = "FWHM arcsec",
-        ["guiding_rms_arcsec"] = "RMS arcsec",
-        ["guiding_rms_ra_arcsec"] = "RMS RA arcsec",
-        ["guiding_rms_dec_arcsec"] = "RMS Dec arcsec",
+        ["exposure_time"] = TableHeads.Exposure,
+        ["median_hfr"] = TableHeads.Hfr,
+        ["eccentricity"] = TableHeads.Ecc,
+        ["fwhm"] = TableHeads.Fwhm,
+        ["detected_stars"] = TableHeads.Stars,
+        ["guiding_rms_arcsec"] = TableHeads.Rms,
+        ["guiding_rms_ra_arcsec"] = "RMS RA \"",
+        ["guiding_rms_dec_arcsec"] = "RMS Dec \"",
+        ["adu_mean"] = "ADU mean",
+        ["adu_median"] = "ADU median",
+        ["adu_min"] = "ADU min",
+        ["adu_max"] = "ADU max",
+        ["focuser_temp"] = "Focus temp",
+        ["ambient_temp"] = "Ambient temp",
+        ["dew_point"] = "Dew point",
+        ["wind_direction"] = "Wind dir",
         ["sensor_temp"] = "Temp C",
+    };
+
+    /// <summary>What an abbreviated header stands for (spec item 5). A column missing here takes
+    /// its title as its tip, so a text title dragged narrow enough to trim still reads in full.
+    /// </summary>
+    private static readonly Dictionary<string, string> HeaderTips = new(StringComparer.Ordinal)
+    {
+        ["exposure_time"] = TableHeads.ExposureTip,
+        ["median_hfr"] = TableHeads.HfrTip,
+        ["eccentricity"] = TableHeads.EccTip,
+        ["fwhm"] = TableHeads.FwhmTip,
+        ["guiding_rms_arcsec"] = TableHeads.RmsTip,
+        ["guiding_rms_ra_arcsec"] = "Guiding RMS error in right ascension, arcseconds",
+        ["guiding_rms_dec_arcsec"] = "Guiding RMS error in declination, arcseconds",
+        ["adu_mean"] = "Analog-to-digital units",
+        ["adu_median"] = "Analog-to-digital units",
+        ["adu_stdev"] = "Analog-to-digital units",
+        ["adu_min"] = "Analog-to-digital units",
+        ["adu_max"] = "Analog-to-digital units",
+        ["sky_quality"] = "Sky quality meter, magnitudes per square arcsecond",
+        ["sensor_temp"] = "Sensor temperature, degrees Celsius",
     };
 
     /// <summary>One formatted cell text per column key, what the view measures for R5's auto-fit.
@@ -277,19 +309,27 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         var zone = SessionTimeFormat.Resolve(general.DisplayTimezoneId);
         var zoneLabel = TimezoneOptions.FormatOffset(zone.BaseUtcOffset);
 
-        Columns = [.. FrameColumns.All.Select(column => new ColumnViewModel(
-            column.Key,
-            HeaderTitle(column, zoneLabel),
-            visible.Contains(column.Key),
+        Columns = [.. FrameColumns.All.Select(column =>
+        {
+            var title = HeaderTitle(column, zoneLabel);
+            return new ColumnViewModel(
+                column.Key,
+                title,
+                visible.Contains(column.Key),
 
-            // Ruling Q15: every frame column is hideable. No single one is the row's identity, a
-            // group-gated column already renders nothing, and the picker is always in the header.
-            canHide: true,
-            isGroupEnabled: FrameColumns.IsGroupEnabled(column, display),
+                // Ruling Q15: every frame column is hideable. No single one is the row's identity,
+                // a group-gated column already renders nothing, and the picker is always in the
+                // header.
+                canHide: true,
+                isGroupEnabled: FrameColumns.IsGroupEnabled(column, display),
 
-            // Spec 14.4's alignment, carried from Core's own column table rather than restated in
-            // the markup: the header cell aligns over its figures instead of at the far edge.
-            isNumeric: column.IsNumeric))];
+                // Spec 14.4's alignment, carried from Core's own column table rather than restated
+                // in the markup: the header cell aligns over its figures instead of at the far edge.
+                isNumeric: column.IsNumeric)
+            {
+                Tip =HeaderTips.GetValueOrDefault(column.Key) ?? title,
+            };
+        })];
 
         // Spec 12.4's rig order (PAR-004): first capture time within the night, which is the first
         // appearance of each label in the frames the query already ordered by capture_date. The
@@ -1266,12 +1306,12 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         SelectedCaptureIndex = singleIndex >= 0 ? singleIndex : null;
     }
 
-    // The Time column carries its zone's GMT offset (spec 5.8.1, fixer-list item 20) and seven
-    // columns carry their unit; the other 24 keep FrameColumns.All's verbatim spec 12.4 title.
+    // The Time column carries its zone's GMT offset (spec 5.8.1, fixer-list item 20); the rest
+    // take HeaderTitles' display title or keep FrameColumns.All's verbatim spec 12.4 title.
     private static string HeaderTitle(FrameColumn column, string zoneLabel)
         => column.Key == "time"
             ? $"Time ({zoneLabel})"
-            : HeaderUnits.TryGetValue(column.Key, out var titled) ? titled : column.Title;
+            : HeaderTitles.TryGetValue(column.Key, out var titled) ? titled : column.Title;
 
     // The direction glyph on the active column, kept on the columns themselves so the header
     // template stays a plain binding, exactly as the dashboard's header does.
