@@ -40,6 +40,10 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// table: one of <c>FrameColumns.All</c>'s 32 keys.</summary>
     public string Key { get; }
 
+    /// <summary>The key as a table spine column key (<c>TableColumn.Key</c> is
+    /// <c>[a-z][a-z0-9]*</c>): <c>last_session</c> is <c>lastsession</c>.</summary>
+    public string TableKey => Key.Replace("_", "", StringComparison.Ordinal);
+
     public string Title { get; }
 
     /// <summary>False for <c>name</c> only (coordinator ruling Q5): hiding every column leaves a
@@ -62,7 +66,7 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// the column picker shows and what is written back to <c>display.columns</c>; it is not on
     /// its own what the table renders.</summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsShown), nameof(SizeGroup))]
+    [NotifyPropertyChangedFor(nameof(IsShown))]
     private bool _isVisible;
 
     /// <summary>False when this column's metric group or field flag is off (design-spec 5.8.2).
@@ -70,7 +74,7 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// separate gates and the group one wins. Always true for a table with no metric groups.
     /// </summary>
     [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(IsShown), nameof(SizeGroup))]
+    [NotifyPropertyChangedFor(nameof(IsShown))]
     private bool _isGroupEnabled;
 
     /// <summary>What the view binds. A column is rendered only when it is in the persisted
@@ -84,23 +88,6 @@ public sealed partial class ColumnViewModel : ObservableObject
     /// </para>
     /// </summary>
     public bool IsShown => IsVisible && IsGroupEnabled;
-
-    /// <summary>The shared size group this column's header cell and row cells join while it shows,
-    /// and <c>null</c> while it is hidden (Phase 14C Task 3, the dashboard target list).
-    /// <para>
-    /// A <c>SharedSizeGroup</c> in Avalonia only ever grows: once the group has measured a column
-    /// it keeps reserving that width after every cell in it goes invisible, so hiding a column left
-    /// its gap behind in the header and in every row alike. A user maximum does not clamp a shared
-    /// minimum either, measured twice now, so the group is what has to go: a hidden column becomes a plain <c>Auto</c> column
-    /// whose only content is invisible, which measures nothing, and rejoins its group unchanged
-    /// when it comes back. Derived from <see cref="IsShown"/>, so the cells' visibility and the
-    /// column's width cannot disagree.
-    /// </para>
-    /// <para>
-    /// The frame table does not bind this: its columns are fixed-width cells rather than a
-    /// shared-size spine.
-    /// </para></summary>
-    public string? SizeGroup => IsShown ? Key : null;
 
     /// <summary>The active-sort marker for this column's header, set by
     /// <see cref="TargetListViewModel"/>: empty unless this column is the sort key. It lives here

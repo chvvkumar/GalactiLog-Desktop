@@ -18,8 +18,6 @@ public class TableMarkupScanTest
     private static readonly string[] SharedSizeGroupAllowlist =
     [
         // Tables, removed by their migration.
-        "Views/Dashboard/TargetListView.axaml",
-        "Views/Mosaics/MosaicsView.axaml",
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
         // Form and bar layouts, not tables (ruling R3): these stay.
@@ -36,8 +34,6 @@ public class TableMarkupScanTest
     [
         "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
         "Views/TargetDetail/Parts/RangesTablePart.axaml",
-        "Views/Dashboard/TargetListView.axaml",
-        "Views/Mosaics/MosaicsView.axaml",
         "Views/StatisticsView.axaml",
         "Views/Settings/CustomColumnsTabView.axaml",
         "Views/TargetDetail/FrameTableView.axaml",

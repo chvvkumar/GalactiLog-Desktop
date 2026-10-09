@@ -87,7 +87,7 @@ public class TargetListPagerViewTests
         // Task 3 may have moved the header, so the two row indices are compared to each other
         // rather than to a literal: a literal would pin Task 3's own layout, not this ordering.
         Assert.True(
-            Grid.GetRow(pager) < Grid.GetRow((Control)header.Parent!),
+            Grid.GetRow(pager) < Grid.GetRow(header),
             "The pager does not sit above the header row.");
     }
 

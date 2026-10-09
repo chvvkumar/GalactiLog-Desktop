@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.Settings;
@@ -44,9 +45,9 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
         ["name"] = "Name",
         ["designation"] = "Designation",
         ["palette"] = "Palette",
-        ["integration"] = "Integration",
+        ["integration"] = TableHeads.Hours,
         ["equipment"] = "Equipment",
-        ["last_session"] = "Last Session",
+        ["last_session"] = "Last session",
     };
 
     private readonly DisplayColumnWriter _columns;

@@ -1,12 +1,10 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:avc="using:Avalonia.Data.Converters"
-             xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
-             xmlns:cc="using:GalactiLog.App.ViewModels.CustomColumns"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
-             xmlns:q="using:GalactiLog.Data.Queries"
-             xmlns:views="using:GalactiLog.App.Views.Dashboard"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
+             xmlns:vmtd="using:GalactiLog.App.ViewModels.TargetDetail"
              x:Class="GalactiLog.App.Views.Dashboard.TargetListView"
              x:Name="Root"
              x:DataType="dash:TargetListViewModel">
@@ -15,138 +13,69 @@
        dynamic column visibility plus a per-row expander plus tinted badge cells are more work to
        bend a DataGrid into than to lay out directly (coordinator ruling Q7).
 
-       Phase 14C, user ruling U3: flat rule-separated rows on one Grid.IsSharedSizeScope spine
-       (DESIGN.md section 6, "The aligned table"), one line high, the sessions control at the row's
-       trailing end. The header grid and every row grid declare the same seven columns: Name is the
-       one star column, with a 120 floor and its own computed cap, and the other six are Auto and
-       shared by SharedSizeGroup, so each is as wide as its widest cell across the header and every
-       realized row. The seven fixed TargetColumn*Width resources, the per-row card Border, the
-       leading "n sessions" toggle, the stacked common name and both WrapPanels are retired with it.
+       The table spine (spec.md items 1 to 9): the header row, every target row and the night
+       expander's rows are t:TableRows over the two column sets below, declared once. Each set's
+       Auto columns are shared size groups, so each is as wide as its widest cell across the header
+       and every realized row; gutters, alignment, trimming, the header rule, the zebra and the
+       faint dash all come from Theme/Table.axaml, never from a cell.
 
        The row fits its viewport at every width down to about 680 and is never carried by a
        horizontal scroller (fix pass, review C1); see the ScrollViewer's own comment below for why
-       the scroller has to be disabled rather than merely hidden, and the header grid's for why the
-       header is drawn at a row's own width.
+       the scroller has to be disabled rather than merely hidden.
 
-       The 8 pixel cell gutter is carried inside the cell as padding (Padding="8,0" on a row cell,
-       the same figure on a header cell's own Button), never as a margin and never as the grid's
-       ColumnSpacing: as a margin it fell outside MaxWidth, so a capped row cell measured 16 wider
-       than its header cell and the shared group took the larger of the two; and ColumnSpacing
-       would leave a hidden column's gap behind, where a hidden column has to collapse to zero
-       width in the header and in every row together. A header cell's IsVisible sits on its
-       ContentControl, not on the button inside it, for the same reason (review item 2).
-
-       Cells bind ColumnViewModel.IsShown rather than IsVisible (Phase 6 Task 5), so
-       the dashboard and the frame table render through one property. The dashboard has no metric
-       groups, so IsGroupEnabled is always true here and the two are the same value; the column
-       picker still binds IsVisible, which is the persisted list.
+       Cells follow ColumnViewModel.IsShown through TableColumn.IsDropped, which
+       TargetListView.axaml.cs writes, so the dashboard and the frame table render through one
+       property and a hidden column leaves its shared size group as well as its cells.
 
        Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios (0.5 to 0.714), not
-       point sizes, so binding one to FontSize renders sub-pixel text; the whole list inherits the
-       root size until Phase 9 lands general.text_size (review item 1). Every colour is a theme token (spec 14) except a palette badge's tint,
-       which is the configured filter colour and therefore user data. -->
+       point sizes, so binding one to FontSize renders sub-pixel text (review item 1). Every colour
+       is a theme token (spec 14) except a palette badge's tint, which is the configured filter
+       colour and therefore user data. -->
   <UserControl.Resources>
-    <!-- The trailing inset. Task 5 makes the themed vertical scrollbar an overlay that takes no
-         layout space, so the thumb would otherwise draw over the trailing 8 pixels of a row, which
-         is where the Expand button sits. One value, used by the header grid and by every row grid,
-         so the two cannot be inset differently and drift apart. Phase 14C Task 4's pager reuses the
-         same key so its own trailing edge lines up with the header row's own trailing edge, the
-         column gear (fix pass, task4-review.md P3: measured on the launched application, the
-         gear sits at the same x the pager's select does, while the Expand buttons sit 8 pixels
-         short of both, the header-versus-row gap that is Task 3's region and not this one's). -->
-    <Thickness x:Key="TableTrailingInset">0,0,12,0</Thickness>
+    <!-- The target table. Name is the one star column: a shared size group cannot be star sized,
+         and it still aligns because every row is drawn at the same width. Its floor holds a
+         catalogue designation; its cap, and Designation's and Equipment's, are written from
+         TargetListView.axaml.cs, which owns the fit arithmetic. The sessions column is Number kind
+         for its trailing alignment: the gear over it and the Expand buttons under it all end one
+         gutter inside the row. -->
+    <t:TableColumns x:Key="TargetCols" Id="Target">
+      <t:TableColumn Key="name" Width="*" MinWidth="120" />
+      <t:TableColumn Key="designation" />
+      <t:TableColumn Key="palette" />
+      <t:TableColumn Key="integration" Kind="Number" />
+      <t:TableColumn Key="equipment" />
+      <t:TableColumn Key="lastsession" />
+      <t:TableColumn Key="custom" Kind="Strip" />
+      <t:TableColumn Key="sessions" Kind="Number" />
+    </t:TableColumns>
 
-    <!-- One header cell: a button that sorts, showing the direction glyph on the active key. A
-         column with no sort mapping (designation, palette) still renders as a button; the command
-         ignores it, which is one branch in the view-model instead of two header templates.
-
-         Classes="header-cell" carries the alignment and the cell declares Padding="8,0" itself,
-         which is the spec's cell gutter since the second fix pass; the base Button style's own
-         padding is not what carries it. Background and BorderThickness are still set here:
-         Button.header-cell holds the two alignment setters and nothing else, so without these two
-         attributes every header label would draw inside an outlined 1 pixel button box, which is
-         the same pair Views/TargetDetail/FrameTableView.axaml's own header cell sets. -->
-    <DataTemplate x:Key="TargetHeaderCell" DataType="dash:ColumnViewModel">
-      <Button Classes="header-cell"
-              Command="{Binding #Root.((dash:TargetListViewModel)DataContext).SortByCommand}"
-              CommandParameter="{Binding Key}"
-              HorizontalAlignment="Stretch"
-              HorizontalContentAlignment="Stretch"
-              Background="Transparent"
-              BorderThickness="0"
-              Padding="8,0">
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Grid.Column="0"
-                     Text="{Binding Title}"
-                     FontWeight="SemiBold"
-                     TextTrimming="CharacterEllipsis"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
-          <TextBlock Grid.Column="1"
-                     Text="{Binding SortGlyph}"
-                     Margin="4,0,0,0"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorAccent}" />
-        </Grid>
-      </Button>
-    </DataTemplate>
-
-    <!-- The same cell with Button.header-cell.numeric over it, for the two right-aligned columns
-         (spec 12.2, "Column order and alignment"). Two templates rather than a
-         Classes.numeric="{Binding IsNumeric}" binding: the dashboard's six ColumnViewModel objects
-         are built with isNumeric left at its default in TargetListViewModel.cs, which is Task 4's
-         file this phase, and the header grid already names its six cells one by one.
-
-         The direction marker leads the label here rather than trailing it. A right-aligned cell's
-         label has to end exactly where its column's figures end, and a trailing marker puts its
-         own width, and the panel's spacing even when the marker is empty, between the two: measured
-         on the launched application, "Integration" sat 4 to 8 pixels inside its own column's
-         values. Leading, the label's trailing edge is the column's trailing edge whether the
-         column is the sort key or not. -->
-    <DataTemplate x:Key="TargetHeaderCellNumeric" DataType="dash:ColumnViewModel">
-      <Button Classes="header-cell numeric"
-              Command="{Binding #Root.((dash:TargetListViewModel)DataContext).SortByCommand}"
-              CommandParameter="{Binding Key}"
-              HorizontalAlignment="Stretch"
-              HorizontalContentAlignment="Stretch"
-              Background="Transparent"
-              BorderThickness="0"
-              Padding="8,0">
-        <Grid ColumnDefinitions="Auto,*">
-          <TextBlock Grid.Column="0"
-                     Text="{Binding SortGlyph}"
-                     Margin="0,0,4,0"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorAccent}" />
-          <TextBlock Grid.Column="1"
-                     Text="{Binding Title}"
-                     FontWeight="SemiBold"
-                     TextAlignment="Right"
-                     TextTrimming="CharacterEllipsis"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
-        </Grid>
-      </Button>
-    </DataTemplate>
+    <!-- The night expander's table (spec 12.2's session columns, plus spec 12.15 amendment 2.4's
+         session-scope cells and the Deep dive action). One set for every expanded row on the page,
+         so the nights of two open targets line up too. -->
+    <t:TableColumns x:Key="SessCols" Id="Sess">
+      <t:TableColumn Key="date" />
+      <t:TableColumn Key="frames" Kind="Number" />
+      <t:TableColumn Key="hours" Kind="Number" />
+      <t:TableColumn Key="filters" />
+      <t:TableColumn Key="custom" Kind="Strip" />
+      <t:TableColumn Key="action" />
+    </t:TableColumns>
 
     <!-- One filter badge, shared by the Palette column and the session line's Filters cell
          (spec 12.2: both cells draw the same Border.tag badge), so the two agree by construction
          rather than by two copies of the same markup.
 
          Border.tag from Theme/Controls.axaml carries the chrome: ColorBadgeBg at radius 3, padding
-         6,1. Two things are set here. The filter's configured colour is the badge's 1 pixel
-         outline, over Border.tag's own ColorBorderDefault, which is the idiom
-         Views/Dashboard/FilterPanelView.axaml's filter pill already uses, so the dashboard's two
-         filter surfaces agree; and the label is ColorBadgeText, a theme token, because the tint is
-         user data with no contrast floor against a theme background and a stored #4040FF measured
-         about 1.5:1 on the dark themes (coordinator ruling, fix pass, reversing question Q2). The
-         frame count is on the tooltip rather than inside the badge, which is what kept the cell to
-         one line (user ruling U3 item 4). The tint is parsed by TargetRowViewModel.ParseTint
-         (FIXER F10, F29) and is the one non-token colour in this view. -->
+         6,1. The frame count is on the tooltip rather than inside the badge, which is what kept the
+         cell to one line (user ruling U3 item 4). The tint is parsed by
+         TargetRowViewModel.ParseTint (FIXER F10, F29) and is the one non-token colour in this
+         view. -->
     <DataTemplate x:Key="TargetFilterBadge" x:DataType="dash:PaletteBadgeViewModel">
       <!-- 2026-10-05, user request: the web app's frosted-glass badge. The outer Border keeps
            Border.tag's chrome (ColorBadgeBg base, 1 px edge, radius 3) with the edge and shadow
            re-tinted from the view model; the inner Border is the tint wash inside the edge, which
            is the one way to layer a translucent tint over a themed base without a literal. The
-           label is the tint, as on the web, which reverses the ColorBadgeText ruling above. -->
+           label is the tint, as on the web. -->
       <Border Classes="tag" Margin="0,0,6,0" Padding="0"
               BorderBrush="{Binding GlassEdge}"
               BoxShadow="{Binding GlassShadow}">
@@ -158,72 +87,13 @@
         </Border>
       </Border>
     </DataTemplate>
-
-    <!-- Spec 12.15's custom column strip. One header label and one editor per drawn column, both
-         at the same fixed width, so the header strip and every row strip hold the same number of
-         entries at the same widths and line up by construction; the DashCustom shared size group
-         then makes the two grids agree on the strip's total.
-
-         The width comes from TargetListView.CellWidth over the column's name and type and the
-         view's own type size and family, never as a literal: View_NoCellDeclaresAFixedWidth fails
-         any Width="<digit>" in this file and is what stopped the seven retired fixed cell widths
-         coming back. The figures are declared once, in TargetListView.axaml.cs beside the other
-         caps, and the entry is as wide as its heading when the editor needs less, so a check box
-         column's name is read rather than drawn as an ellipsis. Above the cap the heading trims
-         and the tooltip and the automation name carry the whole of it.
-
-         The header cell carries no sort button: a custom column is not sortable in this phase,
-         which is what keeps the header's own button count at six. -->
-    <DataTemplate x:Key="TargetCustomHeaderCell" x:DataType="q:CustomColumnDefinition">
-      <TextBlock Text="{Binding Name}"
-                 ToolTip.Tip="{Binding Name}"
-                 AutomationProperties.Name="{Binding Name}"
-                 Padding="8,0"
-                 FontWeight="SemiBold"
-                 VerticalAlignment="Center"
-                 TextTrimming="CharacterEllipsis"
-                 Foreground="{DynamicResource ColorTextSecondary}">
-        <TextBlock.Width>
-          <MultiBinding Converter="{x:Static views:TargetListView.CellWidth}">
-            <Binding Path="Name" />
-            <Binding Path="Type" />
-            <Binding Path="#Root.FontSize" />
-            <Binding Path="#Root.FontFamily" />
-          </MultiBinding>
-        </TextBlock.Width>
-      </TextBlock>
-    </DataTemplate>
-
-    <!-- One cell, on a target row and on a night line alike. The editor declares no width, no
-         margin and no background of its own (Task 3), so the gutter rides on this container, which
-         paints nothing: a press in the gutter belongs to the row's own hit area, while a press on
-         the editor is swallowed by the control and never opens the target. -->
-    <DataTemplate x:Key="TargetCustomCell" x:DataType="cc:CustomValueViewModel">
-      <Border Padding="8,0" VerticalAlignment="Center">
-        <!-- The same converter over the same column, so a cell is exactly as wide as its own
-             heading entry and the two strips line up by construction. -->
-        <Border.Width>
-          <MultiBinding Converter="{x:Static views:TargetListView.CellWidth}">
-            <Binding Path="Column.Name" />
-            <Binding Path="Column.Type" />
-            <Binding Path="#Root.FontSize" />
-            <Binding Path="#Root.FontFamily" />
-          </MultiBinding>
-        </Border.Width>
-        <controls:CustomCellEditor />
-      </Border>
-    </DataTemplate>
   </UserControl.Resources>
 
   <Grid RowDefinitions="Auto,Auto,*" Grid.IsSharedSizeScope="True">
     <!-- The pager (spec 12.2 Pager paragraph, Phase 14C Task 4), above the header row, where the
          count is read before the rows rather than at the bottom (questions.md Q5, which is why
-         PageStatusText stays and stays rendered here). Spans the list's own width and carries the
-         same TableTrailingInset as the header and every row grid, so its trailing edge lines up
-         with the header row's own trailing edge, the column gear (fix pass, task4-review.md P3;
-         see TableTrailingInset's own comment above for the measured figures). Replaces the old
-         build's bottom Previous and Next pair, which carried no page numbers and no page-size
-         control.
+         PageStatusText stays and stays rendered here). It carries the header row's ScrollInset, so
+         its trailing edge, the page-size select, lines up with the header's, the column gear.
 
          Three columns, not two (launched-app look): Previous, the page numbers and Next are
          Auto, and spec 12.2's own pageRange rule caps that set at seven slots whatever the total
@@ -231,13 +101,10 @@
          and only that column is starred: a bare TextBlock in a star column measures within the
          width the Grid actually offers it and trims there, where a StackPanel does not, because
          a horizontal StackPanel's own MeasureOverride offers each child infinite width regardless
-         of what its own parent offered it (the same "a star column does not shrink below its
-         cell's desired width" finding TargetListView.axaml.cs's own NameCellMaxWidth remarks
-         record for the row grid, traced here to its root cause). The page-size select stays Auto
-         on the trailing end. -->
+         of what its own parent offered it. The page-size select stays Auto on the trailing end. -->
     <Grid Grid.Row="0"
           x:Name="TargetListPager"
-          Margin="{StaticResource TableTrailingInset}"
+          Margin="{x:Static t:TableMetrics.ScrollInset}"
           ColumnDefinitions="Auto,*,Auto">
       <StackPanel Grid.Column="0"
                   Orientation="Horizontal"
@@ -316,306 +183,214 @@
       </StackPanel>
     </Grid>
 
-    <!-- Header row, under its own 1 pixel rule. The cells are bound one per column so each can
-         carry its own visibility; the column order is DisplaySettings.DefaultColumns["dashboard"],
-         which is what the view-model builds Columns in. -->
-    <Border Grid.Row="1" Classes="rule">
-      <!-- The seven columns, in the order DisplaySettings.DefaultColumns["dashboard"] declares.
-           The seventh is the sessions control's own cell and is not a persistable column key
-           (spec 5.8.2's default list holds six): the control is always present, exactly as the
-           leading toggle cell was, so its header cell carries no sort button.
+    <!-- Header row, one cell per column in the order DisplaySettings.DefaultColumns["dashboard"]
+         declares, then the custom strip and the sessions column. The sessions column is not a
+         persistable column key (spec 5.8.2's default list holds six): its header cell holds the
+         column gear rather than a sort button.
 
-           The header grid is drawn at a row's own width, not at a row's width less the help glyph
-           and the gear: a star column resolves to whatever is left, so a header measured 60 pixels
-           narrower than a row would put every column after the star out of line with its cells.
-           The glyph and the gear are therefore drawn right aligned inside the header's own empty
-           seventh cell rather than in two grid columns of their own. That cell is as wide as the
-           Expand button below it, which is wider than the pair.
+         The header sits outside the scroller, whose vertical bar is always drawn and reserves its
+         width, so the header is inset by the same ScrollInset and is drawn at a row's own width:
+         Name is a star column mid-row, and a header measured narrower than a row would put every
+         column after it out of line with its cells.
 
-           Name is the one star column and carries no SharedSizeGroup, because a shared size group
-           cannot be star sized. It still aligns with its cells: every row is drawn at the same
-           width, so the star resolves to the same width in every row, and every other column is
-           shared. This is the Nights ledger's own rule and its own comment
-           (Views/TargetDetail/TargetDetailView.axaml, "Avalonia's Grid does not shrink an Auto
-           column when the arranged width is smaller than the sum"), applied to the second table
-           that needed it rather than re-derived, and it is the whole of review finding C1 and C2:
-           seven Auto columns summed to about 990 inside the 720 the page gives the list, so
-           Equipment was cut, Last Session and the sessions control were off screen, and at a wide
-           window the same seven hugged the left with dead space after them.
+         Name carries NameCellMaxWidth on the header cell and on every row cell: a star column in
+         Avalonia does not shrink below its cell's desired width, so bounding both by one computed
+         figure is what stops the header and the rows resolving different column sets. -->
+    <t:TableRow Grid.Row="1"
+                x:Name="TargetListHeaderRow"
+                Kind="Header"
+                Columns="{StaticResource TargetCols}"
+                Margin="{x:Static t:TableMetrics.ScrollInset}">
+      <!-- One sort button per column, over the shared title templates. A column with no sort
+           mapping (designation, palette) still renders as a button; the command ignores it, which
+           is one branch in the view-model instead of two header kinds. -->
+      <Button t:TableRow.Col="name"
+              MaxWidth="{Binding #Root.NameCellMaxWidth}"
+              ToolTip.Tip="{Binding Columns[0].Title}"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[0].Key}"
+              Content="{Binding Columns[0]}"
+              ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="designation"
+              ToolTip.Tip="{Binding Columns[1].Title}"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[1].Key}"
+              Content="{Binding Columns[1]}"
+              ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="palette"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[2].Key}"
+              Content="{Binding Columns[2]}"
+              ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="integration"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[3].Key}"
+              Content="{Binding Columns[3]}"
+              ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="equipment"
+              ToolTip.Tip="{Binding Columns[4].Title}"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[4].Key}"
+              Content="{Binding Columns[4]}"
+              ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="lastsession"
+              Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[5].Key}"
+              Content="{Binding Columns[5]}"
+              ContentTemplate="{StaticResource TableSortTitle}" />
 
-           Name's floor is 120, which holds a catalogue designation plus its two gutters, and it
-           carries NameCellMaxWidth as well, the share left once every other shown column has taken
-           its own cap: a star column in Avalonia does not shrink below its cell's desired width,
-           so bounding both the header cell and every row cell by one computed figure is what stops
-           the two grids resolving different column sets.
+      <!-- Spec 12.15's custom column labels, one per drawn column, at the widths the row cells
+           carry (both measured by CustomCellWidths.HeadingWidth). No sort button and no picker of
+           its own: the column gear beside it is what switches a custom column on and off. -->
+      <ItemsControl t:TableRow.Col="custom"
+                    x:Name="CustomHeaderStrip"
+                    ItemsSource="{Binding DrawnCustomColumns}"
+                    ItemTemplate="{StaticResource TableCustomHead}" />
 
-           Every Auto column but Palette carries a cap, declared once in TargetListView.axaml.cs
-           and applied here through DataCellMaxWidth and EquipmentCellMaxWidth rather than as a
-           literal on a cell: an Auto column is resolved before a star, so an uncapped one can
-           still take the whole row and leave the star at its floor, which is what the fixer pass
-           closed (phase-review P2, four of the five caps the fit width was built from reached no
-           cell). Palette is the one left uncapped, because question Q10 rules that no badge is
-           clipped and the badge count is not capped, so its figure is a budget in the arithmetic
-           and nothing in the markup. -->
-      <Grid x:Name="TargetListHeaderRow" Margin="{StaticResource TableTrailingInset}">
-        <Grid.ColumnDefinitions>
-          <ColumnDefinition Width="*" MinWidth="120" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.DesignationSizeGroup}" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.((dash:TargetListViewModel)DataContext).Columns[2].SizeGroup}" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.IntegrationSizeGroup}" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.EquipmentSizeGroup}" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.LastSessionSizeGroup}" />
-          <!-- Spec 12.15: ONE grid column for every custom column, not one each. Avalonia cannot
-               bind a ColumnDefinitions collection (AVLN3000, recorded in
-               TargetDetailViewModel.cs), so the strip is an ItemsControl of fixed-width cells
-               inside a single Auto column. It measures nothing at all while no custom column is
-               shown, which is every library that has none or has switched them all off. -->
-          <ColumnDefinition Width="Auto" SharedSizeGroup="DashCustom" />
-          <ColumnDefinition Width="Auto" SharedSizeGroup="DashSessions" />
-        </Grid.ColumnDefinitions>
-        <ContentControl Grid.Column="0"
-                        MaxWidth="{Binding #Root.NameCellMaxWidth}"
-                        HorizontalAlignment="Left"
-                        IsVisible="{Binding Columns[0].IsShown}"
-                        Content="{Binding Columns[0]}"
-                        ContentTemplate="{StaticResource TargetHeaderCell}" />
-        <ContentControl Grid.Column="1"
-                        MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                        HorizontalAlignment="Left"
-                        IsVisible="{Binding Columns[1].IsShown}"
-                        Content="{Binding Columns[1]}"
-                        ContentTemplate="{StaticResource TargetHeaderCell}" />
-        <ContentControl Grid.Column="2"
-                        IsVisible="{Binding Columns[2].IsShown}"
-                        Content="{Binding Columns[2]}"
-                        ContentTemplate="{StaticResource TargetHeaderCell}" />
-        <ContentControl Grid.Column="3"
-                        MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                        HorizontalAlignment="Right"
-                        IsVisible="{Binding Columns[3].IsShown}"
-                        Content="{Binding Columns[3]}"
-                        ContentTemplate="{StaticResource TargetHeaderCellNumeric}" />
-        <ContentControl Grid.Column="4"
-                        MaxWidth="{Binding #Root.EquipmentCellMaxWidth}"
-                        HorizontalAlignment="Left"
-                        IsVisible="{Binding #Root.IsEquipmentShown}"
-                        Content="{Binding Columns[4]}"
-                        ContentTemplate="{StaticResource TargetHeaderCell}" />
-        <ContentControl Grid.Column="5"
-                        MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                        HorizontalAlignment="Right"
-                        IsVisible="{Binding Columns[5].IsShown}"
-                        Content="{Binding Columns[5]}"
-                        ContentTemplate="{StaticResource TargetHeaderCellNumeric}" />
-
-        <!-- The custom column labels, one per drawn column, at the same widths the row cells
-             carry. No sort button and no picker of its own: the column gear beside it is what
-             switches a custom column on and off. -->
-        <ItemsControl Grid.Column="6"
-                      x:Name="CustomHeaderStrip"
-                      VerticalAlignment="Center"
-                      ItemsSource="{Binding DrawnCustomColumns}"
-                      ItemTemplate="{StaticResource TargetCustomHeaderCell}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <!-- A StackPanel, never a WrapPanel: both WrapPanels are retired and a wrapped
-                   strip would make the row two lines high again. Declared rather than left to the
-                   default so a later reader does not have to know what the default is. -->
-              <StackPanel Orientation="Horizontal" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-        </ItemsControl>
-
-        <!-- The header's last cell: the sessions column's own, with no sort button in it, and
-             the list's two page controls drawn right aligned inside it so they cost the header no
-             width of its own. -->
-        <StackPanel Grid.Column="7"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Center">
-          <!-- Column picker: a gear rather than a text label (spec 12.2, ruling D4). DESIGN.md
-               section 8 and spec 14.5 refuse a Unicode glyph standing in for an icon (questions.md
-               Q10), so this draws a Path over Theme/Controls.axaml's IconGear StreamGeometry, the
-               same idiom IconHelpRing/IconHelpMark already use, rather than typing a character. The
-               tooltip keeps the word the button used to show as its label. Each checkbox in the
-               flyout still raises ToggleColumn rather than writing IsVisible itself, so the
-               persisted list and the checkboxes cannot disagree; name's is disabled (ruling Q5).
-               This flyout, the live Columns list and ToggleColumnCommand it binds are already the
-               same instance AppHost.cs hands the Display tab's picker (ruling D4's "one
-               ColumnPickerViewModel instance shown in two places"); this button is the re-skin, not
-               new plumbing. -->
-          <Button x:Name="ColumnGearButton"
-                  Padding="8,3"
-                  ToolTip.Tip="Columns">
-            <!-- Phase 14B fixer, fixer list item 41: Path.icon-glyph from Theme/Controls.axaml,
-                 which is the one declaration of these four stroke setters and carries the
-                 pointer-over ink this icon had none of. The 16 square here is the icon's own size,
-                 not a cell width: it is the one Width in this file and
-                 View_NoCellDeclaresAFixedWidth allows it by name. -->
-            <Path Width="16"
-                  Height="16"
-                  Classes="icon-glyph"
-                  Data="{StaticResource IconGear}" />
-            <!-- Spec 12.15: custom columns are listed under a "Custom" heading below the built-in
-                 ones, so the flyout draws the picker's own groups rather than the flat column list.
-                 The picker is a view over this same live collection and this same toggle, so there
-                 is still one dashboard column state (ruling D4), and the split is the picker's one
-                 implementation rather than a second one written here. ShowGroupHeadings is false
-                 while only one group exists, which is every library with no target-scope custom
-                 column, so the flyout of such a library is exactly what it was before Phase 20. -->
-            <Button.Flyout>
-              <Flyout>
-                <ItemsControl ItemsSource="{Binding ColumnPicker.Groups}">
-                  <ItemsControl.ItemTemplate>
-                    <DataTemplate DataType="settings:ColumnGroupViewModel">
-                      <StackPanel Spacing="2">
-                        <TextBlock x:Name="ColumnGroupHeading"
-                                   Text="{Binding Heading}"
-                                   Margin="0,4,0,0"
-                                   IsVisible="{Binding #Root.((dash:TargetListViewModel)DataContext).ColumnPicker.ShowGroupHeadings}"
-                                   Foreground="{DynamicResource ColorTextTertiary}" />
-                        <ItemsControl ItemsSource="{Binding Columns}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate DataType="dash:ColumnViewModel">
-                              <CheckBox Content="{Binding Title}"
-                                        IsChecked="{Binding IsVisible, Mode=OneWay}"
-                                        IsEnabled="{Binding CanHide}"
-                                        Command="{Binding #Root.((dash:TargetListViewModel)DataContext).ToggleColumnCommand}"
-                                        CommandParameter="{Binding}" />
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                      </StackPanel>
-                    </DataTemplate>
-                  </ItemsControl.ItemTemplate>
-                </ItemsControl>
-              </Flyout>
-            </Button.Flyout>
-          </Button>
-        </StackPanel>
-      </Grid>
-    </Border>
+      <!-- The sessions column's header cell: the column gear, with no sort button. -->
+      <StackPanel t:TableRow.Col="sessions"
+                  Orientation="Horizontal"
+                  HorizontalAlignment="Right"
+                  VerticalAlignment="Center">
+        <!-- Column picker: a gear rather than a text label (spec 12.2, ruling D4). DESIGN.md
+             section 8 and spec 14.5 refuse a Unicode glyph standing in for an icon (questions.md
+             Q10), so this draws a Path over Theme/Controls.axaml's IconGear StreamGeometry, the
+             same idiom IconHelpRing/IconHelpMark already use, rather than typing a character. The
+             tooltip keeps the word the button used to show as its label. Each checkbox in the
+             flyout still raises ToggleColumn rather than writing IsVisible itself, so the
+             persisted list and the checkboxes cannot disagree; name's is disabled (ruling Q5).
+             This flyout, the live Columns list and ToggleColumnCommand it binds are already the
+             same instance AppHost.cs hands the Display tab's picker (ruling D4's "one
+             ColumnPickerViewModel instance shown in two places"). -->
+        <Button x:Name="ColumnGearButton"
+                Padding="8,3"
+                ToolTip.Tip="Columns">
+          <!-- Phase 14B fixer, fixer list item 41: Path.icon-glyph from Theme/Controls.axaml,
+               which is the one declaration of these four stroke setters and carries the
+               pointer-over ink this icon had none of. The 16 square here is the icon's own size,
+               not a cell width: it is the one Width in this file and
+               View_NoCellDeclaresAFixedWidth allows it by name. -->
+          <Path Width="16"
+                Height="16"
+                Classes="icon-glyph"
+                Data="{StaticResource IconGear}" />
+          <!-- Spec 12.15: custom columns are listed under a "Custom" heading below the built-in
+               ones, so the flyout draws the picker's own groups rather than the flat column list.
+               ShowGroupHeadings is false while only one group exists, which is every library with
+               no target-scope custom column. -->
+          <Button.Flyout>
+            <Flyout>
+              <ItemsControl ItemsSource="{Binding ColumnPicker.Groups}">
+                <ItemsControl.ItemTemplate>
+                  <DataTemplate DataType="settings:ColumnGroupViewModel">
+                    <StackPanel Spacing="2">
+                      <TextBlock x:Name="ColumnGroupHeading"
+                                 Text="{Binding Heading}"
+                                 Margin="0,4,0,0"
+                                 IsVisible="{Binding #Root.((dash:TargetListViewModel)DataContext).ColumnPicker.ShowGroupHeadings}"
+                                 Foreground="{DynamicResource ColorTextTertiary}" />
+                      <ItemsControl ItemsSource="{Binding Columns}">
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate DataType="dash:ColumnViewModel">
+                            <CheckBox Content="{Binding Title}"
+                                      IsChecked="{Binding IsVisible, Mode=OneWay}"
+                                      IsEnabled="{Binding CanHide}"
+                                      Command="{Binding #Root.((dash:TargetListViewModel)DataContext).ToggleColumnCommand}"
+                                      CommandParameter="{Binding}" />
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+                    </StackPanel>
+                  </DataTemplate>
+                </ItemsControl.ItemTemplate>
+              </ItemsControl>
+            </Flyout>
+          </Button.Flyout>
+        </Button>
+      </StackPanel>
+    </t:TableRow>
 
     <!-- The horizontal scroller is disabled, not hidden: a ScrollViewer that can scroll sideways
          measures its content at infinite width, so a star column inside one then resolves to its
          content's desired width rather than to the viewport, so nothing would ever give way and the
-         scrollbar would be the only outcome. Disabled, the row is measured at the viewport and the
-         two star columns trim.
+         scrollbar would be the only outcome. Disabled, the row is measured at the viewport and Name
+         trims. Below the row's own minimum, about 680, the trimming has run out and the trailing
+         cells clip rather than scroll; a scroller for that case alone would let the header, which
+         sits outside it, drift out of line with the rows.
 
-         The header sits outside this scroller and used to drift out of line with the rows once they
-         were scrolled sideways (review P3). That is unreachable now: there is no horizontal scroll
-         at any width at or above the row's own minimum, about 680 for the list's own viewport.
-         Below that the trimming has run out; the trailing cells clip rather than scroll, and
-         restoring a scroller for that case alone would bring the desync back with it. -->
-    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled">
+         The vertical bar is a table bar (spec.md item 8): always drawn and never auto-hidden, so it
+         reserves its width and the rows end where the header's ScrollInset ends. -->
+    <ScrollViewer Grid.Row="2"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Visible"
+                  t:Table.Scroller="True">
       <!-- The refetch dim (spec 12.2, "The refetch dim", Phase 14C Task 4): while a filtered query
            is in flight, the rows already on screen stay rendered, dim and stop taking input; Load
-           still replaces nothing until the new page lands (TargetListViewModel.Load is untouched),
-           so the dim is the only signal this adds. IsHitTestVisible carries the input-disable half,
-           not IsEnabled: an IsEnabled="False" subtree drops keyboard focus in Avalonia and never
-           restores it, which failed the case that proves focus already inside a row survives the
-           refetch, and the web's own treatment is pointer-events-none, which is a hit-test rule
-           rather than a disablement of the element. Classes.refetching carries the dim, its Opacity
-           setter on ItemsControl.refetching in Theme/Controls.axaml rather than inline, and never
-           inside a Button or ToggleButton style block (ControlStyleScanTest's gradient and fill
-           scan). -->
+           still replaces nothing until the new page lands, so the dim is the only signal this
+           adds. IsHitTestVisible carries the input-disable half, not IsEnabled: an
+           IsEnabled="False" subtree drops keyboard focus in Avalonia and never restores it, and the
+           web's own treatment is pointer-events-none, a hit-test rule rather than a disablement.
+           Classes.refetching carries the dim, its Opacity setter on ItemsControl.refetching in
+           Theme/Controls.axaml rather than inline. Classes="table" is the zebra. -->
       <ItemsControl x:Name="TargetListRows"
+                    Classes="table"
                     ItemsSource="{Binding Rows}"
                     IsHitTestVisible="{Binding !IsRefetching}"
                     Classes.refetching="{Binding IsRefetching}">
         <ItemsControl.ItemTemplate>
           <DataTemplate DataType="dash:TargetRowViewModel">
-            <!-- One bottom edge per row, never a top edge as well: two neighbouring rows would
-                 otherwise draw a 2 pixel line between them. The sessions expander opens inside
-                 this pair, under the cells and above the bottom edge. -->
-            <Border Classes="rule">
-              <StackPanel>
-                <!-- Row height 34 as a MinHeight, not a Height: a row grows if a theme type does,
-                     it does not clip.
+            <!-- One zebra band per target, the night expander inside it under the cells. -->
+            <StackPanel>
+              <!-- The click target is a Button drawn under the cells rather than around them
+                   (spec 12.2: clicking a row opens Target detail). A cell with no background of
+                   its own is not hit tested, so a click anywhere in the row but on a badge reaches
+                   the button.
 
-                     The row grid declares the header grid own seven columns, cell for cell, and the
-                     six data cells sit in them directly. It used to nest a six column grid inside
-                     the click button, in a star column of a two column outer grid; that nesting
-                     measured 20 pixels wider than the header at the same viewport, because the
-                     inner grid stars were resolved against the outer star measure constraint rather
-                     than against its arranged width, and the Name column came out 24 pixels wider
-                     in a row than in the header. One column set, one width, nothing to reconcile.
+                   It is a sibling of the row inside this Panel, not a cell of it, so it stretches
+                   the whole row including the sessions column and takes part in no column at all:
+                   inside the row it added about 20 pixels to the star share that the header did
+                   not have (measured). What keeps a click on Expand off it is z-order alone: the
+                   row is declared after the button and therefore paints and hit tests above it.
 
-                     The click target is a Button drawn under the cells rather than around them
-                     (spec 12.2: clicking a row opens Target detail). A cell with no background of
-                     its own is not hit tested, so a click anywhere in the row but on a badge
-                     reaches the button.
+                   IsTabStop is off and the automation name is the row's own (phase-review P3): an
+                   empty, nameless, focusable Button per row put up to 250 unlabelled stops in the
+                   tab order at the largest page size. The keyboard reaches the row through its
+                   cells; the name is still set, so a screen reader that walks the tree reads it. -->
+              <Panel>
+                <Button Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
+                        CommandParameter="{Binding}"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        IsTabStop="False"
+                        AutomationProperties.Name="{Binding Name}"
+                        MinHeight="0"
+                        Padding="0" />
 
-                     It is a sibling of the row grid inside this Panel, not a child of the grid, so
-                     it stretches the whole row including the seventh column and the trailing
-                     inset. What keeps a click on Expand off it is z-order alone: the grid is
-                     declared after the button and therefore paints and hit tests above it
-                     (phase-review P3, correcting a comment that claimed the button stopped short
-                     of the seventh column). A click in the sessions cell beside the button does
-                     reach the row and opens the target, which is the row-wide behaviour spec 12.2
-                     asks for. -->
-                <Panel>
-                  <!-- Phase 5 has no destination: the command raises TargetOpened and Phase 6
-                       navigates (ruling Q17). It sits behind the cells rather than around them and
-                       outside the row grid altogether: inside it, as a child spanning the six data
-                       columns, it added about 20 pixels to the row grid star share that the header
-                       grid did not have, and the Name column came out 24 pixels wider in a row than
-                       in the header (measured). Behind the grid it takes part in no column at all.
-
-                       IsTabStop is off and the automation name is the row's own (phase-review P3):
-                       an empty, nameless, focusable Button per row put up to 250 unlabelled stops
-                       in the tab order at the largest page size and announced "button" with
-                       nothing in it. The keyboard reaches the row through its cells, which is what
-                       the previous build's row did; the name is still set, so the click target is
-                       addressable from outside and readable by a screen reader that walks the
-                       tree rather than the tab order. -->
-                  <Button Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
-                          CommandParameter="{Binding}"
-                          HorizontalAlignment="Stretch"
-                          VerticalAlignment="Stretch"
-                          Background="Transparent"
-                          BorderThickness="0"
-                          IsTabStop="False"
-                          AutomationProperties.Name="{Binding Name}"
-                          MinHeight="0"
-                          Padding="0" />
-
-                <Grid x:Name="TargetRowGrid" MinHeight="34" Margin="{StaticResource TableTrailingInset}">
-                  <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" MinWidth="120" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.DesignationSizeGroup}" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.((dash:TargetListViewModel)DataContext).Columns[2].SizeGroup}" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.IntegrationSizeGroup}" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.EquipmentSizeGroup}" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="{Binding #Root.LastSessionSizeGroup}" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="DashCustom" />
-                    <ColumnDefinition Width="Auto" SharedSizeGroup="DashSessions" />
-                  </Grid.ColumnDefinitions>
-
+                <!-- The secondary ink is inherited from the row rather than set on each cell, so a
+                     missing value's faint dash (a style) is not outranked by a local Foreground. -->
+                <t:TableRow x:Name="TargetRowGrid"
+                            Columns="{StaticResource TargetCols}"
+                            TextElement.Foreground="{DynamicResource ColorTextSecondary}">
                   <!-- One line, name then common name on the same baseline (spec 12.2, "The Name
-                       cell"), not a stacked subtitle. The name takes the star column and trims with
-                       an ellipsis; the common name sits beside it, capped and trimmed itself so its
-                       own column cannot run away and push the name out of the cell. ClipToBounds is
-                       the belt: neither text can reach the Designation column, which is what a name
-                       longer than the cell used to do on the 120 target fixture
-                       ("NGC 6960 - Veil Nebula,Filamentary Nebula,Western Veil"). -->
-                  <Grid Grid.Column="0"
-                        x:Name="NameCell"
-                        MaxWidth="{Binding #Root.NameCellMaxWidth}"
-                        HorizontalAlignment="Left"
-                        ColumnDefinitions="Auto,*"
-                        IsVisible="{Binding Columns[0].IsShown}"
-                        ClipToBounds="True"
-                        VerticalAlignment="Center">
+                       cell"), not a stacked subtitle. The name trims with an ellipsis; the common
+                       name takes what is left and trims itself, so it cannot push the name out of
+                       the cell. ClipToBounds is the belt: neither text can reach the Designation
+                       column, which is what a name longer than the cell used to do on the 120
+                       target fixture ("NGC 6960 - Veil Nebula,Filamentary Nebula,Western Veil"). -->
+                  <DockPanel t:TableRow.Col="name"
+                             x:Name="NameCell"
+                             MaxWidth="{Binding #Root.NameCellMaxWidth}"
+                             ClipToBounds="True"
+                             ToolTip.Tip="{Binding Name}">
                     <!-- Spec 12.2's mosaic link (Phase 18, ruling R19): straight after the name and
                          before the common name, a drawn 2 by 2 tile glyph in the accent ink. It
                          sits above the row's own click target, so it opens the mosaic and never
                          the row's Target detail. Docked first, so the DockPanel measures it before
                          the name and the name trims into what is left: a long name can never push
                          the link past the cell's clip edge. -->
-                    <DockPanel Grid.Column="0"
-                               MaxWidth="{Binding #Root.NameCellMaxWidth}"
-                               HorizontalAlignment="Left">
+                    <DockPanel DockPanel.Dock="Left">
                       <Button DockPanel.Dock="Right"
                               x:Name="MosaicLink"
                               Classes="quiet"
@@ -631,206 +406,146 @@
                       </Button>
                       <TextBlock Text="{Binding Name}"
                                  FontWeight="SemiBold"
-                                 Margin="8,0,0,0"
                                  VerticalAlignment="Center"
                                  TextTrimming="CharacterEllipsis"
                                  Foreground="{DynamicResource ColorTextPrimary}" />
                     </DockPanel>
-                    <TextBlock Grid.Column="1"
-                               Text="{Binding CommonName}"
+                    <TextBlock Text="{Binding CommonName}"
                                IsVisible="{Binding HasCommonName}"
-                               Margin="6,0,8,0"
-                               TextTrimming="CharacterEllipsis"
-                               Foreground="{DynamicResource ColorTextSecondary}" />
-                  </Grid>
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis" />
+                  </DockPanel>
 
-                  <TextBlock Grid.Column="1"
+                  <TextBlock t:TableRow.Col="designation"
                              x:Name="DesignationCell"
-                             MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                             HorizontalAlignment="Left"
                              Classes="mono"
-                             IsVisible="{Binding Columns[1].IsShown}"
                              Text="{Binding Designation}"
-                             Padding="8,0"
-                             VerticalAlignment="Center"
-                             TextTrimming="CharacterEllipsis"
-                             Foreground="{DynamicResource ColorTextSecondary}" />
+                             ToolTip.Tip="{Binding Designation}" />
 
                   <!-- One line of badges, never a WrapPanel: the wrap is what made the row two
                        lines high (user ruling U3 item 4). The column is shared and uncapped, so it
                        is as wide as the widest palette on the page and no badge is clipped and the
-                       count is not capped (questions.md Q10); the two star columns give way to it
-                       rather than a scroller carrying the row. -->
-                  <ItemsControl Grid.Column="2"
-                                x:Name="PaletteCell"
-                                IsVisible="{Binding Columns[2].IsShown}"
-                                Padding="8,0"
-                                VerticalAlignment="Center"
-                                ItemsSource="{Binding PaletteBadges}"
-                                ItemTemplate="{StaticResource TargetFilterBadge}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                  </ItemsControl>
+                       count is not capped (questions.md Q10). A target whose frames carry no
+                       filter reads the faint dash instead of a silent blank (spec.md item 6). -->
+                  <Panel t:TableRow.Col="palette">
+                    <ItemsControl x:Name="PaletteCell"
+                                  ItemsSource="{Binding PaletteBadges}"
+                                  ItemTemplate="{StaticResource TargetFilterBadge}">
+                      <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                          <StackPanel Orientation="Horizontal" />
+                        </ItemsPanelTemplate>
+                      </ItemsControl.ItemsPanel>
+                    </ItemsControl>
+                    <TextBlock x:Name="PaletteMissing"
+                               Text="{x:Static vmtd:MetricText.Missing}"
+                               Foreground="{DynamicResource ColorTextTertiary}"
+                               IsVisible="{Binding !PaletteBadges.Count}" />
+                  </Panel>
 
-                  <TextBlock Grid.Column="3"
+                  <!-- Never "-" (a group with no frames reads 0.0), so it keeps the primary ink. -->
+                  <TextBlock t:TableRow.Col="integration"
                              x:Name="IntegrationCell"
-                             MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                             HorizontalAlignment="Right"
-                             Classes="num"
-                             IsVisible="{Binding Columns[3].IsShown}"
                              Text="{Binding IntegrationText}"
-                             Padding="8,0"
-                             VerticalAlignment="Center"
                              Foreground="{DynamicResource ColorTextPrimary}" />
 
-                  <TextBlock Grid.Column="4"
+                  <TextBlock t:TableRow.Col="equipment"
                              x:Name="EquipmentCell"
-                             MaxWidth="{Binding #Root.EquipmentCellMaxWidth}"
-                             HorizontalAlignment="Left"
-                             IsVisible="{Binding #Root.IsEquipmentShown}"
                              Text="{Binding EquipmentText}"
-                             Padding="8,0"
-                             VerticalAlignment="Center"
-                             TextTrimming="CharacterEllipsis"
-                             Foreground="{DynamicResource ColorTextSecondary}" />
+                             ToolTip.Tip="{Binding EquipmentText}" />
 
-                  <TextBlock Grid.Column="5"
+                  <TextBlock t:TableRow.Col="lastsession"
                              x:Name="LastSessionCell"
-                             MaxWidth="{Binding #Root.DataCellMaxWidth}"
-                             HorizontalAlignment="Right"
-                             Classes="num"
-                             IsVisible="{Binding Columns[5].IsShown}"
-                             Text="{Binding LastSessionText}"
-                             Padding="8,0"
-                             VerticalAlignment="Center"
-                             Foreground="{DynamicResource ColorTextSecondary}" />
+                             Text="{Binding LastSessionText}" />
 
-                  <!-- Spec 12.15's target-scope cells, after Last Session and before the sessions
+                  <!-- Spec 12.15's target-scope cells, after Last session and before the sessions
                        control, in display order. Empty on an unresolved obj: group, which has no
                        target id to key a value by, and empty until the reader switches a column
                        on. -->
-                  <ItemsControl Grid.Column="6"
+                  <ItemsControl t:TableRow.Col="custom"
                                 x:Name="CustomCellStrip"
-                                VerticalAlignment="Center"
                                 ItemsSource="{Binding CustomCells}"
-                                ItemTemplate="{StaticResource TargetCustomCell}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <StackPanel Orientation="Horizontal" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                  </ItemsControl>
+                                ItemTemplate="{StaticResource TableCustomCell}" />
 
-                  <!-- The sessions control, at the row trailing end in the web application own form
-                       (spec 12.2, user ruling U3 item 3): the word, not a chevron, and the session
-                       count on the tooltip rather than as a label beside the name. -->
-                  <Button Grid.Column="7"
+                  <!-- The sessions control, at the row's trailing end in the web application's own
+                       form (spec 12.2, user ruling U3 item 3): the word, not a chevron, and the
+                       session count on the tooltip rather than as a label beside the name. -->
+                  <Button t:TableRow.Col="sessions"
                           x:Name="SessionsToggle"
                           Classes="sm"
-                          Margin="8,0"
                           HorizontalAlignment="Right"
-                          VerticalAlignment="Center"
                           Content="{Binding SessionsToggleText}"
                           Command="{Binding ToggleSessionsCommand}"
                           ToolTip.Tip="{Binding SessionsSummaryText}" />
-                </Grid>
-                </Panel>
+                </t:TableRow>
+              </Panel>
 
-                <!-- The per-session lines, inside the row's own rule pair. Realized only while the
-                     row is open: a collapsed row costs no session line controls. No Border of its
-                     own: DESIGN.md section 8 refuses nested bordered containers, so the indent and
-                     the row's rules carry the containment and the 2 pixel left edge is retired. -->
-                <ItemsControl x:Name="SessionsExpander"
-                              IsVisible="{Binding IsExpanded}"
-                              Margin="24,0,0,4"
-                              ItemsSource="{Binding Sessions}">
+              <!-- The per-session lines, under a compact header of their own (ruling R15): the
+                   figures carry no unit, so the header is what names them. Realized only while the
+                   row is open: a collapsed row costs no session line controls. No Border and no
+                   zebra of its own: the owning row's band and the indent carry the containment
+                   (DESIGN.md section 8 refuses nested bordered containers). -->
+              <StackPanel IsVisible="{Binding IsExpanded}" Margin="24,0,0,4">
+                <t:TableRow Kind="Header" Columns="{StaticResource SessCols}">
+                  <TextBlock t:TableRow.Col="date" Text="Date" />
+                  <TextBlock t:TableRow.Col="frames" Text="{x:Static t:TableHeads.Frames}" />
+                  <TextBlock t:TableRow.Col="hours" Text="{x:Static t:TableHeads.Hours}" />
+                  <TextBlock t:TableRow.Col="filters" Text="Filters" />
+                  <ItemsControl t:TableRow.Col="custom"
+                                ItemsSource="{Binding SessionCustomHeadings}"
+                                ItemTemplate="{StaticResource TableCustomHead}" />
+                </t:TableRow>
+
+                <ItemsControl x:Name="SessionsExpander" ItemsSource="{Binding Sessions}">
                   <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="dash:SessionRowViewModel">
-                      <!-- Spec 12.2's four session columns: Date, Frames, Integration, Filters,
-                           and the Deep dive action. A shared-size grid rather than the
-                           fixed-width StackPanel it was: the Filters cell's 200 pixel cap is what
-                           wrapped a five filter night to two badge rows, and the four columns now
-                           line up across nights for free. A fifth column is still one more cell
-                           (task6.md 5.3). -->
-                      <Grid MinHeight="26">
-                        <Grid.ColumnDefinitions>
-                          <ColumnDefinition Width="Auto" SharedSizeGroup="SessDate" />
-                          <ColumnDefinition Width="Auto" SharedSizeGroup="SessFrames" />
-                          <ColumnDefinition Width="Auto" SharedSizeGroup="SessIntegration" />
-                          <ColumnDefinition Width="Auto" SharedSizeGroup="SessFilters" />
-                          <!-- Spec 12.15 amendment 2.4's session-scope cells, one more cell rather
-                               than a layout change (task6.md 5.3's own rule). Ungated by any
-                               picker (user choice 4), and read only when the row is expanded
-                               (ruling C11), so the column measures nothing until then. -->
-                          <ColumnDefinition Width="Auto" SharedSizeGroup="SessCustom" />
-                          <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <TextBlock Grid.Column="0"
-                                   Classes="mono"
-                                   Text="{Binding DateText}"
-                                   Margin="8,0"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <TextBlock Grid.Column="1"
-                                   Classes="num"
-                                   Text="{Binding FrameCount}"
-                                   Margin="8,0"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <TextBlock Grid.Column="2"
-                                   Classes="num"
-                                   Text="{Binding IntegrationText}"
-                                   Margin="8,0"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <!-- The same Border.tag badges the Palette column draws (spec 12.2), the
-                             shared TargetFilterBadge template above, in the same alphabetical
-                             order. A night whose frames carry no filter renders nothing here
-                             rather than a placeholder: the ItemsControl is simply empty. -->
-                        <ItemsControl Grid.Column="3"
-                                      x:Name="SessionFiltersCell"
-                                      Margin="8,0"
-                                      VerticalAlignment="Center"
-                                      ItemsSource="{Binding Filters}"
-                                      ItemTemplate="{StaticResource TargetFilterBadge}">
-                          <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                          </ItemsControl.ItemsPanel>
-                        </ItemsControl>
-                        <ItemsControl Grid.Column="4"
+                      <t:TableRow Columns="{StaticResource SessCols}"
+                                  TextElement.Foreground="{DynamicResource ColorTextSecondary}">
+                        <TextBlock t:TableRow.Col="date" Text="{Binding DateText}" />
+                        <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCountText}" />
+                        <TextBlock t:TableRow.Col="hours" Text="{Binding IntegrationText}" />
+                        <!-- The same Border.tag badges the Palette column draws (spec 12.2), in
+                             the same filter order. A night whose frames carry no filter reads
+                             the faint dash, as the Palette cell does (spec.md item 6). -->
+                        <Panel t:TableRow.Col="filters">
+                          <ItemsControl x:Name="SessionFiltersCell"
+                                        ItemsSource="{Binding Filters}"
+                                        ItemTemplate="{StaticResource TargetFilterBadge}">
+                            <ItemsControl.ItemsPanel>
+                              <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal" />
+                              </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                          </ItemsControl>
+                          <TextBlock x:Name="SessionFiltersMissing"
+                                     Text="{x:Static vmtd:MetricText.Missing}"
+                                     Foreground="{DynamicResource ColorTextTertiary}"
+                                     IsVisible="{Binding !Filters.Count}" />
+                        </Panel>
+                        <!-- Spec 12.15 amendment 2.4's session-scope cells. Ungated by any picker
+                             (user choice 4), and read only when the row is expanded (ruling
+                             C11), so the column measures nothing until then. -->
+                        <ItemsControl t:TableRow.Col="custom"
                                       x:Name="SessionCustomCellStrip"
-                                      VerticalAlignment="Center"
                                       ItemsSource="{Binding CustomCells}"
-                                      ItemTemplate="{StaticResource TargetCustomCell}">
-                          <ItemsControl.ItemsPanel>
-                            <ItemsPanelTemplate>
-                              <StackPanel Orientation="Horizontal" />
-                            </ItemsPanelTemplate>
-                          </ItemsControl.ItemsPanel>
-                        </ItemsControl>
+                                      ItemTemplate="{StaticResource TableCustomCell}" />
 
                         <!-- Spec 12.2's Deep dive action: the row's group key and this line's
                              own date, and nothing else (task6.md 6.3). Works identically for an
                              unresolved obj: group, whose GroupKey already carries that prefix. -->
-                        <Button Grid.Column="5"
+                        <Button t:TableRow.Col="action"
                                 x:Name="DeepDiveButton"
                                 Content="Deep dive"
                                 Classes="sm"
-                                Margin="8,0"
-                                VerticalAlignment="Center"
                                 Command="{Binding #Root.((dash:TargetListViewModel)DataContext).DeepDiveCommand}"
                                 CommandParameter="{Binding}" />
-                      </Grid>
+                      </t:TableRow>
                     </DataTemplate>
                   </ItemsControl.ItemTemplate>
                 </ItemsControl>
               </StackPanel>
-            </Border>
+            </StackPanel>
           </DataTemplate>
         </ItemsControl.ItemTemplate>
       </ItemsControl>

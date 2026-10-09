@@ -219,8 +219,8 @@
            constant reads. A top-only rule was tried as one edit with that constant and was
            reverted: with the border costing the list nothing across, the constant drops to 32, the
            panel's bound grows by 2, and three DashboardViewTests pins go red by exactly those two
-           pixels (the forced-open panel reads 624 against 622, the re-applied bound 304 against 302,
-           the collapsed strip 48 against 46). Those pins are not this phase's to move, so the
+           pixels (the forced-open panel reads 636 against 634, the re-applied bound 316 against 314,
+           the collapsed strip 60 against 58). Those pins are not this phase's to move, so the
            four-sided hairline stays. DESIGN.md section 4's rule is about the radius and the card,
            not about a 1 px outline, and TargetListView.axaml and TargetDetailView.axaml already
            carry plain edges. -->
