@@ -18,8 +18,6 @@ public class TableMarkupScanTest
     private static readonly string[] SharedSizeGroupAllowlist =
     [
         // Tables, removed by their migration.
-        "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
-        "Views/TargetDetail/Parts/RangesTablePart.axaml",
         // Form and bar layouts, not tables (ruling R3): these stay.
         "Views/Mosaics/MosaicDetailView.axaml",
         "Views/TargetDetail/CreateMosaicWindow.axaml",
@@ -32,10 +30,6 @@ public class TableMarkupScanTest
     // they are not listed because nothing here is waiting on them.
     private static readonly string[] PendingTables =
     [
-        "Views/TargetDetail/Parts/PerFilterTablePart.axaml",
-        "Views/TargetDetail/Parts/RangesTablePart.axaml",
-        "Views/StatisticsView.axaml",
-        "Views/Settings/CustomColumnsTabView.axaml",
     ];
 
     private static readonly Regex XmlComment = new("<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);

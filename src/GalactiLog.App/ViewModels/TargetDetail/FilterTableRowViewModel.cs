@@ -28,7 +28,8 @@ namespace GalactiLog.App.ViewModels.TargetDetail;
 /// </para>
 /// <para>
 /// Every figure is unit free: the nine units live in the column headers, exactly as the ledger's
-/// do, so a cell is a figure and a column is a unit.
+/// do, so a cell is a figure and a column is a unit. An absent figure is
+/// <see cref="MetricText.Missing"/>, never a blank.
 /// </para>
 /// </remarks>
 public sealed class FilterTableRowViewModel
@@ -40,7 +41,7 @@ public sealed class FilterTableRowViewModel
     /// <param name="details">That filter's detail rows, one per exposure, in the order the query
     /// delivered them. One row fills the Exp, Frames and Int cells from itself; more than one
     /// makes the Exp cell a count and the other two the sums of the sub-rows rendered beneath;
-    /// none leaves all three empty.</param>
+    /// none leaves all three missing.</param>
     public FilterTableRowViewModel(
         FilterMedians medians,
         FilterSwatchViewModel swatch,
@@ -48,15 +49,15 @@ public sealed class FilterTableRowViewModel
     {
         FilterName = medians.FilterName;
         Swatch = swatch;
-        MedianHfrText = MetricText.Format(medians.MedianHfr, "0.00");
-        MedianEccentricityText = MetricText.Format(medians.MedianEccentricity, "0.00");
-        MedianFwhmText = MetricText.Format(medians.MedianFwhm, "0.00");
-        MedianGuidingRmsText = MetricText.Format(medians.MedianGuidingRmsArcsec, "0.00");
-        MedianDetectedStarsText = MetricText.Format(medians.MedianDetectedStars, "N0");
+        MedianHfrText = MetricText.Cell(medians.MedianHfr, "0.00");
+        MedianEccentricityText = MetricText.Cell(medians.MedianEccentricity, "0.00");
+        MedianFwhmText = MetricText.Cell(medians.MedianFwhm, "0.00");
+        MedianGuidingRmsText = MetricText.Cell(medians.MedianGuidingRmsArcsec, "0.00");
+        MedianDetectedStarsText = MetricText.Cell(medians.MedianDetectedStars, "N0");
 
         if (details.Count == 1)
         {
-            ExposureTimeText = MetricText.Format(details[0].ExposureTime, "0.##");
+            ExposureTimeText = MetricText.Cell(details[0].ExposureTime, "0.##");
         }
         else if (details.Count > 1)
         {
@@ -67,7 +68,7 @@ public sealed class FilterTableRowViewModel
         if (details.Count > 0)
         {
             FrameCountText = MetricText.Count(details.Sum(row => row.FrameCount));
-            IntegrationText = MetricText.Format(details.Sum(row => row.IntegrationSeconds) / 3600d, "0.0");
+            IntegrationText = MetricText.Cell(details.Sum(row => row.IntegrationSeconds) / 3600d, "0.0");
         }
     }
 
@@ -89,13 +90,13 @@ public sealed class FilterTableRowViewModel
             ? MetricText.Format(detail.ExposureTime, "0.##", " s")
             : detail.FilterName;
 
-        MedianHfrText = MetricText.Format(detail.MedianHfr, "0.00");
-        MedianEccentricityText = MetricText.Format(detail.MedianEccentricity, "0.00");
-        ExposureTimeText = MetricText.Format(detail.ExposureTime, "0.##");
+        MedianHfrText = MetricText.Cell(detail.MedianHfr, "0.00");
+        MedianEccentricityText = MetricText.Cell(detail.MedianEccentricity, "0.00");
+        ExposureTimeText = MetricText.Cell(detail.ExposureTime, "0.##");
         FrameCountText = MetricText.Count(detail.FrameCount);
-        IntegrationText = MetricText.Format(detail.IntegrationSeconds / 3600d, "0.0");
+        IntegrationText = MetricText.Cell(detail.IntegrationSeconds / 3600d, "0.0");
 
-        // FWHM, guiding RMS and detected stars stay empty: a FilterDetailRow carries no such
+        // FWHM, guiding RMS and detected stars stay missing: a FilterDetailRow carries no such
         // figure and inventing one would be arithmetic this join refuses.
     }
 
@@ -110,9 +111,7 @@ public sealed class FilterTableRowViewModel
 
     /// <summary>
     /// Spec 12.4 item 2 and ruling C4: the row that opens one rig's block on a multi-rig night.
-    /// A full-width row in the table's own grid carrying the rig's label in the <c>section</c> type
-    /// and its frame count. It adds no column and changes no shared size group, so the filter table
-    /// and the ranges table stay aligned with each other and the pane's breakpoint is untouched.
+    /// A full-width row carrying the rig's label in the <c>section</c> type and its frame count.
     /// A single-rig night has no label row at all.
     /// </summary>
     /// <param name="cells">Spec 12.15's rig-scope custom column cells (Phase 20 Task 6b), trailing
@@ -127,8 +126,8 @@ public sealed class FilterTableRowViewModel
     /// <c>DataTemplate</c> over it (phase review P3-3).</summary>
     public RigLabelRowViewModel? LabelRow { get; }
 
-    /// <summary>True on spec 12.4's rig label row, which the view renders as one full-width cell
-    /// instead of nine.</summary>
+    /// <summary>True on spec 12.4's rig label row, which the view renders as one full-width row
+    /// instead of the table row.</summary>
     public bool IsRigLabel => LabelRow is not null;
 
     /// <summary>The rig's canonical label. Empty on every row that is not a label row.</summary>
@@ -151,19 +150,19 @@ public sealed class FilterTableRowViewModel
     /// renders in tertiary ink (the comp).</summary>
     public bool IsExposureCount { get; }
 
-    public string MedianHfrText { get; } = "";
+    public string MedianHfrText { get; } = MetricText.Missing;
 
-    public string MedianEccentricityText { get; } = "";
+    public string MedianEccentricityText { get; } = MetricText.Missing;
 
-    public string MedianFwhmText { get; } = "";
+    public string MedianFwhmText { get; } = MetricText.Missing;
 
-    public string MedianGuidingRmsText { get; } = "";
+    public string MedianGuidingRmsText { get; } = MetricText.Missing;
 
-    public string MedianDetectedStarsText { get; } = "";
+    public string MedianDetectedStarsText { get; } = MetricText.Missing;
 
-    public string ExposureTimeText { get; } = "";
+    public string ExposureTimeText { get; } = MetricText.Missing;
 
-    public string FrameCountText { get; } = "";
+    public string FrameCountText { get; } = MetricText.Missing;
 
-    public string IntegrationText { get; } = "";
+    public string IntegrationText { get; } = MetricText.Missing;
 }

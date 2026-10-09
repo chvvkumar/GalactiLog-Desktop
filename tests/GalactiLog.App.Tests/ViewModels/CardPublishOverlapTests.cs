@@ -1,6 +1,7 @@
 using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.Views.TargetDetail.Parts;
@@ -80,9 +81,9 @@ public class CardPublishOverlapTests
         TargetPartHost.Show(part);
         Avalonia.Threading.Dispatcher.UIThread.RunJobs();
 
-        var counts = part.Named<ItemsControl>("FilterRowsList").GetVisualDescendants().OfType<Grid>()
-            .Where(grid => grid.Classes.Contains("tab-row") && grid.DataContext is FilterTableRowViewModel { IsRigLabel: false })
-            .SelectMany(grid => grid.Children.OfType<TextBlock>().Where(cell => Grid.GetColumn(cell) == 7))
+        var counts = part.Named<ItemsControl>("FilterRowsList").GetVisualDescendants().OfType<TableRow>()
+            .Where(row => row.DataContext is FilterTableRowViewModel { IsRigLabel: false })
+            .SelectMany(row => row.Children.OfType<TextBlock>().Where(cell => TableRow.GetCol(cell) == "frames"))
             .ToList();
         Assert.NotEmpty(counts);
     }

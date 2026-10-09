@@ -1,9 +1,11 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless.XUnit;
 using Avalonia.VisualTree;
 using Avalonia.Threading;
 using static GalactiLog.App.Tests.Views.TargetDetail.Parts.NightPartsTestKit;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels;
@@ -49,9 +51,30 @@ public class RangesTablePartTests
         Assert.Equal(0d, cell.MedianPosition);
     }
 
+    [Fact]
+    public void RangeCell_WithAnAbsentFigure_DashesIt()
+    {
+        var cell = new RangeCellViewModel("HFR px", new MetricRangeSummary(1.0d, 1.5d, null), "0.00");
+
+        Assert.Equal(MetricText.Missing, cell.MedianText);
+        Assert.Equal("1.00", cell.MinText);
+        Assert.True(cell.HasValues);
+    }
+
+    [Fact]
+    public void RangeCell_WithNoFigureAtAll_HasNoValues()
+    {
+        var cell = new RangeCellViewModel("HFR px", new MetricRangeSummary(null, null, null), "0.00");
+
+        Assert.False(cell.HasValues);
+        Assert.Equal(MetricText.Missing, cell.MinText);
+        Assert.Equal(MetricText.Missing, cell.MedianText);
+        Assert.Equal(MetricText.Missing, cell.MaxText);
+    }
+
     private const double WideFigure = 123456.789d;
 
-    private const double RangeMinMinWidthCell = 62d - 12d;
+    private const double RangeMinMinWidthCell = 66d - 16d;
 
     [AvaloniaFact]
     public void RangesTablePart_RangesTableColumns_ReportEqualWidthsAfterLayout()
@@ -71,17 +94,17 @@ public class RangesTablePartTests
         var rows = TableRows(pane, "RangesTable");
         Assert.True(rows.Count >= 2, "the ranges table rendered no rows under its header");
 
-        // Column 1 is Min on every row, header included, and HFR is the first range.
-        var header = TableCellAt(rows[0], 1);
-        var first = TableCellAt(rows[1], 1);
+        // HFR is the first range; the Min heading right-aligns over its figures.
+        var header = TableCellAt(rows[0], "min");
+        var first = TableCellAt(rows[1], "min");
         Assert.True(
             first.Bounds.Width > RangeMinMinWidthCell,
             $"the seeded minimum is not wider than the column minimum ({first.Bounds.Width}).");
-        Assert.Equal(header.Bounds.Width, first.Bounds.Width, 3);
+        Assert.Equal(header.Bounds.Right, first.Bounds.Right, 0.5);
     }
 
     [AvaloniaFact]
-    public void RangesTablePart_ARigLabelRow_SpansTheFiveColumns()
+    public void RangesTablePart_ARigLabelRow_SpansTheRow()
     {
         var (pane, harness) = ThumbnailKit.RigHost(card => new RangesTablePart { DataContext = card }, [ThumbnailKit.RigA, ThumbnailKit.RigB]);
         using var scope = harness;
@@ -94,9 +117,39 @@ public class RangesTablePartTests
             .ToList();
 
         Assert.Equal(2, rangeLabels.Count);
-        Assert.All(rangeLabels, label => Assert.Equal(5, Grid.GetColumnSpan(label)));
+        Assert.All(rangeLabels, label => Assert.Equal(
+            label.FindAncestorOfType<ContentPresenter>()!.Bounds.Width,
+            label.Bounds.Width + 2 * TableMetrics.Gutter,
+            0.5));
+
+        var header = pane.Named<TableRow>("RangesTableHeader");
+        Assert.Equal(6, header.Columns!.Count);
+        Assert.Equal(6, header.ColumnDefinitions.Count);
 
         Assert.Contains(ThumbnailKit.RigA, VisibleTexts(pane));
         Assert.Contains(ThumbnailKit.RigB, VisibleTexts(pane));
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void RangesTablePart_MeetsTableConventions(bool extraLarge)
+    {
+        using var harness = Cards.Create(detail: Cards.PopulatedDetail());
+
+        harness.Card.IsExpanded = true;
+        harness.Settle();
+
+        var pane = new RangesTablePart { DataContext = harness.Card };
+        var window = Show(pane, 1280, 800);
+        if (extraLarge)
+        {
+            window.FontSize = 20d;
+        }
+
+        Dispatcher.UIThread.RunJobs();
+
+        TableAssert.Conventions(pane);
+        TextFit.AssertTextFitsItsBox(pane);
     }
 }

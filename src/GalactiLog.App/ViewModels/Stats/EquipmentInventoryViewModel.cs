@@ -5,8 +5,8 @@ namespace GalactiLog.App.ViewModels.Stats;
 
 /// <summary>One camera or telescope row of spec 12.5's Equipment inventory.</summary>
 /// <param name="FwhmFrameCount">Rendered beside the median as <c>n=NNN</c>, in a tertiary colour,
-/// so a median over four frames does not read like a median over four hundred. Empty when no frame
-/// carried an FWHM.</param>
+/// so a median over four frames does not read like a median over four hundred.
+/// <see cref="MetricText.Missing"/> when no frame carried an FWHM.</param>
 public sealed record EquipmentInventoryRow(
     string Name,
     bool Grouped,
@@ -62,12 +62,8 @@ public sealed class EquipmentInventoryViewModel
         MetricText.Count(item.TargetCount),
         item.AvgSessionSeconds is { } average ? MetricText.Integration(average) : MetricText.Missing,
         MetricText.Integration(item.IntegrationSeconds),
-        // Arcseconds, rendered the way every other arcsecond figure in this application is
-        // (MetricText.Format with the " arcsec" suffix) rather than with the web's double-prime
-        // glyph: spec 7.1.1's fwhm column is already arcseconds and Phase 6 settled the rendering.
-        item.MedianFwhmArcsec is { } fwhm ? MetricText.Format(fwhm, "0.00", " arcsec") : MetricText.Missing,
-        item.FwhmFrameCount > 0 ? $"n={MetricText.Count(item.FwhmFrameCount)}" : "",
-        item.MedianGuidingRmsArcsec is { } guiding
-            ? MetricText.Format(guiding, "0.00", " arcsec")
-            : MetricText.Missing);
+        // Arcseconds, unit in the column header.
+        MetricText.Cell(item.MedianFwhmArcsec, "0.00"),
+        item.FwhmFrameCount > 0 ? $"n={MetricText.Count(item.FwhmFrameCount)}" : MetricText.Missing,
+        MetricText.Cell(item.MedianGuidingRmsArcsec, "0.00"));
 }

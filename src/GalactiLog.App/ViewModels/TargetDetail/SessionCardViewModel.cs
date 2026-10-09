@@ -3,6 +3,7 @@ using System.Globalization;
 using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.Core.Sessions;
@@ -1669,14 +1670,15 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     // Spec 12.4's order: HFR, eccentricity, FWHM, guiding RMS, sensor temperature. One table of
     // labels and formats for both the session's ranges and a rig's, because RigGroup.Ranges is
-    // carried in exactly this order and a second copy of the order is what would drift.
+    // carried in exactly this order and a second copy of the order is what would drift. A label
+    // is the row's heading, so it carries the unit once (ruling R17).
     private static readonly (string Label, string Format)[] RangeColumns =
     [
-        ("HFR", "0.00"),
+        (TableHeads.Hfr, "0.00"),
         ("Eccentricity", "0.00"),
-        ("FWHM", "0.00"),
-        ("Guiding RMS", "0.00"),
-        ("Sensor temp", "0.0"),
+        (TableHeads.Fwhm, "0.00"),
+        ("Guiding " + TableHeads.Rms, "0.00"),
+        ("Sensor temp C", "0.0"),
     ];
 
     private static IReadOnlyList<RangeCellViewModel> RangeCells(IReadOnlyList<MetricRangeSummary> ranges)
@@ -1781,12 +1783,13 @@ public sealed class RangeCellViewModel
     {
         Label = label;
         Range = range;
-        MinText = MetricText.Format(range.Min, format);
-        MaxText = MetricText.Format(range.Max, format);
-        MedianText = MetricText.Format(range.Median, format);
+        HasValues = Present(range.Min) || Present(range.Median) || Present(range.Max);
+        MinText = MetricText.Cell(range.Min, format);
+        MaxText = MetricText.Cell(range.Max, format);
+        MedianText = MetricText.Cell(range.Median, format);
 
         if (range.Min is { } min && range.Max is { } max && range.Median is { } median
-            && double.IsFinite(min) && double.IsFinite(max) && double.IsFinite(median))
+            && Present(min) && Present(max) && Present(median))
         {
             HasPosition = true;
             var span = max - min;
@@ -1803,11 +1806,13 @@ public sealed class RangeCellViewModel
     {
         Label = "";
         Range = new MetricRangeSummary(null, null, null);
-        MinText = "";
-        MaxText = "";
-        MedianText = "";
+        MinText = MetricText.Missing;
+        MaxText = MetricText.Missing;
+        MedianText = MetricText.Missing;
         LabelRow = row;
     }
+
+    private static bool Present(double? value) => value is { } figure && double.IsFinite(figure);
 
     /// <summary>Spec 12.4 item 2: the row that opens one rig's block of the ranges table on a
     /// multi-rig night, in the same shape the filter table's label row takes. A single-rig night
@@ -1849,7 +1854,7 @@ public sealed class RangeCellViewModel
 
     /// <summary>False when no frame of the night carried the metric, which takes the cell out of
     /// the list rather than showing three empty figures.</summary>
-    public bool HasValues => MedianText.Length > 0 || MinText.Length > 0 || MaxText.Length > 0;
+    public bool HasValues { get; }
 
     /// <summary>
     /// Where the median sits between the minimum and the maximum, 0 to 1. It shows skew: a median

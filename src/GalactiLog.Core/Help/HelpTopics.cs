@@ -190,7 +190,7 @@ public static class HelpTopics
             + "integration, median and best HFR in pixels, median eccentricity, median FWHM in "
             + "arcseconds and the filters used. Expand a row with its + button for a per-filter "
             + "breakdown. HFR is measured in pixels and is comparable only within one optical "
-            + "train; use FWHM in arcseconds to compare across telescopes. The Med Ecc and Med "
+            + "train; use FWHM in arcseconds to compare across telescopes. The Ecc and "
             + "FWHM cells are coloured by how far they sit from the median of every combination's "
             + "own median, and the colour is withheld while fewer than eight combinations carry "
             + "that figure. A (grouped) marker means several header spellings are combined under "
