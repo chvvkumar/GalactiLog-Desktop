@@ -320,6 +320,42 @@ public class QualityPanelViewTests
     }
 
     /// <summary>
+    /// The rows take the height the wizard body has left rather than a fixed 420, with the footer
+    /// note still inside the body's viewport, and never fall under the floor in a short window.
+    /// </summary>
+    /// <remarks>Fails against the fixed bound: in a 1200 px body the rows stay at 420.</remarks>
+    [AvaloniaTheory]
+    [InlineData(1200d)]
+    [InlineData(300d)]
+    public void QualityPanelView_TheRows_FillTheWizardBodysViewport(double bodyHeight)
+    {
+        var view = new QualityPanelView { DataContext = Populated() };
+        var body = new ScrollViewer { Width = PanelAllotment, Height = bodyHeight, Content = view };
+        var window = new Window { Width = PanelAllotment + 40d, Height = bodyHeight + 40d, Content = body };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var rows = Named<ScrollViewer>(view, "RowsScroller");
+        var top = rows.TranslatePoint(default, body)!.Value.Y + body.Offset.Y;
+        var footer = Named<TextBlock>(view, "FooterNote");
+        var expected = Math.Max(
+            QualityPanelView.MinRowsHeight,
+            body.Viewport.Height - top - footer.Bounds.Height - footer.Margin.Top);
+
+        Assert.Equal(expected, rows.MaxHeight, 1);
+        if (bodyHeight > 1000d)
+        {
+            Assert.True(rows.MaxHeight > 420d, $"the rows are bounded at {rows.MaxHeight:F0} in a {bodyHeight:F0} px body");
+        }
+        else
+        {
+            Assert.Equal(QualityPanelView.MinRowsHeight, rows.MaxHeight, 1);
+        }
+
+        window.Close();
+    }
+
+    /// <summary>
     /// The Night heading sits over its dates although only the rows are inside the scroller: the
     /// header row carries the reserved bar's width, so the two Night columns start at one x.
     /// </summary>

@@ -193,9 +193,10 @@
 
       <!-- Spec 12.13's tally, one line beside the chips. It counts every LIGHT frame of the
            checked nights, which is a wider set than the page footer's figures, and the footer's
-           own sentence says so. -->
+           own sentence says so. Body size, like the chips beside it: it is the line that says what
+           the limits did, so it is not set as a caption. -->
       <TextBlock x:Name="Tally"
-                 Classes="t-caption num"
+                 Classes="num"
                  VerticalAlignment="Center"
                  Text="{Binding TallyText}" />
 
@@ -263,7 +264,8 @@
 
     <!-- 3. The rows, or the empty state. The scroller is bounded, so the virtualising panel inside
          it has something finite to measure against: this panel lives inside the export page's own
-         body scroller, which would otherwise offer it infinite height and realise every row. -->
+         body scroller, which would otherwise offer it infinite height and realise every row. 420 is
+         the bound before the first layout; the code-behind then grows it to the body's viewport. -->
     <ScrollViewer Grid.Row="2"
                   x:Name="RowsScroller"
                   MaxHeight="420"
