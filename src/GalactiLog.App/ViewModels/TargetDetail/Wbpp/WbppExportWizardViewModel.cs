@@ -11,16 +11,12 @@ namespace GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 
 /// <summary>
 /// Spec 12.13's Export for stacking as a six-step wizard. Nothing writes before the review
-/// step's one commit; while the commit runs Back, Next, Close and Escape refuse and only Cancel
-/// acts.
+/// step's one commit; while the commit runs Back and Next refuse; during a copy Close hands the
+/// copy to <see cref="StagingCopyService"/> and the status bar.
 /// </summary>
 public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExportStepViewModel>
 {
-    /// <summary>The copy's job kind in the status bar's registry.</summary>
-    public const string CopyJobKind = "stacking_copy";
-
-    private readonly JobRegistry? _jobs;
-    private readonly Action<string>? _recordActivity;
+    private readonly StagingCopyService _copies;
     private readonly Func<string, Task> _copyText;
     private readonly Action<string>? _openFolder;
     private readonly Action<string>? _runScript;
@@ -31,17 +27,15 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
 
     /// <param name="page">The shared export state, disposed with the wizard.</param>
     /// <param name="copyText">Normally <c>ShellIntegration.CopyTextAsync</c>, for Copy path.</param>
-    /// <param name="jobs">The status bar's job registry. Null in a case that does not
-    /// assert it.</param>
-    /// <param name="recordActivity">Records one activity row with the given message.</param>
+    /// <param name="copies">The app-lifetime owner of the copy, its job and its Activity row. Null
+    /// gives a private one with neither, for a case that does not assert them.</param>
     /// <param name="openFolder">Normally <c>ShellIntegration.OpenFolderInExplorer</c>, for Open folder.</param>
     /// <param name="runScript">Normally <c>ShellIntegration.RunPowerShellScript</c>, for Run script.</param>
     /// <param name="post">How to reach the UI thread. Defaults to <c>UiPost.Default</c>.</param>
     public WbppExportWizardViewModel(
         WbppExportViewModel page,
         Func<string, Task> copyText,
-        JobRegistry? jobs = null,
-        Action<string>? recordActivity = null,
+        StagingCopyService? copies = null,
         Action<string>? openFolder = null,
         Action<string>? runScript = null,
         Action<Action>? post = null,
@@ -50,8 +44,7 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     {
         Page = page;
         _copyText = copyText;
-        _jobs = jobs;
-        _recordActivity = recordActivity;
+        _copies = copies ?? new StagingCopyService();
         _openFolder = openFolder;
         _runScript = runScript;
         _post = post ?? UiPost.Default;
@@ -65,6 +58,12 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         if (e.PropertyName == nameof(ReviewStep.IsBlocked))
         {
             CommitCommand.NotifyCanExecuteChanged();
+        }
+
+        // IsBusy is raised before the copy flips IsCopying, so Close would stay disabled.
+        if (e.PropertyName == nameof(ReviewStep.IsCopying))
+        {
+            CloseCommand.NotifyCanExecuteChanged();
         }
     }
 
@@ -127,6 +126,16 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         IsBusy = true;
         try
         {
+            // Decision 10: a folder another copy is still filling is refused on the review step,
+            // the lock released, the same shape as a refused script below. A script too: it copies
+            // with -Force, so it would overwrite what the running copy writes.
+            if (Page.CopyDestination is { } destination && _copies.RefusalFor(destination) is { } busy)
+            {
+                StepError = busy;
+                ReleaseCommit();
+                return;
+            }
+
             if (Method.IsScript)
             {
                 var before = Page.ScriptPath;
@@ -172,37 +181,32 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     {
         _copyCancel = new CancellationTokenSource();
         var cancel = _copyCancel;
-        using var job = _jobs?.Begin(CopyJobKind, "Copy for stacking: " + Page.TargetName, cancel.Cancel);
+        // IsBusy's notification ran before the source existed, so Cancel would stay disabled.
+        CancelCopyCommand.NotifyCanExecuteChanged();
         Review.IsCopying = true;
+        Review.ProgressStats = "";
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var progress = new PostedProgress(_post, p =>
         {
-            var text = string.Create(CultureInfo.InvariantCulture, $"Copying {p.FilesDone:N0} of {p.FilesTotal:N0}");
-            var percent = p.BytesTotal > 0 ? 100d * p.BytesDone / p.BytesTotal : 0d;
-            Review.ProgressText = text;
-            Review.ProgressPercent = percent;
-            job?.Report(text, percent);
+            // Closed mid-copy: the service carries on, and the window that read this is gone.
+            if (_disposed)
+            {
+                return;
+            }
+
+            Review.ProgressText = cancel.IsCancellationRequested
+                ? StagingCopyService.CancellingText
+                : string.Create(CultureInfo.InvariantCulture, $"Copying {p.FilesDone:N0} of {p.FilesTotal:N0}");
+            Review.ProgressStats = StagingCopyService.TransferStats(p, clock.Elapsed);
+            Review.ProgressPercent = p.BytesTotal > 0 ? 100d * p.BytesDone / p.BytesTotal : 0d;
         });
 
-        StagingCopyResult result;
+        // The service owns the job, the exception mapping and the Activity row, so a copy that
+        // outlives this window ends the same way as one watched to the end.
         try
         {
-            result = await Page.RunCopyAsync(progress, cancel.Token).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
-        {
-            result = new StagingCopyResult(StagingOutcome.Cancelled, 0, 0, [], [], [], null);
-        }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or UnauthorizedPathException)
-        {
-            Logger.LogWarning(ex, "The staging copy could not start");
-            result = new StagingCopyResult(StagingOutcome.Aborted, 0, 0, [], [], [], ex.Message);
-        }
-        catch (Exception ex)
-        {
-            // Anything else still lands on the result step, so the wizard never stays locked.
-            Logger.LogError(ex, "The staging copy failed");
-            result = new StagingCopyResult(
-                StagingOutcome.Aborted, 0, 0, [], [], [], "an unexpected error: " + ex.Message);
+            return await _copies.StartAsync(Page.TargetName, Page.CopyDestination!, Page.RunCopyAsync, progress, cancel.Token)
+                .ConfigureAwait(true);
         }
         finally
         {
@@ -210,52 +214,31 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
             _copyCancel = null;
             cancel.Dispose();
         }
-
-        job?.Finish(
-            result.Outcome switch
-            {
-                StagingOutcome.Completed => JobResult.Succeeded,
-                StagingOutcome.Cancelled => JobResult.Cancelled,
-                _ => JobResult.Failed,
-            },
-            ResultStep.OutcomeTextFor(result));
-
-        if (_disposed || result.Copied == 0)
-        {
-            return result;
-        }
-
-        try
-        {
-            _recordActivity?.Invoke(string.Create(
-                CultureInfo.InvariantCulture,
-                $"Export for stacking copied {result.Copied:N0} files to {Path.GetFileName(Page.CopyDestination)}"));
-        }
-        catch (Exception ex)
-        {
-            Logger.LogWarning(ex, "Recording the staging copy's activity row failed");
-        }
-
-        return result;
     }
 
     private bool CanCancelCopy() => IsBusy && _copyCancel is not null;
 
-    /// <summary>Stops the copy; files in flight keep their partial contents and are listed.
-    /// </summary>
+    /// <summary>Stops the copy: no new file starts, and files in flight finish.</summary>
     [RelayCommand(CanExecute = nameof(CanCancelCopy))]
-    private void CancelCopy() => _copyCancel?.Cancel();
+    private void CancelCopy()
+    {
+        if (_copyCancel is { } cancel)
+        {
+            cancel.Cancel();
+            Review.ProgressText = StagingCopyService.CancellingText;
+        }
+    }
 
-    private bool CanClose() => !IsBusy;
+    private bool CanClose() => !IsBusy || Review.IsCopying;
 
-    /// <summary>Closes the wizard, reporting whether anything was written. Refused while a commit
-    /// runs.</summary>
+    /// <summary>Closes the wizard, reporting whether anything was written. Refused only while a
+    /// script commit runs; during a copy it hands the copy to the status bar.</summary>
     [RelayCommand(CanExecute = nameof(CanClose))]
     private void Close()
     {
         if (CanClose())
         {
-            RequestClose(_wroteSomething);
+            RequestClose(_wroteSomething || Review.IsCopying);
         }
     }
 
@@ -317,7 +300,6 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     {
         _disposed = true;
         Review.PropertyChanged -= OnReviewChanged;
-        _copyCancel?.Cancel();
         Page.Dispose();
     }
 

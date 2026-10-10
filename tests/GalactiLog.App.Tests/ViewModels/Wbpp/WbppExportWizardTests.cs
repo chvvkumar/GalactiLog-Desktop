@@ -17,13 +17,20 @@ public class WbppExportWizardTests
 
     private sealed class Rig : IDisposable
     {
-        public Rig(bool parked = false, Library? library = null)
+        public Rig(bool parked = false, Library? library = null, StagingCopyService? copies = null, JobRegistry? jobs = null)
         {
             Harness = ExportHarness.Create(library ?? new Library().Frame(N1, Ha("a.fits")), [N1], parked: parked);
-            Jobs = new JobRegistry(action => action());
+            Jobs = jobs ?? new JobRegistry(action => action());
             Wizard = new WbppExportWizardViewModel(
-                Harness.Page, _ => Task.CompletedTask, Jobs, openFolder: Opened.Add, runScript: Ran.Add, post: action => action());
+                Harness.Page,
+                _ => Task.CompletedTask,
+                copies ?? new StagingCopyService(Jobs, (s, e, m, d) => Activity.Add((s, e, m, d))),
+                openFolder: Opened.Add,
+                runScript: Ran.Add,
+                post: action => action());
         }
+
+        public List<(string Severity, string EventType, string Message, object Details)> Activity { get; } = [];
 
         public List<string> Opened { get; } = [];
 
@@ -161,6 +168,23 @@ public class WbppExportWizardTests
         Assert.False(rig.Wizard.IsBusy);
     }
 
+    // A failure here is a Cancel button left disabled for the whole copy: the view only re-reads
+    // CanExecute when CanExecuteChanged fires.
+    [Fact]
+    public async Task CancelCopy_BecomesExecutableOnceTheCopyStarts()
+    {
+        using var rig = new Rig();
+        var enabledAtEvent = new List<bool>();
+        rig.Wizard.CancelCopyCommand.CanExecuteChanged +=
+            (_, _) => enabledAtEvent.Add(rig.Wizard.CancelCopyCommand.CanExecute(null));
+        rig.FakeIo(() => []);
+        await rig.ToReviewAsync();
+
+        await rig.Wizard.CommitCommand.ExecuteAsync(null);
+
+        Assert.Contains(true, enabledAtEvent);
+    }
+
     // A failure here is a different-size file that is not listed, or no Save report beside it (R5, R14).
     [Fact]
     public async Task AResultWithADifferentSizeSkip_ListsItAndOffersSaveReport()
@@ -182,6 +206,9 @@ public class WbppExportWizardTests
         Assert.Equal(StagingSkipReason.ExistsDifferentSize, skip.Reason);
         Assert.Equal([skip.Path], rig.Wizard.Result.DifferentSizePaths);
         Assert.True(rig.Wizard.Result.HasProblems);
+        // Review finding 10: the window's copy writes its Activity row through the injected service.
+        var row = Assert.Single(rig.Activity);
+        Assert.Equal(("warning", StagingCopyService.CopyJobKind), (row.Severity, row.EventType));
     }
 
     // A failure here is a restart that keeps the lock, the old result or the result step (R14).
@@ -222,13 +249,13 @@ public class WbppExportWizardTests
         Assert.Equal(rig.Harness.Destination, rig.Harness.Page.ScriptPath);
     }
 
-    // A failure here is a Close that abandons a running copy (R4).
+    // A failure here is a Close that is refused during a copy, or one that stops the copy.
     [Fact]
-    public async Task Close_IsRefused_WhileTheCopyRuns()
+    public async Task Close_IsAllowed_WhileTheCopyRuns_AndTheCopyCarriesOn()
     {
         using var rig = new Rig();
-        var closedDuringCopy = false;
-        rig.Wizard.CloseRequested += (_, _) => closedDuringCopy = rig.Wizard.IsBusy;
+        bool? closedWithWrote = null;
+        rig.Wizard.CloseRequested += (_, wrote) => closedWithWrote = wrote;
         bool? canCloseDuringCopy = null;
         rig.FakeIo(() =>
         {
@@ -240,14 +267,15 @@ public class WbppExportWizardTests
 
         await rig.Wizard.CommitCommand.ExecuteAsync(null);
 
-        Assert.False(canCloseDuringCopy);
-        Assert.False(closedDuringCopy);
+        Assert.True(canCloseDuringCopy);
+        Assert.True(closedWithWrote);
+        Assert.Equal(JobResult.Succeeded, Assert.Single(rig.Jobs.Recent).Result);
     }
 
-    // Ruling E10. A failure here is a close during a copy that waits for the copy, or that leaves
-    // it running to completion.
+    // Reverses ruling E10: closing hands the copy to StagingCopyService instead of cancelling it.
+    // A failure here is a close during a copy that waits for the copy, or that stops it.
     [Fact]
-    public async Task Dispose_DuringAPendingCopy_CancelsIt_WithoutWaiting()
+    public async Task Dispose_DuringAPendingCopy_HandsItOff_WithoutWaiting()
     {
         var rig = new Rig();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -261,16 +289,160 @@ public class WbppExportWizardTests
 
         var commit = rig.Wizard.CommitCommand.ExecuteAsync(null);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var progressText = rig.Wizard.Review.ProgressText;
 
         rig.Wizard.Dispose();
 
         Assert.False(commit.IsCompleted, "Dispose waited for the copy");
         gate.Set();
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
-        // The disposed wizard publishes nothing; the status bar's job records the cancellation.
-        Assert.Equal(JobResult.Cancelled, Assert.Single(rig.Jobs.Recent).Result);
+        // The disposed wizard publishes nothing; the status bar's job records the outcome.
+        Assert.Equal(JobResult.Succeeded, Assert.Single(rig.Jobs.Recent).Result);
         Assert.Null(rig.Wizard.Result.Result);
+        Assert.Equal(progressText, rig.Wizard.Review.ProgressText);
         rig.Harness.Dispose();
+    }
+
+    // Gap G1. A failure here is a Close button left disabled for the whole copy: IsBusy is raised
+    // before IsCopying flips, and the view only re-reads CanExecute on CanExecuteChanged.
+    [Fact]
+    public async Task CloseCommand_IsEnabledByEvent_WhenTheCopyStarts()
+    {
+        using var rig = new Rig();
+        var enabledAtEvent = new List<bool>();
+        rig.FakeIo(() => []);
+        await rig.ToReviewAsync();
+        rig.Wizard.CloseCommand.CanExecuteChanged +=
+            (_, _) => enabledAtEvent.Add(rig.Wizard.IsBusy && rig.Wizard.CloseCommand.CanExecute(null));
+
+        await rig.Wizard.CommitCommand.ExecuteAsync(null);
+
+        Assert.Contains(true, enabledAtEvent);
+    }
+
+    // A failure here is a Close that lets the window go while a script's save dialog is still open.
+    [Fact]
+    public async Task Close_IsStillRefused_WhileAScriptCommitRuns()
+    {
+        using var rig = new Rig();
+        var picked = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        rig.Harness.Page.ScriptDestinationPicker = _ => picked.Task;
+        await rig.ToReviewAsync();
+        rig.Wizard.Method.IsScript = true;
+
+        var commit = rig.Wizard.CommitCommand.ExecuteAsync(null);
+        var closed = false;
+        rig.Wizard.CloseRequested += (_, _) => closed = true;
+
+        Assert.True(rig.Wizard.IsBusy);
+        Assert.False(rig.Wizard.CloseCommand.CanExecute(null));
+        // Review finding 9: Execute ignores CanExecute, so the guard in Close's body is what holds.
+        rig.Wizard.CloseCommand.Execute(null);
+        Assert.False(closed);
+        picked.SetResult(null);
+        await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.True(rig.Wizard.CloseCommand.CanExecute(null));
+    }
+
+    // Decision 10. A failure here is a second export copying into a folder another copy is still
+    // filling, or one that lands on the result step as a failed copy.
+    [Fact]
+    public async Task Commit_IntoAFolderAlreadyCopying_StaysOnReview_WithTheRefusal()
+    {
+        var jobs = new JobRegistry(action => action());
+        var copies = new StagingCopyService(jobs);
+        using var first = new Rig(copies: copies, jobs: jobs);
+        using var second = new Rig(copies: copies, jobs: jobs);
+        var staging = first.Harness.TempFolder("staging");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var gate = new ManualResetEventSlim(false);
+        first.FakeIo(() =>
+        {
+            Rig.Park(entered, gate);
+            return [];
+        });
+        second.FakeIo(() => []);
+        await first.ToReviewAsync(staging);
+        await second.ToReviewAsync(staging);
+        var commit = first.Wizard.CommitCommand.ExecuteAsync(null);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            await second.Wizard.CommitCommand.ExecuteAsync(null);
+
+            Assert.True(second.Wizard.IsReviewStep);
+            Assert.Contains("is still running", second.Wizard.StepError, StringComparison.Ordinal);
+            Assert.False(second.Wizard.IsCommitted);
+            Assert.False(second.Wizard.IsBusy);
+            Assert.Equal(0, second.IoCalls);
+        }
+        finally
+        {
+            gate.Set();
+            await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    // Review finding 3. A failure here is a script, which copies with -Force, written for a folder
+    // an in-app copy is still filling.
+    [Fact]
+    public async Task AScriptCommit_IntoAFolderAlreadyCopying_StaysOnReview_WithTheRefusal()
+    {
+        var jobs = new JobRegistry(action => action());
+        var copies = new StagingCopyService(jobs);
+        using var first = new Rig(copies: copies, jobs: jobs);
+        using var second = new Rig(copies: copies, jobs: jobs);
+        var staging = first.Harness.TempFolder("staging");
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var gate = new ManualResetEventSlim(false);
+        first.FakeIo(() =>
+        {
+            Rig.Park(entered, gate);
+            return [];
+        });
+        second.Harness.Destination = second.Harness.ScriptPath("wbpp_M_31.ps1");
+        await first.ToReviewAsync(staging);
+        await second.ToReviewAsync(staging);
+        second.Wizard.Method.IsScript = true;
+        var commit = first.Wizard.CommitCommand.ExecuteAsync(null);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        try
+        {
+            await second.Wizard.CommitCommand.ExecuteAsync(null);
+
+            Assert.True(second.Wizard.IsReviewStep);
+            Assert.Contains("is still running", second.Wizard.StepError, StringComparison.Ordinal);
+            Assert.False(second.Wizard.IsCommitted);
+            Assert.Empty(second.Harness.SuggestedNames);
+            Assert.False(File.Exists(second.Harness.Destination));
+        }
+        finally
+        {
+            gate.Set();
+            await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    // Review finding 7. A failure here is a footer Cancel that changes nothing on screen while the
+    // files in flight finish.
+    [Fact]
+    public async Task CancelCopy_SaysCancelling_AtOnce()
+    {
+        using var rig = new Rig();
+        string? textAfterCancel = null;
+        rig.FakeIo(() =>
+        {
+            rig.Wizard.CancelCopyCommand.Execute(null);
+            textAfterCancel = rig.Wizard.Review.ProgressText;
+            return [];
+        });
+        await rig.ToReviewAsync();
+
+        await rig.Wizard.CommitCommand.ExecuteAsync(null);
+
+        Assert.Equal(StagingCopyService.CancellingText, textAfterCancel);
     }
 
     // Ruling E14 (R2: one staging folder for both routes). A failure here is a script that copies
@@ -514,5 +686,17 @@ public class WbppExportWizardTests
 
         Assert.Equal(StagingOutcome.Completed, rig.Wizard.Result.Result!.Outcome);
         Assert.False(rig.Wizard.Result.HasProblems);
+    }
+
+    // A failure here is a cancel that left only part-written files with no Save report to list them.
+    [Fact]
+    public void SaveReport_IsOffered_WhenOnlyPartialFilesRemain()
+    {
+        using var rig = new Rig();
+
+        rig.Wizard.Result.Result = new StagingCopyResult(StagingOutcome.Cancelled, 0, 0, [], [], [@"X:\a.fits"], null);
+
+        Assert.True(rig.Wizard.Result.HasProblems);
+        Assert.Contains(@"Partial: X:\a.fits", rig.Wizard.Result.ReportText, StringComparison.Ordinal);
     }
 }

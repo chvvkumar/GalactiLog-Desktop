@@ -1094,34 +1094,30 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// The copy of the chosen folder levels into <see cref="CopyDestination"/> through a
-    /// new-file-only staging writer. The caller has locked the wizard before this runs.
+    /// new-file-only staging writer. <c>StagingCopyService</c> owns the returned run.
     /// </summary>
-    public async Task<StagingCopyResult> RunCopyAsync(IProgress<StagingProgress> progress, CancellationToken ct)
+    /// <param name="track">The service's wrapper over the copier's io, so it knows which files
+    /// are open.</param>
+    public Task<StagingCopyResult> RunCopyAsync(
+        IProgress<StagingProgress> progress, Func<StagingIo, StagingIo> track, CancellationToken ct)
     {
         var destination = CopyDestination ?? throw new InvalidOperationException(NoStagingReason);
         var chosen = ChosenLevels();
         var operations = FolderLevels.CopyOperations(
             chosen, FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()));
         var request = new StagingCopyRequest(operations, destination, Exclusions);
+        var writer = _appWriter;
+        var io = StagingIoFor;
 
-        using var writer = _appWriter.BeginStagingCopy(destination);
-        var copier = new StagingCopier(StagingIoFor(writer));
-
+        // The task captures nothing of the page after this line, so the copy outlives the window.
         // Off the UI thread: the copier's first pass enumerates every source tree synchronously.
-        var result = await Task.Run(() => copier.RunAsync(request, progress, ct), CancellationToken.None)
-            .ConfigureAwait(true);
-
-        // Closed mid-copy (a shutdown close disposes the wizard): no window is left to list the
-        // partial files, so the log does.
-        if (_disposed && result.PartialPaths.Count > 0)
-        {
-            _logger.LogInformation(
-                "The staging copy stopped with {Count} partial files: {Paths}",
-                result.PartialPaths.Count,
-                string.Join("; ", result.PartialPaths));
-        }
-
-        return result;
+        return Task.Run(
+            async () =>
+            {
+                using var staging = writer.BeginStagingCopy(destination);
+                return await new StagingCopier(track(io(staging))).RunAsync(request, progress, ct).ConfigureAwait(true);
+            },
+            CancellationToken.None);
     }
 
     /// <summary>Save report: one new text file at the path the save dialog returned.

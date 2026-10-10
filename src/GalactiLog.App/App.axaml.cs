@@ -263,7 +263,8 @@ public partial class App : Application
                         services.GetRequiredService<ScanScheduler>(),
                         services.GetRequiredService<ScanCoordinator>(),
                         thumbnails,
-                        services.GetRequiredService<UpdateService>());
+                        services.GetRequiredService<UpdateService>(),
+                        services.GetRequiredService<StagingCopyService>());
                 };
 
                 // Spec 12.1's setup wizard is posted from NewShell above, which is the one place a
@@ -291,7 +292,7 @@ public partial class App : Application
     /// <para>
     /// Internal, static and free of Avalonia types, so App.Tests can exercise the decision without
     /// a lifetime, exactly as <see cref="DrainForShutdown(WatcherService, ScanScheduler,
-    /// ScanCoordinator, ThumbnailWorker?, UpdateService?)"/> and
+    /// ScanCoordinator, ThumbnailWorker?, UpdateService?, StagingCopyService?)"/> and
     /// <see cref="ShowSetupWizardIfNeededAsync"/> are. It is the one owner of the rule:
     /// <c>AppHost.Build</c> calls it once to compose <see cref="StartupState"/>, which spec 12.8's
     /// "Started minimized" field then reports, so the Diagnostics page says what actually
@@ -315,7 +316,7 @@ public partial class App : Application
     /// <remarks>
     /// Internal and free of Avalonia types beyond the service lookups, so App.Tests can exercise
     /// the decision without a window, the way <see cref="DrainForShutdown(WatcherService,
-    /// ScanScheduler, ScanCoordinator, ThumbnailWorker?, UpdateService?)"/> is. A failed settings
+    /// ScanScheduler, ScanCoordinator, ThumbnailWorker?, UpdateService?, StagingCopyService?)"/> is. A failed settings
     /// read or a failed
     /// show is logged and swallowed: a wizard that could not be opened must not take the
     /// application's startup down with it, and the flag stays false so the next start tries again.
@@ -357,8 +358,9 @@ public partial class App : Application
         ScanScheduler scheduler,
         ScanCoordinator coordinator,
         ThumbnailWorker? thumbnails = null,
-        UpdateService? updates = null)
-        => DrainForShutdown(watcher, scheduler, coordinator, thumbnails, ShutdownDrainTimeout, updates);
+        UpdateService? updates = null,
+        StagingCopyService? copies = null)
+        => DrainForShutdown(watcher, scheduler, coordinator, thumbnails, ShutdownDrainTimeout, updates, copies);
 
     /// <summary>The drain above with the budget as an argument, so a test can assert the
     /// sharing arithmetic without spending five real seconds.</summary>
@@ -368,7 +370,8 @@ public partial class App : Application
         ScanCoordinator coordinator,
         ThumbnailWorker? thumbnails,
         TimeSpan budget,
-        UpdateService? updates = null)
+        UpdateService? updates = null,
+        StagingCopyService? copies = null)
     {
         watcher.Stop();
         scheduler.Stop();
@@ -393,12 +396,18 @@ public partial class App : Application
         // returns false without disposing the worker's cancellation source, and the container's
         // own ThumbnailWorker.Dispose() at guiHost.Dispose() waits a fresh five seconds. That is
         // after the window is gone, so it delays process exit and nothing else.
+        //
+        // The background stacking copy shares the same budget. Cancelled before the scan wait, so
+        // its files in flight finish while the scan drains (cancel means no new file starts), and
+        // joined before the thumbnails, because files on disk outrank a preview.
         var elapsed = Stopwatch.StartNew();
         thumbnails?.Cancel();
+        copies?.CancelAll();
 
         coordinator.Cancel();
         var idle = coordinator.WaitForIdleAsync(budget).GetAwaiter().GetResult();
 
+        copies?.WaitForIdle(budget - elapsed.Elapsed);
         thumbnails?.DisposeWithin(budget - elapsed.Elapsed);
 
         if (!idle)

@@ -46,7 +46,9 @@ public sealed record StagingSkip(string Path, StagingSkipReason Reason);
 
 public sealed record StagingFailure(string SourcePath, string Message);
 
-public sealed record StagingProgress(int FilesDone, int FilesTotal, long BytesDone, long BytesTotal, string CurrentFile);
+/// <param name="BytesWritten">Bytes this run wrote, so a speed figure leaves out skipped files.</param>
+public sealed record StagingProgress(
+    int FilesDone, int FilesTotal, long BytesDone, long BytesTotal, long BytesWritten, string CurrentFile);
 
 public enum StagingOutcome { Completed, Cancelled, Aborted }
 
@@ -60,8 +62,9 @@ public sealed record StagingCopyResult(
     string? AbortReason);
 
 /// <summary>Copies source trees into the staging root as new files only, skipping any destination
-/// that exists. A full or refusing destination aborts the run, other errors fail one file; files in
-/// flight at a cancel or abort stop after their current buffer and are listed as partial.</summary>
+/// that exists. A full or refusing destination aborts the run, other errors fail one file. A cancel
+/// starts no new file and lets files in flight finish; an abort stops them after their current
+/// buffer and lists them as partial.</summary>
 public sealed class StagingCopier(StagingIo io)
 {
     // ponytail: fixed pool of 4; make it a parameter if a measured link wants more.
@@ -184,6 +187,7 @@ public sealed class StagingCopier(StagingIo io)
         string? abortReason = null;
         var copied = 0;
         var bytesCopied = 0L;
+        var bytesWritten = 0L;
 
         void Abort(Exception ex)
         {
@@ -228,12 +232,13 @@ public sealed class StagingCopier(StagingIo io)
             {
                 filesDone++;
                 bytesDone += written;
+                bytesWritten += written;
                 if (completed)
                 {
                     copied++;
                     bytesCopied += written;
                 }
-                progress?.Report(new StagingProgress(filesDone, filesTotal, bytesDone, bytesTotal, item.Source));
+                progress?.Report(new StagingProgress(filesDone, filesTotal, bytesDone, bytesTotal, bytesWritten, item.Source));
             }
         }
 
@@ -279,7 +284,8 @@ public sealed class StagingCopier(StagingIo io)
             Exception? sourceError = null;
             Exception? destinationError = null;
             var buffer = new byte[BufferBytes];
-            while (!(token.IsCancellationRequested && written < item.Length))
+            // A cancel lets the file finish; only an abort (full or refusing destination) cuts it short.
+            while (!(Volatile.Read(ref abortReason) is not null && written < item.Length))
             {
                 int read;
                 try

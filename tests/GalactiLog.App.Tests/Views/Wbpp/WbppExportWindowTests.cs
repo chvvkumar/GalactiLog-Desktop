@@ -282,9 +282,9 @@ public class WbppExportWindowTests
         gate.Wait(TimeSpan.FromSeconds(30));
     }
 
-    // A failure here is an Escape that closes the wizard while its copy runs.
+    // A failure here is an Escape that is refused while the copy runs, or one that stops the copy.
     [AvaloniaFact]
-    public async Task Escape_IsRefused_WhileBusy()
+    public async Task Escape_ClosesTheWindow_WhileTheCopyRuns()
     {
         using var harness = Harness();
         using var wizard = Wizard(harness);
@@ -302,11 +302,10 @@ public class WbppExportWindowTests
         window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.False(closed);
-        Assert.True(window.IsVisible);
+        Assert.True(closed);
+        Assert.False(window.IsVisible);
         gate.Set();
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
-        window.Close();
     }
 
     // A failure here is a result step that traps the user: committed and idle, Escape closes.
@@ -333,9 +332,9 @@ public class WbppExportWindowTests
         Assert.False(window.IsVisible);
     }
 
-    // A failure here is a title bar that abandons a running copy, or one that traps an idle wizard.
+    // A failure here is a title bar that traps the user behind a running copy, or an idle wizard.
     [AvaloniaFact]
-    public async Task RefuseClose_IsTrueOnlyWhileTheCopyRuns()
+    public async Task RefuseClose_IsFalse_WhileTheCopyRuns()
     {
         using var harness = Harness();
         using var wizard = Wizard(harness);
@@ -348,8 +347,50 @@ public class WbppExportWindowTests
         await ToReviewAsync(harness, wizard);
         await wizard.CommitCommand.ExecuteAsync(null);
 
-        Assert.True(refusedDuringCopy);
+        Assert.False(refusedDuringCopy);
         Assert.False(Refuses(window, WindowCloseReason.WindowClosing));
+
+        window.Close();
+    }
+
+    // Review finding 8, decision 6's one remaining refusal. A failure here is a title-bar X or an
+    // Escape that closes the window under a script commit's open save dialog.
+    [AvaloniaFact]
+    public async Task TheTitleBarAndEscape_AreRefused_WhileAScriptCommitRuns()
+    {
+        using var harness = Harness();
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var picked = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
+        harness.Page.ScriptDestinationPicker = _ => picked.Task;
+        await ToReviewAsync(harness, wizard);
+        wizard.Method.IsScript = true;
+        var commit = wizard.CommitCommand.ExecuteAsync(null);
+        Assert.True(wizard.IsBusy);
+
+        Assert.True(Refuses(window, WindowCloseReason.WindowClosing));
+        window.KeyPressQwerty(PhysicalKey.Escape, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(window.IsVisible);
+
+        picked.SetResult(null);
+        await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        window.Close();
+    }
+
+    // A failure here is a copy whose window gives no hint that closing it is safe.
+    [AvaloniaFact]
+    public async Task TheBackgroundHint_IsInsideTheCopyProgressPanel()
+    {
+        using var harness = Harness();
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        await ToReviewAsync(harness, wizard);
+
+        var hint = InStep<TextBlock>(window, "CopyBackgroundHint");
+
+        Assert.Equal(ReviewStep.BackgroundCopyText, hint.Text);
+        Assert.Contains(InStep<ProgressBar>(window, "CopyProgressBar"), ((Panel)hint.Parent!).Children);
 
         window.Close();
     }

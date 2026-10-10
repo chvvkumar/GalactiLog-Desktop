@@ -9,15 +9,16 @@ namespace GalactiLog.App.Tests.TestSupport;
 // once, and the display document is a local the writer saves back into.
 internal sealed class MosaicsPageHarness : IDisposable
 {
+    private readonly object _ui = new();
+
     public MosaicsPageHarness(
         MosaicsBackend? backend = null, DisplaySettings? display = null, ScanStatusService? scanStatus = null, JobRegistry? jobs = null)
     {
         // Synchronous, but one action at a time across threads, the way the one UI thread runs
         // them: a reload's apply and a job's end both arrive from the thread pool (Task 6c).
-        var ui = new object();
         void Post(Action action)
         {
-            lock (ui)
+            lock (_ui)
             {
                 action();
             }
@@ -44,7 +45,14 @@ internal sealed class MosaicsPageHarness : IDisposable
 
     public MosaicsPageViewModel Page { get; }
 
-    public void Dispose() => Page.Dispose();
+    // On the same one "UI thread" as the posts, so a reload's apply cannot mutate the rows mid-dispose.
+    public void Dispose()
+    {
+        lock (_ui)
+        {
+            Page.Dispose();
+        }
+    }
 }
 
 // Joins a Mosaics page's pending load from a synchronous test, the way
