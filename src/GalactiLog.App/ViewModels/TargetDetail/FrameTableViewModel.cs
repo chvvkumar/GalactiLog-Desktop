@@ -4,6 +4,7 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.Settings;
@@ -80,29 +81,60 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         };
 
     /// <summary>
-    /// The six frame columns whose header carries a unit, plus the exposure column. The comp puts
-    /// the unit in the header and never in the cell, so a column of figures shares one decimal
-    /// axis; the cells carry no unit at all now that <c>ExposureText</c> has dropped its suffix.
+    /// The display titles: units in the inch-mark style from <see cref="TableHeads"/>, sentence
+    /// case; <c>FrameColumns.All</c> keeps spec 12.4's verbatim titles. The comp puts the unit in
+    /// the header and never in the cell, so a column of figures shares one decimal axis.
     /// </summary>
     /// <remarks>
     /// <c>FrameColumns.All</c> is not touched: it is Core, and its <c>Title</c> is documented as
     /// verbatim from design-spec 12.4's table. The rewrite is a display concern and belongs here,
     /// beside the Time column's zone-label rewrite. The persisted key is untouched either way.
     /// </remarks>
-    private static readonly Dictionary<string, string> HeaderUnits = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, string> HeaderTitles = new(StringComparer.Ordinal)
     {
-        ["exposure_time"] = "Exp s",
-        ["median_hfr"] = "HFR px",
-        ["fwhm"] = "FWHM arcsec",
-        ["guiding_rms_arcsec"] = "RMS arcsec",
-        ["guiding_rms_ra_arcsec"] = "RMS RA arcsec",
-        ["guiding_rms_dec_arcsec"] = "RMS Dec arcsec",
+        ["exposure_time"] = TableHeads.Exposure,
+        ["median_hfr"] = TableHeads.Hfr,
+        ["eccentricity"] = TableHeads.Ecc,
+        ["fwhm"] = TableHeads.Fwhm,
+        ["detected_stars"] = TableHeads.Stars,
+        ["guiding_rms_arcsec"] = TableHeads.Rms,
+        ["guiding_rms_ra_arcsec"] = TableHeads.RmsRa,
+        ["guiding_rms_dec_arcsec"] = TableHeads.RmsDec,
+        ["adu_mean"] = "ADU mean",
+        ["adu_median"] = "ADU median",
+        ["adu_min"] = "ADU min",
+        ["adu_max"] = "ADU max",
+        ["focuser_temp"] = "Focus temp",
+        ["ambient_temp"] = "Ambient temp",
+        ["dew_point"] = "Dew point",
+        ["wind_direction"] = "Wind dir",
         ["sensor_temp"] = "Temp C",
     };
 
+    /// <summary>What an abbreviated header stands for (spec item 5). A column missing here takes
+    /// its title as its tip (<see cref="ColumnViewModel.Tip"/>).</summary>
+    private static readonly Dictionary<string, string> HeaderTips = new(StringComparer.Ordinal)
+    {
+        ["exposure_time"] = TableHeads.ExposureTip,
+        ["median_hfr"] = TableHeads.HfrTip,
+        ["eccentricity"] = TableHeads.EccTip,
+        ["fwhm"] = TableHeads.FwhmTip,
+        ["guiding_rms_arcsec"] = TableHeads.RmsTip,
+        ["guiding_rms_ra_arcsec"] = TableHeads.RmsRaTip,
+        ["guiding_rms_dec_arcsec"] = TableHeads.RmsDecTip,
+        ["adu_mean"] = "Mean pixel value, analog-to-digital units",
+        ["adu_median"] = "Median pixel value, analog-to-digital units",
+        ["adu_stdev"] = "Standard deviation of pixel values, analog-to-digital units",
+        ["adu_min"] = "Lowest pixel value, analog-to-digital units",
+        ["adu_max"] = "Highest pixel value, analog-to-digital units",
+        ["wind_direction"] = "Wind direction",
+        ["sky_quality"] = "Sky quality meter, magnitudes per square arcsecond",
+        ["sensor_temp"] = "Sensor temperature, degrees Celsius",
+    };
+
     /// <summary>One formatted cell text per column key, what the view measures for R5's auto-fit.
-    /// The same texts the row template binds, so the fit and the rendering cannot disagree; the
-    /// RMS cell carries its source mark, which shares the column.</summary>
+    /// The same texts the row template binds, so the fit and the rendering cannot disagree. The
+    /// RMS cell's source mark sits in the column's right gutter, so it is not measured.</summary>
     private static readonly Dictionary<string, Func<FrameRowViewModel, string>> CellTexts =
         new(StringComparer.Ordinal)
         {
@@ -116,7 +148,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
             ["fwhm"] = row => row.FwhmCell.Text,
             ["detected_stars"] = row => row.DetectedStarsCell.Text,
 
-            ["guiding_rms_arcsec"] = row => row.GuidingRmsCell.Text + row.GuidingRmsSourceGlyph,
+            ["guiding_rms_arcsec"] = row => row.GuidingRmsCell.Text,
             ["guiding_rms_ra_arcsec"] = row => row.GuidingRmsRaText,
             ["guiding_rms_dec_arcsec"] = row => row.GuidingRmsDecText,
 
@@ -152,9 +184,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
 
     // R5: the widths the profile stores for this table, overlaid with what this process has
     // written since the display snapshot was read; and the auto-fit the view last measured per
-    // column, which is what a stored width falls back to when cleared.
+    // column, which is what a stored width falls back to when cleared; and the widest figure plus
+    // its gutters, a numeric column's floor.
     private readonly Dictionary<string, double> _storedWidths;
     private readonly Dictionary<string, double> _autoWidths = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, double> _figureFits = new(StringComparer.Ordinal);
     private readonly Action<Action> _post;
     private readonly ShellIntegration _shell;
     private readonly Action<IReadOnlyList<FrameRowViewModel>, int>? _openPreview;
@@ -277,19 +311,27 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         var zone = SessionTimeFormat.Resolve(general.DisplayTimezoneId);
         var zoneLabel = TimezoneOptions.FormatOffset(zone.BaseUtcOffset);
 
-        Columns = [.. FrameColumns.All.Select(column => new ColumnViewModel(
-            column.Key,
-            HeaderTitle(column, zoneLabel),
-            visible.Contains(column.Key),
+        Columns = [.. FrameColumns.All.Select(column =>
+        {
+            var title = HeaderTitle(column, zoneLabel);
+            return new ColumnViewModel(
+                column.Key,
+                title,
+                visible.Contains(column.Key),
 
-            // Ruling Q15: every frame column is hideable. No single one is the row's identity, a
-            // group-gated column already renders nothing, and the picker is always in the header.
-            canHide: true,
-            isGroupEnabled: FrameColumns.IsGroupEnabled(column, display),
+                // Ruling Q15: every frame column is hideable. No single one is the row's identity,
+                // a group-gated column already renders nothing, and the picker is always in the
+                // header.
+                canHide: true,
+                isGroupEnabled: FrameColumns.IsGroupEnabled(column, display),
 
-            // Spec 14.4's alignment, carried from Core's own column table rather than restated in
-            // the markup: the header cell aligns over its figures instead of at the far edge.
-            isNumeric: column.IsNumeric))];
+                // Spec 14.4's alignment, carried from Core's own column table rather than restated
+                // in the markup: the header cell aligns over its figures instead of at the far edge.
+                isNumeric: column.IsNumeric)
+            {
+                Tip = HeaderTips.GetValueOrDefault(column.Key),
+            };
+        })];
 
         // Spec 12.4's rig order (PAR-004): first capture time within the night, which is the first
         // appearance of each label in the frames the query already ordered by capture_date. The
@@ -745,9 +787,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         SelectedRows.Add(row);
     }
 
-    /// <summary>R5's floor, the least a drag or an auto-fit leaves any column: enough for a cell
-    /// to keep its first characters so a column can never be dragged out of existence. There is
-    /// no ceiling: a wide value pushes the row wider and the horizontal scroll covers it.</summary>
+    /// <summary>R5's floor for a text column, the least a drag or an auto-fit leaves it: enough
+    /// for a cell to keep its first characters so a column can never be dragged out of existence.
+    /// A numeric column's floor is its figure fit once measured, because a number never trims
+    /// (spec.md item 3); its header may (spec.md item 5). There is no ceiling: a wide value pushes the row wider and the horizontal
+    /// scroll covers it.</summary>
     public const double ColumnFloor = 48d;
 
     /// <summary>Whether the profile stores a width for a column, in which case the auto-fit is
@@ -755,10 +799,13 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     public bool HasStoredWidth(string columnKey) => _storedWidths.ContainsKey(columnKey);
 
     /// <summary>Records the width the view measured for a column's widest cell and header, and
-    /// applies it unless the profile stores a width for that column. A non-finite or non-positive
-    /// figure is refused outright: a measurement taken before the control has a typeface produces
-    /// one, and a NaN width reaches layout as a silently unmeasurable column.</summary>
-    public void SetAutoFitWidth(string columnKey, double width)
+    /// applies it unless the profile stores a width for that column. <paramref name="figureFit"/>
+    /// is the widest cell alone plus its gutters, a numeric column's floor. A stored numeric width
+    /// under the figure fit draws at the figure fit and stays stored as it was. A non-finite or
+    /// non-positive figure is refused outright: a measurement taken before the control has a
+    /// typeface produces one, and a NaN width reaches layout as a silently unmeasurable column.
+    /// </summary>
+    public void SetAutoFitWidth(string columnKey, double width, double figureFit = 0d)
     {
         if (!double.IsFinite(width) || width <= 0d || Column(columnKey) is not { } column)
         {
@@ -766,10 +813,12 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         }
 
         _autoWidths[columnKey] = Math.Max(ColumnFloor, width);
-        if (!_storedWidths.ContainsKey(columnKey))
-        {
-            column.Width = _autoWidths[columnKey];
-        }
+        _figureFits[columnKey] = double.IsFinite(figureFit)
+            ? Math.Clamp(figureFit, ColumnFloor, _autoWidths[columnKey])
+            : ColumnFloor;
+        column.Width = _storedWidths.TryGetValue(columnKey, out var stored)
+            ? Math.Max(stored, FloorFor(column))
+            : _autoWidths[columnKey];
     }
 
     /// <summary>A drag in progress: the column takes the width live, floored, and nothing is
@@ -778,7 +827,7 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
     {
         if (double.IsFinite(width) && Column(columnKey) is { } column)
         {
-            column.Width = Math.Max(ColumnFloor, width);
+            column.Width = Math.Max(FloorFor(column), width);
         }
     }
 
@@ -812,6 +861,11 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
 
     private ColumnViewModel? Column(string columnKey)
         => Columns.FirstOrDefault(column => column.Key == columnKey);
+
+    // Spec item 3: a number is never cut, so a numeric column's least width is its widest figure;
+    // its header trims behind its tip (item 5). A text column may trim and keeps the bare floor.
+    private double FloorFor(ColumnViewModel column)
+        => column.IsNumeric && _figureFits.TryGetValue(column.Key, out var fit) ? fit : ColumnFloor;
 
     /// <summary>Highlights the row at an index into capture order. Out of range, null, or a row
     /// the current filter hides clears the highlight rather than leaving a stale one stranded:
@@ -1266,12 +1320,12 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
         SelectedCaptureIndex = singleIndex >= 0 ? singleIndex : null;
     }
 
-    // The Time column carries its zone's GMT offset (spec 5.8.1, fixer-list item 20) and seven
-    // columns carry their unit; the other 24 keep FrameColumns.All's verbatim spec 12.4 title.
+    // The Time column carries its zone's GMT offset (spec 5.8.1, fixer-list item 20); the rest
+    // take HeaderTitles' display title or keep FrameColumns.All's verbatim spec 12.4 title.
     private static string HeaderTitle(FrameColumn column, string zoneLabel)
         => column.Key == "time"
             ? $"Time ({zoneLabel})"
-            : HeaderUnits.TryGetValue(column.Key, out var titled) ? titled : column.Title;
+            : HeaderTitles.TryGetValue(column.Key, out var titled) ? titled : column.Title;
 
     // The direction glyph on the active column, kept on the columns themselves so the header
     // template stays a plain binding, exactly as the dashboard's header does.

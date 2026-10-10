@@ -346,27 +346,27 @@ public class CustomCellEditorTests
     }
 
     [AvaloniaFact]
-    public void WithTheWatermarkOff_TheCellIsEmptyAndStillNamesItselfToAScreenReader()
+    public void WithTheWatermarkOff_TheCellShowsTheDashAndStillNamesItselfToAScreenReader()
     {
         // The Nights ledger's own row strip. It prints the column's name once in the header strip
         // directly above the rows, so every empty text cell under it repeated a word already on
         // screen, seven times on a seven night ledger (phase review target P3-7, from the capture).
         // Red against the tree before this property: the watermark below is "Notes tag".
         //
-        // The second half is what makes the first half safe: the automation name is untouched, so a
-        // screen reader still hears the column and the night on a cell with no watermark.
+        // With the watermark off the cell shows MetricText.Missing in its place, and the automation
+        // name is unchanged, so a screen reader still hears the column and the night.
         var cell = Factory.Cell(Factory.Text("Notes tag"), subject: "2026-03-14");
         var (_, editor) = Show(cell);
         editor.ShowWatermark = false;
         Dispatcher.UIThread.RunJobs();
 
         var box = Editor<TextBox>(editor);
-        Assert.True(string.IsNullOrEmpty(box.Watermark));
+        Assert.Equal(MetricText.Missing, box.Watermark);
         Assert.Equal("Notes tag, 2026-03-14", AutomationProperties.GetName(box));
     }
 
     [AvaloniaFact]
-    public void WithTheWatermarkOff_ARecycledCellStaysEmpty()
+    public void WithTheWatermarkOff_ARecycledCellKeepsTheDash()
     {
         // A row's editor is realized once and handed one cell after another as the list scrolls, so
         // the watermark follows the DataContext, not the construction. A failure here is an editor
@@ -377,7 +377,7 @@ public class CustomCellEditorTests
         editor.DataContext = Factory.Cell(Factory.Text("Another column"));
         Dispatcher.UIThread.RunJobs();
 
-        Assert.True(string.IsNullOrEmpty(Editor<TextBox>(editor).Watermark));
+        Assert.Equal(MetricText.Missing, Editor<TextBox>(editor).Watermark);
 
         editor.ShowWatermark = true;
         Dispatcher.UIThread.RunJobs();

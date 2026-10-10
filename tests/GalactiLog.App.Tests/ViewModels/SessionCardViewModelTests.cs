@@ -1,4 +1,5 @@
 using System.Globalization;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -41,10 +42,6 @@ public class SessionCardViewModelTests
         Assert.Equal("1.90 arcsec", card.MedianFwhmText);
         Assert.Equal("0.45 arcsec", card.MedianGuidingRmsText);
         Assert.Equal("1,490", card.MedianDetectedStarsText);
-
-        // The joined filter names went with the round 2 sweep; the swatches are what the ledger
-        // row and the pane render.
-        Assert.Equal(["Ha"], card.FilterSwatches.Select(swatch => swatch.FilterName));
     }
 
     [Fact]
@@ -70,7 +67,6 @@ public class SessionCardViewModelTests
         Assert.False(card.HasHfrArcsec);
         Assert.Equal("", card.MedianEccentricityText);
         Assert.Equal("", card.MedianGuidingRmsText);
-        Assert.Empty(card.FilterSwatches);
     }
 
     [Fact]
@@ -225,7 +221,7 @@ public class SessionCardViewModelTests
         harness.Card.IsExpanded = true;
         harness.Settle();
 
-        Assert.DoesNotContain("Guiding RMS", harness.Card.Ranges.Select(range => range.Label));
+        Assert.DoesNotContain("Guiding " + TableHeads.Rms, harness.Card.Ranges.Select(range => range.Label));
     }
 
     [Fact]
@@ -439,7 +435,7 @@ public class SessionCardViewModelTests
         harness.Settle();
 
         Assert.Equal(
-            ["HFR", "Eccentricity", "FWHM", "Guiding RMS", "Sensor temp"],
+            [TableHeads.Hfr, "Eccentricity", TableHeads.Fwhm, "Guiding " + TableHeads.Rms, "Sensor temp C"],
             harness.Card.Ranges.Select(range => range.Label));
     }
 
@@ -531,7 +527,7 @@ public class SessionCardViewModelTests
         var card = harness.Card;
 
         Assert.Equal(
-            ["HFR", "Eccentricity", "FWHM", "Guiding RMS", "Sensor temp"],
+            [TableHeads.Hfr, "Eccentricity", TableHeads.Fwhm, "Guiding " + TableHeads.Rms, "Sensor temp C"],
             card.Ranges.Select(range => range.Label));
         Assert.Equal("1.23", card.MedianAirmassText);
         Assert.Equal("4.5 C", card.MedianAmbientTempText);
@@ -575,9 +571,8 @@ public class SessionCardViewModelTests
 
         Assert.Equal("91", harness.Card.FrameCountText);
         Assert.Equal("2.50 px", harness.Card.MedianHfrText);
-        Assert.Equal("2.50", harness.Card.LedgerHfrText);
         Assert.Contains(nameof(SessionCardViewModel.FrameCountText), changes);
-        Assert.Contains(nameof(SessionCardViewModel.LedgerHfrText), changes);
+        Assert.Contains(nameof(SessionCardViewModel.MedianHfrText), changes);
 
         // Still expanded, so it re-read exactly once more.
         Assert.True(harness.Card.IsExpanded);
@@ -774,83 +769,9 @@ public class SessionCardViewModelTests
     }
 
     [Fact]
-    public void LedgerCells_CarryNoUnits()
-    {
-        // The ledger's units live in its column headers, so these six are the unit-free twins of
-        // the card's own figures, which keep theirs.
-        using var harness = Cards.Create();
-        var card = harness.Card;
-
-        Assert.Equal("6.2", card.LedgerIntegrationText);
-        Assert.Equal("2.30", card.LedgerHfrText);
-        Assert.Equal("0.40", card.LedgerEccentricityText);
-        Assert.Equal("1.90", card.LedgerFwhmText);
-        Assert.Equal("0.45", card.LedgerGuidingRmsText);
-        Assert.Equal("1,490", card.LedgerStarsText);
-
-        // The unit-carrying originals are untouched.
-        Assert.Equal("6.2 h", card.IntegrationText);
-        Assert.Equal("2.30 px", card.MedianHfrText);
-    }
-
-    [Fact]
-    public async Task FilterSwatches_CarryOneImmutableBrushPerFilter()
-    {
-        // Spec 14.5: a view model that holds a brush holds an ImmutableSolidColorBrush, because
-        // these are built wherever the query result arrives.
-        //
-        // What is asserted is the rule rather than the record's own signature. Brush is a
-        // non-nullable positional parameter, so Assert.NotNull could never fail, which is an
-        // unfalsifiable assertion in the phase that added it (Task 4 review P3-4). An immutable
-        // brush is one whose colour can be read off the UI thread without VerifyAccess throwing,
-        // and that is what TRACKING section 6 item 24 exists for.
-        using var harness = Cards.Create();
-
-        var swatch = Assert.Single(harness.Card.FilterSwatches);
-        Assert.Equal("Ha", swatch.FilterName);
-        Assert.Equal(byte.MaxValue, swatch.Brush.Color.A);
-
-        var offThread = await Task.Run(() => swatch.Brush.Color);
-        Assert.Equal(swatch.Brush.Color, offThread);
-    }
-
-    [Fact]
-    public void FilterSwatches_AreResolvedOncePerOverview()
-    {
-        // Phase review P3-3. The property used to rebuild the list, and call the tint resolver once
-        // per filter, on every binding evaluation, which on the virtualised ledger is once per row
-        // realisation during a scroll, and the resolver can fall through to a synchronous settings
-        // read. One read per overview, and a fresh overview is what invalidates it.
-        using var harness = Cards.Create();
-        var card = harness.Card;
-
-        var first = card.FilterSwatches;
-        Assert.Same(first, card.FilterSwatches);
-        Assert.Same(first, card.FilterSwatches);
-
-        card.Refresh(Page.Session(Page.LastSession) with { FiltersUsed = ["Ha", "OIII"] });
-
-        var second = card.FilterSwatches;
-        Assert.NotSame(first, second);
-        Assert.Equal(["Ha", "OIII"], second.Select(swatch => swatch.FilterName));
-        Assert.Same(second, card.FilterSwatches);
-    }
-
-    [Fact]
-    public void FilterSwatches_FollowFilterOrder_NotTheQueryOrder()
-    {
-        // The ledger row's dots follow the filter order. A failure is the swatches in the query's wire
-        // order (OIII, Ha, L) instead of L, Ha, OIII.
-        using var harness = Cards.Create();
-        harness.Card.Refresh(Page.Session(Page.LastSession) with { FiltersUsed = ["OIII", "Ha", "L"] });
-
-        Assert.Equal(["L", "Ha", "OIII"], harness.Card.FilterSwatches.Select(swatch => swatch.FilterName));
-    }
-
-    [Fact]
     public void TargetTotals_FilterSwatches_FollowFilterOrder_NotTheQueryOrder()
     {
-        // The same rule on the ledger's target row. A failure is OIII, Ha, L in that order.
+        // The header's swatches follow the filter order. A failure is OIII, Ha, L in that order.
         var totals = new TargetTotalsViewModel(Page.PopulatedTotals() with { FiltersUsed = ["OIII", "Ha", "L"] });
 
         Assert.Equal(["L", "Ha", "OIII"], totals.FilterSwatches.Select(swatch => swatch.FilterName));
@@ -959,11 +880,11 @@ public class SessionCardViewModelTests
     // SessionOverview.GuidingProvenance --------------------------------------------------------
     //
     // The facts line clause needs a loaded detail (BuildFactsLine runs from Publish), so every
-    // case expands and settles first. The ledger cell reads Overview alone and needs neither.
-    // Both read the one member TargetDetailQuery computed, task7.md section 7.2 cases 4 to 8.
+    // case expands and settles first. It reads the one member TargetDetailQuery computed,
+    // task7.md section 7.2 cases 4 to 8.
 
     [Fact]
-    public void GuidingProvenance_CsvOnly_NoSourceClauseAndNoLedgerMark()
+    public void GuidingProvenance_CsvOnly_NoSourceClause()
     {
         var overview = Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.Csv };
         using var harness = Cards.Create(overview: overview);
@@ -973,12 +894,10 @@ public class SessionCardViewModelTests
         Assert.Equal(
             "21:05 to 03:40, gain 100, 180 s, 300 s, airmass 1.23, 4.5 C, 62 %",
             harness.Card.FactsLineText);
-        Assert.Equal("0.45", harness.Card.LedgerGuidingRmsText);
-        Assert.Equal("", harness.Card.LedgerGuidingRmsMark);
     }
 
     [Fact]
-    public void GuidingProvenance_Phd2Only_AppendsTheSentenceAndDrawsTheLedgerMark()
+    public void GuidingProvenance_Phd2Only_AppendsTheSentence()
     {
         var overview = Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.Phd2 };
         using var harness = Cards.Create(overview: overview);
@@ -988,32 +907,10 @@ public class SessionCardViewModelTests
         Assert.Equal(
             "21:05 to 03:40, gain 100, 180 s, 300 s, airmass 1.23, 4.5 C, 62 %, from a PHD2 guide log",
             harness.Card.FactsLineText);
-        // Review P2-2: the mark is its own property now, not concatenated into the value, so the
-        // ledger's fixed-width value box is unaffected by whether a night is marked.
-        Assert.Equal("0.45", harness.Card.LedgerGuidingRmsText);
-        Assert.Equal("†", harness.Card.LedgerGuidingRmsMark);
-    }
-
-    // Phase review P3-10. The ledger's mark cell keeps its declared width on an unmarked night
-    // (an invisible child would move every value box's right edge), so the view cannot hang a
-    // literal tooltip on it: hovering an unmarked night's empty box offered "from a PHD2 guide
-    // log". The tooltip has to come from the mark's own presence, which is here.
-    [Fact]
-    public void TheLedgerMarksTooltip_IsAbsentWithoutAMark_AndNamesTheGuideLogWithOne()
-    {
-        using var unmarked = Cards.Create(
-            overview: Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.Csv });
-        using var marked = Cards.Create(
-            overview: Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.Phd2 });
-
-        Assert.Equal("", unmarked.Card.LedgerGuidingRmsMark);
-        Assert.Null(unmarked.Card.LedgerGuidingRmsMarkTip);
-        Assert.Equal("†", marked.Card.LedgerGuidingRmsMark);
-        Assert.Equal("from a PHD2 guide log", marked.Card.LedgerGuidingRmsMarkTip);
     }
 
     [Fact]
-    public void GuidingProvenance_Mixed_AppendsTheForSomeFramesSentenceAndDrawsTheLedgerMark()
+    public void GuidingProvenance_Mixed_AppendsTheForSomeFramesSentence()
     {
         var overview = Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.Mixed };
         using var harness = Cards.Create(overview: overview);
@@ -1026,15 +923,13 @@ public class SessionCardViewModelTests
             "21:05 to 03:40, gain 100, 180 s, 300 s, airmass 1.23, 4.5 C, 62 %, "
             + "from a PHD2 guide log for some frames",
             harness.Card.FactsLineText);
-        Assert.Equal("0.45", harness.Card.LedgerGuidingRmsText);
-        Assert.Equal("†", harness.Card.LedgerGuidingRmsMark);
     }
 
     [Fact]
     public void GuidingProvenance_None_DrawsNothingAtAll()
     {
-        // Every value null: not an empty clause with a dangling separator, and not an empty
-        // ledger badge, nothing at all (task7.md 7.2 case 7).
+        // Every value null: not an empty clause with a dangling separator, nothing at all
+        // (task7.md 7.2 case 7).
         var overview = Page.Session(Page.LastSession) with { GuidingProvenance = GuidingRmsProvenance.None };
         using var harness = Cards.Create(overview: overview);
         harness.Card.IsExpanded = true;
@@ -1043,8 +938,6 @@ public class SessionCardViewModelTests
         Assert.Equal(
             "21:05 to 03:40, gain 100, 180 s, 300 s, airmass 1.23, 4.5 C, 62 %",
             harness.Card.FactsLineText);
-        Assert.Equal("0.45", harness.Card.LedgerGuidingRmsText);
-        Assert.Equal("", harness.Card.LedgerGuidingRmsMark);
     }
 
     [Fact]

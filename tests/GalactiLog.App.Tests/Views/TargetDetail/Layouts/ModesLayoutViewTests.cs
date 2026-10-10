@@ -13,6 +13,7 @@ using System.Text.Json;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.Views.TargetDetail.Parts;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.ViewModels;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.Views.TargetDetail;
@@ -51,6 +52,9 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         public List<Cards.Harness> MoreNights { get; } = [];
 
         public Factory.Harness Harness => (Factory.Harness)Owner;
+
+        public List<Func<DisplaySettings, DisplaySettings>> DisplayWrites
+            => Owner is LedgerPage ledger ? ledger.DisplayWrites : Harness.DisplayWrites;
 
         private SessionCardViewModel?[] Nights => [(Night as Cards.Harness)?.Card, .. MoreNights.Select(night => night.Card)];
 
@@ -141,88 +145,27 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         return Factory.PopulatedDetail(totals: totals) with { NightFilters = rows };
     }
 
-    private static LedgerPage WithCustomColumn(CustomColumnType type)
+    // A page whose Nights list draws the given custom columns, mounted with the stored record.
+    private static Mounted MountWithColumns(
+        double width, double height, TargetPageSettings? stored, bool inShell, params CustomColumnType[] types)
     {
-        var column = CustomColumnTestFactory.Define("Tag", type, CustomColumnScope.Session, [], order: 0);
+        var columns = types
+            .Select((type, index) => CustomColumnTestFactory.Define(
+                "Col " + (index + 1), type, CustomColumnScope.Session, type == CustomColumnType.Dropdown ? ["High"] : [], order: index))
+            .ToList();
         var harness = LedgerPage.Create(
-            columns: [column],
-            ledgerKeys: [column.Slug],
-            post: action => Dispatcher.UIThread.Post(action)).Settle();
+            columns: columns,
+            ledgerKeys: [.. columns.Select(column => column.Slug)],
+            post: action => Dispatcher.UIThread.Post(action),
+            targetPage: stored).Settle();
         Dispatcher.UIThread.RunJobs();
-        return harness;
+        return MountOn(harness.Page, harness, width, height, inShell);
     }
 
-    private static void AssertTheLedgerRowFits(NightsLedgerPart ledger, Control column)
-    {
-        var row = TargetPartHost.LedgerRowAt(ledger, 0);
-        var used = row.ColumnDefinitions.Sum(c => c.ActualWidth);
-        Assert.True(used <= row.Bounds.Width + 0.5, $"a ledger row needs {used} in {row.Bounds.Width}");
-        Assert.True(ledger.Bounds.Width <= column.Bounds.Width + 0.5, $"the ledger is {ledger.Bounds.Width} in {column.Bounds.Width}");
-    }
+    private static Mounted MountWithTwoColumns(TargetPageSettings? stored = null)
+        => MountWithColumns(1900, 900, stored, inShell: false, CustomColumnType.Text, CustomColumnType.Text);
 
     private static Color InkOf(Grid row) => ((ISolidColorBrush)TargetPartHost.CellAt(row, 1).Foreground!).Color;
-
-    [AvaloniaFact]
-    public void LeftColumn_TakesTheLedgersWidthInTheWideForm_And472InTheCompactForm_AndTheLedgerFitsIt()
-    {
-        // Red if a form's width moves or a ledger row's columns run past the column.
-        using (var wide = Mount())
-        {
-            var column = wide.View.Named<Control>("LeftColumn");
-            Assert.True(column.Bounds.Width >= LedgerColumn.WideMinWidth - 0.5, $"the left column is {column.Bounds.Width}");
-            AssertTheLedgerRowFits(wide.View.Named<NightsLedgerPart>("NightsLedgerPart"), column);
-        }
-
-        using var narrow = Mount(NarrowWidth, 720);
-        var narrowColumn = narrow.View.Named<Control>("LeftColumn");
-        Assert.Equal(LedgerColumn.CompactWidth, narrowColumn.Bounds.Width, 0.5);
-        AssertTheLedgerRowFits(narrow.View.Named<NightsLedgerPart>("NightsLedgerPart"), narrowColumn);
-    }
-
-    [AvaloniaFact]
-    public void TheWideFormShowsTheCustomColumns_AndTheCompactFormHidesThem()
-    {
-        // Red if a custom column is hidden in the wide form, runs past the column, or shows beside
-        // the compact ledger once the sidebar is dragged under 520.
-        var harness = WithCustomColumn(CustomColumnType.Boolean);
-        using var mounted = MountOn(harness.Page, harness, 1760, 900, inShell: true);
-        var view = mounted.View;
-        var ledger = view.Named<NightsLedgerPart>("NightsLedgerPart");
-        var head = ledger.Named<ItemsControl>("LedgerCustomHead");
-        Assert.True(harness.Page.IsWide);
-        Assert.False(ledger.IsCompact);
-        Assert.True(head.IsEffectivelyVisible && head.Bounds.Width > 0, "the custom column is hidden in the wide form");
-        AssertTheLedgerRowFits(ledger, view.Named<Control>("LeftColumn"));
-
-        DragSidebar(mounted, 500d - view.Named<Control>("LeftColumn").Bounds.Width);
-        Assert.True(harness.Page.IsWide);
-        Assert.True(ledger.IsCompact);
-        Assert.False(head.IsEffectivelyVisible && head.Bounds.Width > 0, "the custom column shows in the compact form");
-    }
-
-    [AvaloniaFact]
-    public void InTheShellAt1600_TheWideNightFloorStillFitsTheLedgerRow()
-    {
-        // Red if the page's wide Night floor of 112 pushes a ledger row past its column.
-        var harness = Factory.Create(fullNight: true, post: action => Dispatcher.UIThread.Post(action)).Settle();
-        using var mounted = MountOn(harness.ViewModel, harness, 1600, 900, inShell: true);
-        Assert.True(harness.ViewModel.IsWide);
-        AssertTheLedgerRowFits(mounted.View.Named<NightsLedgerPart>("NightsLedgerPart"), mounted.View.Named<Control>("LeftColumn"));
-    }
-
-    [AvaloniaFact]
-    public void Ledger_IsCompactOnlyInTheCompactForm_AndNeverDrawsFilters()
-    {
-        using (var wide = Mount())
-        {
-            var ledger = wide.View.Named<NightsLedgerPart>("NightsLedgerPart");
-            Assert.False(ledger.IsCompact);
-            Assert.False(ledger.Named<TextBlock>("LedgerFiltersHead").IsEffectivelyVisible);
-        }
-
-        using var narrow = Mount(NarrowWidth, 720);
-        Assert.True(narrow.View.Named<NightsLedgerPart>("NightsLedgerPart").IsCompact);
-    }
 
     [AvaloniaFact]
     public void TheLitRowAndACheckedRow_CarryDistinctMarks()
@@ -352,7 +295,9 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
             view.Mode = mode;
             mounted.Settle();
             Assert.True(Overflow(view) <= 0.5, $"{mode} runs {Overflow(view)} past the layout's {view.Bounds.Height}");
-            foreach (var region in new[] { "LeftColumn", "LanesRegion", "FramesRegion", "CompareNightsRegion", "IntegrationRegion" })
+            // Compare nights holds two scrollers side by side in time, the lanes and the table, whose
+            // bar is always shown (spec.md item 8), so each is counted on its own.
+            foreach (var region in new[] { "LeftColumn", "LanesRegion", "FramesRegion", "TrendChartPart", "CompareTableHost", "IntegrationRegion" })
             {
                 var bars = VerticalBars(view.Named<Control>(region));
                 Assert.True(bars <= 1, $"{region} in {mode} shows {bars} vertical scroll bars");
@@ -458,15 +403,25 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     }
 
     [AvaloniaTheory]
-    [InlineData(1280d, 720d, 0)]
-    [InlineData(1600d, 900d, 7)]
-    public void NightReview_ATwoRigNightWithFourFindings_KeepsTheChartWholeAndItsRows_UnderTwoChromeLines(double width, double height, int least)
+    [InlineData(1280d, 720d, 0, 740d)]
+    [InlineData(1600d, 900d, 7, 0d)]
+    public void NightReview_ATwoRigNightWithFourFindings_KeepsTheChartWholeAndItsRows_UnderTwoChromeLines(double width, double height, int least, double right)
     {
         // Red if a two-rig night with four findings cuts the chart, leaves fewer full frame rows than
-        // this size keeps, or takes more than two lines of chrome above the column header.
+        // this size keeps, or takes more than two lines of chrome above the column header. A
+        // nonzero right is the right region's width the case pins, by narrowing the window: 740 is
+        // what the old 472 px compact sidebar left beside it at 1280, and the Nights list is now
+        // narrower than that sidebar.
         using var mounted = Mount(width, height, realNight: true, findings: 4, twoRigs: true);
-        CloseNightMetrics(mounted);
         var view = mounted.View;
+        if (right > 0d)
+        {
+            mounted.Window.Width -= view.Named<Control>("RightRegion").Bounds.Width - right;
+            mounted.Settle();
+            Assert.Equal(right, view.Named<Control>("RightRegion").Bounds.Width, 1d);
+        }
+
+        CloseNightMetrics(mounted);
         var lanes = view.Named<ScrollViewer>("LanesRegion");
         var plot = BoundsIn(view.Named<NightMetricsPart>("NightMetricsPart").Named<Control>("PlotHost"), lanes);
         var frames = view.Named<FramesPart>("FramesPart");
@@ -586,6 +541,33 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     }
 
     [AvaloniaFact]
+    public void CompareNights_ANightWithNoMetrics_IsHidden_AndTheLineShowsIt()
+    {
+        // Red if the empty night is plotted, the line is missing or disabled with nothing checked
+        // (the switch beside it is), or its button does not bring the night back.
+        var middle = new DateOnly(2025, 6, 1);
+        using var mounted = Mount(get: _ => Factory.PopulatedDetail(
+            sessions: [Factory.Session(Factory.LastSession), Factory.SessionWithoutMetrics(middle), Factory.Session(Factory.FirstSession)]));
+        var page = mounted.Harness.ViewModel;
+        var button = mounted.View.Named<ToggleButton>("CompareNightsButton");
+        button.Command!.Execute(button.CommandParameter);
+        mounted.Settle();
+
+        Assert.Equal(2, page.TargetChart.PlottedSessionCount);
+        var line = mounted.View.Named<Control>("EmptyNightsLine");
+        Assert.True(line.IsEffectivelyVisible);
+        Assert.True(line.IsEffectivelyEnabled);
+        Assert.Contains("1 night has no metrics.", line.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+
+        var show = mounted.View.Named<Button>("EmptyNightsButton");
+        show.Command!.Execute(null);
+        mounted.Settle();
+
+        Assert.Equal(3, page.TargetChart.PlottedSessionCount);
+        Assert.Equal("Hide them", show.Content);
+    }
+
+    [AvaloniaFact]
     public async Task TheSelectedFrame_IsMarkedAtTheTimelinesX_InTheChart_AndAPointPressSelectsIt()
     {
         // Spec 5.2 and 5.3: red if the per-frame chart's mark is more than 1 px off the timeline's
@@ -652,9 +634,10 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.False(outlierRow.IsSelected || ordinaryRow.IsSelected);
         Assert.Equal(Fill(ordinaryRow), Fill(outlierRow));
 
+        // The row's own borders only: the container's fill is the table's zebra, which follows
+        // the item index (spec.md item 7) and so differs between rows 0 and 1 by design.
         static string Fill(ListBoxItem row) => string.Join(",", row.GetVisualDescendants().OfType<Border>()
-            .Select(border => border.Background?.ToString() ?? "none")
-            .Prepend(row.Background?.ToString() ?? "none"));
+            .Select(border => border.Background?.ToString() ?? "none"));
     }
 
     [AvaloniaFact]
@@ -831,7 +814,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
     [AvaloniaTheory]
     [InlineData(1280d, 720d)]
     [InlineData(1600d, 900d)]
-    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenBothTables(double width, double height)
+    public void Integration_IsOneScrollViewer_HoldingTheFullBarsThenTheTables(double width, double height)
     {
         // Red if the bars are not in their full form, the tables are not below them in
         // the same scroll viewer, or the hours table at the end cannot be reached by its one bar.
@@ -850,8 +833,8 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.True(LayoutParityCensusTests.IsShown(tables), "the Integration tables are not on screen");
         Assert.Equal(1, VerticalBars(view.Named<Control>("IntegrationRegion")));
 
-        var exposure = tables.Named<Control>("ExposureTable");
-        Assert.True(BoundsIn(exposure, scroll).Top < scroll.Bounds.Height, "the exposure table starts below the viewport at rest");
+        var overall = tables.Named<Control>("OverallTable");
+        Assert.True(BoundsIn(overall, scroll).Top < scroll.Bounds.Height, "the Overall metrics table starts below the viewport at rest");
         scroll.Offset = new Vector(0, scroll.Extent.Height);
         mounted.Settle();
         var hours = BoundsIn(tables.Named<Control>("HoursTable"), scroll);
@@ -896,7 +879,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         var view = mounted.View;
         foreach (var (mode, viewers) in new[]
         {
-            (TargetPageMode.CompareNights, new[] { "LanesScroll", "CompareTableHost" }),
+            (TargetPageMode.CompareNights, new[] { "LanesScroll", "CompareScroll" }),
             (TargetPageMode.Integration, new[] { "IntegrationScroll" }),
         })
         {
@@ -925,7 +908,7 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
 
     // The document after every queued write, replayed over the seeded one, as JSON.
     private static string Replayed(Mounted mounted, TargetPageSettings? seed = null)
-        => JsonSerializer.Serialize(mounted.Harness.DisplayWrites
+        => JsonSerializer.Serialize(mounted.DisplayWrites
             .Aggregate(new DisplaySettings { TargetPage = seed ?? new TargetPageSettings() }, (document, write) => write(document)).TargetPage);
 
     private static bool IsCollapsed(NightsLedgerPart ledger) => ledger.Classes.Contains(":collapsed");
@@ -951,97 +934,129 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         mounted.Settle();
     }
 
-    [AvaloniaTheory]
-    [InlineData(600d, false, false)]
-    [InlineData(520d, false, false)]
-    [InlineData(519d, true, false)]
-    [InlineData(472d, true, false)]
-    [InlineData(471d, true, true)]
-    public void Sidebar_TheFormFollowsTheStoredWidthAlone(double width, bool compact, bool collapsed)
-    {
-        // Red if the form is picked from the window's width rather than the sidebar's, or a
-        // threshold moves: wide at 520 and up, compact from 472, collapsed under 472.
-        using var mounted = Mount(1900, 900, stored: StoredModes($"{{\"sidebar_width\":{width}}}"));
-        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
-        var column = mounted.View.Named<Control>("LeftColumn");
+    // The modes record after every queued write, replayed over the seed.
+    private static TargetLayoutState StoredLayout(Mounted mounted, TargetPageSettings? seed = null)
+        => JsonSerializer.Deserialize<TargetPageSettings>(Replayed(mounted, seed))!.Layouts["modes"];
 
-        Assert.Equal(compact, ledger.IsCompact);
-        Assert.Equal(collapsed, IsCollapsed(ledger));
-        if (!collapsed)
+    private static double Stop(NightsLedgerPart ledger) => ledger.CollapsedWidth + TableMetrics.ScrollBarSize;
+
+    private static double Open(NightsLedgerPart ledger) => ledger.OpenWidth + TableMetrics.ScrollBarSize;
+
+    [AvaloniaFact]
+    public void Sidebar_WithNothingStored_IsFullyOpen_AndShowsEveryCustomColumn()
+    {
+        // Spec.md, Nights list: fully open shows every custom column. Red against a column that is
+        // narrower than the table, or a heading drawn past the visible edge.
+        using var mounted = MountWithTwoColumns();
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<ScrollViewer>("LeftColumn");
+
+        Assert.False(IsCollapsed(ledger));
+        Assert.Equal(Open(ledger), column.Bounds.Width, 0.5);
+        var headings = ledger.Named<ItemsControl>("LedgerCustomHead").GetRealizedContainers().ToList();
+        Assert.Equal(2, headings.Count);
+        foreach (var heading in headings)
         {
-            Assert.Equal(width, column.Bounds.Width, 0.5);
+            var right = heading.TranslatePoint(new Point(heading.Bounds.Width, 0), column)!.Value.X;
+            Assert.True(right <= column.Viewport.Width + 0.5, $"a heading ends at {right} in a {column.Viewport.Width} viewport");
         }
 
-        Assert.Empty(mounted.Harness.DisplayWrites);
+        Assert.Empty(mounted.DisplayWrites);
     }
 
     [AvaloniaFact]
-    public void Sidebar_ADragUnder472SnapsToCollapsed_AndADragOutOfCollapsedSnapsToCompact()
+    public void Sidebar_ADragLeft_SlidesThePaneOverTheList_WithoutReflow()
     {
-        // Red if a drag under 472 leaves a sliver of ledger, loses the open width, or a drag out of
-        // collapsed does not land in the compact form at the dragged width.
-        var seed = StoredModes("{\"sidebar_width\":480}");
-        using var mounted = Mount(1900, 900, stored: seed);
+        // Spec.md, Nights list: the pane slides over the static list. Red against a list that
+        // shrinks or reflows with the column.
+        using var mounted = MountWithTwoColumns();
         var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
         var column = mounted.View.Named<Control>("LeftColumn");
-
-        DragSidebar(mounted, -20);
-        Assert.True(IsCollapsed(ledger), "not collapsed after a drag to 460");
-        Assert.Contains("\"sidebar_collapsed\":true", Replayed(mounted, seed), StringComparison.Ordinal);
-        Assert.Contains("\"sidebar_width\":480", Replayed(mounted, seed), StringComparison.Ordinal);
-
-        DragSidebar(mounted, 10);
-        Assert.False(IsCollapsed(ledger), "still collapsed after a drag out");
-        Assert.True(ledger.IsCompact, "wide after a drag out of collapsed");
-        Assert.Equal(LedgerColumn.CompactWidth + 10, column.Bounds.Width, 1.5);
-        Assert.Contains("\"sidebar_collapsed\":false", Replayed(mounted, seed), StringComparison.Ordinal);
-    }
-
-    [AvaloniaFact]
-    public void Sidebar_Collapsed_FitsTheBoxAndTheDate_HidesEveryMetricColumn_AndCannotBeNarrowed()
-    {
-        // Red if the collapsed sidebar is wider than the box column and the Night column, a metric
-        // cell still draws, the All-nights label, the Export button or the sort note is lost, or a
-        // drag narrows it.
-        var seed = StoredModes("{\"sidebar_width\":600,\"sidebar_collapsed\":true}");
-        using var mounted = Mount(1900, 900, stored: seed);
-        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
-        var column = mounted.View.Named<Control>("LeftColumn");
+        var right = mounted.View.Named<Control>("RightRegion");
         var row = TargetPartHost.LedgerRowAt(ledger, 0);
+        var strip = row.Children.OfType<ItemsControl>().Single();
+        var rowWidth = row.Bounds.Width;
+        var stripX = strip.TranslatePoint(default, ledger)!.Value.X;
+        var width = column.Bounds.Width;
+        var rightX = right.Bounds.X;
 
+        DragSidebar(mounted, -40);
+
+        Assert.Equal(rowWidth, row.Bounds.Width, 0.5);
+        Assert.Equal(stripX, strip.TranslatePoint(default, ledger)!.Value.X, 0.5);
+        Assert.Equal(width - 40, column.Bounds.Width, 1.5);
+        Assert.Equal(rightX - 40, right.Bounds.X, 1.5);
+        Assert.False(IsCollapsed(ledger));
+        Assert.Equal(column.Bounds.Width, StoredLayout(mounted).SidebarWidth!.Value, 1.5);
+    }
+
+    [AvaloniaFact]
+    public void Sidebar_ADragPastTheDate_StopsAtTheDatesRightEdge_AndStoresCollapsed()
+    {
+        // Spec.md, Nights list: the stop is the date column's right edge, and that stop is the
+        // collapsed state. Red if a drag passes it, the open width is lost, or the collapsed chrome
+        // drops the chevron, Export or the sort note.
+        var seed = StoredModes("{\"sidebar_width\":300}");
+        using var mounted = MountWithColumns(1900, 900, seed, inShell: false, CustomColumnType.Text, CustomColumnType.Text);
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<ScrollViewer>("LeftColumn");
+        Assert.Equal(300d, column.Bounds.Width, 0.5);
+
+        DragSidebar(mounted, -1000);
+
+        Assert.Equal(Stop(ledger), column.Bounds.Width, 1d);
+        var header = ledger.Named<TableRow>("LedgerHeaderRow");
+        var dateEdge = header.TranslatePoint(
+            new Point(header.ColumnDefinitions[0].ActualWidth + header.ColumnDefinitions[1].ActualWidth, 0), column)!.Value.X;
+        Assert.Equal(column.Viewport.Width, dateEdge, 1d);
         Assert.True(IsCollapsed(ledger));
-        Assert.True(row.Children.OfType<CheckBox>().Single().IsEffectivelyVisible);
-        Assert.True(TargetPartHost.CellAt(row, 1).IsEffectivelyVisible);
-        foreach (var cell in row.Children.Where(child => Grid.GetColumn(child) >= 2))
-        {
-            Assert.False(cell.IsEffectivelyVisible && cell.Bounds.Width > 0, $"column {Grid.GetColumn(cell)} still draws");
-        }
+        var stored = StoredLayout(mounted, seed);
+        Assert.True(stored.SidebarCollapsed);
+        Assert.Equal(300d, stored.SidebarWidth);
 
-        // The Night column fits the widest of the dates and the All-nights label, never under its floor.
-        var night = new[] { TargetPartHost.CellAt(row, 1).DesiredSize.Width, ledger.Named<TextBlock>("TotalsRowLabel").DesiredSize.Width, mounted.Harness.ViewModel.NightColumnMinWidth }.Max();
-        var fit = row.ColumnDefinitions[0].ActualWidth + night;
-        var actions = ledger.Named<StackPanel>("LedgerActions");
-        output.WriteLine($"collapsed sidebar {column.Bounds.Width}, fit {fit}, actions {actions.Bounds.Width}");
-        Assert.Equal(Orientation.Vertical, actions.Orientation);
-
-        Assert.Equal(fit, column.Bounds.Width, 1d);
-        Assert.True(ledger.Named<TextBlock>("TotalsRowLabel").IsEffectivelyVisible);
+        Assert.Equal(Orientation.Vertical, ledger.Named<StackPanel>("LedgerActions").Orientation);
         Assert.True(ledger.Named<Button>("ExportButton").IsEffectivelyVisible);
         Assert.True(ledger.Named<TextBlock>("LedgerSortNote").IsEffectivelyVisible);
+        Assert.True(ledger.Named<Button>("CollapseChevron").IsEffectivelyVisible);
         Assert.False(ledger.Named<TextBlock>("LedgerTitleText").IsEffectivelyVisible);
+        Assert.Equal("All", ledger.Named<TextBlock>("LedgerNightHead").Text);
 
         DragSidebar(mounted, -100);
         Assert.True(IsCollapsed(ledger));
-        Assert.Equal(fit, column.Bounds.Width, 1d);
+        Assert.Equal(Stop(ledger), column.Bounds.Width, 1d);
     }
 
     [AvaloniaFact]
-    public void Sidebar_TheChevronCollapsesAndRestoresTheLastOpenWidth_AndStoresBoth()
+    public void Sidebar_NarrowerThanTheTitleLine_StacksTheChrome()
     {
-        // Red if the chevron does not toggle, expanding comes back at another width, or either
-        // key is not written.
-        var seed = StoredModes("{\"sidebar_width\":560}");
-        using var mounted = Mount(1900, 900, stored: seed);
+        // Ruling R8: the chrome reflows to the column, so between the stop and the title line's
+        // width it stacks. Red against a title line drawn under the chevron and Export.
+        using var mounted = MountWithTwoColumns();
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<Control>("LeftColumn");
+
+        DragSidebar(mounted, Stop(ledger) + 40d - column.Bounds.Width);
+
+        Assert.Equal(Stop(ledger) + 40d, column.Bounds.Width, 1.5);
+        Assert.False(IsCollapsed(ledger));
+        Assert.Contains(":stacked", ledger.Classes);
+        var title = ledger.Named<StackPanel>("LedgerTitle");
+        var actions = ledger.Named<StackPanel>("LedgerActions");
+        Assert.True(title.Bounds.Top >= actions.Bounds.Bottom - 0.5,
+            $"the title spans {title.Bounds} and the actions {actions.Bounds}");
+        Assert.Equal("Night", ledger.Named<TextBlock>("LedgerNightHead").Text);
+
+        DragSidebar(mounted, 1000);
+        Assert.DoesNotContain(":stacked", ledger.Classes);
+    }
+
+    [AvaloniaFact]
+    public void Sidebar_TheGlyphJumpsToTheStop_AndRestoresTheLastWidth()
+    {
+        // Spec.md, Nights list: the collapse glyph jumps straight to the stop. Red if it takes
+        // another width, expanding comes back elsewhere, or either key is not written.
+        var seed = StoredModes("{\"sidebar_width\":300}");
+        using var mounted = MountWithColumns(1900, 900, seed, inShell: false, CustomColumnType.Text, CustomColumnType.Text);
         var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
         var column = mounted.View.Named<Control>("LeftColumn");
         var chevron = ledger.Named<Button>("CollapseChevron");
@@ -1049,67 +1064,132 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         TargetPartHost.Click(mounted.Window, chevron);
         mounted.Settle();
         Assert.True(IsCollapsed(ledger), "the chevron did not collapse");
-        Assert.True(column.Bounds.Width < LedgerColumn.CompactWidth / 2d, $"collapsed at {column.Bounds.Width}");
-        Assert.Contains("\"sidebar_collapsed\":true", Replayed(mounted, seed), StringComparison.Ordinal);
+        Assert.Equal(Stop(ledger), column.Bounds.Width, 1d);
+        Assert.True(StoredLayout(mounted, seed).SidebarCollapsed);
 
         TargetPartHost.Click(mounted.Window, chevron);
         mounted.Settle();
         Assert.False(IsCollapsed(ledger), "the chevron did not expand");
-        Assert.False(ledger.IsCompact);
-        Assert.Equal(560d, column.Bounds.Width, 0.5);
-        Assert.Contains("\"sidebar_collapsed\":false", Replayed(mounted, seed), StringComparison.Ordinal);
-        Assert.Contains("\"sidebar_width\":560", Replayed(mounted, seed), StringComparison.Ordinal);
+        Assert.Equal(300d, column.Bounds.Width, 0.5);
+        var stored = StoredLayout(mounted, seed);
+        Assert.False(stored.SidebarCollapsed);
+        Assert.Equal(300d, stored.SidebarWidth);
     }
 
     [AvaloniaFact]
-    public void Sidebar_WithNothingStored_IsWideAtTheLedgersWidth_AndLeftAndRightStepItAndWriteOnRelease()
+    public void Sidebar_WithNoCustomColumn_OpensToTheTitleLine_EvenFromAStoredCollapse()
     {
-        // Red if a fresh profile is not the wide form at the ledger's own width, a key step is not
-        // 24, or the width is written before the key is released.
-        using var mounted = Mount(1900, 900);
+        // Ruling R8: with no custom column the table is a box and a date, and open is the title
+        // line's width. Red against a list mounted collapsed that never measures its open title
+        // line, and so has no travel to open into.
+        using var mounted = Mount(1900, 900, stored: StoredModes("{\"sidebar_collapsed\":true}"));
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<Control>("LeftColumn");
+        Assert.True(IsCollapsed(ledger));
+        Assert.Equal(Stop(ledger), column.Bounds.Width, 1d);
+
+        TargetPartHost.Click(mounted.Window, ledger.Named<Button>("CollapseChevron"));
+        mounted.Settle();
+
+        Assert.False(IsCollapsed(ledger));
+        Assert.True(Open(ledger) > Stop(ledger) + 1, $"open {Open(ledger)} is no wider than the stop {Stop(ledger)}");
+        Assert.Equal(Open(ledger), column.Bounds.Width, 1d);
+    }
+
+    [AvaloniaFact]
+    public void Sidebar_ADragPastOpen_StoresFullyOpen()
+    {
+        // Red if the column grows past the table, or a drag to open stores a figure that would not
+        // follow a custom column added later.
+        var seed = StoredModes("{\"sidebar_width\":300}");
+        using var mounted = MountWithColumns(1900, 900, seed, inShell: false, CustomColumnType.Text, CustomColumnType.Text);
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<Control>("LeftColumn");
+
+        DragSidebar(mounted, 500);
+
+        Assert.Equal(Open(ledger), column.Bounds.Width, 1d);
+        var stored = StoredLayout(mounted, seed);
+        Assert.Null(stored.SidebarWidth);
+        Assert.False(stored.SidebarCollapsed);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(50d)]
+    [InlineData(9999d)]
+    [InlineData(300d)]
+    public void Sidebar_StoredWidthsAreClamped(double width)
+    {
+        // Ruling R10: a width stored by the old forms clamps without a migration and writes nothing.
+        using var mounted = MountWithColumns(
+            1900, 900, StoredModes("{\"sidebar_width\":" + width + "}"), inShell: false, CustomColumnType.Text, CustomColumnType.Text);
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<Control>("LeftColumn");
+
+        Assert.Equal(Math.Clamp(width, Stop(ledger), Open(ledger)), column.Bounds.Width, 1d);
+        Assert.Empty(mounted.DisplayWrites);
+    }
+
+    [AvaloniaFact]
+    public void Sidebar_KeysStep24InsideTheTravel_AndWriteOnRelease()
+    {
+        // Red if a key step is not 24, or the width is written before the key is released.
+        using var mounted = MountWithTwoColumns();
         var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
         var column = mounted.View.Named<Control>("LeftColumn");
         var handle = mounted.View.Named<Control>("SidebarHandle");
-        Assert.False(ledger.IsCompact);
-        Assert.False(IsCollapsed(ledger));
-        Assert.True(column.Bounds.Width >= LedgerColumn.WideMinWidth - 0.5, $"the sidebar is {column.Bounds.Width}");
-        Assert.Equal(ledger.Bounds.Width, column.Bounds.Width, 0.5);
-        Assert.Empty(mounted.Harness.DisplayWrites);
         var start = column.Bounds.Width;
 
         handle.Focus();
         mounted.Window.KeyPressQwerty(PhysicalKey.ArrowLeft, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(start - 24d, column.Bounds.Width, 1.5);
-        Assert.True(ledger.IsCompact, "a step under 520 is not compact");
-        Assert.Empty(mounted.Harness.DisplayWrites);
+        Assert.Empty(mounted.DisplayWrites);
         mounted.Window.KeyReleaseQwerty(PhysicalKey.ArrowLeft, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
-        Assert.Single(mounted.Harness.DisplayWrites);
-        Assert.Contains($"\"sidebar_width\":{start - 24d}", Replayed(mounted), StringComparison.Ordinal);
+        Assert.Single(mounted.DisplayWrites);
+        Assert.Equal(start - 24d, StoredLayout(mounted).SidebarWidth!.Value, 1.5);
 
         mounted.Window.KeyPressQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
         mounted.Window.KeyReleaseQwerty(PhysicalKey.ArrowRight, RawInputModifiers.None);
         Dispatcher.UIThread.RunJobs();
         Assert.Equal(start, column.Bounds.Width, 1.5);
-        Assert.False(ledger.IsCompact);
+        Assert.False(IsCollapsed(ledger));
+    }
+
+    [AvaloniaFact]
+    public void Sidebar_ManyCustomColumns_LeaveTheRightRegionItsFloor()
+    {
+        // Ruling R7: extra custom columns stay covered rather than squeezing the night pane.
+        using var mounted = MountWithColumns(
+            1280, 800, null, inShell: true, [.. Enumerable.Repeat(CustomColumnType.Text, 8)]);
+        var ledger = mounted.View.Named<NightsLedgerPart>("NightsLedgerPart");
+        var column = mounted.View.Named<ScrollViewer>("LeftColumn");
+        var right = mounted.View.Named<Control>("RightRegion");
+        var grid = mounted.View.Named<Control>("ReviewGrid");
+
+        Assert.True(right.Bounds.Width >= ModesLayoutView.FramesFloor - 0.5, $"the right region is {right.Bounds.Width}");
+        Assert.Equal(grid.Bounds.Width - SidebarHandle.Thickness - ModesLayoutView.FramesFloor, column.Bounds.Width, 1d);
+        var last = ledger.Named<ItemsControl>("LedgerCustomHead").GetRealizedContainers().Last();
+        Assert.True(
+            last.TranslatePoint(default, column)!.Value.X > column.Viewport.Width,
+            "the last custom column is not covered, so this case cannot fail");
     }
 
     [AvaloniaFact]
     public void Frames_AreCompactFromTheRightRegionsWidth_NotTheWindows()
     {
-        // Red if the compact frames follow the window rather than the right region: at 1400 a
-        // 900 px sidebar leaves under the 800 the wide form needs, and a collapsed one leaves more.
-        var seed = StoredModes("{\"sidebar_width\":900}");
-        using var mounted = Mount(1400, 900, stored: seed, realNight: true);
-        var frames = mounted.View.Named<FramesPart>("FramesPart");
-        var right = mounted.View.Named<Control>("RightRegion");
-        Assert.True(right.Bounds.Width < FramesColumn.WideWidth, $"the right region is {right.Bounds.Width} beside a 900 px sidebar");
-        Assert.True(frames.IsCompact, "the frames keep the wide chrome beside a 900 px sidebar");
+        // Red if the compact frames follow the window rather than the right region: the same
+        // sidebar leaves under the 800 the wide form needs at 1100 and more at 1900.
+        using (var narrow = Mount(1100, 900, realNight: true))
+        {
+            var right = narrow.View.Named<Control>("RightRegion");
+            Assert.True(right.Bounds.Width < FramesColumn.WideWidth, $"the right region is {right.Bounds.Width}");
+            Assert.True(narrow.View.Named<FramesPart>("FramesPart").IsCompact, "the frames keep the wide chrome in a narrow right region");
+        }
 
-        TargetPartHost.Click(mounted.Window, mounted.View.Named<NightsLedgerPart>("NightsLedgerPart").Named<Button>("CollapseChevron"));
-        mounted.Settle();
-        Assert.False(frames.IsCompact, "the frames stay compact beside a collapsed sidebar");
+        using var wide = Mount(1900, 900, realNight: true);
+        Assert.False(wide.View.Named<FramesPart>("FramesPart").IsCompact, "the frames stay compact in a wide right region");
     }
 
     [AvaloniaFact]
@@ -1139,12 +1219,12 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         var ledger = view.Named<NightsLedgerPart>("NightsLedgerPart");
 
         Assert.True(metrics.IsExpanded);
-        Assert.Null(ledger.LitRowContent);
         Assert.Contains(lanes, metrics.GetVisualAncestors());
         foreach (var name in new[] { "PerFilterTablePart", "RangesTablePart", "ComparisonLine", "SharpestFramePart" })
         {
             var part = view.Named<Control>(name);
             Assert.Contains(metrics, part.GetVisualAncestors());
+            Assert.DoesNotContain(ledger, part.GetVisualAncestors());
             Assert.Same(mounted.Harness.ViewModel.SelectedSession, part.DataContext);
         }
 

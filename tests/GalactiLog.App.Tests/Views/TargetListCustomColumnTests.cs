@@ -10,8 +10,10 @@ using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.Views.Dashboard;
 using GalactiLog.Core.Settings;
@@ -166,7 +168,7 @@ public class TargetListCustomColumnTests
 
         var heading = Heading(view, longName);
 
-        Assert.Equal(TargetListView.DropdownCellWidth, heading.Bounds.Width);
+        Assert.Equal(CustomCellWidths.Choice, heading.Bounds.Width);
         Assert.True(IsTrimmed(heading), "The heading grew past the cap.");
         Assert.Equal(longName, ToolTip.GetTip(heading));
         Assert.Equal(longName, AutomationProperties.GetName(heading));
@@ -179,7 +181,7 @@ public class TargetListCustomColumnTests
         // Ruling C24's principle: a custom column gives way first and no built-in column pays for
         // one. The defect: the three capped columns gave up a third of the strip's width whenever a
         // strip was drawn, so the built-in headings trimmed harder at a wider window than at a
-        // narrower one and the Last Session value, which carries no trimming at all, hard-clipped
+        // narrower one and the Last session value, which carries no trimming at all, hard-clipped
         // mid-figure and read as a wrong date.
         foreach (var allotment in new[] { ShippedAllotment, NarrowAllotment })
         {
@@ -209,9 +211,9 @@ public class TargetListCustomColumnTests
             var baseline = Named<TextBlock>(none, "LastSessionCell").Bounds.Width;
             Assert.True(
                 Math.Abs(value - baseline) < ColumnSettle,
-                $"At {allotment}, the Last Session value measures {value} with custom columns on "
+                $"At {allotment}, the Last session value measures {value} with custom columns on "
                     + $"and {baseline} with none on.");
-            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor, "The star column went below its floor.");
+            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor - TableMetrics.ColumnGutters, "The star column went below its floor.");
         }
     }
 
@@ -455,7 +457,7 @@ public class TargetListCustomColumnTests
         // runs paint no background of their own, reaches the row's own click target behind the
         // cells and opens the target. Without it this case would pass against a row that never
         // opens at all.
-        Press(window, At(window, Named<Grid>(view, "NameCell"), 0.5d, 0.5d));
+        Press(window, At(window, Named<DockPanel>(view, "NameCell"), 0.5d, 0.5d));
 
         Assert.Equal(1, opened);
     }
@@ -611,7 +613,7 @@ public class TargetListCustomColumnTests
     // at the end of the built-in six.
     //
     // Red against that binding: the two headings are absent from the flyout and "Processed" follows
-    // "Last Session" with nothing between them.
+    // "Last session" with nothing between them.
     [AvaloniaFact]
     public void TheGearFlyout_ListsACustomColumnUnderACustomHeading()
     {
@@ -632,7 +634,7 @@ public class TargetListCustomColumnTests
         // built-in ones rather than a second column state.
         var boxes = FlyoutBoxes(gear);
         Assert.Equal(
-            ["Name", "Designation", "Palette", "Integration", "Equipment", "Last Session", "Processed"],
+            ["Name", "Designation", "Palette", "Hours", "Equipment", "Last session", "Processed"],
             boxes);
 
         gear.Flyout.Hide();
@@ -659,7 +661,7 @@ public class TargetListCustomColumnTests
         Assert.DoesNotContain("Built-in", texts);
         Assert.DoesNotContain("Custom", texts);
         Assert.Equal(
-            ["Name", "Designation", "Palette", "Integration", "Equipment", "Last Session"],
+            ["Name", "Designation", "Palette", "Hours", "Equipment", "Last session"],
             FlyoutBoxes(gear));
 
         gear.Flyout.Hide();

@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Automation.Peers;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Input;
@@ -10,6 +11,7 @@ using Avalonia.Interactivity;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -67,12 +69,16 @@ public class RigLabelRowTests
         var (pane, harness, _) = RigPane(MultiRigDetail(RigA, RigB));
         using var scope = harness;
 
-        var header = pane.Named<Grid>("FilterTableHeader");
-        Assert.Equal(9, header.ColumnDefinitions.Count);
+        var header = pane.Named<TableRow>("FilterTableHeader");
+        Assert.Equal(10, header.ColumnDefinitions.Count);
 
+        // The label row spans its item between the two gutters, no wider.
         var labels = VisibleLabelRows(pane, "FilterRigLabelRow");
         Assert.Equal(2, labels.Count);
-        Assert.All(labels, label => Assert.Equal(9, Grid.GetColumnSpan(label)));
+        Assert.All(labels, label => Assert.Equal(
+            label.FindAncestorOfType<ContentPresenter>()!.Bounds.Width,
+            label.Bounds.Width + TableMetrics.ColumnGutters,
+            0.5));
 
         // A label row with no rig-scope column carries no CustomCellEditor: the strip is bound but
         // never realized, which is what an unedited RigLabelRowTemplate already proves empirically

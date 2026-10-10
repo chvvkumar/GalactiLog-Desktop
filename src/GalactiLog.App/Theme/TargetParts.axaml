@@ -4,11 +4,9 @@
     <!-- The disclosure chevron shared by the night header and the current layout. -->
     <StreamGeometry x:Key="IconChevronDown">M3,6 L8,11 L13,6</StreamGeometry>
 
-    <!-- One filter swatch row, keyed once. Three ItemsControls render it: the log line, the
-         ledger's target row and every ledger night row. It was written out verbatim in all three
-         places, which is design lesson 1's second-occurrence rule broken twice inside one file
-         (phase review P2-3). The Brush is a filter's own configured colour and is the one value on
-         this page that is user data rather than a theme token. -->
+    <!-- One filter swatch row, keyed once (phase review P2-3). The header's log line renders it.
+         The Brush is a filter's own configured colour and is the one value on this page that is
+         user data rather than a theme token. -->
     <DataTemplate x:Key="FilterSwatchTemplate" x:DataType="detail:FilterSwatchViewModel">
       <StackPanel Orientation="Horizontal" Margin="0,0,8,0">
         <Ellipse Width="7" Height="7" Fill="{Binding Brush}" VerticalAlignment="Center" Margin="0,0,5,0" />

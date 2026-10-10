@@ -6,6 +6,7 @@ using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Theme;
 using GalactiLog.App.ViewModels.Stats;
@@ -153,12 +154,17 @@ public class StatisticsViewTests
     [AvaloniaFact]
     public void ColumnHeaders_CarryTheirUnits()
     {
-        // Review finding M5, and the same rule applied to the inventory tables' new header rows.
+        // Review finding M5, and spec.md item 4: the unit once in the header, in the shared style.
         var (_, view, page) = Show();
 
-        var headers = view.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text).ToList();
-        Assert.Contains("Med FWHM (arcsec)", headers);
-        Assert.Contains("Med HFR (px)", headers);
+        var headers = HeaderRows(view)
+            .SelectMany(row => row.GetVisualDescendants().OfType<TextBlock>())
+            .Select(text => text.Text ?? "")
+            .ToList();
+        Assert.Contains(TableHeads.Fwhm, headers);
+        Assert.Contains(TableHeads.Hfr, headers);
+        Assert.DoesNotContain(headers, header => header.Contains("arcsec", StringComparison.Ordinal));
+        Assert.DoesNotContain(headers, header => header.Contains("(px)", StringComparison.Ordinal));
         page.Dispose();
     }
 
@@ -250,51 +256,44 @@ public class StatisticsViewTests
     }
 
     [AvaloniaFact]
-    public void Scorecard_FitsThePagesRealAllotment_AtTheWindowMinimum()
+    public void Scorecard_AtTheWindowMinimum_TrimsTheRigAndKeepsEveryFigureWhole()
     {
-        // Item 46's second half: Avalonia's Grid does not shrink an Auto column when the arranged
-        // width is smaller than the sum (TargetDetailView.axaml:114, HANDOFF item 48), which is how
-        // Phase 14C clipped a seven-column header. The scorecard is nine columns on proportional
-        // stars with a floor on each, and this case is written at the page's real allotment rather
-        // than in a bare 1280 window where nothing can fail.
+        // Spec.md item 3 at the page's real allotment: a figure never trims, so the rig name is the
+        // one cell that gives. A rig name far wider than its column, because the rule only bites
+        // when the content wants more width than the page has. Gated sessions too, so the gate
+        // clause's column is drawn.
         ChartTheme.Apply();
-        // A rig name far wider than its column, because the rule only bites when the content wants
-        // more width than the page has: nine Auto columns would size to their content and overflow,
-        // where nine stars shrink together and the name trims.
         var model = Factory.Create(loadStats: () => Factory.Sample(guiding: Factory.Guiding(
-            rigs: [Factory.Rig(telescope: new string('W', 120))])));
+            rigs: [Factory.Rig(telescope: new string('W', 120), gated: 2)])));
         var view = new StatisticsView { DataContext = model };
         var window = new Window { Width = 1024, Height = 700, Content = view };
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        var rows = view.GetControl<ItemsControl>("GuidingScorecardRows");
-        var grid = rows.GetVisualDescendants().OfType<Grid>().First();
+        var row = view.GetControl<ItemsControl>("GuidingScorecardRows").GetVisualDescendants().OfType<TableRow>().First();
+        var rig = (TextBlock)row.Children.First(cell => TableRow.GetCol(cell) == "rig");
 
-        Assert.Equal(9, grid.ColumnDefinitions.Count);
-        Assert.All(grid.ColumnDefinitions, column => Assert.True(
+        Assert.Contains(rig.TextLayout.TextLines, line => line.HasCollapsed);
+        Assert.NotNull(ToolTip.GetTip(rig));
+        Assert.All(row.ColumnDefinitions, column => Assert.True(
             column.ActualWidth > 0, "every scorecard column is arranged at a non-zero width"));
-        Assert.True(
-            grid.ColumnDefinitions.Sum(column => column.ActualWidth) <= grid.Bounds.Width + 0.5d,
-            "the nine columns fit the width the page arranged the grid at");
+        TableAssert.Conventions(view);
 
         window.Close();
         model.Dispose();
     }
 
     /// <summary>
-    /// Phase 15B fixer item 26, confirm only. <c>task5b-review.md</c> ruling 2.2 fixed the
-    /// Equipment performance header overlap with <c>TextTrimming</c> alone, and this is the
-    /// measured confirmation at the 1296 px width the overlap was reported at.
+    /// Phase 15B fixer item 26, at the 1296 px width the Equipment performance header overlap was
+    /// reported at.
     /// </summary>
     /// <remarks>
-    /// The grid's nine columns are proportional stars with no floor, so a header whose text wants
-    /// more than its share cannot push its neighbour aside; it either trims or it runs into the
-    /// cell beside it. A failure looks like the second, which is the defect the ruling closed, and
-    /// it is a question for the coordinator rather than a column width to edit.
+    /// The figures are Auto columns that never trim (spec.md item 3), so a header that wants more
+    /// width widens its column and the table scrolls sideways rather than trimming or running into
+    /// the cell beside it.
     /// </remarks>
     [AvaloniaFact]
-    public void EquipmentPerformanceHeaders_TrimRatherThanOverlap_At1296()
+    public void EquipmentPerformanceHeaders_NeitherTrimNorOverlap_At1296()
     {
         ChartTheme.Apply();
         var model = Factory.Create();
@@ -303,17 +302,15 @@ public class StatisticsViewTests
         window.Show();
         Dispatcher.UIThread.RunJobs();
 
-        // The Equipment performance header row: nine columns, and the only nine-column grid on
-        // this page whose first cell reads "Equipment" (the scorecard's nine read "Rig" first).
-        var headerRow = view.GetVisualDescendants()
-            .OfType<Grid>()
-            .First(grid => grid.ColumnDefinitions.Count == 9
-                && grid.Children.OfType<TextBlock>().Any(text => text.Text == "Equipment"));
+        var headerRow = HeaderRows(view)
+            .First(row => row.Children.OfType<TextBlock>().Any(text => text.Text == "Equipment"));
 
         var headers = headerRow.Children.OfType<TextBlock>().ToList();
 
         Assert.Equal(9, headers.Count);
-        Assert.All(headers, text => Assert.Equal(TextTrimming.CharacterEllipsis, text.TextTrimming));
+        Assert.All(
+            headers.Where(text => text.Classes.Contains("tc-num")),
+            text => Assert.DoesNotContain(text.TextLayout.TextLines, line => line.HasCollapsed));
         Assert.All(headers, text => Assert.True(
             text.Bounds.Width > 0,
             "every header cell is arranged at a non-zero width"));
@@ -407,30 +404,60 @@ public class StatisticsViewTests
     [AvaloniaFact]
     public void Scorecard_TheHeaderColumns_AgreeWithTheRowColumns()
     {
-        // Review finding P3-3: the nine column definitions are written out twice, in the header grid
-        // and in the row template, with no SharedSizeGroup and nothing else comparing them, so an
-        // edit to one would drift the header off its data silently.
+        // Review finding P3-3: the header and the rows read one column set, and line up on it.
         var (_, view, page) = Show();
 
-        var header = view.GetControl<ItemsControl>("GuidingScorecardRows")
-            .GetVisualAncestors()
-            .OfType<StackPanel>()
-            .SelectMany(panel => panel.Children.OfType<Grid>())
-            .First(grid => grid.ColumnDefinitions.Count == 9);
+        var header = HeaderRows(view).First(row => row.Children.OfType<TextBlock>().Any(text => text.Text == "Rig")
+            && row.Columns!.Id == "Score");
         var row = view.GetControl<ItemsControl>("GuidingScorecardRows")
             .GetVisualDescendants()
-            .OfType<Grid>()
-            .First(grid => grid.ColumnDefinitions.Count == 9);
+            .OfType<TableRow>()
+            .First();
 
-        Assert.Equal(9, header.ColumnDefinitions.Count);
+        Assert.Same(header.Columns, row.Columns);
         Assert.Equal(
-            header.ColumnDefinitions.Select(column => column.Width.ToString()),
-            row.ColumnDefinitions.Select(column => column.Width.ToString()));
-        Assert.Equal(
-            header.ColumnDefinitions.Select(column => column.MinWidth),
-            row.ColumnDefinitions.Select(column => column.MinWidth));
+            Lefts(header).Select(left => Math.Round(left, 1)),
+            Lefts(row).Select(left => Math.Round(left, 1)));
         page.Dispose();
     }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void StatisticsView_MeetsTableConventions(bool extraLarge)
+    {
+        ChartTheme.Apply();
+        var model = Factory.Create();
+        var view = new StatisticsView { DataContext = model };
+        var window = new Window { Width = 1280, Height = 800, Content = view };
+        if (extraLarge)
+        {
+            window.FontSize = 20d;
+        }
+
+        window.Show();
+        model.Performance.Rows[0].IsExpanded = true;
+        model.Guiding.ToggleTableCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(view.GetControl<StackPanel>("AltitudeTable").IsVisible);
+        TableAssert.Conventions(view);
+
+        // The tables only: the page's wrapping captions are not table text.
+        var tables = view.GetVisualDescendants().OfType<ScrollViewer>().Where(scroller => scroller.Classes.Contains("table")).ToList();
+        Assert.Equal(4, tables.Count);
+        Assert.All(tables, TextFit.AssertTextFitsItsBox);
+
+        window.Close();
+        model.Dispose();
+    }
+
+    private static IEnumerable<TableRow> HeaderRows(Control view)
+        => view.GetVisualDescendants().OfType<TableRow>().Where(row => row.Kind == RowKind.Header);
+
+    // Each column's left edge, in the row's own coordinates.
+    private static IEnumerable<double> Lefts(TableRow row)
+        => row.ColumnDefinitions.Select((_, index) => row.ColumnDefinitions.Take(index).Sum(column => column.ActualWidth));
 
     // The page's markup with its XML comments removed, so a rule named in a comment is not a
     // match. SourceScan.StripComments strips the C# forms and this file is XAML.

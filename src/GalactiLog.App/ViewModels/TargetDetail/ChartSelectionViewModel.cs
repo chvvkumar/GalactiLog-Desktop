@@ -318,9 +318,8 @@ public sealed partial class ChartSelectionViewModel : ObservableObject
     /// One canonical filter's configured colour, as the brush the chart pills already carry.
     /// </summary>
     /// <remarks>
-    /// The Target detail page draws the same 7 px dot in its log line, in the ledger's filters
-    /// column and in the session pane's filter table (P12, Task 4 and Task 5). Those three
-    /// surfaces resolve the colour through this method rather than each rebuilding
+    /// The Target detail page draws the same 7 px dot in its log line and in the session pane's
+    /// filter table (P12, Task 4 and Task 5). Those surfaces resolve the colour through this method rather than each rebuilding
     /// <c>ParseTint(aliases.FilterColor(name))</c>, which is the fifth occurrence of that pair in
     /// the solution and the point at which it becomes a shared spine (design lesson 1).
     /// <para>

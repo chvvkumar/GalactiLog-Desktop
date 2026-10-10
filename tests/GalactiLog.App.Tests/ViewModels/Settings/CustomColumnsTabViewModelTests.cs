@@ -455,6 +455,17 @@ public class CustomColumnsTabViewModelTests
         Assert.Equal(7, Assert.Single(tab.Rows).ValueCount);
     }
 
+    [Fact]
+    public async Task TheValuesColumn_SeparatesThousands()
+    {
+        var catalogue = new FakeCatalogue();
+        catalogue.Seed(CustomColumnTestFactory.Define(
+            "Done", CustomColumnType.Boolean, CustomColumnScope.Target, []) with { ValueCount = 1234 });
+        var tab = await CreateAndLoadAsync(catalogue);
+
+        Assert.Equal("1,234", Assert.Single(tab.Rows).ValueCountText);
+    }
+
     // ---- required case 21 --------------------------------------------------------------
 
     [Fact]

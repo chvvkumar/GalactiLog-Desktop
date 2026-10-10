@@ -95,7 +95,7 @@ public partial class DashboardView : UserControl
         // fixer-list item 6, phase-review P2. Task 5's 1024 by 700 window minimum, Task 2's 480
         // panel maximum and Task 3's no-scroller trimming rule did not hold together: at the floor
         // the list was handed 448 pixels with the panel at its 300 default and 268 at 480, against
-        // a row that needs TargetListView.ListMinWidth, so Last Session, the Expand button and the
+        // a row that needs TargetListView.ListMinWidth, so Last session, the Expand button and the
         // pager's page-size select clipped off the trailing edge with no way to reach them.
         //
         // The panel's rendered width is therefore bounded by what the list needs. This computes

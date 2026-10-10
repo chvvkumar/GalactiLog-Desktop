@@ -38,6 +38,11 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
     public const string HfrNotGradedTooltip =
         "Pixel HFR; only comparable within this optical train, not graded across rigs";
 
+    /// <summary>The median HFR column header's hover text: the header drops "Med", so the tooltip
+    /// states the median (ruling R17).</summary>
+    public const string MedianHfrTooltip =
+        "Median pixel HFR; only comparable within this optical train, not graded across rigs";
+
     /// <summary>The web's hover text on the grouped marker.</summary>
     public const string GroupedTooltip =
         "Grouped: multiple equipment aliases are combined under this name";
@@ -61,8 +66,8 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
         MedianFwhm = MetricGrading.Grade(combo.MedianFwhm, fwhmBaseline, "FWHM", brushes);
         FwhmFrameCount = combo.FwhmFrameCount > 0
             ? $"n={MetricText.Count(combo.FwhmFrameCount)}"
-            : "";
-        Filters = string.Join(", ", combo.FilterBreakdown.Select(filter => filter.FilterName));
+            : MetricText.Missing;
+        Filters = MetricText.Cell(string.Join(", ", combo.FilterBreakdown.Select(filter => filter.FilterName)));
         FilterRows =
         [
             .. combo.FilterBreakdown.Select(filter => new EquipmentFilterRow(
@@ -100,7 +105,7 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
     public GradedCell MedianFwhm { get; }
 
     /// <summary>How many frames carried an FWHM, rendered beside the median as <c>n=NNN</c>.
-    /// Empty when none did.</summary>
+    /// <see cref="MetricText.Missing"/> when none did.</summary>
     public string FwhmFrameCount { get; }
 
     /// <summary>The canonical filters of this combination, comma separated.</summary>
@@ -135,7 +140,8 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
 internal static class MetricGrading
 {
     /// <summary>One graded cell. A null <paramref name="value"/> is neutral with no hover text at
-    /// all, never a neutral cell whose tooltip reads NaN.</summary>
+    /// all, never a neutral cell whose tooltip reads NaN, and takes the faint missing-value ink.
+    /// </summary>
     /// <param name="baseline">The sample this value is compared against.
     /// <see cref="FrameQuality.MadZ"/> answers null, and so the cell is neutral, whenever that
     /// sample holds fewer than <see cref="FrameQuality.MinGroup"/> values or has a zero
@@ -146,7 +152,7 @@ internal static class MetricGrading
         var text = EquipmentComboRowViewModel.Metric(value);
         if (value is null)
         {
-            return new GradedCell(text, QualityBand.Neutral, brushes.Neutral, "");
+            return new GradedCell(text, QualityBand.Neutral, brushes.Missing, "");
         }
 
         // Every graded metric here is higher-is-worse, so the sign is not flipped.
@@ -163,7 +169,8 @@ internal static class MetricGrading
 }
 
 /// <summary>
-/// The four band colours, resolved once from the theme rather than per cell.
+/// The four band colours and the missing-value ink, resolved once from the theme rather than per
+/// cell.
 /// </summary>
 /// <remarks>
 /// Spec 14.5: a view-model that holds a brush holds an <see cref="ImmutableSolidColorBrush"/>.
@@ -177,6 +184,11 @@ internal sealed class BandBrushes
     /// assert against the dictionary rather than against a hard-coded hex string.</summary>
     internal static readonly string[] TokenKeys = ["ColorTextPrimary", "ColorSuccess", "ColorWarning", "ColorError"];
 
+    /// <summary>The faint ink of a missing value (spec.md item 6). A graded cell binds its brush
+    /// locally, which outranks the table's faint-dash style, so an absent figure takes this instead.
+    /// Not one of <see cref="TokenKeys"/>, which are the bands in order.</summary>
+    internal const string MissingKey = "ColorTextTertiary";
+
     public BandBrushes()
     {
         // Review finding I1: the first implementation named the ColorSuccessValue, ColorWarningValue
@@ -188,6 +200,7 @@ internal sealed class BandBrushes
         Better = Resolve(TokenKeys[1]);
         Watch = Resolve(TokenKeys[2]);
         Reject = Resolve(TokenKeys[3]);
+        Missing = Resolve(MissingKey);
     }
 
     public IImmutableSolidColorBrush Neutral { get; }
@@ -197,6 +210,8 @@ internal sealed class BandBrushes
     public IImmutableSolidColorBrush Watch { get; }
 
     public IImmutableSolidColorBrush Reject { get; }
+
+    public IImmutableSolidColorBrush Missing { get; }
 
     public IImmutableSolidColorBrush For(QualityBand band) => band switch
     {

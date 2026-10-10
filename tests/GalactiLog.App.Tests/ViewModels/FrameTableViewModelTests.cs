@@ -1,6 +1,8 @@
 using System.Diagnostics;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
@@ -798,7 +800,7 @@ public class FrameTableViewModelTests
         Assert.Equal("3.4", row.AmbientTempText);
         Assert.Equal("1.6", row.DewPointText);
         Assert.Equal("62", row.HumidityText);
-        Assert.Equal("1013", row.PressureText);
+        Assert.Equal("1,013", row.PressureText);
         Assert.Equal("3.4", row.WindSpeedText);
         Assert.Equal("271", row.WindDirectionText);
         Assert.Equal("6.6", row.WindGustText);
@@ -816,20 +818,38 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public void Rows_AbsentMetrics_RenderEmptyRatherThanZero()
+    public void Rows_AbsentMetrics_RenderTheMissingDash()
     {
         // Null means "not measured", never zero (Task 1 handoff). A frame with nothing but a path
-        // renders empty cells, and a null capture date renders an empty Time rather than an epoch.
+        // renders the missing dash (spec item 6, never a silent blank), and a null capture date
+        // renders the dash in Time rather than an epoch.
         var row = Harness.Create(frames: [Frame()], display: EveryGroup()).Table.Rows[0];
 
-        Assert.Equal("", row.TimeText);
-        Assert.Equal("", row.FilterText);
-        Assert.Equal("", row.ExposureText);
-        Assert.Equal("", row.MedianHfrText);
-        Assert.Equal("", row.DetectedStarsText);
-        Assert.Equal("", row.AduMinText);
-        Assert.Equal("", row.PierSideText);
-        Assert.Equal("", row.CameraGainText);
+        Assert.Equal(MetricText.Missing, row.TimeText);
+        Assert.Equal(MetricText.Missing, row.FilterText);
+        Assert.Equal(MetricText.Missing, row.ExposureText);
+        Assert.Equal(MetricText.Missing, row.MedianHfrText);
+        Assert.Equal(MetricText.Missing, row.DetectedStarsText);
+        Assert.Equal(MetricText.Missing, row.AduMinText);
+        Assert.Equal(MetricText.Missing, row.PierSideText);
+        Assert.Equal(MetricText.Missing, row.CameraGainText);
+
+        // A real zero is a measurement and shows as one.
+        var zero = Harness.Create(frames: [Frame(cameraGain: 0)], display: EveryGroup()).Table.Rows[0];
+        Assert.Equal("0", zero.CameraGainText);
+    }
+
+    [Fact]
+    public void Rows_LongNumbers_CarryTheThousandsSeparator()
+    {
+        // Spec item 3: every figure past three digits groups its thousands, like ADU and Stars.
+        var row = Harness.Create(
+            frames: [Frame(exposureTime: 1200.5d, pressure: 1013d, cameraGain: 1600)],
+            display: EveryGroup()).Table.Rows[0];
+
+        Assert.Equal("1,200.5", row.ExposureText);
+        Assert.Equal("1,013", row.PressureText);
+        Assert.Equal("1,600", row.CameraGainText);
     }
 
     [Fact]
@@ -1524,28 +1544,50 @@ public class FrameTableViewModelTests
     }
 
     [Fact]
-    public void Columns_SevenHeadersCarryTheirUnit()
+    public void Columns_HeadersUseTheSharedUnitsAndSentenceCase()
     {
-        // The comp puts the unit in the header and never in the cell, so a column of figures
-        // shares one decimal axis. FrameColumns.All is Core and keeps spec 12.4's verbatim
-        // titles; the rewrite is a display concern and sits beside the zone-label rewrite.
+        // Spec items 4 and 5: the unit in the header in the inch-mark style, the six shared
+        // headings from TableHeads, sentence case, and a tooltip on every header. FrameColumns.All
+        // is Core and keeps spec 12.4's verbatim titles; the rewrite is a display concern.
         var harness = Harness.Create(display: EveryGroup());
 
-        string Title(string key) => harness.Table.Columns.Single(column => column.Key == key).Title;
+        ColumnViewModel Column(string key) => harness.Table.Columns.Single(column => column.Key == key);
+        string Title(string key) => Column(key).Title;
 
-        Assert.Equal("Exp s", Title("exposure_time"));
-        Assert.Equal("HFR px", Title("median_hfr"));
-        Assert.Equal("FWHM arcsec", Title("fwhm"));
-        Assert.Equal("RMS arcsec", Title("guiding_rms_arcsec"));
-        Assert.Equal("RMS RA arcsec", Title("guiding_rms_ra_arcsec"));
-        Assert.Equal("RMS Dec arcsec", Title("guiding_rms_dec_arcsec"));
+        Assert.Equal(TableHeads.Hfr, Title("median_hfr"));
+        Assert.Equal(TableHeads.Ecc, Title("eccentricity"));
+        Assert.Equal(TableHeads.Fwhm, Title("fwhm"));
+        Assert.Equal(TableHeads.Rms, Title("guiding_rms_arcsec"));
+        Assert.Equal(TableHeads.Stars, Title("detected_stars"));
+        Assert.Equal(TableHeads.Exposure, Title("exposure_time"));
+        Assert.Equal("RMS RA \"", Title("guiding_rms_ra_arcsec"));
+        Assert.Equal("RMS Dec \"", Title("guiding_rms_dec_arcsec"));
+
+        Assert.Equal("ADU mean", Title("adu_mean"));
+        Assert.Equal("ADU median", Title("adu_median"));
+        Assert.Equal("ADU min", Title("adu_min"));
+        Assert.Equal("ADU max", Title("adu_max"));
+        Assert.Equal("Focus temp", Title("focuser_temp"));
+        Assert.Equal("Ambient temp", Title("ambient_temp"));
+        Assert.Equal("Dew point", Title("dew_point"));
+        Assert.Equal("Wind dir", Title("wind_direction"));
         Assert.Equal("Temp C", Title("sensor_temp"));
 
-        // Everything else keeps FrameColumns.All's title, and the Time column keeps its zone's
-        // GMT offset (fixer-list item 20, re-pointed from the bare "UTC" id).
-        Assert.Equal("Ecc", Title("eccentricity"));
-        Assert.Equal("Stars", Title("detected_stars"));
+        // The Time column keeps its zone's GMT offset (fixer-list item 20).
         Assert.Equal("Time (GMT+00:00)", Title("time"));
+
+        Assert.All(harness.Table.Columns, column => Assert.DoesNotContain("arcsec", column.Title));
+
+        // Every header has a tip: an abbreviation says what it stands for, and any other title
+        // carries itself, so a text title dragged narrow enough to trim still reads in full.
+        Assert.All(harness.Table.Columns, column => Assert.NotNull(column.Tip));
+        Assert.Equal(TableHeads.HfrTip, Column("median_hfr").Tip);
+        Assert.Equal(TableHeads.EccTip, Column("eccentricity").Tip);
+        Assert.Equal(TableHeads.FwhmTip, Column("fwhm").Tip);
+        Assert.Equal(TableHeads.RmsTip, Column("guiding_rms_arcsec").Tip);
+        Assert.Equal(TableHeads.ExposureTip, Column("exposure_time").Tip);
+        Assert.Equal("File name", Column("file_name").Tip);
+        Assert.Equal("Time (GMT+00:00)", Column("time").Tip);
     }
 
     [Fact]
@@ -1645,6 +1687,50 @@ public class FrameTableViewModelTests
         Assert.Equal(FrameTableViewModel.ColumnFloor, hfr.Width);
         Assert.False(harness.Table.HasStoredWidth("median_hfr"));
         Assert.Equal(0, harness.Saves);
+    }
+
+    [Fact]
+    public void SetColumnWidth_ANumericColumn_StopsAtItsFigureFit()
+    {
+        // Spec item 3: a number never trims, so a drag stops a numeric column at its widest
+        // figure. Its header may trim behind its tip (item 5), so the drag goes below the
+        // header-driven auto-fit. A text column may trim and still narrows to the bare floor.
+        var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
+        var hfr = harness.Table.Columns.Single(column => column.Key == "median_hfr");
+        var fileName = harness.Table.Columns.Single(column => column.Key == "file_name");
+
+        harness.Table.SetAutoFitWidth("median_hfr", 90d, 70d);
+        Assert.Equal(90d, hfr.Width);
+        harness.Table.SetColumnWidth("median_hfr", 80d);
+        Assert.Equal(80d, hfr.Width);
+        harness.Table.SetColumnWidth("median_hfr", 50d);
+        Assert.Equal(70d, hfr.Width);
+
+        harness.Table.SetAutoFitWidth("file_name", 200d);
+        harness.Table.SetColumnWidth("file_name", 50d);
+        Assert.Equal(50d, fileName.Width);
+    }
+
+    [Fact]
+    public async Task AStoredNumericWidth_UnderItsFigureFit_RendersAtTheFigureFit_AndStaysStored()
+    {
+        // A stored width narrower than a numeric column's widest figure (a larger font since the
+        // drag) draws at the figure fit, and the stored figure is never rewritten by the font
+        // change.
+        var harness = Harness.Create(frames: FlaggedFrames(), display: EveryGroup());
+        harness.Table.SetColumnWidth("fwhm", 50d);
+        harness.Table.StoreColumnWidth("fwhm");
+        await harness.Pending;
+        var saves = harness.Saves;
+
+        var table = harness.NewTable(harness.Display, FlaggedFrames());
+        var fwhm = table.Columns.Single(column => column.Key == "fwhm");
+        table.SetAutoFitWidth("fwhm", 90d, 70d);
+
+        Assert.Equal(70d, fwhm.Width);
+        Assert.True(table.HasStoredWidth("fwhm"));
+        Assert.Equal(50d, harness.Display.ColumnWidthsFor(DisplaySettings.FramesTableId)["fwhm"]);
+        Assert.Equal(saves, harness.Saves);
     }
 
     [Fact]

@@ -80,8 +80,8 @@ public static class HelpTopics
             + "nights list. The page is one layout, Question Modes, with a mode switch under "
             + "the header: Night review, Compare nights, and Integration. The nights list is a "
             + "sidebar: drag the handle on its right edge, or press Left and Right on it, to set "
-            + "its width, and the chevron in its header collapses it to the check boxes and the "
-            + "dates. Both are kept per profile."),
+            + "how much of it the night pane covers, and the chevron in its header collapses it "
+            + "to the check boxes and the dates in one step. Both are kept per profile."),
 
         new("page.preview", "File preview",
             "A rendered view of one frame, at the configured preview resolution. The wheel "
@@ -190,7 +190,7 @@ public static class HelpTopics
             + "integration, median and best HFR in pixels, median eccentricity, median FWHM in "
             + "arcseconds and the filters used. Expand a row with its + button for a per-filter "
             + "breakdown. HFR is measured in pixels and is comparable only within one optical "
-            + "train; use FWHM in arcseconds to compare across telescopes. The Med Ecc and Med "
+            + "train; use FWHM in arcseconds to compare across telescopes. The Ecc and "
             + "FWHM cells are coloured by how far they sit from the median of every combination's "
             + "own median, and the colour is withheld while fewer than eight combinations carry "
             + "that figure. A (grouped) marker means several header spellings are combined under "
@@ -576,10 +576,10 @@ public static class HelpTopics
         new("settings.display.ledger-columns", "Nights list columns",
             "Chooses which of your own night columns appear on the Nights list of a target "
             + "page. Every custom night column starts switched on here; clear one to hide it. "
-            + "When the window is "
-            + "narrow these columns are the first thing dropped, so the columns already on that "
-            + "list never lose room. The built-in columns are always shown and are not in this "
-            + "list. With no night column defined the list reads No custom columns yet."),
+            + "The Nights list shows every column switched on here when its divider is fully "
+            + "open; dragging the divider left slides the night pane over them. The check boxes "
+            + "and the date are always shown and are not in this list. With no night column "
+            + "defined the list reads No custom columns yet."),
 
         // The gates are stated per scope, not as one blanket sentence: spec 12.15's "Where the
         // cells appear" table puts a night column in the dashboard's night expander and a rig
@@ -742,10 +742,8 @@ public static class HelpTopics
             + "so opening a night fills its points in."),
 
         new("target.nights", "Nights",
-            "Every night this target was imaged, newest first, with that night's medians beside "
-            + "the target's means in the top row. A night's figure is marked only when it is "
-            + "worse than the target mean by more than one unit of the last displayed decimal; "
-            + "better stays silent. The check box on a row selects that night and the lit row is "
+            "Every night this target was imaged, newest first, with your own night columns "
+            + "beside the date. The check box on a row selects that night and the lit row is "
             + "the night the pane shows. A plain click lights one night and clears the checks, "
             + "Ctrl and click adds or removes that night, and Shift and click adds the range from "
             + "the lit night to it."),

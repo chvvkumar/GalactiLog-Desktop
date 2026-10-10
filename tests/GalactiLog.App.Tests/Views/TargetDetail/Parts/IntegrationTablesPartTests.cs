@@ -1,11 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Media;
 using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels;
 using GalactiLog.App.Views.TargetDetail.Parts;
-using GalactiLog.Data.Queries;
 using Xunit;
 using static GalactiLog.App.Tests.TestSupport.TargetPartHost;
 using Factory = GalactiLog.App.Tests.TestSupport.TargetDetailViewModelTestFactory;
@@ -16,6 +17,8 @@ namespace GalactiLog.App.Tests.Views.TargetDetail.Parts;
 // Content and size cases of IntegrationTablesPart, hosted on the part alone.
 public class IntegrationTablesPartTests(Xunit.Abstractions.ITestOutputHelper output)
 {
+    private static readonly string[] Tables = ["OverallTable", "ExposureTable", "HoursTable"];
+
     private static Factory.Harness Page()
         => Factory.Create(get: _ => Factory.PopulatedDetail() with
         {
@@ -34,8 +37,12 @@ public class IntegrationTablesPartTests(Xunit.Abstractions.ITestOutputHelper out
         return view;
     }
 
-    private static List<TextBlock> Cells(Control table, double width)
-        => [.. table.GetVisualDescendants().OfType<TextBlock>().Where(block => block.Width == width && block.Classes.Contains("num"))];
+    private static List<string?> Texts(Control view, string table)
+        => [.. view.Named<Control>(table).GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text)];
+
+    // The label column's width, from the table's header row.
+    private static double LabelColumn(Control view, string table)
+        => view.Named<Control>(table).GetVisualDescendants().OfType<TableRow>().First().ColumnDefinitions[0].ActualWidth;
 
     [AvaloniaTheory]
     [InlineData(14d)]
@@ -44,67 +51,83 @@ public class IntegrationTablesPartTests(Xunit.Abstractions.ITestOutputHelper out
     [InlineData(20d)]
     public void AtEveryTextSize_NoLabelRunsPastItsColumn_AndNoRowClips(double textSize)
     {
-        // A failure is "Frames by exposure" or a night label drawn past its label column, a label
-        // column under 117 px at the default size, two tables with label columns of different
-        // widths, or a row whose text is taller than the row.
+        // A failure is a night label drawn past its label column, three tables with label columns
+        // of different widths, or a row whose text is taller than the row.
         using var harness = Page();
         var view = new IntegrationTablesPart { DataContext = harness.ViewModel };
         var window = Show(view, 1100, 600);
         window.FontSize = textSize;
+        Dispatcher.UIThread.RunJobs();
         window.UpdateLayout();
 
         TextFit.AssertTextFitsItsBox(view);
-        var exposure = LabelColumn(view, "ExposureTable");
-        Assert.Equal(exposure, LabelColumn(view, "HoursTable"), 0.01);
-        Assert.True(exposure >= 117d * textSize / 14d - 0.01, $"the label column is {exposure} at {textSize} px");
-        output.WriteLine($"label column at {textSize} px: {exposure}");
-    }
-
-    // The x of the first filter cell is where the label column ends.
-    private static double LabelColumn(Control view, string table)
-    {
-        var root = view.Named<Control>(table);
-        var cell = root.GetVisualDescendants().OfType<TextBlock>().First(block => block.Classes.Contains("t-label") && block.Classes.Contains("num"));
-        return cell.TranslatePoint(new Point(0, 0), root)!.Value.X;
+        var overall = LabelColumn(view, "OverallTable");
+        Assert.All(Tables, table => Assert.Equal(overall, LabelColumn(view, table), 0.01));
+        output.WriteLine($"label column at {textSize} px: {overall}");
     }
 
     [AvaloniaFact]
     public void ExposureTable_IsOneRowPerLengthWithFrameCountsAndTotals()
     {
-        // A failure is a missing 600 s row, a count that is not summed over the nights, or no
-        // total row.
+        // A failure is a missing 600 row, a count that is not summed over the nights, no total
+        // row, a unit left on the labels, or a blank where OIII shot no 600 s frame.
         using var harness = Page();
         var view = Host(harness);
 
-        var texts = view.Named<Control>("ExposureTable").GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text).ToList();
-        Assert.Contains("300 s", texts);
-        Assert.Contains("600 s", texts);
+        var texts = Texts(view, "ExposureTable");
+        Assert.Contains(TableHeads.Exposure, texts);
+        Assert.Contains("300", texts);
+        Assert.Contains("600", texts);
+        Assert.DoesNotContain("300 s", texts);
         Assert.Contains("Total", texts);
         Assert.Contains("15", texts);
         Assert.Contains("24", texts);
         Assert.Contains("42", texts);
+        Assert.Contains("-", texts);
+        var total = view.Named<Control>("ExposureTable").GetVisualDescendants().OfType<TableRow>()
+            .Single(row => row.Kind != RowKind.Header && row.Children.OfType<TextBlock>().Any(block => block.Text == "Total"));
+        Assert.Equal(RowKind.Total, total.Kind);
+    }
+
+    [AvaloniaFact]
+    public void ATargetWithNoFilterRow_StillShowsItsOverallMetrics()
+    {
+        // A failure is the target-wide means hidden with the matrices: frames with no FILTER card
+        // (a one-shot-colour rig) or no date are in no matrix row, and the means are shown nowhere
+        // else.
+        using var harness = Factory.Create(get: _ => Factory.PopulatedDetail() with { NightFilters = [] }).Settle();
+        var view = Host(harness);
+
+        Assert.True(view.Named<Control>("OverallTable").IsEffectivelyVisible);
+        Assert.Contains(view.Named<Control>("OverallTable").GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == "All frames" && block.IsEffectivelyVisible);
+        Assert.False(view.Named<Control>("ExposureTable").IsEffectivelyVisible);
+        Assert.False(view.Named<Control>("HoursTable").IsEffectivelyVisible);
     }
 
     [AvaloniaFact]
     public void HoursTable_IsOneRowPerNightWithATotalColumnAndRow_ToOneDecimal()
     {
-        // A failure is a second decimal, a missing total column or a missing total row.
+        // A failure is a second decimal, a missing total column or row, or a blank for the night
+        // with no OIII.
         using var harness = Page();
         var view = Host(harness);
 
-        var texts = view.Named<Control>("HoursTable").GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text).ToList();
+        var texts = Texts(view, "HoursTable");
+        Assert.Contains(TableHeads.Night, texts);
         Assert.Contains("2025-12-07", texts);
         Assert.Contains("2024-01-05", texts);
         Assert.Contains("3.0", texts);
         Assert.Contains("0.5", texts);
         Assert.Contains("3.5", texts);
+        Assert.Contains("-", texts);
     }
 
     [AvaloniaFact]
-    public void ColumnsAre64AndTheLabelColumnIsAtLeast117_AndTheTwoTablesLineUp()
+    public void FilterColumnsLineUpAcrossBothMatrices()
     {
-        // A failure is a column of another width, or a filter column that sits at another x in
-        // the hours table than in the exposure table.
+        // A failure is a filter column that sits at another x in the hours table than in the
+        // exposure table, or two filters sharing one column.
         string[] names = ["L", "R", "G", "B", "SII", "Ha", "OIII"];
         using var harness = Factory.Create(get: _ => Factory.PopulatedDetail(
             totals: Factory.PopulatedTotals() with
@@ -121,14 +144,54 @@ public class IntegrationTablesPartTests(Xunit.Abstractions.ITestOutputHelper out
         }).Settle();
         var view = Host(harness);
 
-        var exposure = view.Named<Control>("ExposureTable");
-        var hours = view.Named<Control>("HoursTable");
-        Assert.Equal(7, Cells(hours, 64d).Select(cell => cell.TranslatePoint(new Point(0, 0), view)!.Value.X).Distinct().Count() - 1);
-        Assert.True(LabelColumn(view, "ExposureTable") >= 117d);
+        Dictionary<string, double> Xs(string table) => view.Named<Control>(table)
+            .GetVisualDescendants().OfType<TableStripCell>()
+            .GroupBy(cell => cell.Group!)
+            .ToDictionary(group => group.Key, group => group.Select(cell => cell.TranslatePoint(default, view)!.Value.X).Distinct().Single());
 
-        double X(Control table, Control cell) => cell.TranslatePoint(new Point(0, 0), view)!.Value.X;
-        var exposureXs = Cells(exposure, 64d).Select(cell => X(exposure, cell)).Distinct().Order().ToList();
-        var hoursXs = Cells(hours, 64d).Select(cell => X(hours, cell)).Distinct().Order().ToList();
-        Assert.Equal(exposureXs, hoursXs);
+        var exposure = Xs("ExposureTable");
+        Assert.Equal(7, exposure.Values.Distinct().Count());
+        Assert.Equal(exposure, Xs("HoursTable"));
+    }
+
+    [AvaloniaFact]
+    public void OverallMetrics_IsAboveTheExposureTable_WithAllFramesThenOneRowPerFilter()
+    {
+        // A failure is the section below the matrices, no All frames row, filters out of bar
+        // order, a heading in the retired units, or All frames drawn as an ordinary row.
+        using var harness = Page();
+        var view = Host(harness);
+
+        var overall = view.Named<Control>("OverallTable");
+        var exposure = view.Named<Control>("ExposureTable");
+        Assert.True(overall.TranslatePoint(new Point(0, overall.Bounds.Height), view)!.Value.Y
+            <= exposure.TranslatePoint(default, view)!.Value.Y + 0.5);
+
+        var texts = Texts(view, "OverallTable");
+        Assert.Contains("Overall metrics", texts);
+        Assert.Contains(TableHeads.Hfr, texts);
+        Assert.Contains(TableHeads.Fwhm, texts);
+        Assert.Contains(TableHeads.Rms, texts);
+        var order = harness.ViewModel.Totals!.FilterSwatches.Select(swatch => swatch.FilterName).ToList();
+        Assert.Equal(["All frames", .. order], texts.Where(text => text == "All frames" || order.Contains(text!)));
+
+        var allFrames = overall.GetVisualDescendants().OfType<TableRow>()
+            .Single(row => row.Children.OfType<TextBlock>().Any(block => block.Text == "All frames"));
+        Assert.Equal(RowKind.LeadTotal, allFrames.Kind);
+    }
+
+    [AvaloniaTheory]
+    [InlineData("")]
+    [InlineData("x-large")]
+    public void Conventions_HoldAtDefaultAndExtraLargeText(string textSize)
+    {
+        using var harness = Page();
+        var view = new IntegrationTablesPart { DataContext = harness.ViewModel };
+        var window = Show(view);
+        window.FontSize = MainWindowViewModel.ResolveRootFontSize(textSize);
+        Dispatcher.UIThread.RunJobs();
+        window.UpdateLayout();
+
+        TableAssert.Conventions(view);
     }
 }

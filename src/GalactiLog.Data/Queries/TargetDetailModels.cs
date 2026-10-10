@@ -72,7 +72,19 @@ public sealed record TargetTotals(
     double? AvgDetectedStars,
     IReadOnlyList<string> FiltersUsed,
     IReadOnlyDictionary<string, double> IntegrationSecondsByFilter,
-    IReadOnlyList<string> Equipment);
+    IReadOnlyList<string> Equipment)
+{
+    /// <summary>The five metric means per canonical filter: the same keys as
+    /// <see cref="IntegrationSecondsByFilter"/>, a frame with no filter in no bucket, and the
+    /// eccentricity pooling the target's modal source, so every row reads the pool
+    /// <see cref="AvgEccentricity"/> reads.</summary>
+    public IReadOnlyDictionary<string, MetricMeans> MeansByFilter { get; init; } =
+        new Dictionary<string, MetricMeans>(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>Means over a group's LIGHT frames, in the units of <see cref="TargetTotals"/>.</summary>
+public sealed record MetricMeans(
+    double? Hfr, double? Eccentricity, double? Fwhm, double? GuidingRmsArcsec, double? DetectedStars);
 
 /// <summary>Spec 12.4's guiding provenance truth table (Phase 15A), over one night's RMS-bearing
 /// frames (review ruling: a frame with no <c>guiding_rms_arcsec</c> at all never counts, whatever

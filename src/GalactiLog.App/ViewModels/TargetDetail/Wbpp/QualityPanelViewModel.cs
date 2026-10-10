@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.Core.Settings;
@@ -588,14 +589,14 @@ public sealed partial class QualityPanelViewModel : ObservableObject, IDisposabl
     [
         new("copy", "Copy", isVisible: true),
         new("verdict", "Verdict", isVisible: true),
-        new("filter", "Filter", isVisible: true),
-        new("hfr", "HFR", isVisible: true, isNumeric: true),
-        new("ecc", "Ecc", isVisible: true, isNumeric: true),
-        new("fwhm", "FWHM", isVisible: true, isNumeric: true),
-        new("stars", "Stars", isVisible: true, isNumeric: true),
-        new("rms", "RMS", isVisible: true, isNumeric: true),
+        new("filter", TableHeads.Filter, isVisible: true),
+        new("hfr", TableHeads.Hfr, isVisible: true, isNumeric: true) { Tip = TableHeads.HfrTip },
+        new("ecc", TableHeads.Ecc, isVisible: true, isNumeric: true) { Tip = TableHeads.EccTip },
+        new("fwhm", TableHeads.Fwhm, isVisible: true, isNumeric: true) { Tip = TableHeads.FwhmTip },
+        new("stars", TableHeads.Stars, isVisible: true, isNumeric: true),
+        new("rms", TableHeads.Rms, isVisible: true, isNumeric: true) { Tip = TableHeads.RmsTip },
         new("file", "File", isVisible: true),
-        new("night", "Night", isVisible: true, isNumeric: true),
+        new("night", TableHeads.Night, isVisible: true),
     ];
 
     // ---- the coalesced write (section 7.2) ----------------------------------------------------

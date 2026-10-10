@@ -245,23 +245,11 @@ public class TargetDetailViewModelTests
         using var harness = Factory.Create().Settle();
         var totals = harness.ViewModel.Totals!;
 
-        // The frame count and the arcsecond mean are what the Details drawer binds. The integration
-        // hours, the night count and the two session dates are constructor locals now, because the
-        // log line is their only reader (coordinator round 2), and
-        // Totals_CarryTheLogLineAndTheLedgerRow asserts all four inside the sentence the view
-        // renders; the two joined name strings went with them and the filters are pinned as
-        // swatches.
-        Assert.Equal("148", totals.FrameCountText);
+        // The arcsecond mean is what the Details drawer binds. The integration hours, the night
+        // count, the frame count and the two session dates are constructor locals now, because the
+        // log line is their only reader (coordinator round 2), and Totals_CarryTheLogLine asserts
+        // them inside the sentence the view renders; the filters are pinned as swatches.
         Assert.Equal("1.85 arcsec", totals.AvgHfrArcsecText);
-
-        // The five unit-carrying Avg*Text twins the retired card bound went with it (phase review
-        // P2-5); the ledger's six unit-free figures are what the page renders and they are pinned
-        // by Totals_CarryTheLogLineAndTheLedgerRow.
-        Assert.Equal("2.34", totals.LedgerAvgHfrText);
-        Assert.Equal("0.42", totals.LedgerAvgEccentricityText);
-        Assert.Equal("1.90", totals.LedgerAvgFwhmText);
-        Assert.Equal("0.45", totals.LedgerAvgGuidingRmsText);
-        Assert.Equal("1,500", totals.LedgerAvgDetectedStarsText);
 
         // Spec 12.4's disclosure, which the drawer binds. The eccentricity twin is gone with the
         // card; its two facts are in LogLineDisclosureText, asserted below.
@@ -317,11 +305,6 @@ public class TargetDetailViewModelTests
         var projected = harness.ViewModel.Totals!;
 
         Assert.False(projected.HasAvgHfrArcsec);
-        Assert.Equal("", projected.LedgerAvgHfrText);
-        Assert.Equal("", projected.LedgerAvgEccentricityText);
-        Assert.Equal("", projected.LedgerAvgFwhmText);
-        Assert.Equal("", projected.LedgerAvgGuidingRmsText);
-        Assert.Equal("", projected.LedgerAvgDetectedStarsText);
         Assert.Empty(projected.FilterSwatches);
     }
 
@@ -1534,7 +1517,7 @@ public class TargetDetailViewModelTests
     }
 
     [Fact]
-    public async Task Totals_CarryTheLogLineAndTheLedgerRow()
+    public async Task Totals_CarryTheLogLine()
     {
         using var harness = Factory.Create();
         await SettleAsync(harness);
@@ -1557,12 +1540,6 @@ public class TargetDetailViewModelTests
         Assert.True(totals.HasLogLineDisclosure);
         Assert.Contains("23 frames without a plate scale", totals.LogLineDisclosureText);
         Assert.Contains("measured by header", totals.LogLineDisclosureText);
-
-        // Ruling Q10's first cell, and the unit-free ledger cells beside it.
-        Assert.Equal("All 2 nights", totals.LedgerRowLabelText);
-        Assert.Equal("12.4", totals.LedgerIntegrationText);
-        Assert.Equal("2.34", totals.LedgerAvgHfrText);
-        Assert.Equal("1,500", totals.LedgerAvgDetectedStarsText);
 
         Assert.Equal(["Ha", "OIII"], totals.FilterSwatches.Select(swatch => swatch.FilterName));
 
