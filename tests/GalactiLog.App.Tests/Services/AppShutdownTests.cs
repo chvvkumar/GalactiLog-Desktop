@@ -293,6 +293,7 @@ public class AppShutdownTests
         var copies = new StagingCopyService();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var sawCancel = false;
+        var finished = false;
         var run = copies.StartAsync("M 31", Path.Combine(settings.Root, "staging"), async (_, ct) =>
         {
             entered.TrySetResult();
@@ -306,14 +307,18 @@ public class AppShutdownTests
                 await Task.Delay(100, CancellationToken.None);
             }
 
+            finished = true;
             return new StagingCopyResult(StagingOutcome.Cancelled, 0, 0, [], [], [], null);
         }, null, CancellationToken.None);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
 
         App.DrainForShutdown(watcher, scheduler, coordinator, null, TimeSpan.FromSeconds(30), copies: copies);
 
+        // The work, not the task: the drain wakes on the run's done signal, a moment before its
+        // task returns.
         Assert.True(sawCancel);
-        Assert.True(run.IsCompleted, "the drain returned before the copy's files in flight finished");
+        Assert.True(finished, "the drain returned before the copy's files in flight finished");
+        await run.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.NotNull(scheduler.LoopTask);
         await scheduler.LoopTask!.WaitAsync(TimeSpan.FromSeconds(30));
     }
