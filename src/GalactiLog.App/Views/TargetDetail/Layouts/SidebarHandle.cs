@@ -12,9 +12,9 @@ using GalactiLog.App.Views.TargetDetail.Parts;
 namespace GalactiLog.App.Views.TargetDetail.Layouts;
 
 /// <summary>The handle on the nights sidebar's right edge, the shape of <see cref="LanesHandle"/>
-/// turned sideways. A drag or Left and Right set the sidebar's width live and store it on release;
-/// the form follows the width (<see cref="LedgerColumn"/>), a width under the compact floor stores
-/// collapsed and keeps the last open width for the chevron to restore.</summary>
+/// turned sideways. A drag or Left and Right set the width live between the stop and open
+/// (<see cref="LedgerColumn"/>) and store it on release; a width at the stop stores collapsed and
+/// keeps the last open width for the chevron, a width at open stores fully open.</summary>
 public sealed class SidebarHandle : Border
 {
     public const double Thickness = 28d;
@@ -28,6 +28,8 @@ public sealed class SidebarHandle : Border
     private NightsLedgerPart? _ledger;
 
     private Func<TargetPageState?>? _state;
+
+    private Func<double> _room = () => double.PositiveInfinity;
 
     private string _key = "";
 
@@ -50,12 +52,22 @@ public sealed class SidebarHandle : Border
         Paint();
     }
 
-    public void Attach(Control column, NightsLedgerPart ledger, string layoutKey, Func<TargetPageState?> state)
+    public void Attach(Control column, NightsLedgerPart ledger, string layoutKey, Func<TargetPageState?> state, Func<double> room)
     {
         _column = column;
         _ledger = ledger;
         _key = layoutKey;
         _state = state;
+        _room = room;
+        // The stop and open move with the type size and the custom columns; a gesture in flight
+        // keeps its own width until release.
+        ledger.ExtentsChanged += (_, _) =>
+        {
+            if (_dragStartX is null && _keyWidth is null)
+            {
+                Refresh();
+            }
+        };
     }
 
     /// <summary>Places the sidebar from the stored width and collapsed flag.</summary>
@@ -78,24 +90,22 @@ public sealed class SidebarHandle : Border
     {
         if (_column is not null && _ledger is not null)
         {
-            LedgerColumn.Apply(_column, _ledger, width, collapsed);
+            LedgerColumn.Apply(_column, _ledger, width, collapsed, _room());
         }
     }
 
-    // A width under the compact floor collapses and leaves the open width as it was.
     private void Commit(double width)
     {
-        _state?.Invoke()?.SetLayout(_key, state => width < LedgerColumn.CompactWidth
-            ? state with { SidebarCollapsed = true }
-            : state with { SidebarWidth = width, SidebarCollapsed = false });
+        if (_ledger is { } ledger)
+        {
+            _state?.Invoke()?.SetLayout(_key, state => LedgerColumn.Committed(
+                state, width, LedgerColumn.StopOf(ledger), LedgerColumn.OpenOf(ledger, _room())));
+        }
+
         Refresh();
     }
 
-    // A drag or a key out of the collapsed form starts at the compact floor, so the first step
-    // rightwards is the compact form and the sidebar does not stay shut while the pointer crosses
-    // the hidden columns.
-    private double CurrentWidth()
-        => _ledger is { IsCollapsed: true } || _column is null ? LedgerColumn.CompactWidth : _column.Bounds.Width;
+    private double CurrentWidth() => _column?.Bounds.Width ?? 0d;
 
     protected override void OnPointerPressed(PointerPressedEventArgs e)
     {
@@ -174,6 +184,11 @@ public sealed class SidebarHandle : Border
 
         _keyWidth = (_keyWidth ?? CurrentWidth()) + (e.Key == Key.Left ? -KeyStep : KeyStep);
         Place(_keyWidth, collapsed: false);
+        // Held past either end, the next step the other way moves at once.
+        if (double.IsFinite(_column.Width))
+        {
+            _keyWidth = _column.Width;
+        }
     }
 
     protected override void OnKeyUp(KeyEventArgs e)

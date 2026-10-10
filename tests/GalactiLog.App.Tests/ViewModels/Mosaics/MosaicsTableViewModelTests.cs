@@ -1,6 +1,7 @@
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Mosaics;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Mosaics;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
@@ -50,6 +51,15 @@ public class MosaicsTableViewModelTests
         // A mosaic with no night sorts first ascending.
         Assert.Equal(new[] { "b", "c", "a" }, harness.Page.Table.Mosaics.Select(row => row.Name));
         Assert.Equal("2026-03-02", harness.Page.Table.Mosaics[1].DateRangeText);
+    }
+
+    [Fact]
+    public async Task DateRangeText_WithNoNight_IsTheDash()
+    {
+        // Spec.md item 6: a mosaic with no night reads the faint dash, never a blank cell.
+        using var harness = await Ready(new MosaicsBackend { ListMosaics = () => [Mosaic("empty")] });
+
+        Assert.Equal(MetricText.Missing, Assert.Single(harness.Page.Table.Mosaics).DateRangeText);
     }
 
     [Fact]

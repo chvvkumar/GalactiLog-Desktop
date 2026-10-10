@@ -60,12 +60,12 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
 
     public string FramesText => MetricText.Count(Frames);
 
-    /// <summary>"yyyy-MM-dd to yyyy-MM-dd", one date when they are equal, empty with no frame.</summary>
+    /// <summary>"yyyy-MM-dd to yyyy-MM-dd", one date when they are equal, "-" with no frame.</summary>
     public string DateRangeText => (FirstNight, LastNight) switch
     {
         ({ } first, { } last) when first == last => MetricText.Date(first),
         ({ } first, { } last) => $"{MetricText.Date(first)} to {MetricText.Date(last)}",
-        _ => "",
+        _ => MetricText.Missing,
     };
 
     private void ApplyFigures(int panels, double seconds, int frames, DateOnly? first, DateOnly? last)

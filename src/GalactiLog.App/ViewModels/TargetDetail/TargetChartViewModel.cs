@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using GalactiLog.Core.Aliases;
 using GalactiLog.Core.Metrics;
 using GalactiLog.Data.Queries;
@@ -77,6 +78,31 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
     public partial bool CheckedOnly { get; set; }
 
     partial void OnCheckedOnlyChanged(bool value) => Rebuild();
+
+    /// <summary>The "Show them" toggle: true plots the nights with no metric too. Not persisted,
+    /// for the reason <see cref="CheckedOnly"/> is not: it is a per-visit decision.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(EmptyNightsAction))]
+    public partial bool ShowEmptyNights { get; set; }
+
+    partial void OnShowEmptyNightsChanged(bool value) => Rebuild();
+
+    /// <summary>The nights under the All or Checked switch that carry none of the five medians,
+    /// whether shown or not.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasEmptyNights), nameof(EmptyNightsText))]
+    public partial int EmptyNightCount { get; private set; }
+
+    public bool HasEmptyNights => EmptyNightCount > 0;
+
+    public string EmptyNightsText => EmptyNightCount == 1
+        ? "1 night has no metrics."
+        : string.Create(CultureInfo.InvariantCulture, $"{EmptyNightCount} nights have no metrics.");
+
+    public string EmptyNightsAction => ShowEmptyNights ? "Hide them" : "Show them";
+
+    [RelayCommand]
+    private void ToggleEmptyNights() => ShowEmptyNights = !ShowEmptyNights;
 
     /// <summary>Every frame of every night, capture ordered, which the laned form plots as
     /// dots. Handed over by the page with its load; in memory, so a rebuild reads nothing.</summary>
@@ -179,6 +205,7 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
             return;
         }
 
+        EmptyNightCount = Candidates().Count(card => !HasMetrics(card));
         var plotted = Plotted();
         PlottedSessionCount = plotted.Count;
         var nights = plotted.Select(card => card.SessionDate).ToList();
@@ -491,7 +518,7 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
     /// One night's value for a metric, for the whole night or for one rig of it.
     /// </summary>
     /// <remarks>
-    /// The whole-night figure is the overview's own, the same number the ledger row shows. A
+    /// The whole-night figure is the overview's own, the night overview's median. A
     /// per-rig figure has no such precomputed home: <c>SessionOverview</c> is one row per night and
     /// <c>RigGroup</c> carries counts and ranges rather than the five chart metrics. It is
     /// therefore taken here, over the loaded night's own frames, through the same
@@ -615,8 +642,18 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
         return [.. pool.Take(take).Reverse()];
     }
 
+    // The nights the chart may plot: measured ones, and the empty ones once shown. The newest-N cap
+    // and the scope text therefore count measured nights only.
     private List<SessionCardViewModel> Pool()
-        => CheckedOnly ? [.. _sessions.Where(card => card.IsChecked)] : [.. _sessions];
+        => [.. Candidates().Where(card => ShowEmptyNights || HasMetrics(card))];
+
+    private IEnumerable<SessionCardViewModel> Candidates()
+        => CheckedOnly ? _sessions.Where(card => card.IsChecked) : _sessions;
+
+    // The night overview's medians, the figures the whole-night series plots, so the chart, the
+    // Compare table and the count read one rule.
+    private static bool HasMetrics(SessionCardViewModel card)
+        => ChartMetrics.All.Any(metric => metric.SessionValue(card.Overview) is not null);
 
     /// <summary>Every rig the loaded session details carry, in the order they first appear walking
     /// the target's nights oldest first, which is spec 12.4's first-capture order extended across

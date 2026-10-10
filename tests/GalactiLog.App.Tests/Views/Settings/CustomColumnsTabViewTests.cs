@@ -68,6 +68,45 @@ public class CustomColumnsTabViewTests
         Assert.DoesNotContain("<Style ", source);
     }
 
+    [Fact]
+    public void TheTable_DeclaresItsColumnsOnce()
+    {
+        // One t:TableColumns set read by the header and every row, not a pixel list per row.
+        var source = File.ReadAllText(ViewPath);
+        Assert.DoesNotContain("ColumnDefinitions=", source);
+    }
+
+    [AvaloniaTheory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void TheTable_MeetsTableConventions(bool extraLarge)
+    {
+        var tab = new CustomColumnsTabViewModel(
+            load: () =>
+            [
+                CustomColumnTestFactory.Text("Notes"),
+                CustomColumnTestFactory.Boolean("Processed"),
+                CustomColumnTestFactory.Dropdown("Good", "Bad"),
+            ],
+            create: (_, _, _, _) => CustomColumnTestFactory.Written,
+            update: (_, _, _) => CustomColumnTestFactory.Written,
+            reorder: (_, _) => CustomColumnTestFactory.Written,
+            delete: _ => CustomColumnTestFactory.Written,
+            post: action => Dispatcher.UIThread.Post(action));
+        var view = new CustomColumnsTabView { DataContext = tab };
+        var window = Show(view);
+        if (extraLarge)
+        {
+            window.FontSize = 20d;
+        }
+
+        tab.PendingLoad?.Wait(Budget);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(3, tab.Rows.Count);
+
+        TableAssert.Conventions(view);
+        TextFit.AssertTextFitsItsBox(view.FindControl<ItemsControl>("ColumnsList")!);
+    }
     // Review P3-2: no case attached the same view instance twice to confirm RefreshAsync is not
     // called twice within one attach. A held-publish seam over `load` proves it directly: the
     // first call blocks, so a re-attach while it is still in flight either starts a second call

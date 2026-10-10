@@ -48,6 +48,18 @@ public class PreviewMetadataStripTests
 
         Assert.DoesNotContain(strip, badge => badge.Label == "RMS");
         Assert.All(strip, badge => Assert.NotEqual("", badge.Value));
+        Assert.All(strip, badge => Assert.NotEqual(MetricText.Missing, badge.Value));
+    }
+
+    [Fact]
+    public void AFrameWithNoFilterAndNoHfr_DrawsNeitherBadge()
+    {
+        // The frame table's cells render an absent value as the missing dash; the strip still
+        // omits the badge rather than drawing "Filter -".
+        var strip = StripFor(Complete() with { FilterUsed = null, MedianHfr = null });
+
+        Assert.DoesNotContain(strip, badge => badge.Label is "Filter" or "HFR");
+        Assert.Equal(5, strip.Count);
     }
 
     [Theory]

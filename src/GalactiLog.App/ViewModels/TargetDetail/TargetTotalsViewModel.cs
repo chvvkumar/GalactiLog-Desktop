@@ -62,9 +62,8 @@ public sealed record IntegrationSegmentViewModel(DateOnly Night, double Hours, d
 /// same metrics, and the two are deliberately different figures (Task 1 handoff).
 /// </para>
 /// <para>
-/// P12 moved the collapsed field set off this type. The ledger's target row reads the six
-/// <c>Ledger*Text</c> figures, the log line reads <c>LogLineRuns</c>, and the drawer reads the
-/// arcsecond HFR and its disclosure. The unit-carrying twins the retired card bound, the five
+/// P12 moved the collapsed field set off this type. The log line reads <c>LogLineRuns</c>, and
+/// the drawer reads the arcsecond HFR and its disclosure. The unit-carrying twins the retired card bound, the five
 /// <c>Avg*Text</c> and their <c>Has*</c> companions, the eccentricity disclosure, the joined log
 /// line and the joined filter names, were bound by no view after that and are gone with their
 /// cases (phase review P2-5, coordinator ruling (3)). The round 2 sweep took the six that survived
@@ -72,6 +71,9 @@ public sealed record IntegrationSegmentViewModel(DateOnly Night, double Hours, d
 /// <c>LastSessionText</c>, <c>FiltersText</c> and <c>EquipmentText</c>, with
 /// <c>HasFirstSession</c> and <c>HasLastSession</c>: the log line is the only reader the five
 /// figures had left, so they are constructor locals now. Nothing here is kept as a read surface.
+/// The table overhaul removed the Nights list's totals row, and its seven <c>Ledger*Text</c>
+/// figures and <c>FrameCountText</c> went with it (ruling R13); the Integration tab's Overall
+/// metrics reads the means from <see cref="Totals"/>.
 /// </para>
 /// </remarks>
 public sealed class TargetTotalsViewModel
@@ -93,11 +95,10 @@ public sealed class TargetTotalsViewModel
     {
         Totals = totals;
 
-        // Five locals rather than five properties: the log line is the only reader left, so they
-        // are the words it is built from and not a surface (phase review escalation 4, coordinator
-        // round 2). FrameCountText stays a property because the drawer binds it.
+        // Locals rather than properties: the log line is the only reader left, so they are the
+        // words it is built from and not a surface (phase review escalation 4, coordinator round 2).
         var integrationText = MetricText.Hours(totals.IntegrationSeconds);
-        FrameCountText = MetricText.Count(totals.FrameCount);
+        var frameCountText = MetricText.Count(totals.FrameCount);
         var sessionCountText = MetricText.Count(totals.SessionCount);
         var firstSessionText = FormatDate(totals.FirstSessionDate);
         var lastSessionText = FormatDate(totals.LastSessionDate);
@@ -109,24 +110,6 @@ public sealed class TargetTotalsViewModel
                 $"{totals.HfrArcsecExcludedCount} frames without a plate scale")
             : "";
         var equipmentText = string.Join(", ", totals.Equipment);
-
-        // ---- P12: the ledger's target row and the comp's log line ---------------------------
-
-        // Ruling Q10. The row is the target's own averages, and naming what it pools is what
-        // makes the alignment below it readable as a comparison.
-        LedgerRowLabelText = totals.SessionCount == 1
-            ? "All 1 night"
-            : string.Create(CultureInfo.InvariantCulture, $"All {totals.SessionCount} nights");
-
-        // Unit-free twins of the figures above, because the ledger carries its units in the
-        // column headers and never in a cell. The originals are untouched: the drawer, the log
-        // line and the Statistics page still read them.
-        LedgerIntegrationText = MetricText.Format(totals.IntegrationSeconds / 3600d, "0.0");
-        LedgerAvgHfrText = MetricText.Format(totals.AvgHfr, "0.00");
-        LedgerAvgEccentricityText = MetricText.Format(totals.AvgEccentricity, "0.00");
-        LedgerAvgFwhmText = MetricText.Format(totals.AvgFwhm, "0.00");
-        LedgerAvgGuidingRmsText = MetricText.Format(totals.AvgGuidingRmsArcsec, "0.00");
-        LedgerAvgDetectedStarsText = MetricText.Format(totals.AvgDetectedStars, "N0");
 
         var tint = filterTint ?? (_ => ChartSelectionViewModel.FallbackFilterTint);
         FilterSwatches = [.. totals.FiltersUsed.Order(FilterOrder.Comparer(aliases?.Invoke())).Select(name => new FilterSwatchViewModel(name, tint(name)))];
@@ -159,7 +142,7 @@ public sealed class TargetTotalsViewModel
             };
         })];
 
-        LogLineRuns = BuildLogLine(totals, integrationText, sessionCountText, FrameCountText, firstSessionText, lastSessionText);
+        LogLineRuns = BuildLogLine(totals, integrationText, sessionCountText, frameCountText, firstSessionText, lastSessionText);
         LogLineEquipmentText = equipmentText.Length > 0
             ? string.Create(CultureInfo.InvariantCulture, $"on {equipmentText}.")
             : "";
@@ -168,12 +151,6 @@ public sealed class TargetTotalsViewModel
 
     /// <summary>The read model behind the row.</summary>
     public TargetTotals Totals { get; }
-
-    /// <summary>The frame count, which the ledger's target row binds
-    /// (<c>Views/TargetDetail/TargetDetailView.axaml:657</c>) and nothing else does. It carries no
-    /// unit, so the ledger reads it directly rather than through a <c>Ledger*Text</c> twin.
-    /// </summary>
-    public string FrameCountText { get; }
 
     public string AvgHfrArcsecText { get; }
 
@@ -185,33 +162,8 @@ public sealed class TargetTotalsViewModel
 
     public bool HasHfrArcsecDisclosure => HfrArcsecDisclosure.Length > 0;
 
-    // ---- P12: the ledger's target row --------------------------------------------------------
-
-    /// <summary>Ruling Q10's first cell of the ledger's target row: "All 12 nights". The row is
-    /// the comp's <c>.ref</c> row, the target's own averages under the same nine column headers
-    /// every night row uses, so the comparison is made by alignment rather than by arithmetic.
-    /// </summary>
-    public string LedgerRowLabelText { get; }
-
-    /// <summary>Integration in hours with no unit, for example <c>12.4</c>. The ledger's units
-    /// live in the column header; <see cref="IntegrationText"/> keeps its <c>h</c> for the log
-    /// line and for every other surface that reads it.</summary>
-    public string LedgerIntegrationText { get; }
-
-    /// <summary>The mean HFR in pixels with no unit. See <see cref="LedgerIntegrationText"/>.
-    /// </summary>
-    public string LedgerAvgHfrText { get; }
-
-    public string LedgerAvgEccentricityText { get; }
-
-    public string LedgerAvgFwhmText { get; }
-
-    public string LedgerAvgGuidingRmsText { get; }
-
-    public string LedgerAvgDetectedStarsText { get; }
-
     /// <summary>The filters this target was shot through, each with its configured colour, for
-    /// the 7 px dots in the log line and in the ledger's filters column.</summary>
+    /// the 7 px dots in the log line.</summary>
     public IReadOnlyList<FilterSwatchViewModel> FilterSwatches { get; }
 
     /// <summary>The per-filter integration line under the log line, one bar per swatch in the

@@ -13,8 +13,8 @@ namespace GalactiLog.App.ViewModels.TargetDetail;
 /// dispatcher exists. A filter colour is user data rather than a theme token, which is why this is
 /// the one brush on this page that a view model is allowed to hold at all.
 /// <para>
-/// Declared as its own small file because three surfaces render it: the log line's filter run
-/// (Task 4), the ledger row's filters cell (Task 4) and the session pane's filter table (Task 5).
+/// Declared as its own small file because more than one surface renders it: the log line's filter
+/// run (Task 4) and the session pane's filter table (Task 5).
 /// </para>
 /// </remarks>
 /// <param name="FilterName">The canonical filter name, as the queries already resolved it.</param>

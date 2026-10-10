@@ -55,6 +55,9 @@
   <Application.Styles>
     <FluentTheme />
     <StyleInclude Source="/Theme/Controls.axaml" />
+    <!-- The table spine's styles. After Controls.axaml, so a table rule such as the sort glyph's
+         accent ink wins over a type tier it shares a TextBlock with. -->
+    <StyleInclude Source="/Theme/Table.axaml" />
     <!-- The colour picker's own control themes (P13 R2b, ruling Q24). Avalonia.Controls.ColorPicker
          ships outside the main Avalonia packages and FluentTheme does not carry its templates, so
          without this line the Filters tab's picker renders as an untemplated TemplatedControl. It

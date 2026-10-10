@@ -192,8 +192,10 @@ public class HelpTopicsTests
     {
         var paragraph = HelpTopics.Get("settings.custom-columns.add").Paragraph;
 
+        // Custom columns start shown and the pickers switch them off, so the old "stays hidden
+        // until you switch it on" sentences are pinned absent.
         Assert.Contains(
-            "stays hidden on the dashboard until you switch it on in the column picker",
+            "shows on the dashboard straight away and can be switched off in the column picker",
             paragraph,
             StringComparison.Ordinal);
         // The place is named rather than pointed at. "There" read as the Nights list, which has no
@@ -201,16 +203,16 @@ public class HelpTopicsTests
         // is what settings.display.ledger-columns describes. The old phrasing is pinned absent
         // below, so a later brevity pass cannot put the misdirection back.
         Assert.Contains(
-            "stays hidden on the Nights list until you switch it on in Settings, under Display",
+            "shows on the Nights list straight away and can be switched off in Settings, under Display",
             paragraph,
             StringComparison.Ordinal);
         Assert.Contains(
-            "Night columns appear in the dashboard's night expander and Rig columns appear on a "
-            + "night's rig lines straight away",
+            "Night columns also appear in the dashboard's night expander and Rig columns appear on "
+            + "a night's rig lines straight away",
             paragraph,
             StringComparison.Ordinal);
-        Assert.DoesNotContain("appears nowhere until you switch it on", paragraph, StringComparison.Ordinal);
-        Assert.DoesNotContain("until you switch it on there", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("until you switch it on", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("stays hidden", paragraph, StringComparison.Ordinal);
     }
 
     // Ruling C36, which replaces the count ruling C34 asked for. No count is defensible: the Nights
@@ -226,8 +228,12 @@ public class HelpTopicsTests
         var paragraph = HelpTopics.Get("settings.display.ledger-columns").Paragraph;
 
         Assert.Contains(
-            "so the columns already on that list never lose room", paragraph, StringComparison.Ordinal);
-        Assert.Contains("The built-in columns are always shown", paragraph, StringComparison.Ordinal);
+            "The Nights list shows every column switched on here when its divider is fully open",
+            paragraph,
+            StringComparison.Ordinal);
+        Assert.Contains(
+            "The check boxes and the date are always shown and are not in this list", paragraph, StringComparison.Ordinal);
+        Assert.DoesNotContain("narrow", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("eight", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain("ten ", paragraph, StringComparison.Ordinal);
         Assert.DoesNotContain(" nine", paragraph, StringComparison.Ordinal);
@@ -328,6 +334,8 @@ public class HelpTopicsTests
         Assert.Contains("Shift and click adds the range", nights, StringComparison.Ordinal);
         Assert.Contains("several nights are checked they show here as one night", night, StringComparison.Ordinal);
         Assert.Contains("a dashed line at the start of each night", night, StringComparison.Ordinal);
+        Assert.DoesNotContain("median", nights, StringComparison.Ordinal);
+        Assert.DoesNotContain("marked", nights, StringComparison.Ordinal);
 
         var longestIds = FiveLongest().Select(topic => topic.Id).ToList();
         Assert.DoesNotContain("target.nights", longestIds);

@@ -997,24 +997,24 @@ public class FilterPanelViewModelTests
         var dashboard = CreateDashboard(query, delay, post: posted.Add);
         await SettleAsync(dashboard, delay, posted);
 
-        // Phase 14C Task 4: a completed query now posts two closures, not one, the refetch dim's
-        // SetRefetching(true) ahead of Apply itself (spec 12.2, "The refetch dim"). Both are
-        // captured here since this test intercepts the whole post seam; only Apply matters to
-        // what this case proves, and it is always the second of each query's pair.
+        // A completed query can post the refetch dim's SetRefetching(true) ahead of Apply itself
+        // (spec 12.2, "The refetch dim"), or not, when it beats the dim's grace wait. Only Apply
+        // matters to what this case proves, and it is always the last closure a query posts.
         //
         // The first query completes but its result is still sitting in the queue...
         query.Page = new TargetListingPage([], 1, 0d, 1, 1, 50);
         dashboard.Filters.ObjectTypes[0].IsSelected = true;
         await DrainAsync(dashboard, delay);
-        Assert.Equal(2, posted.Count);
-        var firstApply = posted[1];
+        Assert.NotEmpty(posted);
+        var firstApply = posted[^1];
+        posted.Clear();
 
         // ...when a second one is requested and completes.
         query.Page = new TargetListingPage([], 99, 0d, 99, 1, 50);
         dashboard.Filters.ObjectTypes[1].IsSelected = true;
         await DrainAsync(dashboard, delay);
-        Assert.Equal(4, posted.Count);
-        var secondApply = posted[3];
+        Assert.NotEmpty(posted);
+        var secondApply = posted[^1];
 
         // Applying the newer one first, then the stale one, must not roll the figures back.
         secondApply();

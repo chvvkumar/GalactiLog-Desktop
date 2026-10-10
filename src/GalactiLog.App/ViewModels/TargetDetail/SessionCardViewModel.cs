@@ -3,9 +3,9 @@ using System.Globalization;
 using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.CustomColumns;
-using GalactiLog.Core.Aliases;
 using GalactiLog.Core.Sessions;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
@@ -53,7 +53,6 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
     private readonly TimeZoneInfo _zone;
     private readonly bool _use24Hour;
     private readonly Func<string, ImmutableSolidColorBrush> _filterTint;
-    private readonly Func<AliasMap>? _aliases;
 
     // The debounce seam, kept so spec 12.15's cells take the same one the notes box does. Null in
     // the application, where AutosaveField's own IdleWindow is the window.
@@ -113,13 +112,11 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
     /// <param name="logger">Optional. A failed expansion is logged and surfaced on the card,
     /// never rethrown on the UI thread: one failed session must not take the page down.</param>
     /// <param name="filterTint">Resolves a canonical filter name to its configured colour for
-    /// the ledger row's filters cell (P12), normally
+    /// the night pane's filter swatches, normally
     /// <c>ChartSelectionViewModel.FilterTint</c>, which is the same resolution the chart pills
     /// use. Optional and trailing, so no existing construction site changes; null falls back to
     /// spec 5.8.4's grey, which since P13 R2a is what <c>FilterColor.Resolve</c> reaches only after
     /// the stored colour and the seeded palette have both missed.</param>
-    /// <param name="aliases">Normally <c>AliasMapCache.Current</c>, for the filters cell's alias
-    /// fallback in its order (polish wave 2 ruling 1). Null folds the canonical names alone.</param>
     /// <param name="targetPage">P13 R5's live <c>display.target_page</c> holder, the one instance
     /// in the process, which is what makes a section toggle on one night visible on every other
     /// night's card and on a page opened afterwards (phase review P2-1). Optional and trailing, so
@@ -161,7 +158,6 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
         Func<DateOnly, string?, Phd2NightGuiding>? getGuiding = null,
         Func<bool>? anyGuideLogs = null,
         Func<Guid, Phd2SessionFrames?>? getFrames = null,
-        Func<AliasMap>? aliases = null,
         IReadOnlyList<DateOnly>? nights = null,
         IReadOnlyList<SessionCardViewModel>? noteNights = null)
     {
@@ -178,7 +174,6 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
         _zone = SessionTimeFormat.Resolve(general.DisplayTimezoneId);
         _use24Hour = general.Use24HTime;
         _filterTint = filterTint ?? (_ => ChartSelectionViewModel.FallbackFilterTint);
-        _aliases = aliases;
         _delay = delay;
         _targetPage = targetPage ?? new TargetPageState(display.TargetPage);
         _targetPage.PropertyChanged += OnTargetPageChanged;
@@ -247,16 +242,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
         nameof(MedianEccentricityText),
         nameof(MedianFwhmText),
         nameof(MedianGuidingRmsText),
-        nameof(MedianDetectedStarsText),
-        nameof(FilterSwatches),
-        nameof(LedgerIntegrationText),
-        nameof(LedgerHfrText),
-        nameof(LedgerEccentricityText),
-        nameof(LedgerFwhmText),
-        nameof(LedgerGuidingRmsText),
-        nameof(LedgerGuidingRmsMark),
-        nameof(LedgerGuidingRmsMarkTip),
-        nameof(LedgerStarsText))]
+        nameof(MedianDetectedStarsText))]
     public partial SessionOverview Overview { get; private set; }
 
     /// <summary>The night this card is for. Fixed for the card's lifetime: it keys the expansion
@@ -319,76 +305,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     public string MedianDetectedStarsText => MetricText.Format(Overview.MedianDetectedStars, "N0");
 
-    // ---- P12: the ledger row ---------------------------------------------------------------
-
-    /// <summary>Integration in hours with no unit, for example <c>6.2</c>. The ledger carries its
-    /// units in the column headers and never in a cell, which is why these six exist beside the
-    /// unit-carrying originals; <see cref="IntegrationText"/> and the five <c>Median*Text</c>
-    /// properties are untouched and still read elsewhere.</summary>
-    public string LedgerIntegrationText => MetricText.Format(Overview.IntegrationSeconds / 3600d, "0.0");
-
-    /// <summary>The night's median HFR in pixels with no unit.</summary>
-    public string LedgerHfrText => MetricText.Format(Overview.MedianHfr, "0.00");
-
-    public string LedgerEccentricityText => MetricText.Format(Overview.MedianEccentricity, "0.00");
-
-    public string LedgerFwhmText => MetricText.Format(Overview.MedianFwhm, "0.00");
-
-    /// <summary>The night's median guiding RMS, the figure alone. Review P2-2: the dagger used to
-    /// be concatenated into this string, which put a marked night's digits one mark's width to
-    /// the left of an unmarked night's and of the totals row's in the ledger's shared-size RMS
-    /// column. The mark is now <see cref="LedgerGuidingRmsMark"/>, its own reserved-width cell in
-    /// the view beside this one, so this value's own box never changes width.</summary>
-    public string LedgerGuidingRmsText => MetricText.Format(Overview.MedianGuidingRmsArcsec, "0.00");
-
-    /// <summary>Spec 12.4's dagger for the ledger night row (review P2-2), read from the same
-    /// <see cref="SessionOverview.GuidingProvenance"/> member <see cref="LedgerGuidingRmsText"/>
-    /// and the facts line clause below both read, so the ledger cell and the pane cannot disagree
-    /// about a night. Empty, not absent, on an unmarked or unmeasured night: the view's mark cell
-    /// keeps its own declared width whether or not this string is empty, which is what lets every
-    /// row's value box share one right edge (a mark cell that left the layout on
-    /// <c>IsVisible="False"</c> would still move that edge). The frame table's own dagger is a
-    /// separate per-frame read, <c>FrameRowViewModel.GuidingRmsSourceGlyph</c>, kept apart on
-    /// purpose: spec 12.4 grades a night here and a frame there.</summary>
-    public string LedgerGuidingRmsMark
-        => LedgerGuidingRmsText.Length > 0
-           && Overview.GuidingProvenance is GuidingRmsProvenance.Phd2 or GuidingRmsProvenance.Mixed
-            ? "†"
-            : "";
-
-    /// <summary>What the mark means, or null when there is no mark. The ledger's mark cell keeps
-    /// its declared width on an unmarked night (above), so a literal tooltip on that cell offered
-    /// "from a PHD2 guide log" over an empty box on every unmarked row and on the totals row
-    /// (phase review P3-10). Null rather than empty: a null <c>ToolTip.Tip</c> is a control with
-    /// no tooltip at all, an empty string is a control with a blank one.</summary>
-    public string? LedgerGuidingRmsMarkTip
-        => LedgerGuidingRmsMark.Length > 0 ? "from a PHD2 guide log" : null;
-
-    public string LedgerStarsText => MetricText.Format(Overview.MedianDetectedStars, "N0");
-
-    /// <summary>The night's filters, each with its configured colour, for the 7 px dots in the
-    /// ledger's filters column. Republished with the rest of the collapsed field set whenever a
-    /// scan brings a fresh overview.</summary>
-    /// <remarks>
-    /// Resolved once per overview rather than once per binding evaluation, which on a virtualised
-    /// ledger is once per row realisation during a scroll (phase review P3-3):
-    /// <c>ChartSelectionViewModel.FilterTint</c>'s own remarks record that resolving the alias map
-    /// can fall through to a synchronous settings read, so the per-read form put a settings read on
-    /// the scroll path and allocated a fresh list and a fresh view model per filter with it. The
-    /// cache is cleared rather than filled when the overview changes, because the constructor
-    /// assigns <see cref="Overview"/> before the tint delegate is in place.
-    /// </remarks>
-    public IReadOnlyList<FilterSwatchViewModel> FilterSwatches =>
-        _filterSwatches ??=
-            [.. Overview.FiltersUsed.Order(FilterOrder.Comparer(_aliases?.Invoke())).Select(name => new FilterSwatchViewModel(name, _filterTint(name)))];
-
-    private IReadOnlyList<FilterSwatchViewModel>? _filterSwatches;
-
-    partial void OnOverviewChanged(SessionOverview value)
-    {
-        _filterSwatches = null;
-        OnPropertyChanged(nameof(IStripItem.FullLabel));
-    }
+    partial void OnOverviewChanged(SessionOverview value) => OnPropertyChanged(nameof(IStripItem.FullLabel));
 
     // ---- Spec 12.15's custom column cells -----------------------------------------------------
 
@@ -407,7 +324,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     /// <summary>
     /// Spec 12.15's session-scope cells on this night's ledger row. Empty when no session-scope
-    /// column is switched on, which is every library until the reader switches one on in the
+    /// column is shown, which is every library that has none or has switched them all off in the
     /// Display tab's Nights ledger columns picker, and empty on an <c>obj:</c>
     /// group, which has no target id to key a value on.
     /// </summary>
@@ -588,7 +505,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
         _rigCells.Clear();
     }
 
-    // ---- P12: the worse ink (R4, ruling Q9) --------------------------------------------------
+    // ---- P12: worse than the target (R4, ruling Q9) -------------------------------------------
 
     /// <summary>Set when this night's median HFR is worse than the target's mean by more than one
     /// unit of the last displayed decimal. See <see cref="CompareWith"/>.</summary>
@@ -616,16 +533,15 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
     public partial bool IsWorseStars { get; private set; }
 
     /// <summary>
-    /// The comp's worse ink: a night's median reads in <c>ColorMetricWorst</c> only when it is
-    /// worse than the target's mean in the ledger's first row by more than one unit of the last
-    /// displayed decimal (P12 R4, ruling Q9). Better stays silent, because the job on this page is
+    /// Flags a night's median as worse only when it is worse than the target's mean by more than
+    /// one unit of the last displayed decimal (P12 R4, ruling Q9); the night pane's comparison
+    /// sentence names the flagged metrics. Better stays silent, because the job on this page is
     /// finding what to reject, and a difference inside the last decimal is noise rather than a
     /// signal. A null on either side is silent too.
     /// </summary>
     /// <remarks>
-    /// A night median against a target mean is not a like-for-like comparison, and the page says
-    /// so: every one of the five column headers carries the tooltip "Night medians against target
-    /// means", and Task 5's comparison sentence carries the same note (P12 R4).
+    /// A night median against a target mean is not a like-for-like comparison, and the comparison
+    /// sentence says so (P12 R4).
     /// <para>
     /// Called by the page after its totals are assigned, for every card it adds or carries, which
     /// is on the UI thread. A null <paramref name="totals"/> clears all five, which is the
@@ -1754,14 +1670,15 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     // Spec 12.4's order: HFR, eccentricity, FWHM, guiding RMS, sensor temperature. One table of
     // labels and formats for both the session's ranges and a rig's, because RigGroup.Ranges is
-    // carried in exactly this order and a second copy of the order is what would drift.
+    // carried in exactly this order and a second copy of the order is what would drift. A label
+    // is the row's heading, so it carries the unit once (ruling R17).
     private static readonly (string Label, string Format)[] RangeColumns =
     [
-        ("HFR", "0.00"),
+        (TableHeads.Hfr, "0.00"),
         ("Eccentricity", "0.00"),
-        ("FWHM", "0.00"),
-        ("Guiding RMS", "0.00"),
-        ("Sensor temp", "0.0"),
+        (TableHeads.Fwhm, "0.00"),
+        ("Guiding " + TableHeads.Rms, "0.00"),
+        ("Sensor temp C", "0.0"),
     ];
 
     private static IReadOnlyList<RangeCellViewModel> RangeCells(IReadOnlyList<MetricRangeSummary> ranges)
@@ -1866,12 +1783,13 @@ public sealed class RangeCellViewModel
     {
         Label = label;
         Range = range;
-        MinText = MetricText.Format(range.Min, format);
-        MaxText = MetricText.Format(range.Max, format);
-        MedianText = MetricText.Format(range.Median, format);
+        HasValues = Present(range.Min) || Present(range.Median) || Present(range.Max);
+        MinText = MetricText.Cell(range.Min, format);
+        MaxText = MetricText.Cell(range.Max, format);
+        MedianText = MetricText.Cell(range.Median, format);
 
         if (range.Min is { } min && range.Max is { } max && range.Median is { } median
-            && double.IsFinite(min) && double.IsFinite(max) && double.IsFinite(median))
+            && Present(min) && Present(max) && Present(median))
         {
             HasPosition = true;
             var span = max - min;
@@ -1888,11 +1806,13 @@ public sealed class RangeCellViewModel
     {
         Label = "";
         Range = new MetricRangeSummary(null, null, null);
-        MinText = "";
-        MaxText = "";
-        MedianText = "";
+        MinText = MetricText.Missing;
+        MaxText = MetricText.Missing;
+        MedianText = MetricText.Missing;
         LabelRow = row;
     }
+
+    private static bool Present(double? value) => value is { } figure && double.IsFinite(figure);
 
     /// <summary>Spec 12.4 item 2: the row that opens one rig's block of the ranges table on a
     /// multi-rig night, in the same shape the filter table's label row takes. A single-rig night
@@ -1934,7 +1854,7 @@ public sealed class RangeCellViewModel
 
     /// <summary>False when no frame of the night carried the metric, which takes the cell out of
     /// the list rather than showing three empty figures.</summary>
-    public bool HasValues => MedianText.Length > 0 || MinText.Length > 0 || MaxText.Length > 0;
+    public bool HasValues { get; }
 
     /// <summary>
     /// Where the median sits between the minimum and the maximum, 0 to 1. It shows skew: a median

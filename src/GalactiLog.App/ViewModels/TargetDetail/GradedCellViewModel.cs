@@ -57,7 +57,8 @@ public sealed class GradedCellViewModel
         // no median carries no grading tooltip at all, rather than one that says nothing: an empty
         // claim reads as a claim." Tooltip stays null and the markup binds ToolTip.Tip to it,
         // which Avalonia renders as no tooltip.
-        if (grade?.Z is not { } z || grade.BaselineMedian is not { } median || text.Length == 0)
+        if (grade?.Z is not { } z || grade.BaselineMedian is not { } median
+            || text.Length == 0 || text == MetricText.Missing)
         {
             return;
         }

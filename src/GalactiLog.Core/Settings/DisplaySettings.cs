@@ -84,7 +84,7 @@ public sealed record TargetLayoutState
     /// document round-trips.</summary>
     [JsonPropertyName("chart_height")] public double? ChartHeight { get; init; }
 
-    /// <summary>The nights sidebar's last open width; null is the wide form at the ledger's own width.</summary>
+    /// <summary>The nights sidebar's last open width; null is fully open, every custom column shown.</summary>
     [JsonPropertyName("sidebar_width")] public double? SidebarWidth { get; init; }
 
     [JsonPropertyName("sidebar_collapsed")] public bool SidebarCollapsed { get; init; }
@@ -373,8 +373,20 @@ public sealed record DisplaySettings
 
     /// <summary>The table id of the Target detail page's Nights ledger (spec 12.4, 12.15).
     /// Unlike the other two ids, this list holds CUSTOM SLUGS ONLY: the ledger's built-in
-    /// columns are not hideable and are not in it (spec 5.8.2's Phase 20 note).</summary>
+    /// columns are not hideable and are not in it (spec 5.8.2's Phase 20 note). No longer read:
+    /// custom column visibility is <see cref="LedgerHiddenTableId"/>'s; kept so a stored document
+    /// round-trips.</summary>
     public const string LedgerTableId = "ledger";
+
+    /// <summary>The custom slugs the user switched off on the dashboard. A <c>columns</c> entry
+    /// that lists HIDDEN keys, unlike every other entry: a custom column is shown unless its slug
+    /// is here, so a column created later starts shown with no write. Absent on a fresh profile,
+    /// which <see cref="ColumnsFor"/> answers as empty.</summary>
+    public const string DashboardHiddenTableId = "dashboard_hidden";
+
+    /// <summary>The custom slugs the user switched off on the Nights ledger, the same shape as
+    /// <see cref="DashboardHiddenTableId"/>.</summary>
+    public const string LedgerHiddenTableId = "ledger_hidden";
 
     /// <summary>The table id of the Mosaics page's table (spec 12.17, 5.8.2, Phase 18).</summary>
     public const string MosaicsTableId = "mosaics";

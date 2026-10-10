@@ -60,10 +60,14 @@ public class ControlStyleScanTest
     [Fact]
     public void NoButtonStyle_CarriesAGradientOrASemiTransparentAccentFill()
     {
-        var path = Path.Combine(SourceScan.SrcRoot(), "GalactiLog.App", "Theme", "Controls.axaml");
-        Assert.True(File.Exists(path), $"Missing {path}");
+        // Theme/Table.axaml is the table spine's half of the vocabulary (its sort header buttons), so
+        // its Button blocks are held to the same rules.
+        var paths = new[] { "Controls.axaml", "Table.axaml" }
+            .Select(name => Path.Combine(SourceScan.SrcRoot(), "GalactiLog.App", "Theme", name))
+            .ToList();
+        Assert.All(paths, path => Assert.True(File.Exists(path), $"Missing {path}"));
 
-        var text = File.ReadAllText(path);
+        var text = string.Concat(paths.Select(File.ReadAllText));
         var blocks = ButtonStyleBlock.Matches(text);
 
         // A file rename or a selector rewrite must not make this test vacuous.
@@ -227,7 +231,12 @@ public class ControlStyleScanTest
     public void NoViewUnderSrc_DeclaresItsOwnButtonTagOrCalloutStyle()
     {
         var root = SourceScan.SrcRoot();
-        var controls = Path.Combine(root, "GalactiLog.App", "Theme", "Controls.axaml");
+        // The two shared vocabulary files: the controls, and the table spine's styles.
+        string[] shared =
+        [
+            Path.Combine(root, "GalactiLog.App", "Theme", "Controls.axaml"),
+            Path.Combine(root, "GalactiLog.App", "Theme", "Table.axaml"),
+        ];
         var offenders = new List<string>();
         var scanned = 0;
 
@@ -235,7 +244,7 @@ public class ControlStyleScanTest
         {
             if (file.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}")
                 || file.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}")
-                || string.Equals(file, controls, StringComparison.OrdinalIgnoreCase))
+                || shared.Contains(file, StringComparer.OrdinalIgnoreCase))
             {
                 continue;
             }
@@ -256,7 +265,7 @@ public class ControlStyleScanTest
         Assert.True(scanned > 0, $"No .axaml files were scanned under {root}.");
         Assert.True(
             offenders.Count == 0,
-            "Button, tag and callout styling lives in Theme/Controls.axaml only. Offenders:"
+            "Button, tag and callout styling lives in Theme/Controls.axaml and Theme/Table.axaml only. Offenders:"
             + Environment.NewLine + string.Join(Environment.NewLine, offenders));
     }
 

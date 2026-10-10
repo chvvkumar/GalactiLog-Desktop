@@ -1,9 +1,9 @@
-using System.Globalization;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.ViewModels.CustomColumns;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Aliases;
 using GalactiLog.Data.Queries;
 using Microsoft.Extensions.Logging;
@@ -55,9 +55,9 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         // parent reference (task6.md 5.3), which keeps this the one place a SessionRowViewModel
         // is built.
         _sessions = [.. row.Sessions.Select(session => new SessionRowViewModel(
-            session.SessionDate.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
+            MetricText.Date(session.SessionDate),
             session.FrameCount,
-            FormatHours(session.IntegrationSeconds),
+            MetricText.HourFigure(session.IntegrationSeconds),
             session.SessionDate,
             row.GroupKey,
             SortBadges(session.Filters, order)))];
@@ -135,19 +135,22 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         _ => $"Mosaics: {string.Join(", ", Row.Mosaics.Select(link => link.Name))}",
     };
 
-    /// <summary>Spec 12.2's Designation column, rendered monospace by the view.</summary>
-    public string Designation => Row.CatalogId ?? "";
+    /// <summary>Spec 12.2's Designation column, rendered monospace by the view; "-" when the group
+    /// has no catalogue id.</summary>
+    public string Designation => MetricText.Cell(Row.CatalogId);
 
     public IReadOnlyList<PaletteBadgeViewModel> PaletteBadges { get; }
 
-    /// <summary>Hours with one decimal, for example <c>12.4 h</c>.</summary>
-    public string IntegrationText => FormatHours(Row.IntegrationSeconds);
+    /// <summary>Hours with one decimal, no unit (the "Hours" header carries it, ruling R15), for
+    /// example <c>12.4</c>.</summary>
+    public string IntegrationText => MetricText.HourFigure(Row.IntegrationSeconds);
 
-    /// <summary><c>yyyy-MM-dd</c>, empty when the group has no dated session.</summary>
-    public string LastSessionText => Row.LastSession?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "";
+    /// <summary><c>yyyy-MM-dd</c>, "-" when the group has no dated session.</summary>
+    public string LastSessionText => MetricText.Cell(Row.LastSession is { } date ? MetricText.Date(date) : null);
 
-    /// <summary>The canonical rig strings, joined. Task 2 already deduplicates and sorts.</summary>
-    public string EquipmentText => string.Join(", ", Row.Equipment);
+    /// <summary>The canonical rig strings, joined, "-" when there is none. Task 2 already
+    /// deduplicates and sorts.</summary>
+    public string EquipmentText => MetricText.Cell(string.Join(", ", Row.Equipment));
 
     public int FrameCount => Row.FrameCount;
 
@@ -206,6 +209,13 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
     public IReadOnlyList<CustomValueViewModel> CustomCells
         => _drawnCells >= _cells.Cells.Count ? _cells.Cells : [.. _cells.Cells.Take(_drawnCells)];
 
+    /// <summary>The night expander's custom headings: every session-scope column, in the order
+    /// its line cells are drawn. Empty with no custom column wiring, and empty on an unresolved
+    /// obj: group, which <see cref="LoadSessionCells"/> builds no cells for, so no heading stands
+    /// over a blank strip.</summary>
+    public IReadOnlyList<CustomColumnDefinition> SessionCustomHeadings
+        => Row.TargetId is null ? [] : _custom?.SessionColumns ?? [];
+
     /// <summary>Ruling C24's figure, pushed down by <see cref="TargetListViewModel"/> from the
     /// width rule. Nothing is disposed: a dropped column is not drawn, not discarded.</summary>
     internal void SetDrawnCustomCells(int count)
@@ -232,6 +242,10 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
     {
         var replacement = ReconcileTargetCells(_cells, custom, values);
         _custom = custom;
+
+        // Raised before the reference-equal return: the session columns can change while the
+        // target cells on screen are reseeded in place.
+        OnPropertyChanged(nameof(SessionCustomHeadings));
 
         // Reference equal means the cells on screen were reseeded in place, so there is no new list
         // for the strip to draw and nothing to raise.
@@ -428,9 +442,6 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         _sessionCells.Clear();
     }
 
-    private static string FormatHours(double seconds)
-        => string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600d:0.0} h");
-
     /// <summary>
     /// The one filter-tint parser (FIXER LIST F10); the filter panel's pills use it too. A filter's
     /// tint is user data, not a theme token, which is why this is the one place in the dashboard a
@@ -486,12 +497,11 @@ public sealed record PaletteBadgeViewModel(FilterBadge Badge, IImmutableSolidCol
         => FrameCount == 1 ? $"{CanonicalName}, 1 frame" : $"{CanonicalName}, {FrameCount} frames";
 }
 
-/// <summary>One line inside the Sessions expander: date, frames, integration, and, since Phase
+/// <summary>One line inside the Sessions expander: date, frames, hours, and, since Phase
 /// 14B Task 6, the raw <see cref="SessionDate"/> and owning <see cref="GroupKey"/> the Deep dive
 /// action needs and the night's <see cref="Filters"/> badges (spec 12.2, "a fifth column is an
-/// added cell rather than a rewrite": the session line is a <c>StackPanel</c> of fixed-width
-/// cells, not a shared-width <c>Grid</c>, so this is one more cell rather than a layout
-/// change).</summary>
+/// added cell rather than a rewrite": the session line is a table row over one column set, so
+/// this is one more column rather than a layout change).</summary>
 public sealed record SessionRowViewModel(
     string DateText,
     int FrameCount,
@@ -500,6 +510,9 @@ public sealed record SessionRowViewModel(
     string GroupKey,
     IReadOnlyList<PaletteBadgeViewModel> Filters)
 {
+    /// <summary>The Frames cell: thousands separators, like every count in a table.</summary>
+    public string FrameCountText => MetricText.Count(FrameCount);
+
     /// <summary>Spec 12.15 amendment 2.4's session-scope cells for this night, in display order,
     /// after the line's own columns and with no picker over them (user choice 4). Empty until the
     /// row is expanded and the lazy read comes back (ruling C11), and empty for good on a library

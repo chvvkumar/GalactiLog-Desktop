@@ -6,6 +6,7 @@ using Avalonia.Media;
 using Avalonia.Rendering.Composition;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Aliases;
@@ -141,10 +142,7 @@ internal static class TargetPartHost
         var ledger = view.Named<ListBox>("NightsLedger");
         var container = ledger.ContainerFromIndex(index);
         Assert.NotNull(container);
-        return container!
-            .GetVisualDescendants()
-            .OfType<Grid>()
-            .First(grid => grid.Classes.Contains("ledger-row"));
+        return container!.GetVisualDescendants().OfType<TableRow>().First();
     }
 
     public static TextBlock CellAt(Grid row, int column)

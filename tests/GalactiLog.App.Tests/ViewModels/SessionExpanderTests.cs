@@ -1,4 +1,5 @@
 using GalactiLog.App.ViewModels.Dashboard;
+using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
 using Xunit;
 
@@ -171,4 +172,41 @@ public class SessionExpanderTests
 
         Assert.Equal("Collapse", row.SessionsToggleText);
     }
+
+    private static CustomColumnDefinition SessionColumn(string name, int order)
+        => new(Guid.NewGuid(), name, $"custom_{name.ToLowerInvariant()}", CustomColumnType.Text, CustomColumnScope.Session, [], order, DateTime.UtcNow, 0);
+
+    private static CustomCellContext Context(params CustomColumnDefinition[] sessionColumns)
+        => new([], sessionColumns, _ => [], (_, _, _) => default!, action => action());
+
+    [Fact]
+    public void SessionCustomHeadings_FollowTheSessionColumns()
+    {
+        // The night expander's header row draws one heading per session-scope column, in the
+        // order the cells under it are drawn, and follows a changed column set.
+        var seeing = SessionColumn("Seeing", 0);
+        var clouds = SessionColumn("Clouds", 1);
+        var source = Row("g1", [new SessionSummary(new DateOnly(2025, 12, 7), 10, 3_000d)])
+            with { TargetId = Guid.NewGuid() };
+        var row = new TargetRowViewModel(source, [], custom: Context(seeing, clouds));
+
+        Assert.Equal([seeing, clouds], row.SessionCustomHeadings);
+
+        // An unresolved obj: group has no target id to key a night's value by, so it gets no
+        // session cells and so no headings over them.
+        var unresolved = new TargetRowViewModel(
+            source with { GroupKey = "obj:Bubble Neb", TargetId = null }, [], custom: Context(seeing, clouds));
+        Assert.Empty(unresolved.SessionCustomHeadings);
+
+        var raised = new List<string?>();
+        row.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        row.RebuildCustomCells(Context(clouds), null);
+
+        Assert.Equal([clouds], row.SessionCustomHeadings);
+        Assert.Contains(nameof(TargetRowViewModel.SessionCustomHeadings), raised);
+    }
+
+    [Fact]
+    public void SessionCustomHeadings_AreEmpty_WithNoCustomColumnWiring()
+        => Assert.Empty(Build("g1", []).SessionCustomHeadings);
 }

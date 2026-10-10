@@ -4,6 +4,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels;
@@ -31,15 +32,16 @@ internal static class NightPartsTestKit
     public static DateTime DuskOf(NightStripViewModel strip)
         => strip.StartLocal + (strip.EndLocal - strip.StartLocal) * strip.BandStartFraction;
 
-    /// <summary>Every shared-size row of one table, header first, in visual order.</summary>
-    public static IReadOnlyList<Grid> TableRows(Control host, string tableName)
-        => [.. host.Named<Grid>(tableName)
+    /// <summary>Every shown row of one table, header first, in visual order. A rig label item keeps
+    /// a hidden TableRow, so visibility is what counts.</summary>
+    public static IReadOnlyList<TableRow> TableRows(Control host, string tableName)
+        => [.. host.Named<Control>(tableName)
             .GetVisualDescendants()
-            .OfType<Grid>()
-            .Where(grid => grid.Classes.Contains("tab-row"))];
+            .OfType<TableRow>()
+            .Where(row => row.IsEffectivelyVisible)];
 
-    public static Control TableCellAt(Grid row, int column)
-        => row.Children.OfType<Control>().First(child => Grid.GetColumn(child) == column);
+    public static Control TableCellAt(TableRow row, string key)
+        => row.Children.First(child => TableRow.GetCol(child) == key);
 
     /// <summary>The frame table toolbar's items keep clear of each other and of the toolbar's edge,
     /// on at most <paramref name="mostLines"/> visual lines, the lines inside the slot's content counted. An item's extent is

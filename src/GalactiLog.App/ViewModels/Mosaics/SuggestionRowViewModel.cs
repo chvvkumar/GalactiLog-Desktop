@@ -361,6 +361,9 @@ public sealed partial class SuggestionSessionViewModel(SuggestionSessionRow data
 
     public string NightText => MetricText.Date(Data.Night);
 
+    /// <summary>The canonical filter, "-" for frames that carry none.</summary>
+    public string FilterText => MetricText.Cell(Data.Filter);
+
     public string FramesText => MetricText.Count(Data.Frames);
 
     public string IntegrationText => MetricText.Integration(Data.IntegrationSeconds);

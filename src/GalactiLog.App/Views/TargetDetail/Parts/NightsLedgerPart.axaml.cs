@@ -1,41 +1,31 @@
-using System.Globalization;
+using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
-using Avalonia.Data.Converters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.ViewModels.TargetDetail;
 
 namespace GalactiLog.App.Views.TargetDetail.Parts;
 
 public partial class NightsLedgerPart : UserControl
 {
-    public static readonly StyledProperty<Control?> LitRowContentProperty =
-        AvaloniaProperty.Register<NightsLedgerPart, Control?>(nameof(LitRowContent));
-
-    public static readonly StyledProperty<bool> IsCompactProperty =
-        AvaloniaProperty.Register<NightsLedgerPart, bool>(nameof(IsCompact));
-
     public static readonly StyledProperty<bool> IsCollapsedProperty =
         AvaloniaProperty.Register<NightsLedgerPart, bool>(nameof(IsCollapsed));
 
-    /// <summary>The column bound here keeps its declared figure, the parameter, unless the bound
-    /// flag (compact or collapsed) is set, when it is zero.</summary>
-    public static readonly IValueConverter Unless = new FuncValueConverter<bool, object?, double>(
-        (hidden, figure) => hidden ? 0d : double.Parse((string)figure!, CultureInfo.InvariantCulture));
+    private TargetDetailViewModel? _page;
 
-    /// <summary>A hidden column leaves its shared size group, because a group only ever grows and
-    /// would hold the width the column gave up.</summary>
-    public static readonly IValueConverter GroupUnless = new FuncValueConverter<bool, object?, string?>(
-        (hidden, group) => hidden ? null : (string?)group);
+    private double _titleLineWidth;
 
-    private ContentControl? _litSlot;
+    private bool _isStacked;
+
+    private (double Collapsed, double Open) _extents;
 
     public NightsLedgerPart()
     {
         InitializeComponent();
-        NightsLedger.LayoutUpdated += (_, _) => PlaceLitRowContent();
+        LedgerViewport.LayoutUpdated += (_, _) => ReportExtents();
 
         // Tunnelling, so a Ctrl or Shift press is handled before the ListBox reads it as a selection.
         NightsLedger.AddHandler(PointerPressedEvent, OnLedgerRowPointerPressed, RoutingStrategies.Tunnel);
@@ -81,29 +71,45 @@ public partial class NightsLedgerPart : UserControl
         e.Handled = true;
     }
 
-    /// <summary>Drawn under the lit row, inside the ledger's shared size scope.</summary>
-    public Control? LitRowContent
-    {
-        get => GetValue(LitRowContentProperty);
-        set => SetValue(LitRowContentProperty, value);
-    }
-
-    /// <summary>True drops the Frames and Filters columns.</summary>
-    public bool IsCompact
-    {
-        get => GetValue(IsCompactProperty);
-        set => SetValue(IsCompactProperty, value);
-    }
-
-    /// <summary>True keeps the box and the date only; the layout sets it with <see cref="IsCompact"/>.</summary>
+    /// <summary>True at the divider's stop: the box and the date only. The layout sets it.</summary>
     public bool IsCollapsed
     {
         get => GetValue(IsCollapsedProperty);
         set => SetValue(IsCollapsedProperty, value);
     }
 
+    /// <summary>True when the column is narrower than the title line, and always at the stop: the
+    /// chrome stacks one item per line. The layout sets it.</summary>
+    public bool IsStacked
+    {
+        get => _isStacked;
+        set
+        {
+            _isStacked = value;
+            PseudoClasses.Set(":stacked", value);
+        }
+    }
+
+    /// <summary>The title line's width in its one-line form (ruling R8).</summary>
+    public double TitleLineWidth => _titleLineWidth;
+
     /// <summary>The header's chevron; the layout gives it the sidebar's toggle.</summary>
     public Button CollapseToggle => CollapseChevron;
+
+    /// <summary>The date column's right edge: the divider's stop.</summary>
+    public double CollapsedWidth => LedgerHeaderRow.ColumnDefinitions.Count < 2
+        ? 0d
+        : LedgerHeaderRow.ColumnDefinitions[0].ActualWidth + LedgerHeaderRow.ColumnDefinitions[1].ActualWidth;
+
+    /// <summary>The table's own width, every custom column shown, and never narrower than the title
+    /// line in its open form (ruling R8).</summary>
+    public double OpenWidth => Math.Max(LedgerViewport.NaturalWidth, _titleLineWidth);
+
+    /// <summary>Raised after a layout pass that moved <see cref="CollapsedWidth"/> or
+    /// <see cref="OpenWidth"/>.</summary>
+    public event EventHandler? ExtentsChanged;
+
+    private TableColumns Columns => (TableColumns)Resources["NightsCols"]!;
 
     /// <summary>Scrolls the ledger to the night.</summary>
     public void ScrollToNight(SessionCardViewModel card) => NightsLedger.ScrollIntoView(card);
@@ -129,45 +135,80 @@ public partial class NightsLedgerPart : UserControl
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
     {
         base.OnPropertyChanged(change);
-        if (change.Property == IsCompactProperty)
-        {
-            PseudoClasses.Set(":compact", IsCompact);
-        }
-        else if (change.Property == IsCollapsedProperty)
+        if (change.Property == IsCollapsedProperty)
         {
             PseudoClasses.Set(":collapsed", IsCollapsed);
         }
-        else if (change.Property == LitRowContentProperty)
+        else if (change.Property == DataContextProperty)
         {
-            PlaceLitRowContent();
+            if (this.IsAttachedToVisualTree())
+            {
+                Follow(DataContext as TargetDetailViewModel);
+            }
+
+            Columns.Reset();
         }
     }
 
-    // A control has one parent, so the content moves to the lit row's slot rather than being bound
-    // from every row's template; containers are realised and recycled during layout.
-    private void PlaceLitRowContent()
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
     {
-        var content = LitRowContent;
-        var slot = content is not null
-            && NightsLedger.SelectedItem is { } night
-            && NightsLedger.ContainerFromItem(night) is { } row
-                ? row.GetVisualDescendants().OfType<ContentControl>().FirstOrDefault(c => c.Classes.Contains("lit-slot"))
-                : null;
-        if (ReferenceEquals(slot, _litSlot) && ReferenceEquals(slot?.Content, content))
+        base.OnAttachedToVisualTree(e);
+        Follow(DataContext as TargetDetailViewModel);
+    }
+
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        Follow(null);
+        base.OnDetachedFromVisualTree(e);
+    }
+
+    // A shared size group only grows, so a custom column switched off starts a new generation, or
+    // the strip would keep the width of the column it no longer draws. Followed only while
+    // attached, so a page kept by the history does not keep this view.
+    private void Follow(TargetDetailViewModel? page)
+    {
+        if (_page is not null)
         {
-            return;
+            _page.PropertyChanged -= OnPageChanged;
         }
 
-        if (_litSlot is not null)
+        _page = page;
+        if (page is not null)
         {
-            _litSlot.Content = null;
+            page.PropertyChanged += OnPageChanged;
+        }
+    }
+
+    private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TargetDetailViewModel.LedgerCustomHeadings))
+        {
+            Columns.Reset();
+        }
+    }
+
+    private void ReportExtents()
+    {
+        // The title line is measured in its one-line form only; stacked, it is one item per line.
+        if (!IsStacked)
+        {
+            _titleLineWidth = LineWidth(LedgerTitle) + LineWidth(LedgerActions);
         }
 
-        _litSlot = slot;
-        if (slot is not null)
+        var extents = (CollapsedWidth, OpenWidth);
+        if (extents != _extents)
         {
-            slot.Content = content;
+            _extents = extents;
+            ExtentsChanged?.Invoke(this, EventArgs.Empty);
         }
+    }
+
+    // A horizontal line's own width: its children measure unconstrained, while the panel's desired
+    // size is clipped to the column it was given.
+    private static double LineWidth(StackPanel line)
+    {
+        var shown = line.Children.Where(child => child.IsVisible).ToList();
+        return shown.Sum(child => child.DesiredSize.Width) + line.Spacing * Math.Max(0, shown.Count - 1);
     }
 
     /// <summary>

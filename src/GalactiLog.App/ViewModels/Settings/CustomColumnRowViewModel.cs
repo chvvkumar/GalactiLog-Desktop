@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Settings;
 using GalactiLog.Data.Queries;
 
@@ -91,6 +92,9 @@ public sealed partial class CustomColumnRowViewModel : ObservableObject
     public IReadOnlyList<string> Options => Column.Options;
 
     public int ValueCount => Column.ValueCount;
+
+    /// <summary>The Values cell: <see cref="ValueCount"/> with thousands separators.</summary>
+    public string ValueCountText => MetricText.Count(ValueCount);
 
     /// <summary>Always false (spec 12.15, departure 9): the Type control is never editable, and
     /// this is what the view binds so a real disabled control carries <see cref="TypeScopeTooltip"/>

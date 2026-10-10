@@ -1,11 +1,10 @@
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Controls.Primitives;
 using Avalonia.Headless.XUnit;
-using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels.Wbpp;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.App.Views.TargetDetail.Wbpp;
@@ -117,38 +116,26 @@ public class QualityPanelViewTests
             .ToList();
 
         Assert.Equal(
-            ["Copy", "Verdict", "Filter", "HFR", "Ecc", "FWHM", "Stars", "RMS", "File", "Night"],
+            ["Copy", "Verdict", "Filter", "HFR px", "Ecc", "FWHM \"", "Stars", "RMS \"", "File", "Night"],
             titles);
 
         window.Close();
     }
 
     /// <summary>
-    /// The header cells and the row cells share one left edge, which is what the two repeated
-    /// <c>ColumnDefinitions</c> strings have to keep true.
+    /// The table follows the spine's conventions (spine-spec 6.2): one gutter per cell, one right
+    /// edge per figure column across the header and the rows, figures never trimmed, a faint dash,
+    /// headers on t-label and a scroller that does not auto-hide. Again at the x-large text size.
     /// </summary>
-    /// <remarks>Fails the moment the two strings drift apart, which puts every row one cell out of
-    /// line with the header it is read under.</remarks>
     [AvaloniaFact]
-    public void QualityPanelView_TheHeaderCells_ShareOneLeftEdgeWithTheRowCells()
+    public void QualityPanelView_FollowsTheTableConventions()
     {
         var (window, view) = Show(Populated());
-        var header = Named<Grid>(view, "HeaderRow");
-        var row = Rows(view)[0];
 
-        // The declared strings first, which is the drift this case exists for.
-        Assert.Equal(
-            header.ColumnDefinitions.Select(column => column.Width.ToString()),
-            row.ColumnDefinitions.Select(column => column.Width.ToString()));
-
-        // Then the laid out result, over the five metric columns, whose header cell and row cell
-        // both sit flush at their column's left edge: a drift in either string moves them apart.
-        // The first three columns are excluded because their cells carry their own margin and
-        // alignment, which is an offset inside the column rather than the column's own position.
-        for (var column = 3; column <= 7; column++)
-        {
-            Assert.Equal(LeftEdge(header, column, view), LeftEdge(row, column, view), precision: 0);
-        }
+        TableAssert.Conventions(view);
+        window.FontSize = 20;
+        Dispatcher.UIThread.RunJobs();
+        TableAssert.Conventions(view);
 
         window.Close();
     }
@@ -306,7 +293,7 @@ public class QualityPanelViewTests
     /// same slack and a single figure hides which of them is the binding one.</param>
     [AvaloniaTheory]
     [InlineData(PanelAllotment, 170d)]
-    [InlineData(MinimumAllotment, 146d)]
+    [InlineData(MinimumAllotment, 64d)]
     public void QualityPanelView_LaysOutInsideItsAllotment_WithNoHorizontalOverflow(
         double allotment,
         double fileColumnFloor)
@@ -319,22 +306,11 @@ public class QualityPanelViewTests
         var scroller = Named<ScrollViewer>(view, "RowsScroller");
         Assert.True(scroller.Extent.Width <= scroller.Viewport.Width + 0.5d);
 
-        // The File column is the one star column, so it carries the whole difference between the
-        // two allotments while the nine fitted columns keep their declared widths. The column
-        // itself is 292 at the opening width and 152 at the narrowest the user can drag the window
-        // to; the expression below reads 288 and 148, four pixels less at both, because it is cell
-        // origin to cell origin and the File cell carries its own 4 px leading margin inside the
-        // column. Both figures are measured, and the floors here are against the expression.
-        //
-        // The narrow floor was 170 until the launched-app look's D1. Raising the Night column from
-        // 86 to 112, which is what lets a whole ISO date be drawn instead of "2025-03-...", takes
-        // 26 px out of this column at every allotment, and no pair of figures satisfies both a
-        // whole date and 170 here: the date needs 106.6 px with its inset and a 170 px File column
-        // leaves the Night column at most 94. Coordinator's ruling at the Phase 16 close: a whole
-        // date beats 18 px of a file name that already trims at this width with its path line
-        // beneath it, so this column is what gives and the narrow floor sits just under what it
-        // measures. Nothing else moved for it: Filter and Copy keep their declared widths and both
-        // overflow assertions above are unchanged.
+        // The File column is the one star column, so it carries whatever the fitted columns leave.
+        // Cell origin to cell origin, so the figure includes the File cell's own gutter. The fitted
+        // columns are as wide as their headings (units, sort glyph slot, mark inset) and a figure
+        // never trims (spec.md item 3), so at the window's MinWidth the file name is what gives:
+        // it trims with the whole path on its tooltip.
         Assert.True(
             LeftEdge(row, 9, view) - LeftEdge(row, 8, view) >= fileColumnFloor,
             $"the File column is {LeftEdge(row, 9, view) - LeftEdge(row, 8, view):F1} px at an "
@@ -344,47 +320,64 @@ public class QualityPanelViewTests
     }
 
     /// <summary>
-    /// The Night column keeps its own trailing clearance from the row scroller's overlay
-    /// scrollbar, and its header label and its digits share one right edge.
+    /// The rows take the height the wizard body has left rather than a fixed 420, with the footer
+    /// note still inside the body's viewport, and never fall under the floor in a short window.
     /// </summary>
-    /// <remarks>Fails when the cell's inset and the header's differ, which is what puts the label
-    /// and the digits under it out of line, or when the inset is narrower than the thumb, which is
-    /// the bar drawing over the date on every session with more rows than the scroller's
-    /// ceiling.</remarks>
-    [AvaloniaFact]
-    public void QualityPanelView_TheNightColumn_KeepsItsClearanceAndOneRightEdge()
+    /// <remarks>Fails against the fixed bound: in a 1200 px body the rows stay at 420.</remarks>
+    [AvaloniaTheory]
+    [InlineData(1200d)]
+    [InlineData(300d)]
+    public void QualityPanelView_TheRows_FillTheWizardBodysViewport(double bodyHeight)
     {
-        var (window, view) = Show(Populated());
-        var header = Named<Grid>(view, "HeaderRow");
-        var row = Rows(view)[0];
-        var digits = Named<TextBlock>(row, "NightCell");
-        var label = header.Children.First(child => Grid.GetColumn(child) == 9);
+        var view = new QualityPanelView { DataContext = Populated() };
+        var body = new ScrollViewer { Width = PanelAllotment, Height = bodyHeight, Content = view };
+        var window = new Window { Width = PanelAllotment + 40d, Height = bodyHeight + 40d, Content = body };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(RightEdge(label, view), RightEdge(digits, view), precision: 0);
-        Assert.Equal(8d, RightEdge(row, view) - RightEdge(digits, view), precision: 0);
+        var rows = Named<ScrollViewer>(view, "RowsScroller");
+        var top = rows.TranslatePoint(default, body)!.Value.Y + body.Offset.Y;
+        var footer = Named<TextBlock>(view, "FooterNote");
+        var expected = Math.Max(
+            QualityPanelView.MinRowsHeight,
+            body.Viewport.Height - top - footer.Bounds.Height - footer.Margin.Top);
+
+        Assert.Equal(expected, rows.MaxHeight, 1);
+        if (bodyHeight > 1000d)
+        {
+            Assert.True(rows.MaxHeight > 420d, $"the rows are bounded at {rows.MaxHeight:F0} in a {bodyHeight:F0} px body");
+        }
+        else
+        {
+            Assert.Equal(QualityPanelView.MinRowsHeight, rows.MaxHeight, 1);
+        }
 
         window.Close();
     }
 
     /// <summary>
-    /// The width "2025-03-20" takes in the shipped face, Atkinson Hyperlegible Next Regular at the
-    /// shipped 18 px root, which is the figure <c>TargetDetailView.axaml</c>'s own ledger block
-    /// measured and records for the same string in the same face and size.
+    /// The Night heading sits over its dates although only the rows are inside the scroller: the
+    /// header row carries the reserved bar's width, so the two Night columns start at one x.
     /// </summary>
-    /// <remarks>A literal because this process cannot measure it: the headless harness loads a
-    /// stub face, so a cell measured here is measured against a face no user sees. Both faces are
-    /// asserted below, because a column that fits the stub can still trim on the shipped one,
-    /// which is exactly what shipped.</remarks>
-    private const double ShippedFaceIsoDateWidth = 98.6d;
+    /// <remarks>Fails when the header's ScrollInset and the rows' reserved bar disagree, which puts
+    /// the label and the dates under it out of line.</remarks>
+    [AvaloniaFact]
+    public void QualityPanelView_TheNightHeading_StartsWhereItsDatesStart()
+    {
+        var (window, view) = Show(Populated());
+        var header = Named<Grid>(view, "HeaderRow");
+        var row = Rows(view)[0];
+
+        Assert.Equal(LeftEdge(header, 9, view), LeftEdge(row, 9, view), precision: 0);
+
+        window.Close();
+    }
 
     /// <summary>
     /// The Night cell draws a whole ISO date at the export window's opening width.
     /// </summary>
-    /// <remarks>Launched-app look D1. At the column's shipped 86 the cell had 78 px after the
-    /// 8 px <c>QualityNightInset</c>, and every row on both fixture libraries rendered
-    /// "2025-03-..." at the default window size and the default text size. The column is clear of
-    /// the scroll bar either way, so the case above stayed green while the value the column exists
-    /// to show was unreadable.</remarks>
+    /// <remarks>Launched-app look D1: a fixed Night column once trimmed every date to
+    /// "2025-03-...". The column is now Auto and a text column without a cap never trims.</remarks>
     [AvaloniaFact]
     public void QualityPanelView_AtTheWindowsOpeningWidth_TheNightCellDrawsAWholeIsoDate()
     {
@@ -392,30 +385,7 @@ public class QualityPanelViewTests
         var cell = Named<TextBlock>(Rows(view)[0], "NightCell");
 
         Assert.Equal("2025-03-20", cell.Text);
-
-        var harnessFace = new FormattedText(
-            "2025-03-20",
-            CultureInfo.InvariantCulture,
-            FlowDirection.LeftToRight,
-            new Typeface(cell.FontFamily, cell.FontStyle, cell.FontWeight),
-            cell.FontSize,
-            Brushes.White).Width;
-        Assert.True(harnessFace > 0d, "the harness measured the ISO date as nothing");
-
-        Assert.True(
-            cell.Bounds.Width >= harnessFace - 0.5d,
-            $"the Night cell is {cell.Bounds.Width:F1} px for a date measuring {harnessFace:F1} px "
-            + "in the harness face");
-        Assert.True(
-            cell.Bounds.Width >= ShippedFaceIsoDateWidth,
-            $"the Night cell is {cell.Bounds.Width:F1} px for a date measuring "
-            + $"{ShippedFaceIsoDateWidth:F1} px in the shipped face, so it trims on a launched "
-            + "application while this harness sees a whole date");
-
-        // And the header label over it has the same room, so the two cannot disagree.
-        var header = Named<Grid>(view, "HeaderRow");
-        var label = header.Children.First(child => Grid.GetColumn(child) == 9);
-        Assert.True(label.Bounds.Width >= ShippedFaceIsoDateWidth);
+        Assert.DoesNotContain(cell.TextLayout.TextLines, line => line.HasCollapsed);
 
         window.Close();
     }
@@ -428,14 +398,11 @@ public class QualityPanelViewTests
         return cell.TranslatePoint(default, origin)!.Value.X;
     }
 
-    // Where a control ends, in the panel's own coordinates.
-    private static double RightEdge(Visual control, Visual origin)
-        => control.TranslatePoint(new Point(control.Bounds.Width, 0d), origin)!.Value.X;
-
+    // A sort header's title, not its direction glyph, which leads in a numeric heading.
     private static string HeaderTitle(Control cell) => cell switch
     {
         TextBlock label => label.Text ?? "",
-        _ => cell.GetVisualDescendants().OfType<TextBlock>().First().Text ?? "",
+        _ => cell.GetVisualDescendants().OfType<TextBlock>().First(block => !block.Classes.Contains("tc-sortglyph")).Text ?? "",
     };
 
     private static string ChipLabel(Control chip) => chip switch
