@@ -1671,17 +1671,24 @@ public static class AppHost
                         logger: serviceProvider.GetRequiredService<ILogger<QualityPanelViewModel>>()),
                     logger: serviceProvider.GetRequiredService<ILogger<WbppExportViewModel>>()));
 
-        // The export wizard over the page factory above: the job
-        // registry for the status bar, one activity row per copy, Copy path, Open folder and Run script.
+        // Spec 12.13's in-app stacking copy: one for the process, so a copy outlives the export
+        // window that started it. Not IDisposable; App.DrainForShutdown cancels and joins it.
+        builder.Services.AddSingleton(serviceProvider => new StagingCopyService(
+            serviceProvider.GetRequiredService<JobRegistry>(),
+            (severity, eventType, message, details) => serviceProvider
+                .GetRequiredService<ActivityRepository>()
+                .EmitStandalone("user_action", severity, eventType, message, details),
+            logger: serviceProvider.GetRequiredService<ILoggerFactory>().CreateLogger<StagingCopyService>()));
+
+        // The export wizard over the page factory above: the copy service (its status bar job and
+        // Activity row), Copy path, Open folder and Run script.
         builder.Services.AddSingleton(serviceProvider => new WbppExportDialogService(
             (groupKey, targetName, nights) => new WbppExportWizardViewModel(
                 serviceProvider
                     .GetRequiredService<Func<string, string, IReadOnlyList<DateOnly>, WbppExportViewModel>>()(
                         groupKey, targetName, nights),
                 serviceProvider.GetRequiredService<ShellIntegration>().CopyTextAsync,
-                serviceProvider.GetRequiredService<JobRegistry>(),
-                message => serviceProvider.GetRequiredService<ActivityRepository>()
-                    .EmitStandalone("user_action", "info", "stacking_copy", message),
+                serviceProvider.GetRequiredService<StagingCopyService>(),
                 serviceProvider.GetRequiredService<ShellIntegration>().OpenFolderInExplorer,
                 serviceProvider.GetRequiredService<ShellIntegration>().RunPowerShellScript,
                 logger: serviceProvider.GetRequiredService<ILogger<WbppExportWizardViewModel>>()),

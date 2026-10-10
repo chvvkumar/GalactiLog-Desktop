@@ -116,7 +116,7 @@ public class JobRegistryCensusTest
     private const string TheSurveyFetch = SurveyImageService.FetchJobKind;
 
     /// <summary>The export wizard's staging copy (wizard ruling R10), census member fifteen.</summary>
-    private const string TheStackingCopy = WbppExportWizardViewModel.CopyJobKind;
+    private const string TheStackingCopy = StagingCopyService.CopyJobKind;
 
     /// <summary>Spec 12.17's four Mosaics page kinds, census members sixteen to nineteen.</summary>
     private static readonly string[] TheMosaicActions =
@@ -369,7 +369,7 @@ public class JobRegistryCensusTest
                    new Library().Frame(new DateOnly(2025, 3, 20), Path.Combine(Library.Root, "M31", "a.fits")),
                    [new DateOnly(2025, 3, 20)]))
         using (var wizard = new WbppExportWizardViewModel(
-                   harness.Page, _ => Task.CompletedTask, registry, post: action => action()))
+                   harness.Page, _ => Task.CompletedTask, new StagingCopyService(registry), post: action => action()))
         {
             harness.Page.StagingIoFor = _ => new StagingIo(
                 _ => new MemoryStream(), _ => [], _ => null, _ => { }, _ => new MemoryStream());

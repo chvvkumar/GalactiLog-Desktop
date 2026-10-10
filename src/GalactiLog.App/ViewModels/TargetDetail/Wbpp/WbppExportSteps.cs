@@ -150,6 +150,11 @@ public sealed partial class ReviewStep(WbppExportViewModel page, MethodStep meth
         + "moves or renames anything, in your library or in the staging folder; a file already "
         + "there is skipped.";
 
+    /// <summary>The hint under the copy's progress: the window may close mid-copy.</summary>
+    public const string BackgroundCopyText =
+        "You can close this window. The copy keeps running, and the Jobs list in the status bar "
+        + "shows its progress and Cancel.";
+
     public override string Title => "Review";
 
     public override string HelpTopicId => HelpTopicIds[4];
@@ -335,22 +340,17 @@ public sealed partial class ResultStep(WbppExportViewModel page, Action<Action>?
         _ => "Done. Open WBPP and use Add Directory on the staging folder.",
     };
 
-    public string CountsText
-    {
-        get
-        {
-            if (Result is not { } r)
-            {
-                return "";
-            }
+    public string CountsText => Result is { } r ? CountsTextFor(r) : "";
 
-            int Count(StagingSkipReason reason) => r.Skipped.Count(skip => skip.Reason == reason);
-            return string.Create(
-                CultureInfo.InvariantCulture,
-                $"Copied {r.Copied:N0} files, {WbppPathText.Bytes(r.BytesCopied)}. Skipped {Count(StagingSkipReason.ExistsSameSize):N0} already present, "
-                + $"{Count(StagingSkipReason.ExistsDifferentSize):N0} present but different size, "
-                + $"{Count(StagingSkipReason.ReparsePoint):N0} linked folders not followed. {r.Failed.Count:N0} failed.");
-        }
+    /// <summary>The counts sentence for a copy result: copied, each skip reason and failed.</summary>
+    public static string CountsTextFor(StagingCopyResult r)
+    {
+        int Count(StagingSkipReason reason) => r.Skipped.Count(skip => skip.Reason == reason);
+        return string.Create(
+            CultureInfo.InvariantCulture,
+            $"Copied {r.Copied:N0} files, {WbppPathText.Bytes(r.BytesCopied)}. Skipped {Count(StagingSkipReason.ExistsSameSize):N0} already present, "
+            + $"{Count(StagingSkipReason.ExistsDifferentSize):N0} present but different size, "
+            + $"{Count(StagingSkipReason.ReparsePoint):N0} linked folders not followed. {r.Failed.Count:N0} failed.");
     }
 
     public IReadOnlyList<string> DifferentSizePaths => Result is { } r
@@ -370,22 +370,25 @@ public sealed partial class ResultStep(WbppExportViewModel page, Action<Action>?
 
     public bool HasPartials => PartialPaths.Count > 0;
 
-    /// <summary>Save report is offered only when something was skipped or failed.</summary>
-    public bool HasProblems => Result is { } r && (r.Skipped.Count > 0 || r.Failed.Count > 0);
+    /// <summary>Save report is offered only when something was skipped, failed or left partial.</summary>
+    public bool HasProblems => Result is { } r && (r.Skipped.Count > 0 || r.Failed.Count > 0 || r.PartialPaths.Count > 0);
 
     /// <summary>The text Save report writes.</summary>
-    public string ReportText => Result is not { } r
-        ? ""
-        : string.Join(
+    public string ReportText => Result is { } r ? ReportTextFor(Page.TargetName, Page.CopyDestination, r) : "";
+
+    /// <summary>The report for a copy result: the one text Save report writes and
+    /// <c>StagingCopyService</c> logs when a copy ends with problems.</summary>
+    public static string ReportTextFor(string targetName, string? destination, StagingCopyResult r)
+        => string.Join(
             Environment.NewLine,
             [
-                "Export for stacking: " + Page.TargetName,
-                "Destination: " + Page.CopyDestination,
-                OutcomeText,
-                CountsText,
+                "Export for stacking: " + targetName,
+                "Destination: " + destination,
+                OutcomeTextFor(r),
+                CountsTextFor(r),
                 "",
                 .. r.Skipped.Select(skip => skip.Reason + ": " + skip.Path),
-                .. FailureLines.Select(line => "Failed: " + line),
-                .. PartialPaths.Select(path => "Partial: " + path),
+                .. r.Failed.Select(failure => "Failed: " + failure.SourcePath + ": " + failure.Message),
+                .. r.PartialPaths.Select(path => "Partial: " + path),
             ]);
 }

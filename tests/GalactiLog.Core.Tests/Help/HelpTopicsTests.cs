@@ -849,6 +849,32 @@ public class HelpTopicsTests
             + "now skips it; nothing in your library is ever overwritten, moved or deleted. "
             + "GalactiLog counts a kilobyte as 1000 bytes and the script's own console counts it "
             + "as 1024, so the two state slightly different totals for the same files.",
+        ["export.review"] =
+            "What the commit will do; nothing has been written yet. A destination inside your "
+            + "library, among the folders being copied or at the top of a drive, or an export "
+            + "left with no frames, blocks the commit. Warnings about free space, paths of 260 "
+            + "characters or more and files already in the destination do not block it. The "
+            + "commit button reads Copy n folders (n frames) or Write script. Once you commit, "
+            + "Back and Next lock until the copy ends. You can close the window while it copies: "
+            + "the copy keeps running, and the Jobs list in the status bar shows its progress and "
+            + "Cancel. A cancelled copy keeps the files already copied, and files being copied "
+            + "when you cancel are finished first. Quitting GalactiLog cancels the copy and waits "
+            + "only a few seconds for those files; any it cuts short are named in the log viewer "
+            + "on the Diagnostics page. A second copy or script into the same folder is refused "
+            + "until the first ends.",
+        ["export.result"] =
+            "What the commit did: the files copied with their size, the files skipped and the "
+            + "files that failed. Copy now never overwrites a file already in the staging folder: "
+            + "one of the same size counts as already present, and one of a different size is "
+            + "listed by path and left untouched. A cancelled or stopped copy lists the files it "
+            + "left part written. Running the same export again copies only the files that are "
+            + "missing; a part written file is a different size, so it is skipped too until you "
+            + "delete it. Open folder and Copy path act on the destination, Start another export "
+            + "returns to the first step over the same nights, and Save report writes these lists "
+            + "to a text file when something was skipped, failed or left part written. A copy "
+            + "that ends after the window closed records its counts in Activity and, when files "
+            + "failed, were left part written or differ in size, lists them in the log viewer on "
+            + "the Diagnostics page.",
         ["target.night-detail"] =
             "It opens with this night's sharpest light frame, the one with the lowest recorded "
             + "HFR, shown whole at the frame's own aspect ratio and never cropped. A night imaged "

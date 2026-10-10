@@ -390,6 +390,10 @@
           <TextBlock x:Name="CopyProgressStats"
                      Text="{Binding ProgressStats}"
                      Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock x:Name="CopyBackgroundHint"
+                     Text="{x:Static wbpp:ReviewStep.BackgroundCopyText}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
         </StackPanel>
       </StackPanel>
     </DataTemplate>

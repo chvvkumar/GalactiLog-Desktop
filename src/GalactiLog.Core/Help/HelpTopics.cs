@@ -886,8 +886,13 @@ public static class HelpTopics
             + "left with no frames, blocks the commit. Warnings about free space, paths of 260 "
             + "characters or more and files already in the destination do not block it. The "
             + "commit button reads Copy n folders (n frames) or Write script. Once you commit, "
-            + "the wizard locks until the copy ends; only Cancel acts, and a cancelled copy keeps "
-            + "the files already copied."),
+            + "Back and Next lock until the copy ends. You can close the window while it copies: "
+            + "the copy keeps running, and the Jobs list in the status bar shows its progress and "
+            + "Cancel. A cancelled copy keeps the files already copied, and files being copied "
+            + "when you cancel are finished first. Quitting GalactiLog cancels the copy and waits "
+            + "only a few seconds for those files; any it cuts short are named in the log viewer "
+            + "on the Diagnostics page. A second copy or script into the same folder is refused "
+            + "until the first ends."),
 
         new("export.result", "Result",
             "What the commit did: the files copied with their size, the files skipped and the "
@@ -898,7 +903,10 @@ public static class HelpTopics
             + "missing; a part written file is a different size, so it is skipped too until you "
             + "delete it. Open folder and Copy path act on the destination, Start another export "
             + "returns to the first step over the same nights, and Save report writes these lists "
-            + "to a text file when something was skipped or failed."),
+            + "to a text file when something was skipped, failed or left part written. A copy "
+            + "that ends after the window closed records its counts in Activity and, when files "
+            + "failed, were left part written or differ in size, lists them in the log viewer on "
+            + "the Diagnostics page."),
 
         // Phase 18 Task 4: the Mosaics page's four glyphs (spec 12.12, 12.17).
         new("mosaics.about", "Mosaics",
