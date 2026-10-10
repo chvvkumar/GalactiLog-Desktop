@@ -387,6 +387,9 @@
                        Foreground="{DynamicResource ColorAccent}"
                        Background="{DynamicResource ColorBgElevated}" />
           <TextBlock x:Name="CopyProgressText" Text="{Binding ProgressText}" />
+          <TextBlock x:Name="CopyProgressStats"
+                     Text="{Binding ProgressStats}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
         </StackPanel>
       </StackPanel>
     </DataTemplate>

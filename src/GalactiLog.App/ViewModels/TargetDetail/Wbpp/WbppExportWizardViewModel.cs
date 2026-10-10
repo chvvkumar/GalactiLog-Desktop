@@ -172,13 +172,18 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
     {
         _copyCancel = new CancellationTokenSource();
         var cancel = _copyCancel;
+        // IsBusy's notification ran before the source existed, so Cancel would stay disabled.
+        CancelCopyCommand.NotifyCanExecuteChanged();
         using var job = _jobs?.Begin(CopyJobKind, "Copy for stacking: " + Page.TargetName, cancel.Cancel);
         Review.IsCopying = true;
+        Review.ProgressStats = "";
+        var clock = System.Diagnostics.Stopwatch.StartNew();
         var progress = new PostedProgress(_post, p =>
         {
             var text = string.Create(CultureInfo.InvariantCulture, $"Copying {p.FilesDone:N0} of {p.FilesTotal:N0}");
             var percent = p.BytesTotal > 0 ? 100d * p.BytesDone / p.BytesTotal : 0d;
             Review.ProgressText = text;
+            Review.ProgressStats = TransferStats(p, clock.Elapsed);
             Review.ProgressPercent = percent;
             job?.Report(text, percent);
         });
@@ -239,10 +244,26 @@ public sealed partial class WbppExportWizardViewModel : WizardViewModel<WbppExpo
         return result;
     }
 
+    /// <summary>"8.1 GB of 17.2 GB, 112 MB/s, about 1m 25s left". The speed is the run's average
+    /// over bytes written, so skipped files do not inflate it; it is left out until a second has
+    /// passed.</summary>
+    internal static string TransferStats(StagingProgress p, TimeSpan elapsed)
+    {
+        var text = MetricText.Bytes(p.BytesDone) + " of " + MetricText.Bytes(p.BytesTotal);
+        if (elapsed.TotalSeconds < 1 || p.BytesWritten <= 0)
+        {
+            return text;
+        }
+
+        var speed = p.BytesWritten / elapsed.TotalSeconds;
+        var left = Math.Max(0, p.BytesTotal - p.BytesDone) / speed;
+        return text + ", " + MetricText.Bytes(speed) + "/s, about "
+            + GuidingSectionViewModel.CompactDuration(left) + " left";
+    }
+
     private bool CanCancelCopy() => IsBusy && _copyCancel is not null;
 
-    /// <summary>Stops the copy; files in flight keep their partial contents and are listed.
-    /// </summary>
+    /// <summary>Stops the copy: no new file starts, and files in flight finish.</summary>
     [RelayCommand(CanExecute = nameof(CanCancelCopy))]
     private void CancelCopy() => _copyCancel?.Cancel();
 
