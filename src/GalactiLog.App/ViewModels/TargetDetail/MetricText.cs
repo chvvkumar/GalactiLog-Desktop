@@ -34,6 +34,13 @@ internal static class MetricText
     /// carries it).</summary>
     public static string HourFigure(double seconds) => Cell(seconds / 3600d, "N1");
 
+    /// <summary>The one exposure length format: thousands separators, up to two decimals, so a
+    /// 1200 s exposure reads <c>1,200</c> wherever it appears.</summary>
+    public const string ExposureFormat = "#,0.##";
+
+    /// <summary>An exposure length as a table figure, no unit (the heading carries it).</summary>
+    public static string ExposureFigure(double? seconds) => Cell(seconds, ExposureFormat);
+
     /// <summary>Hours with one decimal, for example <c>3.2 h</c>. The same rendering
     /// <c>TargetRowViewModel</c> and <c>TargetTotalsViewModel</c> use, so a dashboard row, a
     /// totals row and a session card cannot disagree on the same integration.</summary>

@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Collections;
 using Avalonia.Controls;
+using Avalonia.Controls.Documents;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
 using Avalonia.Data.Converters;
@@ -25,8 +26,12 @@ public static class TableMetrics
 
     public static readonly Thickness CellPadding = new(Gutter, 0);
 
+    /// <summary>A cell's two gutters together: what a column adds to its content's width, and the
+    /// gap between two adjacent cells' content.</summary>
+    public const double ColumnGutters = 2 * Gutter;
+
     /// <summary>A check box column: a 20 pixel box plus the two gutters.</summary>
-    public const double CheckColumnWidth = 20 + 2 * Gutter;
+    public const double CheckColumnWidth = 20 + ColumnGutters;
 
     /// <summary>Header, total and data rows alike.</summary>
     public const double RowMinHeight = 28;
@@ -192,13 +197,35 @@ public sealed class TableColumns : AvaloniaList<TableColumn>
 
     /// <summary>
     /// The one way a column shrinks: a shared size group only ever grows, so every generated group
-    /// is renamed and measured afresh. The owning view calls it when its items source is replaced
-    /// or the root text size changes.
+    /// is renamed and measured afresh. The owning view calls it when its items source is replaced;
+    /// a text size or face change resets the set by itself (<see cref="FollowType"/>).
     /// </summary>
     public void Reset()
     {
         Generation++;
         Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    // The text size and face the set was last measured at.
+    private (double Size, FontFamily Family)? _type;
+
+    /// <summary>Called by every row on attach and on an inherited text size or face change, so no
+    /// view writes its own reset: the first row to see a new size resets the set, the rest find it
+    /// already current (spine-spec 3.3).</summary>
+    internal void FollowType(Control row)
+    {
+        var type = (row.GetValue(TextElement.FontSizeProperty), row.GetValue(TextElement.FontFamilyProperty));
+        if (_type == type)
+        {
+            return;
+        }
+
+        var first = _type is null;
+        _type = type;
+        if (!first)
+        {
+            Reset();
+        }
     }
 
     public TableColumn this[string key] => this[IndexOf(key)];
@@ -368,6 +395,16 @@ public class TableRow : Grid
         {
             _layer.InvalidateVisual();
         }
+        else if ((change.Property == TextElement.FontSizeProperty || change.Property == TextElement.FontFamilyProperty)
+            && this.IsAttachedToVisualTree()
+            && Parent is { } parent && Equals(parent.GetValue(change.Property), change.NewValue))
+        {
+            // A column measured at the old size would keep that width (a group only grows). Only a
+            // type the row's parent carries too: a row being removed first falls back to the
+            // default type, which is no change to the table, and a row still being built is read
+            // once, on attach.
+            Columns?.FollowType(this);
+        }
     }
 
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
@@ -375,6 +412,7 @@ public class TableRow : Grid
         base.OnAttachedToVisualTree(e);
         // A recycled row picks up whatever changed while it was detached.
         Subscribe();
+        Columns?.FollowType(this);
         Rebuild();
     }
 

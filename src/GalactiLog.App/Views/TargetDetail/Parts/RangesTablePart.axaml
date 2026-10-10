@@ -68,12 +68,9 @@
             <!-- Spec 12.4 item 2's rig label row, shown instead of the TableRow above, on the
                  per-filter table's rule and with its shared RigLabelRowTemplate. -->
             <ContentControl x:Name="RangeRigLabelRow"
+                            Classes="rig-label-row"
                             Content="{Binding LabelRow}"
-                            ContentTemplate="{StaticResource RigLabelRowTemplate}"
-                            IsVisible="{Binding IsRigLabel}"
-                            Margin="{x:Static t:TableMetrics.CellPadding}"
-                            MinHeight="{x:Static t:TableMetrics.RowMinHeight}"
-                            VerticalContentAlignment="Center" />
+                            IsVisible="{Binding IsRigLabel}" />
           </Panel>
         </DataTemplate>
       </ItemsControl.ItemTemplate>

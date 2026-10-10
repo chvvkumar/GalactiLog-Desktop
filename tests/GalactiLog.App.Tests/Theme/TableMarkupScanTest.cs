@@ -21,6 +21,18 @@ public class TableMarkupScanTest
         "Views/TargetDetail/Parts/IntegrationBarsPart.axaml",
     ];
 
+    // Files that write one multi-column ColumnDefinitions string twice and are not tables.
+    private static readonly string[] RepeatedColumnsAllowlist =
+    [
+        // The filter usage and top targets lists: two unrelated one-line legends.
+        "Views/StatisticsView.axaml",
+        // The NINA and Stellarium instance editors: form rows.
+        "Views/Settings/ExternalToolsTabView.axaml",
+        // Out of scope for this overhaul and a later candidate (ruling R3).
+        "Views/Settings/LibraryTabView.axaml",
+    ];
+
+    private static readonly Regex ColumnString = new(@"ColumnDefinitions\s*=\s*""(?<cols>[^""]*,[^""]*,[^""]*)""", RegexOptions.Compiled);
     private static readonly Regex XmlComment = new("<!--.*?-->", RegexOptions.Singleline | RegexOptions.Compiled);
     private static readonly Regex TableRowElement = new(@"<t:TableRow\b(?<open>[^>]*)>(?<body>.*?)</t:TableRow>", RegexOptions.Singleline | RegexOptions.Compiled);
     private static readonly Regex LiteralText = new(@"\bText\s*=\s*""(?<text>[^""{][^""]*)""", RegexOptions.Compiled);
@@ -77,6 +89,14 @@ public class TableMarkupScanTest
         }
     }
 
+    // A column set written out per row type, the copy-paste a TableColumns replaces (spec.md item
+    // 9). Three or more columns, so a two-column label and value line is not one.
+    internal static IEnumerable<string> RepeatedColumnSets(string markup)
+        => ColumnString.Matches(markup)
+            .GroupBy(match => match.Groups["cols"].Value)
+            .Where(group => group.Count() > 1)
+            .Select(group => group.Key);
+
     internal static IEnumerable<string> HeaderOffences(string markup)
         => from row in TableRowElement.Matches(markup)
            where Regex.IsMatch(row.Groups["open"].Value, @"\bKind\s*=\s*""Header""")
@@ -100,6 +120,23 @@ public class TableMarkupScanTest
             offenders.Count == 0,
             "A table declares its columns once in a t:TableColumns, not in a SharedSizeGroup per row. Offenders:"
             + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+    }
+
+    [Fact]
+    public void NoFile_WritesOneColumnSetPerRow()
+    {
+        var offenders = Markup()
+            .Where(file => !RepeatedColumnsAllowlist.Contains(file.Relative))
+            .SelectMany(file => RepeatedColumnSets(file.Markup).Select(columns => $"{file.Relative}: \"{columns}\""))
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            "A table declares its columns once in a t:TableColumns, not one ColumnDefinitions string per row. Offenders:"
+            + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+
+        var files = Markup().ToDictionary(file => file.Relative, file => file.Markup);
+        Assert.All(RepeatedColumnsAllowlist, entry => Assert.NotEmpty(RepeatedColumnSets(files[entry])));
     }
 
     [Fact]
@@ -186,6 +223,9 @@ public class TableMarkupScanTest
         {
             Assert.NotEmpty(HeaderOffences($"<t:TableRow Kind=\"Header\"><TextBlock Text=\"{heading}\" /></t:TableRow>"));
         }
+
+        Assert.Equal(["56,88,*"], RepeatedColumnSets("<Grid ColumnDefinitions=\"56,88,*\" /><Grid ColumnDefinitions=\"56,88,*\" />"));
+        Assert.Empty(RepeatedColumnSets("<Grid ColumnDefinitions=\"56,88,*\" /><Grid ColumnDefinitions=\"Auto,*\" /><Grid ColumnDefinitions=\"Auto,*\" />"));
 
         // A data row's text is not a heading.
         Assert.Empty(HeaderOffences("<t:TableRow><TextBlock Text=\"OBJECT\" /></t:TableRow>"));

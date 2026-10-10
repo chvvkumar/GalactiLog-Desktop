@@ -16,6 +16,12 @@ public static class TableHeads
     public const string FwhmTip = "Full width at half maximum, arcseconds";
     public const string Rms = "RMS \"";
     public const string RmsTip = "Guiding RMS error, arcseconds";
+    public const string RmsTotal = "RMS total \"";
+    public const string RmsTotalTip = "Guiding RMS error across both axes, arcseconds";
+    public const string RmsRa = "RMS RA \"";
+    public const string RmsRaTip = "Guiding RMS error in right ascension, arcseconds";
+    public const string RmsDec = "RMS Dec \"";
+    public const string RmsDecTip = "Guiding RMS error in declination, arcseconds";
     public const string Stars = "Stars";
     public const string Hours = "Hours";
     public const string Frames = "Frames";

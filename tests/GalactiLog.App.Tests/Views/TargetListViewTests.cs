@@ -637,7 +637,7 @@ public class TargetListViewTests
         var designationHeader = HeaderCell(view, list, "designation");
         Assert.Contains("123456.789", list.Rows[1].Designation);
         Assert.True(
-            ColumnWidth(view, "TargetListHeaderRow", 1) > designationHeader.Bounds.Width + 2 * TableMetrics.Gutter + 0.5d,
+            ColumnWidth(view, "TargetListHeaderRow", 1) > designationHeader.Bounds.Width + TableMetrics.ColumnGutters + 0.5d,
             "The Designation column is sitting at the width of its own header label, so alignment proves nothing.");
 
         AssertHeaderAlignsWithRows(view, list);
@@ -1247,8 +1247,8 @@ public class TargetListViewTests
             ShowList(view, allotment, width);
             var columns = (TableColumns)view.Resources["TargetCols"]!;
 
-            Assert.Equal(view.DataCellMaxWidth - TargetListView.CellGutter, columns["designation"].MaxWidth);
-            Assert.Equal(TargetListView.EquipmentCap - TargetListView.CellGutter, columns["equipment"].MaxWidth);
+            Assert.Equal(view.DataCellMaxWidth - TableMetrics.ColumnGutters, columns["designation"].MaxWidth);
+            Assert.Equal(TargetListView.EquipmentCap - TableMetrics.ColumnGutters, columns["equipment"].MaxWidth);
             Assert.Equal(double.PositiveInfinity, columns["integration"].MaxWidth);
             Assert.Equal(double.PositiveInfinity, columns["lastsession"].MaxWidth);
             Assert.Equal(columns["designation"].MaxWidth, Assert.Single(NamedCells(view, "DesignationCell")).MaxWidth);

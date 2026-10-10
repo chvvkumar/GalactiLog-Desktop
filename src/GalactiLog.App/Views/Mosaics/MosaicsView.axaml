@@ -44,6 +44,16 @@
       <t:TableColumn Key="frames" Kind="Number" />
       <t:TableColumn Key="integration" Kind="Number" />
     </t:TableColumns>
+
+    <!-- An expanded mosaic's panel lines: no header, but one column set, so the figures line up
+         from panel to panel. Each expanded mosaic is its own size scope. -->
+    <t:TableColumns x:Key="PanelLineCols" Id="PanelLine">
+      <t:TableColumn Key="label" />
+      <t:TableColumn Key="targets" Width="*" />
+      <t:TableColumn Key="integration" Kind="Number" />
+      <t:TableColumn Key="frames" Kind="Number" />
+      <t:TableColumn Key="actions" />
+    </t:TableColumns>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -292,10 +302,10 @@
                             <TextBlock Classes="t-label" Text="Object" />
                           </Button>
                           <Button t:TableRow.Col="night" Command="{Binding SortSessionsByCommand}" CommandParameter="night">
-                            <TextBlock Classes="t-label" Text="Night" />
+                            <TextBlock Classes="t-label" Text="{x:Static t:TableHeads.Night}" />
                           </Button>
                           <Button t:TableRow.Col="filter" Command="{Binding SortSessionsByCommand}" CommandParameter="filter">
-                            <TextBlock Classes="t-label" Text="Filter" />
+                            <TextBlock Classes="t-label" Text="{x:Static t:TableHeads.Filter}" />
                           </Button>
                           <Button t:TableRow.Col="frames" Command="{Binding SortSessionsByCommand}" CommandParameter="frames">
                             <TextBlock Classes="t-label" Text="{x:Static t:TableHeads.Frames}" />
@@ -534,18 +544,20 @@
                       <TextBlock Text="{x:Static mos:MosaicRowViewModel.NoPanelsText}"
                                  IsVisible="{Binding HasNoPanels}"
                                  Foreground="{DynamicResource ColorTextTertiary}" />
-                      <ItemsControl ItemsSource="{Binding PanelLines}">
+                      <ItemsControl ItemsSource="{Binding PanelLines}" Grid.IsSharedSizeScope="True">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="mos:PanelLineViewModel">
-                            <StackPanel Spacing="4" Margin="0,2">
-                              <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
-                                <TextBlock Grid.Column="0" Text="{Binding Label}" FontWeight="SemiBold" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="1" Text="{Binding TargetsText}" Margin="8,0" VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
-                                <TextBlock Grid.Column="2" Text="{Binding IntegrationText}" Margin="8,0" VerticalAlignment="Center" />
-                                <TextBlock Grid.Column="3" Text="{Binding FramesText}" Margin="8,0" VerticalAlignment="Center" />
-                                <Button Grid.Column="4" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
-                              </Grid>
+                            <StackPanel Spacing="4">
+                              <t:TableRow Columns="{StaticResource PanelLineCols}">
+                                <TextBlock t:TableRow.Col="label" Text="{Binding Label}" FontWeight="SemiBold" />
+                                <TextBlock t:TableRow.Col="targets"
+                                           Text="{Binding TargetsText}"
+                                           ToolTip.Tip="{Binding TargetsText}"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+                                <TextBlock t:TableRow.Col="integration" Text="{Binding IntegrationText}" />
+                                <TextBlock t:TableRow.Col="frames" Text="{Binding FramesText}" />
+                                <Button t:TableRow.Col="actions" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
+                              </t:TableRow>
                               <ContentControl Classes="callout warn" IsVisible="{Binding RemovePending}">
                                 <StackPanel Spacing="6">
                                   <TextBlock Text="{Binding RemoveConfirmText}" TextWrapping="Wrap" />

@@ -1481,7 +1481,7 @@ public class FrameTableViewTests
         var drawnRight = fileName.TranslatePoint(
             new Point(fileName.Padding.Left + MeasuredWidth(fileName, name), 0), view)!.Value.X;
         var filterLeft = cells[2].TranslatePoint(new Point(((TextBlock)cells[2]).Padding.Left, 0), view)!.Value.X;
-        Assert.True(filterLeft - drawnRight >= 2 * TableMetrics.Gutter, $"the name ends at {drawnRight}, the Filter text starts at {filterLeft}");
+        Assert.True(filterLeft - drawnRight >= TableMetrics.ColumnGutters, $"the name ends at {drawnRight}, the Filter text starts at {filterLeft}");
         Assert.Equal(HeaderCell(view, table.Columns.Single(column => column.Key == "file_name")).Bounds.Width, fileName.Bounds.Width);
     }
 

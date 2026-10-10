@@ -84,6 +84,25 @@ public class IntegrationTablesPartTests(Xunit.Abstractions.ITestOutputHelper out
         Assert.Contains("24", texts);
         Assert.Contains("42", texts);
         Assert.Contains("-", texts);
+        var total = view.Named<Control>("ExposureTable").GetVisualDescendants().OfType<TableRow>()
+            .Single(row => row.Kind != RowKind.Header && row.Children.OfType<TextBlock>().Any(block => block.Text == "Total"));
+        Assert.Equal(RowKind.Total, total.Kind);
+    }
+
+    [AvaloniaFact]
+    public void ATargetWithNoFilterRow_StillShowsItsOverallMetrics()
+    {
+        // A failure is the target-wide means hidden with the matrices: frames with no FILTER card
+        // (a one-shot-colour rig) or no date are in no matrix row, and the means are shown nowhere
+        // else.
+        using var harness = Factory.Create(get: _ => Factory.PopulatedDetail() with { NightFilters = [] }).Settle();
+        var view = Host(harness);
+
+        Assert.True(view.Named<Control>("OverallTable").IsEffectivelyVisible);
+        Assert.Contains(view.Named<Control>("OverallTable").GetVisualDescendants().OfType<TextBlock>(),
+            block => block.Text == "All frames" && block.IsEffectivelyVisible);
+        Assert.False(view.Named<Control>("ExposureTable").IsEffectivelyVisible);
+        Assert.False(view.Named<Control>("HoursTable").IsEffectivelyVisible);
     }
 
     [AvaloniaFact]

@@ -1,4 +1,5 @@
 using System.Globalization;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.Data.Queries;
 
 namespace GalactiLog.App.ViewModels.TargetDetail;
@@ -26,21 +27,27 @@ public sealed record MatrixRowViewModel(string Label, IReadOnlyList<MatrixCellVi
 public sealed class NightFilterMatrixViewModel
 {
     private readonly Dictionary<(DateOnly Night, string Filter), NightFilterOverview> _cells;
+    private readonly Dictionary<DateOnly, SessionOverview> _overviews;
 
     /// <param name="rows">The query's rows.</param>
     /// <param name="filters">The filter columns, in bar order; a row of another filter is dropped.</param>
     /// <param name="compareNights">The Compare table's nights, any order; rows come out newest
     /// first, the night list's order. Null is <see cref="Nights"/>.</param>
-    /// <param name="totals">The target's totals, for <see cref="Overall"/>; null leaves it null.</param>
+    /// <param name="totals">The target's totals, for <see cref="Overall"/>; null, or a target with
+    /// no frame, leaves it null.</param>
+    /// <param name="overviews">The nights' overviews: a Compare night with no filter row reads the
+    /// night's own medians, the figures the trend chart plots for it.</param>
     public NightFilterMatrixViewModel(
         IReadOnlyList<NightFilterOverview> rows,
         IReadOnlyList<FilterSwatchViewModel> filters,
         IEnumerable<DateOnly>? compareNights = null,
-        TargetTotals? totals = null)
+        TargetTotals? totals = null,
+        IEnumerable<SessionOverview>? overviews = null)
     {
         Filters = filters;
         FilterHeads = Cells(filter => filter);
-        Overall = totals is null ? null : new OverallMetricsViewModel(totals, filters);
+        Overall = totals is { FrameCount: > 0 } ? new OverallMetricsViewModel(totals, filters) : null;
+        _overviews = (overviews ?? []).DistinctBy(overview => overview.SessionDate).ToDictionary(overview => overview.SessionDate);
         var known = filters.Select(filter => filter.FilterName).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var kept = rows.Where(row => known.Contains(row.Filter)).ToList();
         _cells = new(new CellKeyComparer());
@@ -57,11 +64,11 @@ public sealed class NightFilterMatrixViewModel
         var lengths = kept.SelectMany(row => row.Exposures).Select(exposure => exposure.Seconds).Distinct().Order().ToList();
         // The unit is in the "Exp s" heading, so a label is the bare figure (ruling R12).
         ExposureRows = [.. lengths.Select(seconds => new MatrixRowViewModel(
-            MetricText.Format(seconds, "0.##"),
+            MetricText.ExposureFigure(seconds),
             Cells(filter => Frames(ExposureFrames(filter, seconds))),
             MetricText.Count(filters.Sum(filter => ExposureFrames(filter.FilterName, seconds)))))];
         ExposureTotalRow = new MatrixRowViewModel(
-            "Total",
+            TableHeads.Total,
             Cells(filter => MetricText.Count(FrameCount(filter))),
             MetricText.Count(kept.Sum(row => row.FrameCount)));
 
@@ -70,7 +77,7 @@ public sealed class NightFilterMatrixViewModel
             Cells(filter => Hours(Cell(night, filter)?.IntegrationSeconds)),
             Hours(RowSeconds(night))))];
         HoursTotalRow = new MatrixRowViewModel(
-            "Total",
+            TableHeads.Total,
             Cells(filter => Hours(ColumnSeconds(filter))),
             Hours(TotalSeconds));
     }
@@ -84,8 +91,12 @@ public sealed class NightFilterMatrixViewModel
     /// <summary>The matrices' filter headings, one strip cell per filter.</summary>
     public IReadOnlyList<MatrixCellViewModel> FilterHeads { get; }
 
-    /// <summary>The Integration tab's Overall metrics; null when the page passed no totals.</summary>
+    /// <summary>The Integration tab's Overall metrics; null when the page passed no totals or the
+    /// target has no frame. Not gated by <see cref="HasRows"/>: a target whose frames carry no
+    /// filter or no date has no matrix row and still has means.</summary>
     public OverallMetricsViewModel? Overall { get; }
+
+    public bool HasOverall => Overall is not null;
 
     /// <summary>The Compare table: one group per night the trend chart plots, newest first, one
     /// row per filter the night shot, in bar order.</summary>
@@ -135,29 +146,35 @@ public sealed class NightFilterMatrixViewModel
     private static string Hours(double? seconds)
         => seconds is { } present ? MetricText.HourFigure(present) : MetricText.Missing;
 
-    // A night with no row of a known filter keeps one row of dashes, so a night the chart plots
-    // is never silently absent from the table.
+    // A night with no row of a known filter (its frames carry no filter) keeps one All frames row
+    // of the night's own medians, the figures the chart plots, so a night the chart plots is never
+    // silently absent from the table and never reads "no metrics" beside a plotted point.
     private IEnumerable<CompareRowViewModel> CompareGroup(DateOnly night, bool alt)
     {
-        List<(FilterSwatchViewModel? Filter, NightFilterOverview? Row)> shot =
-            [.. Filters.Select(filter => (filter, Cell(night, filter.FilterName))).Where(pair => pair.Item2 is not null)];
+        var shot = Filters
+            .Select(filter => (Filter: filter, Row: Cell(night, filter.FilterName)))
+            .Where(pair => pair.Row is not null)
+            .Select(pair => (Filter: (FilterSwatchViewModel?)pair.Filter, Metrics: MetricRowViewModel.Of(
+                pair.Filter.FilterName,
+                pair.Row!.MedianHfr,
+                pair.Row.MedianEccentricity,
+                pair.Row.MedianFwhm,
+                pair.Row.MedianGuidingRms,
+                pair.Row.MedianDetectedStars)))
+            .ToList();
         if (shot.Count == 0)
         {
-            shot.Add((null, null));
+            var overview = _overviews.GetValueOrDefault(night);
+            shot.Add((null, MetricRowViewModel.Of(
+                OverallMetricsViewModel.AllFramesLabel,
+                overview?.MedianHfr,
+                overview?.MedianEccentricity,
+                overview?.MedianFwhm,
+                overview?.MedianGuidingRmsArcsec,
+                overview?.MedianDetectedStars)));
         }
 
-        return shot.Select((pair, index) => new CompareRowViewModel(
-            night,
-            index == 0,
-            alt,
-            pair.Filter,
-            MetricRowViewModel.Of(
-                MetricText.Cell(pair.Filter?.FilterName),
-                pair.Row?.MedianHfr,
-                pair.Row?.MedianEccentricity,
-                pair.Row?.MedianFwhm,
-                pair.Row?.MedianGuidingRms,
-                pair.Row?.MedianDetectedStars)));
+        return shot.Select((pair, index) => new CompareRowViewModel(night, index == 0, alt, pair.Filter, pair.Metrics));
     }
 
     private sealed class CellKeyComparer : IEqualityComparer<(DateOnly Night, string Filter)>

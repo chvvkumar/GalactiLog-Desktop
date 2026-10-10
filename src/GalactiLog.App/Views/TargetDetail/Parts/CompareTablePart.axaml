@@ -21,12 +21,11 @@
 
   <!-- Nights as rows, newest first as the night list orders them, one row per filter the night
        shot and one zebra band per night; the five medians as columns. The header stays put above a
-       scroller that moves the rows vertically only, under an always shown table bar.
+       scroller that moves the rows vertically only, under an always shown table bar. A night
+       whose frames carry no filter is one "All frames" row of the night's own medians.
 
-       ponytail: a filterless row's "-" sits in the filter cell's inner TextBlock, which the faint
-       dash rule (TextBlock.tc-text[Text=-]) does not reach, so it draws in normal ink. The rows are
-       unvirtualised, fine for tens of nights times a handful of filters; switch to a ListBox if a
-       target passes a few hundred rows. -->
+       ponytail: the rows are unvirtualised, fine for tens of nights times a handful of filters;
+       switch to a ListBox if a target passes a few hundred rows. -->
   <Grid x:Name="CompareTable"
         RowDefinitions="Auto,*"
         Grid.IsSharedSizeScope="True"

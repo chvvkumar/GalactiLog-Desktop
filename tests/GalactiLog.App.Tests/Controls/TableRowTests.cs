@@ -201,7 +201,7 @@ public class TableRowTests
 
         Assert.True(cell.IsVisible);
         Assert.True(row.ColumnDefinitions[2].ActualWidth > 2 * Gutter);
-        Assert.Equal("Metrics_stars_g0", row.ColumnDefinitions[2].SharedSizeGroup);
+        Assert.Equal($"Metrics_stars_g{columns.Generation}", row.ColumnDefinitions[2].SharedSizeGroup);
 
         window.Close();
     }
@@ -215,15 +215,46 @@ public class TableRowTests
         var scope = Scope(keep, wide);
         var window = Show(scope);
         var wideWidth = keep.ColumnDefinitions[2].ActualWidth;
+        var generation = columns.Generation;
 
         scope.Children.Remove(wide);
         columns.Reset();
         Dispatcher.UIThread.RunJobs();
 
         var nine = keep.Children[2];
-        Assert.Equal(1, columns.Generation);
+        Assert.Equal(generation + 1, columns.Generation);
         Assert.Equal(nine.DesiredSize.Width, keep.ColumnDefinitions[2].ActualWidth, 0.5);
         Assert.True(keep.ColumnDefinitions[2].ActualWidth < wideWidth);
+
+        window.Close();
+    }
+
+    [AvaloniaFact]
+    public void T5_ATextSizeChange_ResetsTheSetOnce_AndRemovingARowDoesNot()
+    {
+        // A failure is a view that has to remember its own reset (no new group after the size
+        // change), one reset per row, or a reset whenever a row leaves the table. The harness face
+        // draws every glyph at one advance whatever the size, so the shrink itself is T5's case
+        // above; this proves the trigger.
+        var columns = Metrics();
+        var first = Row(columns, RowKind.Data, Text("label", "L"), Text("hfr", "2.0"), Text("stars", "123,456"));
+        var second = Row(columns, RowKind.Data, Text("label", "L"), Text("hfr", "2.0"), Text("stars", "9"));
+        var scope = Scope(first, second);
+        var window = Show(scope);
+        var generation = columns.Generation;
+
+        window.FontSize = 12;
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(generation + 1, columns.Generation);
+        Assert.Equal($"Metrics_stars_g{columns.Generation}", first.ColumnDefinitions[2].SharedSizeGroup);
+
+        scope.Children.Remove(second);
+        Dispatcher.UIThread.RunJobs();
+        scope.Children.Add(second);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(generation + 1, columns.Generation);
 
         window.Close();
     }

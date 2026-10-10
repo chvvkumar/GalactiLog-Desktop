@@ -49,15 +49,18 @@ public sealed class FilterTableRowViewModel
     {
         FilterName = medians.FilterName;
         Swatch = swatch;
-        MedianHfrText = MetricText.Cell(medians.MedianHfr, "0.00");
-        MedianEccentricityText = MetricText.Cell(medians.MedianEccentricity, "0.00");
-        MedianFwhmText = MetricText.Cell(medians.MedianFwhm, "0.00");
-        MedianGuidingRmsText = MetricText.Cell(medians.MedianGuidingRmsArcsec, "0.00");
-        MedianDetectedStarsText = MetricText.Cell(medians.MedianDetectedStars, "N0");
+        (_, MedianHfrText, MedianEccentricityText, MedianFwhmText, MedianGuidingRmsText, MedianDetectedStarsText) =
+            MetricRowViewModel.Of(
+                FilterName,
+                medians.MedianHfr,
+                medians.MedianEccentricity,
+                medians.MedianFwhm,
+                medians.MedianGuidingRmsArcsec,
+                medians.MedianDetectedStars);
 
         if (details.Count == 1)
         {
-            ExposureTimeText = MetricText.Cell(details[0].ExposureTime, "0.##");
+            ExposureTimeText = MetricText.ExposureFigure(details[0].ExposureTime);
         }
         else if (details.Count > 1)
         {
@@ -68,7 +71,7 @@ public sealed class FilterTableRowViewModel
         if (details.Count > 0)
         {
             FrameCountText = MetricText.Count(details.Sum(row => row.FrameCount));
-            IntegrationText = MetricText.Cell(details.Sum(row => row.IntegrationSeconds) / 3600d, "0.0");
+            IntegrationText = MetricText.HourFigure(details.Sum(row => row.IntegrationSeconds));
         }
     }
 
@@ -87,17 +90,16 @@ public sealed class FilterTableRowViewModel
         // A sub-row is named by its exposure, because the filter is the row above it. An orphan
         // row is named by its filter, because there is no row above it.
         FilterName = isSubRow
-            ? MetricText.Format(detail.ExposureTime, "0.##", " s")
+            ? MetricText.Format(detail.ExposureTime, MetricText.ExposureFormat, " s")
             : detail.FilterName;
-
-        MedianHfrText = MetricText.Cell(detail.MedianHfr, "0.00");
-        MedianEccentricityText = MetricText.Cell(detail.MedianEccentricity, "0.00");
-        ExposureTimeText = MetricText.Cell(detail.ExposureTime, "0.##");
-        FrameCountText = MetricText.Count(detail.FrameCount);
-        IntegrationText = MetricText.Cell(detail.IntegrationSeconds / 3600d, "0.0");
 
         // FWHM, guiding RMS and detected stars stay missing: a FilterDetailRow carries no such
         // figure and inventing one would be arithmetic this join refuses.
+        (_, MedianHfrText, MedianEccentricityText, MedianFwhmText, MedianGuidingRmsText, MedianDetectedStarsText) =
+            MetricRowViewModel.Of(FilterName, detail.MedianHfr, detail.MedianEccentricity, null, null, null);
+        ExposureTimeText = MetricText.ExposureFigure(detail.ExposureTime);
+        FrameCountText = MetricText.Count(detail.FrameCount);
+        IntegrationText = MetricText.HourFigure(detail.IntegrationSeconds);
     }
 
     // Spec 12.4 item 2's rig label row. Private, because the only legal way to build one is the

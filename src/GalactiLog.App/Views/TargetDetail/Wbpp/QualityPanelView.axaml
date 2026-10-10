@@ -1,7 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:sys="using:System"
-             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
+             xmlns:t="using:GalactiLog.App.Controls.Table"
              xmlns:wbpp="using:GalactiLog.App.ViewModels.TargetDetail.Wbpp"
              x:Class="GalactiLog.App.Views.TargetDetail.Wbpp.QualityPanelView"
              x:Name="Root"
@@ -13,13 +13,10 @@
        here, so this is an ItemsControl and not the frame table's ListBox; the one interactive cell
        is the Copy check box, which is bound two way to the row.
 
-       The header row and the rows are two Grids with the SAME ColumnDefinitions string, written
-       out in both places. They are Grid star and pixel columns and NOT an Auto shared size group:
-       Auto shared-size columns inside a scroller measure at infinite width and produce a row wider
-       than its viewport, with no error and every layout case green, which is the rule
-       Views/TargetDetail/TargetDetailView.axaml's own header comment records from Phase 12. The
-       two strings have to stay equal, and QualityPanelViewTests'
-       QualityPanelView_TheHeaderCells_ShareOneLeftEdgeWithTheRowCells is what fails if they drift.
+       The header row and the rows are t:TableRows over one column set, QualityCols below, so the
+       columns are declared once and the gutters, alignment, rules, zebra and faint dash come from
+       Theme/Table.axaml (spec.md items 1 to 9). File is the one star column and takes whatever the
+       fitted columns leave.
 
        Nothing here sets FontSize. Scales.axaml's FontSize* keys are ratios, not point sizes, and
        FontSizeTokenTest fails the build on binding one to FontSize. Every colour is a theme token:
@@ -29,57 +26,25 @@
        the build on one. The chips are Button.pill, the active chip's frame is Border.tag and the
        baseline segment is the shipped ToggleButton, all from Theme/Controls.axaml. -->
   <UserControl.Resources>
-    <!-- The metric cell's two boxes. The value box is fixed and the mark box beside it is
-         reserved on every cell, marked or not, which is spec 12.13's "a mark in a fixed trailing
-         slot present on every cell, so the digits keep one right edge whether a row failed or
-         not". The two sum to the 68 each metric column takes below. -->
-    <sys:Double x:Key="QualityMetricValueWidth">56</sys:Double>
+    <t:TableColumns x:Key="QualityCols" Id="Quality">
+      <t:TableColumn Key="copy" Kind="Check" />
+      <t:TableColumn Key="verdict" />
+      <t:TableColumn Key="filter" />
+      <t:TableColumn Key="hfr" Kind="Number" />
+      <t:TableColumn Key="ecc" Kind="Number" />
+      <t:TableColumn Key="fwhm" Kind="Number" />
+      <t:TableColumn Key="stars" Kind="Number" />
+      <t:TableColumn Key="rms" Kind="Number" />
+      <t:TableColumn Key="file" Width="*" />
+      <t:TableColumn Key="night" />
+    </t:TableColumns>
+
+    <!-- The metric cell's mark slot, reserved on every cell, marked or not, which is spec 12.13's
+         "a mark in a fixed trailing slot present on every cell, so the digits keep one right edge
+         whether a row failed or not". A metric heading carries the same inset, so its title ends
+         where the digits end rather than over the slot. -->
     <sys:Double x:Key="QualityMetricMarkWidth">12</sys:Double>
-
-    <!-- The Night column's trailing clearance. The row scroller's themed vertical scrollbar is an
-         overlay that takes no layout space (the Phase 14C rule TargetListView.axaml's own
-         TableTrailingInset records), so with more rows than the scroller's ceiling the thumb draws
-         over the trailing pixels of the last column. One value, used by the Night header and by
-         the Night cell, so the label and the digits keep one right edge although only one of the
-         two sits inside the scroller.
-
-         The inset comes out of the column's own width, because the digits are right aligned: the
-         Night column is 112 and the date is drawn in the 104 the inset leaves. That is the
-         launched-app look's D1. At 86 the cell had 78 px for a string that measures 98.6 px in
-         Atkinson Hyperlegible Next Regular at the shipped 18 px root, the same face and size the
-         Nights ledger's own Night cell uses and the same measurement its markup records, so every
-         row on the page read "2025-03-..." at the window's opening width. 112 leaves 5.4 px of
-         headroom over 98.6 plus the 8 px inset, which these rows need because they are realised
-         by a VirtualizingStackPanel and a row realised in a different measure pass can keep that
-         pass's remainder. -->
-    <Thickness x:Key="QualityNightInset">0,0,8,0</Thickness>
-
-    <!-- One header cell: a button that sorts, showing the direction glyph on the active key. Copy
-         is drawn as a plain label instead, because it is the one unsortable column (spec 12.13:
-         "inclusion is a per-row decision, not a metric") and a button that ignores its own click
-         teaches the wrong model. -->
-    <DataTemplate x:Key="QualityHeaderCell" DataType="dash:ColumnViewModel">
-      <Button Classes="header-cell"
-              Classes.numeric="{Binding IsNumeric}"
-              Command="{Binding #Root.((wbpp:QualityPanelViewModel)DataContext).SortByCommand}"
-              CommandParameter="{Binding Key}"
-              Background="Transparent"
-              BorderThickness="0"
-              Padding="4,2">
-        <Grid ColumnDefinitions="*,Auto">
-          <TextBlock Grid.Column="0"
-                     Text="{Binding Title}"
-                     FontWeight="SemiBold"
-                     TextTrimming="CharacterEllipsis"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
-          <TextBlock Grid.Column="1"
-                     Text="{Binding SortGlyph}"
-                     Margin="2,0,0,0"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorAccent}" />
-        </Grid>
-      </Button>
-    </DataTemplate>
+    <Thickness x:Key="QualityMetricMarkInset">0,0,12,0</Thickness>
   </UserControl.Resources>
 
   <UserControl.Styles>
@@ -89,7 +54,6 @@
          the inherited ink, which is spec 12.4's "neutral, which is to say no mark". -->
     <Style Selector="TextBlock.qcell">
       <Setter Property="VerticalAlignment" Value="Center" />
-      <Setter Property="TextTrimming" Value="CharacterEllipsis" />
     </Style>
 
     <!-- Spec 12.4's three band inks on a cell of this table, re declared in this host so they can
@@ -122,11 +86,17 @@
     <Style Selector="TextBlock.verdict-copy">
       <Setter Property="Foreground" Value="{DynamicResource ColorSuccess}" />
     </Style>
+
+    <!-- Spec.md item 6's faint dash, redeclared after the inks above because a view level ink beats
+         Theme/Table.axaml's application level [Text=-] rule, as FrameTableView.axaml does. -->
+    <Style Selector="TextBlock.qcell.tc-num[Text=-]">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    </Style>
   </UserControl.Styles>
 
-  <Grid RowDefinitions="Auto,Auto,Auto,Auto">
+  <Grid RowDefinitions="Auto,Auto,Auto,Auto" Grid.IsSharedSizeScope="True">
     <!-- 1. The toolbar. -->
-    <WrapPanel Grid.Row="0" x:Name="ChipsToolbar" Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
+    <WrapPanel Grid.Row="0" x:Name="ChipsToolbar" Margin="0,0,0,8" Orientation="Horizontal" ItemSpacing="8" LineSpacing="6">
       <!-- Spec 12.13's master switch. It stays live while everything beside it goes inert, which
            is what lets the user turn the filter back on. -->
       <CheckBox x:Name="EnableFilters"
@@ -259,198 +229,194 @@
       </StackPanel>
     </WrapPanel>
 
-    <!-- 2. The header row. Its ColumnDefinitions string is repeated on the row Grid below and the
-         two have to stay equal; see the file header. -->
-    <Grid Grid.Row="1"
-          x:Name="HeaderRow"
-          Margin="0,8,0,0"
-          IsVisible="{Binding HasFrames}"
-          ColumnDefinitions="56,88,72,68,68,68,68,68,*,112">
-      <TextBlock Grid.Column="0"
-                 x:Name="CopyHeader"
-                 Classes="t-label"
-                 Text="Copy"
-                 Margin="4,2"
-                 TextAlignment="Center"
-                 VerticalAlignment="Center" />
-      <ContentControl Grid.Column="1" Content="{Binding Columns[1]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="2" Content="{Binding Columns[2]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <!-- The five metric headers give up the mark slot's width, so their label right aligns with
-           the digits rather than with the slot. -->
-      <ContentControl Grid.Column="3" Margin="0,0,12,0" Content="{Binding Columns[3]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="4" Margin="0,0,12,0" Content="{Binding Columns[4]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="5" Margin="0,0,12,0" Content="{Binding Columns[5]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="6" Margin="0,0,12,0" Content="{Binding Columns[6]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="7" Margin="0,0,12,0" Content="{Binding Columns[7]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="8" Content="{Binding Columns[8]}" ContentTemplate="{StaticResource QualityHeaderCell}" />
-      <ContentControl Grid.Column="9"
-                      Margin="{StaticResource QualityNightInset}"
-                      Content="{Binding Columns[9]}"
-                      ContentTemplate="{StaticResource QualityHeaderCell}" />
-    </Grid>
+    <!-- 2. The header row, outside the scroller. The rows' vertical bar is always drawn, so the
+         header carries its width (ScrollInset) and Night ends where its cells end. Copy is a plain
+         label, because it is the one unsortable column (spec 12.13: "inclusion is a per-row
+         decision, not a metric") and a button that ignores its own click teaches the wrong model.
+         -->
+    <t:TableRow Grid.Row="1"
+                x:Name="HeaderRow"
+                Kind="Header"
+                Columns="{StaticResource QualityCols}"
+                Margin="{x:Static t:TableMetrics.ScrollInset}"
+                IsVisible="{Binding HasFrames}">
+      <TextBlock t:TableRow.Col="copy" x:Name="CopyHeader" Text="Copy" />
+      <Button t:TableRow.Col="verdict" Command="{Binding SortByCommand}" CommandParameter="{Binding Columns[1].Key}"
+              Content="{Binding Columns[1]}" ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="filter" Command="{Binding SortByCommand}" CommandParameter="{Binding Columns[2].Key}"
+              Content="{Binding Columns[2]}" ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="hfr" Padding="{StaticResource QualityMetricMarkInset}" Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[3].Key}" Content="{Binding Columns[3]}" ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="ecc" Padding="{StaticResource QualityMetricMarkInset}" Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[4].Key}" Content="{Binding Columns[4]}" ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="fwhm" Padding="{StaticResource QualityMetricMarkInset}" Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[5].Key}" Content="{Binding Columns[5]}" ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="stars" Padding="{StaticResource QualityMetricMarkInset}" Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[6].Key}" Content="{Binding Columns[6]}" ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="rms" Padding="{StaticResource QualityMetricMarkInset}" Command="{Binding SortByCommand}"
+              CommandParameter="{Binding Columns[7].Key}" Content="{Binding Columns[7]}" ContentTemplate="{StaticResource TableSortTitleNumeric}" />
+      <Button t:TableRow.Col="file" ToolTip.Tip="{Binding Columns[8].Title}" Command="{Binding SortByCommand}" CommandParameter="{Binding Columns[8].Key}"
+              Content="{Binding Columns[8]}" ContentTemplate="{StaticResource TableSortTitle}" />
+      <Button t:TableRow.Col="night" Command="{Binding SortByCommand}" CommandParameter="{Binding Columns[9].Key}"
+              Content="{Binding Columns[9]}" ContentTemplate="{StaticResource TableSortTitle}" />
+    </t:TableRow>
 
     <!-- 3. The rows, or the empty state. The scroller is bounded, so the virtualising panel inside
          it has something finite to measure against: this panel lives inside the export page's own
          body scroller, which would otherwise offer it infinite height and realise every row. -->
-    <Border Grid.Row="2" Classes="rule" IsVisible="{Binding HasFrames}">
-      <ScrollViewer x:Name="RowsScroller"
-                    MaxHeight="420"
-                    HorizontalScrollBarVisibility="Disabled"
-                    VerticalScrollBarVisibility="Auto">
-        <ItemsControl x:Name="VerdictRows" ItemsSource="{Binding Rows}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <VirtualizingStackPanel />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate DataType="wbpp:VerdictRowViewModel">
-              <Grid x:Name="VerdictRow"
-                    MinHeight="32"
-                    ColumnDefinitions="56,88,72,68,68,68,68,68,*,112">
-                <!-- Spec 12.13's Copy column: the per row override, which works in both
-                     directions. -->
-                <CheckBox Grid.Column="0"
-                          x:Name="CopyCell"
-                          HorizontalAlignment="Center"
-                          VerticalAlignment="Center"
-                          AutomationProperties.Name="{Binding FileName}"
-                          IsChecked="{Binding IsCopied, Mode=TwoWay}" />
+    <ScrollViewer Grid.Row="2"
+                  x:Name="RowsScroller"
+                  MaxHeight="420"
+                  IsVisible="{Binding HasFrames}"
+                  t:Table.Scroller="True"
+                  HorizontalScrollBarVisibility="Disabled"
+                  VerticalScrollBarVisibility="Visible">
+      <ItemsControl x:Name="VerdictRows" Classes="table" ItemsSource="{Binding Rows}">
+        <ItemsControl.ItemsPanel>
+          <ItemsPanelTemplate>
+            <VirtualizingStackPanel />
+          </ItemsPanelTemplate>
+        </ItemsControl.ItemsPanel>
+        <ItemsControl.ItemTemplate>
+          <DataTemplate DataType="wbpp:VerdictRowViewModel">
+            <t:TableRow x:Name="VerdictRow" Columns="{StaticResource QualityCols}">
+              <!-- Spec 12.13's Copy column: the per row override, which works in both
+                   directions. -->
+              <CheckBox t:TableRow.Col="copy"
+                        x:Name="CopyCell"
+                        AutomationProperties.Name="{Binding FileName}"
+                        IsChecked="{Binding IsCopied, Mode=TwoWay}" />
 
-                <TextBlock Grid.Column="1"
-                           x:Name="VerdictCell"
-                           Classes="qcell"
-                           Classes.verdict-copy="{Binding IsVerdictCopy}"
-                           Margin="4,0"
-                           ToolTip.Tip="{Binding VerdictTooltip}"
-                           Text="{Binding VerdictText}" />
+              <TextBlock t:TableRow.Col="verdict"
+                         x:Name="VerdictCell"
+                         Classes="qcell"
+                         Classes.verdict-copy="{Binding IsVerdictCopy}"
+                         ToolTip.Tip="{Binding VerdictTooltip}"
+                         Text="{Binding VerdictText}" />
 
-                <TextBlock Grid.Column="2"
-                           x:Name="FilterCell"
-                           Classes="qcell"
-                           Margin="4,0"
-                           Text="{Binding FilterText}" />
+              <TextBlock t:TableRow.Col="filter"
+                         x:Name="FilterCell"
+                         Classes="qcell"
+                         Text="{Binding FilterText}" />
 
-                <!-- The five metric cells. Each is a value box of one fixed width and the mark
-                     slot beside it, present whether or not the cell carries a mark. -->
-                <StackPanel Grid.Column="3" Orientation="Horizontal">
-                  <TextBlock x:Name="HfrValue"
-                             Classes="qcell num"
-                             Classes.band-better="{Binding HfrCell.IsBetter}"
-                             Classes.band-watch="{Binding HfrCell.IsWatch}"
-                             Classes.band-reject="{Binding HfrCell.IsReject}"
-                             Classes.failed="{Binding HfrCell.IsFailed}"
-                             Width="{StaticResource QualityMetricValueWidth}"
-                             ToolTip.Tip="{Binding HfrCell.Tooltip}"
-                             Text="{Binding HfrCell.Text}" />
-                  <TextBlock x:Name="HfrMark"
-                             Classes="qcell failed"
-                             Width="{StaticResource QualityMetricMarkWidth}"
-                             TextAlignment="Center"
-                             AutomationProperties.AccessibilityView="Raw"
-                             Text="{Binding HfrCell.Mark}" />
-                </StackPanel>
-                <StackPanel Grid.Column="4" Orientation="Horizontal">
-                  <TextBlock x:Name="EccValue"
-                             Classes="qcell num"
-                             Classes.band-better="{Binding EccentricityCell.IsBetter}"
-                             Classes.band-watch="{Binding EccentricityCell.IsWatch}"
-                             Classes.band-reject="{Binding EccentricityCell.IsReject}"
-                             Classes.failed="{Binding EccentricityCell.IsFailed}"
-                             Width="{StaticResource QualityMetricValueWidth}"
-                             ToolTip.Tip="{Binding EccentricityCell.Tooltip}"
-                             Text="{Binding EccentricityCell.Text}" />
-                  <TextBlock x:Name="EccMark"
-                             Classes="qcell failed"
-                             Width="{StaticResource QualityMetricMarkWidth}"
-                             TextAlignment="Center"
-                             AutomationProperties.AccessibilityView="Raw"
-                             Text="{Binding EccentricityCell.Mark}" />
-                </StackPanel>
-                <StackPanel Grid.Column="5" Orientation="Horizontal">
-                  <TextBlock x:Name="FwhmValue"
-                             Classes="qcell num"
-                             Classes.band-better="{Binding FwhmCell.IsBetter}"
-                             Classes.band-watch="{Binding FwhmCell.IsWatch}"
-                             Classes.band-reject="{Binding FwhmCell.IsReject}"
-                             Classes.failed="{Binding FwhmCell.IsFailed}"
-                             Width="{StaticResource QualityMetricValueWidth}"
-                             ToolTip.Tip="{Binding FwhmCell.Tooltip}"
-                             Text="{Binding FwhmCell.Text}" />
-                  <TextBlock x:Name="FwhmMark"
-                             Classes="qcell failed"
-                             Width="{StaticResource QualityMetricMarkWidth}"
-                             TextAlignment="Center"
-                             AutomationProperties.AccessibilityView="Raw"
-                             Text="{Binding FwhmCell.Mark}" />
-                </StackPanel>
-                <StackPanel Grid.Column="6" Orientation="Horizontal">
-                  <TextBlock x:Name="StarsValue"
-                             Classes="qcell num"
-                             Classes.band-better="{Binding DetectedStarsCell.IsBetter}"
-                             Classes.band-watch="{Binding DetectedStarsCell.IsWatch}"
-                             Classes.band-reject="{Binding DetectedStarsCell.IsReject}"
-                             Classes.failed="{Binding DetectedStarsCell.IsFailed}"
-                             Width="{StaticResource QualityMetricValueWidth}"
-                             ToolTip.Tip="{Binding DetectedStarsCell.Tooltip}"
-                             Text="{Binding DetectedStarsCell.Text}" />
-                  <TextBlock x:Name="StarsMark"
-                             Classes="qcell failed"
-                             Width="{StaticResource QualityMetricMarkWidth}"
-                             TextAlignment="Center"
-                             AutomationProperties.AccessibilityView="Raw"
-                             Text="{Binding DetectedStarsCell.Mark}" />
-                </StackPanel>
-                <!-- Spec 12.13: guiding RMS "has no baseline and is never coloured", so this cell
-                     carries no band class at all. It keeps the failure ink and the mark slot,
-                     because a guiding RMS gate can still fail. -->
-                <StackPanel Grid.Column="7" Orientation="Horizontal">
-                  <TextBlock x:Name="RmsValue"
-                             Classes="qcell num"
-                             Classes.failed="{Binding GuidingRmsCell.IsFailed}"
-                             Width="{StaticResource QualityMetricValueWidth}"
-                             ToolTip.Tip="{Binding GuidingRmsCell.Tooltip}"
-                             Text="{Binding GuidingRmsCell.Text}" />
-                  <TextBlock x:Name="RmsMark"
-                             Classes="qcell failed"
-                             Width="{StaticResource QualityMetricMarkWidth}"
-                             TextAlignment="Center"
-                             AutomationProperties.AccessibilityView="Raw"
-                             Text="{Binding GuidingRmsCell.Mark}" />
-                </StackPanel>
+              <!-- The five metric cells: the figure, then the mark slot, present whether or not
+                   the cell carries a mark. The cell is the StackPanel, so the figure takes tc-num
+                   by hand and gives up the gutter its cell already carries. -->
+              <StackPanel t:TableRow.Col="hfr" Orientation="Horizontal">
+                <TextBlock x:Name="HfrValue"
+                           Classes="qcell tc-num"
+                           Margin="0"
+                           Classes.band-better="{Binding HfrCell.IsBetter}"
+                           Classes.band-watch="{Binding HfrCell.IsWatch}"
+                           Classes.band-reject="{Binding HfrCell.IsReject}"
+                           Classes.failed="{Binding HfrCell.IsFailed}"
+                           ToolTip.Tip="{Binding HfrCell.Tooltip}"
+                           Text="{Binding HfrCell.Text}" />
+                <TextBlock x:Name="HfrMark"
+                           Classes="qcell failed"
+                           Width="{StaticResource QualityMetricMarkWidth}"
+                           TextAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw"
+                           Text="{Binding HfrCell.Mark}" />
+              </StackPanel>
+              <StackPanel t:TableRow.Col="ecc" Orientation="Horizontal">
+                <TextBlock x:Name="EccValue"
+                           Classes="qcell tc-num"
+                           Margin="0"
+                           Classes.band-better="{Binding EccentricityCell.IsBetter}"
+                           Classes.band-watch="{Binding EccentricityCell.IsWatch}"
+                           Classes.band-reject="{Binding EccentricityCell.IsReject}"
+                           Classes.failed="{Binding EccentricityCell.IsFailed}"
+                           ToolTip.Tip="{Binding EccentricityCell.Tooltip}"
+                           Text="{Binding EccentricityCell.Text}" />
+                <TextBlock x:Name="EccMark"
+                           Classes="qcell failed"
+                           Width="{StaticResource QualityMetricMarkWidth}"
+                           TextAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw"
+                           Text="{Binding EccentricityCell.Mark}" />
+              </StackPanel>
+              <StackPanel t:TableRow.Col="fwhm" Orientation="Horizontal">
+                <TextBlock x:Name="FwhmValue"
+                           Classes="qcell tc-num"
+                           Margin="0"
+                           Classes.band-better="{Binding FwhmCell.IsBetter}"
+                           Classes.band-watch="{Binding FwhmCell.IsWatch}"
+                           Classes.band-reject="{Binding FwhmCell.IsReject}"
+                           Classes.failed="{Binding FwhmCell.IsFailed}"
+                           ToolTip.Tip="{Binding FwhmCell.Tooltip}"
+                           Text="{Binding FwhmCell.Text}" />
+                <TextBlock x:Name="FwhmMark"
+                           Classes="qcell failed"
+                           Width="{StaticResource QualityMetricMarkWidth}"
+                           TextAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw"
+                           Text="{Binding FwhmCell.Mark}" />
+              </StackPanel>
+              <StackPanel t:TableRow.Col="stars" Orientation="Horizontal">
+                <TextBlock x:Name="StarsValue"
+                           Classes="qcell tc-num"
+                           Margin="0"
+                           Classes.band-better="{Binding DetectedStarsCell.IsBetter}"
+                           Classes.band-watch="{Binding DetectedStarsCell.IsWatch}"
+                           Classes.band-reject="{Binding DetectedStarsCell.IsReject}"
+                           Classes.failed="{Binding DetectedStarsCell.IsFailed}"
+                           ToolTip.Tip="{Binding DetectedStarsCell.Tooltip}"
+                           Text="{Binding DetectedStarsCell.Text}" />
+                <TextBlock x:Name="StarsMark"
+                           Classes="qcell failed"
+                           Width="{StaticResource QualityMetricMarkWidth}"
+                           TextAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw"
+                           Text="{Binding DetectedStarsCell.Mark}" />
+              </StackPanel>
+              <!-- Spec 12.13: guiding RMS "has no baseline and is never coloured", so this cell
+                   carries no band class at all. It keeps the failure ink and the mark slot,
+                   because a guiding RMS gate can still fail. -->
+              <StackPanel t:TableRow.Col="rms" Orientation="Horizontal">
+                <TextBlock x:Name="RmsValue"
+                           Classes="qcell tc-num"
+                           Margin="0"
+                           Classes.failed="{Binding GuidingRmsCell.IsFailed}"
+                           ToolTip.Tip="{Binding GuidingRmsCell.Tooltip}"
+                           Text="{Binding GuidingRmsCell.Text}" />
+                <TextBlock x:Name="RmsMark"
+                           Classes="qcell failed"
+                           Width="{StaticResource QualityMetricMarkWidth}"
+                           TextAlignment="Center"
+                           AutomationProperties.AccessibilityView="Raw"
+                           Text="{Binding GuidingRmsCell.Mark}" />
+              </StackPanel>
 
-                <!-- Spec 12.13: the file name with the full path beneath it, "because one name can
-                     live in several folders". -->
-                <StackPanel Grid.Column="8" Margin="4,2" VerticalAlignment="Center">
-                  <TextBlock x:Name="FileNameCell"
-                             Classes="mono"
-                             TextTrimming="CharacterEllipsis"
-                             Foreground="{DynamicResource ColorTextPrimary}"
-                             Text="{Binding FileName}" />
-                  <TextBlock x:Name="FilePathCell"
-                             Classes="t-caption mono"
-                             TextTrimming="CharacterEllipsis"
-                             ToolTip.Tip="{Binding FilePath}"
-                             Text="{Binding FilePath}" />
-                </StackPanel>
+              <!-- Spec 12.13: the file name with the full path beneath it, "because one name can
+                   live in several folders". The star column, so both lines trim and the cell's
+                   tooltip carries the whole path. -->
+              <StackPanel t:TableRow.Col="file" ToolTip.Tip="{Binding FilePath}">
+                <TextBlock x:Name="FileNameCell"
+                           Classes="mono"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource ColorTextPrimary}"
+                           Text="{Binding FileName}" />
+                <TextBlock x:Name="FilePathCell"
+                           Classes="t-caption mono"
+                           TextTrimming="CharacterEllipsis"
+                           Text="{Binding FilePath}" />
+              </StackPanel>
 
-                <TextBlock Grid.Column="9"
-                           x:Name="NightCell"
-                           Classes="qcell num"
-                           Margin="{StaticResource QualityNightInset}"
-                           Foreground="{DynamicResource ColorTextTertiary}"
-                           Text="{Binding NightText}" />
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </ScrollViewer>
-    </Border>
+              <TextBlock t:TableRow.Col="night"
+                         x:Name="NightCell"
+                         Classes="qcell"
+                         Foreground="{DynamicResource ColorTextTertiary}"
+                         Text="{Binding NightText}" />
+            </t:TableRow>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+    </ScrollViewer>
 
     <TextBlock Grid.Row="2"
                x:Name="EmptyState"
                Classes="t-caption"
-               Margin="0,8,0,0"
                IsVisible="{Binding !HasFrames}"
                Text="{Binding EmptyText}" />
 

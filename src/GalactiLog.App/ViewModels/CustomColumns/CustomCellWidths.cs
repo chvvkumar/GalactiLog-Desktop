@@ -13,16 +13,10 @@ namespace GalactiLog.App.ViewModels.CustomColumns;
 /// <c>TableCustomHead</c> templates (Theme/Table.axaml).
 /// </summary>
 /// <remarks>
-/// <para>
 /// It lives beside the cell rather than in either view, because the figures were written out twice
 /// and had already drifted: the ledger took 120 for a text cell and the dashboard took 160, and the
 /// heading measurement that a long column name needs landed in one of the two copies only. What a
 /// kind's editor needs is one answer and is chosen here.
-/// </para>
-/// <para>
-/// The dashboard's own names for these figures are aliases of these constants, so the markup that
-/// binds them with <c>x:Static</c> and the arithmetic that sums them keep reading one table.
-/// </para>
 /// </remarks>
 public static class CustomCellWidths
 {
@@ -49,9 +43,6 @@ public static class CustomCellWidths
         _ => Text,
     };
 
-    /// <summary>The cell gutter a measured heading carries, one table gutter each side.</summary>
-    public const double HeadingGutter = 2 * TableMetrics.Gutter;
-
     /// <summary>
     /// The width one custom column takes, its heading and its cells alike: what its editor needs,
     /// or what its own heading needs when that is more, and never more than <see cref="Choice"/>
@@ -75,7 +66,7 @@ public static class CustomCellWidths
                 new Typeface(family, FontStyle.Normal, FontWeight.SemiBold),
                 fontSize,
                 null).Width
-            + HeadingGutter);
+            + TableMetrics.ColumnGutters);
 
         return Math.Max(editor, Math.Min(Choice, heading));
     }

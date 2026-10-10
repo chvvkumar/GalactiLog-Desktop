@@ -148,16 +148,34 @@ public class NightFilterMatrixViewModelTests
     }
 
     [Fact]
-    public void ACompareNightWithNoFilterRows_KeepsOneRow_OfDashes()
+    public void ACompareNightWithNoFilterRows_KeepsOneAllFramesRow_OfTheNightsOwnMedians()
     {
-        // A failure is a shown night silently absent from the table.
+        // A failure is a shown night silently absent from the table, or a row of dashes beside
+        // the point the chart plots from the same night's overview.
         var middle = new DateOnly(2025, 3, 5);
-        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), [Newer, middle]);
+        var overview = Factory.Session(middle) with { MedianHfr = 2.5d, MedianDetectedStars = 1_500d };
+        var matrix = new NightFilterMatrixViewModel(ThreeRows(), Swatches("Ha", "OIII"), [Newer, middle], overviews: [overview]);
 
         var row = Assert.Single(matrix.CompareRows, row => row.Night == middle);
         Assert.Null(row.Filter);
         Assert.Equal("2025-03-05", row.NightText);
-        Assert.Equal(new MetricRowViewModel("-", "-", "-", "-", "-", "-"), row.Metrics);
+        Assert.Equal(
+            MetricRowViewModel.Of(
+                "All frames", 2.5d, overview.MedianEccentricity, overview.MedianFwhm, overview.MedianGuidingRmsArcsec, 1_500d),
+            row.Metrics);
+    }
+
+    [Fact]
+    public void Overall_IsNull_ForATargetWithNoFrame_AndKeptWithNoMatrixRow()
+    {
+        // A failure is Overall following HasRows: filterless frames are in no row and still have
+        // means.
+        var totals = Factory.PopulatedTotals();
+
+        var filterless = new NightFilterMatrixViewModel([], Swatches("Ha"), totals: totals);
+        Assert.False(filterless.HasRows);
+        Assert.True(filterless.HasOverall);
+        Assert.False(new NightFilterMatrixViewModel([], Swatches("Ha"), totals: totals with { FrameCount = 0 }).HasOverall);
     }
 
     [Fact]

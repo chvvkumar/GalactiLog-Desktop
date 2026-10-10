@@ -119,7 +119,7 @@ public class RangesTablePartTests
         Assert.Equal(2, rangeLabels.Count);
         Assert.All(rangeLabels, label => Assert.Equal(
             label.FindAncestorOfType<ContentPresenter>()!.Bounds.Width,
-            label.Bounds.Width + 2 * TableMetrics.Gutter,
+            label.Bounds.Width + TableMetrics.ColumnGutters,
             0.5));
 
         var header = pane.Named<TableRow>("RangesTableHeader");

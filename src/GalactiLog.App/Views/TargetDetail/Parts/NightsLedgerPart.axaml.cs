@@ -139,10 +139,9 @@ public partial class NightsLedgerPart : UserControl
         {
             PseudoClasses.Set(":collapsed", IsCollapsed);
         }
-        else if (change.Property == FontSizeProperty || change.Property == FontFamilyProperty
-            || change.Property == DataContextProperty)
+        else if (change.Property == DataContextProperty)
         {
-            if (change.Property == DataContextProperty && this.IsAttachedToVisualTree())
+            if (this.IsAttachedToVisualTree())
             {
                 Follow(DataContext as TargetDetailViewModel);
             }

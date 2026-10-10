@@ -518,7 +518,7 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
     /// One night's value for a metric, for the whole night or for one rig of it.
     /// </summary>
     /// <remarks>
-    /// The whole-night figure is the overview's own, the same number the ledger row shows. A
+    /// The whole-night figure is the overview's own, the night overview's median. A
     /// per-rig figure has no such precomputed home: <c>SessionOverview</c> is one row per night and
     /// <c>RigGroup</c> carries counts and ranges rather than the five chart metrics. It is
     /// therefore taken here, over the loaded night's own frames, through the same
@@ -650,7 +650,7 @@ public sealed partial class TargetChartViewModel : MetricChartViewModel
     private IEnumerable<SessionCardViewModel> Candidates()
         => CheckedOnly ? _sessions.Where(card => card.IsChecked) : _sessions;
 
-    // The ledger row's own medians, the figures the whole-night series plots, so the chart, the
+    // The night overview's medians, the figures the whole-night series plots, so the chart, the
     // Compare table and the count read one rule.
     private static bool HasMetrics(SessionCardViewModel card)
         => ChartMetrics.All.Any(metric => metric.SessionValue(card.Overview) is not null);

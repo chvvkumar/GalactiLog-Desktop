@@ -32,7 +32,7 @@
        twice 400 pixels apart. A filter shot at more than one exposure keeps its sub-rows. -->
   <StackPanel x:Name="FilterTable" Grid.IsSharedSizeScope="True">
     <t:TableRow x:Name="FilterTableHeader" Kind="Header" Columns="{StaticResource FilterCols}">
-      <TextBlock t:TableRow.Col="name" Text="Filter" />
+      <TextBlock t:TableRow.Col="name" Text="{x:Static t:TableHeads.Filter}" />
       <TextBlock t:TableRow.Col="hfr" Text="{x:Static t:TableHeads.Hfr}" ToolTip.Tip="{x:Static t:TableHeads.HfrTip}" />
       <TextBlock t:TableRow.Col="ecc" Text="{x:Static t:TableHeads.Ecc}" ToolTip.Tip="{x:Static t:TableHeads.EccTip}" />
       <TextBlock t:TableRow.Col="fwhm" Text="{x:Static t:TableHeads.Fwhm}" ToolTip.Tip="{x:Static t:TableHeads.FwhmTip}" />
@@ -73,12 +73,9 @@
             <!-- Spec 12.4 item 2's rig label row, on a multi-rig night only: shown instead of the
                  TableRow above. RigLabelRowTemplate is shared with the ranges table. -->
             <ContentControl x:Name="FilterRigLabelRow"
+                            Classes="rig-label-row"
                             Content="{Binding LabelRow}"
-                            ContentTemplate="{StaticResource RigLabelRowTemplate}"
-                            IsVisible="{Binding IsRigLabel}"
-                            Margin="{x:Static t:TableMetrics.CellPadding}"
-                            MinHeight="{x:Static t:TableMetrics.RowMinHeight}"
-                            VerticalContentAlignment="Center" />
+                            IsVisible="{Binding IsRigLabel}" />
           </Panel>
         </DataTemplate>
       </ItemsControl.ItemTemplate>

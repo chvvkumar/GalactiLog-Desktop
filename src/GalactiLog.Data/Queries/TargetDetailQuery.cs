@@ -391,9 +391,8 @@ public sealed class TargetDetailQuery(
         }
 
         var arcsec = HfrArcsec(frames);
-        var eccentricity = ModalSourceEccentricity(frames);
-        var pooled = PooledEccentricity(frames);
-        var all = Means(frames, pooled);
+        var eccentricity = EccentricityPool(frames);
+        var all = Means(frames, eccentricity.Pool);
 
         return new TargetTotals(
             integration,
@@ -428,7 +427,7 @@ public sealed class TargetDetailQuery(
                 .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)])
         {
             MeansByFilter = framesByFilter.ToDictionary(
-                pair => pair.Key, pair => Means(pair.Value, pooled), StringComparer.OrdinalIgnoreCase),
+                pair => pair.Key, pair => Means(pair.Value, eccentricity.Pool), StringComparer.OrdinalIgnoreCase),
         };
     }
 
@@ -481,38 +480,30 @@ public sealed class TargetDetailQuery(
     /// second copy of the tie break, and two copies of a tie break eventually disagree and make
     /// the same library report two different averages on two screens.
     /// </para>
+    /// <para>
+    /// One vote per group answers all three questions: <c>Pool</c> is a frame's eccentricity, null
+    /// unless the frame is in the modal source pool, so a night row and a frame point pool what the
+    /// night's median pools and a filter row pools what the target's mean pools;
+    /// <c>ExcludedCount</c> counts the frames that carry an eccentricity outside the pool (a frame
+    /// with none was never in it).
+    /// </para>
     /// </summary>
-    private static (List<double?> Values, string? ModalSource, int ExcludedCount) ModalSourceEccentricity(
+    private static (Func<OverviewFrame, double?> Pool, string? ModalSource, int ExcludedCount) EccentricityPool(
         List<OverviewFrame> frames)
     {
         if (!EccentricitySources.TryGetModalSource(
             frames.Select(frame => (frame.EccentricitySource, frame.Eccentricity)),
             out var modalSource))
         {
-            return ([], null, 0);
+            return (_ => null, null, 0);
         }
 
-        var values = new List<double?>();
-        var excluded = 0;
-        foreach (var frame in frames)
-        {
-            if (frame.Eccentricity is null)
-            {
-                // Not excluded: a frame with no eccentricity was never in the pool to begin with.
-                continue;
-            }
+        double? Pool(OverviewFrame frame)
+            => EccentricitySources.IsPooled(frame.EccentricitySource, frame.Eccentricity, modalSource)
+                ? frame.Eccentricity
+                : null;
 
-            if (EccentricitySources.IsPooled(frame.EccentricitySource, frame.Eccentricity, modalSource))
-            {
-                values.Add(frame.Eccentricity);
-            }
-            else
-            {
-                excluded++;
-            }
-        }
-
-        return (values, modalSource, excluded);
+        return (Pool, modalSource, frames.Count(frame => frame.Eccentricity is not null && Pool(frame) is null));
     }
 
     /// <summary>Rule 5. Canonical filter names, nulls dropped, sorted case-insensitively. Unlike
@@ -633,23 +624,6 @@ public sealed class TargetDetailQuery(
         return buckets;
     }
 
-    /// <summary>A frame's eccentricity, null unless the frame is in the group's modal source pool, so
-    /// a night row and a frame point pool what the night's median pools, and a filter row pools what
-    /// the target's mean pools.</summary>
-    private static Func<OverviewFrame, double?> PooledEccentricity(List<OverviewFrame> night)
-    {
-        if (!EccentricitySources.TryGetModalSource(
-            night.Select(frame => (frame.EccentricitySource, frame.Eccentricity)),
-            out var modalSource))
-        {
-            return _ => null;
-        }
-
-        return frame => EccentricitySources.IsPooled(frame.EccentricitySource, frame.Eccentricity, modalSource)
-            ? frame.Eccentricity
-            : null;
-    }
-
     /// <summary>The frame's filter as the key <c>IntegrationSecondsByFilter</c> stores it, so an
     /// ordinal lookup from a row or a point finds the totals entry whatever this frame's casing.</summary>
     private static string? FilterKey(OverviewFrame frame, AliasMap map, Dictionary<string, string> keys)
@@ -664,7 +638,7 @@ public sealed class TargetDetailQuery(
         foreach (var date in nights.Keys.OrderDescending())
         {
             var night = nights[date];
-            var eccentricity = PooledEccentricity(night);
+            var eccentricity = EccentricityPool(night).Pool;
             var byFilter = night
                 .Select(frame => (Key: FilterKey(frame, map, keys), Frame: frame))
                 .Where(pair => pair.Key is not null)
@@ -700,7 +674,7 @@ public sealed class TargetDetailQuery(
         AliasMap map,
         Dictionary<string, string> keys)
     {
-        var eccentricity = nights.ToDictionary(night => night.Key, night => PooledEccentricity(night.Value));
+        var eccentricity = nights.ToDictionary(night => night.Key, night => EccentricityPool(night.Value).Pool);
         var points = new List<NightFramePoint>();
         foreach (var frame in frames)
         {
@@ -737,7 +711,7 @@ public sealed class TargetDetailQuery(
             // Review ruling on spec 7.2: "aggregations pool only same-source values" is not
             // scoped to the totals row, so the card's median pools the session's own modal
             // source with the same tie-break, and reports which source that was.
-            var sessionEccentricity = ModalSourceEccentricity(bucket);
+            var sessionEccentricity = EccentricityPool(bucket);
             var firstFrame = bucket[0];
 
             // Rule 4: a rig is the canonical (telescope, camera) pair, and a pair with a null
@@ -757,7 +731,7 @@ public sealed class TargetDetailQuery(
                 Statistics.Median(bucket.Select(frame => frame.MedianHfr)),
                 Statistics.Median(arcsec.Values),
                 arcsec.ExcludedCount,
-                Statistics.Median(sessionEccentricity.Values),
+                Statistics.Median(bucket.Select(sessionEccentricity.Pool)),
                 sessionEccentricity.ModalSource,
                 Statistics.Median(bucket.Select(frame => frame.Fwhm)),
                 Statistics.Median(bucket.Select(frame => frame.GuidingRmsArcsec)),

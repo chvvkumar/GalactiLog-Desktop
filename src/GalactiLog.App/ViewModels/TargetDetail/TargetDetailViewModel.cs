@@ -484,7 +484,8 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
             _nightFilters,
             Totals.FilterSwatches,
             TargetChart.PlottedNights,
-            Totals.Totals);
+            Totals.Totals,
+            Sessions.Select(card => card.Overview));
     }
 
     /// <summary>The session cards, newest session first (Task 4). Task 8 reads this collection

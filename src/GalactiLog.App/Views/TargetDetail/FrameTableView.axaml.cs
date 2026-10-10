@@ -156,7 +156,7 @@ public partial class FrameTableView : UserControl
     /// <summary>The widest cell alone plus its two gutters: a numeric column's floor, since a
     /// figure never trims and its header may (spec.md items 3 and 5).</summary>
     public static double FigureFitWidth(double widestCell)
-        => Math.Ceiling(widestCell + 2 * TableMetrics.Gutter);
+        => Math.Ceiling(widestCell + TableMetrics.ColumnGutters);
 
     // R5: every column auto-fits the widest text of the loaded night plus its header. Measured
     // here rather than in the view-model because a FormattedText needs a Typeface and a font

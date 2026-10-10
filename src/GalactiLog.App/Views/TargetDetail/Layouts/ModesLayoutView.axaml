@@ -113,7 +113,8 @@
              their natural heights. -->
         <Grid x:Name="IntegrationRegion" IsVisible="False">
           <ScrollViewer x:Name="IntegrationScroll"
-                        VerticalScrollBarVisibility="Auto"
+                        t:Table.Scroller="True"
+                        VerticalScrollBarVisibility="Visible"
                         HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="16">
               <parts:IntegrationBarsPart x:Name="IntegrationBarsPart" IsFull="True" />

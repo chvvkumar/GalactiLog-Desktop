@@ -6,6 +6,7 @@
         xmlns:detail="using:GalactiLog.App.ViewModels.TargetDetail"
         xmlns:vm="using:GalactiLog.App.ViewModels"
         xmlns:help="using:GalactiLog.Core.Help"
+        xmlns:t="using:GalactiLog.App.Controls.Table"
         xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia">
   <!-- Control styles shared by more than one view. Included once from App.axaml, after
        FluentTheme, so a view that needs one of these classes uses it and defines nothing locally.
@@ -236,6 +237,15 @@
       <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
     </ControlTheme>
   </Styles.Resources>
+
+  <!-- The rig label row's placement inside a table row slot, shared by the per-filter and ranges
+       tables so each only places the template: one cell gutter each side, a table row's height. -->
+  <Style Selector="ContentControl.rig-label-row">
+    <Setter Property="ContentTemplate" Value="{StaticResource RigLabelRowTemplate}" />
+    <Setter Property="Margin" Value="{x:Static t:TableMetrics.CellPadding}" />
+    <Setter Property="MinHeight" Value="{x:Static t:TableMetrics.RowMinHeight}" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
 
   <!-- Spec 13's four tooltip and legend paints, on every chart control in the process, which
        corrects a shipped defect.

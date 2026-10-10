@@ -312,7 +312,7 @@ public class PerFilterTablePartTests
         Assert.Equal(2, labels.Count);
         Assert.All(labels, label => Assert.Equal(
             label.FindAncestorOfType<ContentPresenter>()!.Bounds.Width,
-            label.Bounds.Width + 2 * TableMetrics.Gutter,
+            label.Bounds.Width + TableMetrics.ColumnGutters,
             0.5));
 
         var header = pane.Named<TableRow>("FilterTableHeader");

@@ -223,7 +223,7 @@ public sealed partial class GuidingViewModel : ObservableObject
                         CultureInfo.InvariantCulture,
                         $"{MetricText.Count(rig.GatedSessionCount)} too short to score")
                     : "",
-                Num(rig.GuidedHours, "0.0"),
+                Num(rig.GuidedHours, "N1"),
                 MetricGrading.Grade(rig.RmsTotalArcsec, stats.Baselines.RmsTotal, "RMS total", brushes),
                 MetricGrading.Grade(rig.RmsRaArcsec, stats.Baselines.RmsRa, "RMS RA", brushes),
                 MetricGrading.Grade(rig.RmsDecArcsec, stats.Baselines.RmsDec, "RMS Dec", brushes),

@@ -367,13 +367,13 @@
                              Text="{x:Static t:TableHeads.Hours}"
                              ToolTip.Tip="Total guided time." />
                   <TextBlock t:TableRow.Col="rms"
-                             Text="RMS total &quot;"
+                             Text="{x:Static t:TableHeads.RmsTotal}"
                              ToolTip.Tip="Typical guide error in arcseconds across both axes, weighted by frames. Lower is better; compare it against your image scale." />
                   <TextBlock t:TableRow.Col="ra"
-                             Text="RMS RA &quot;"
+                             Text="{x:Static t:TableHeads.RmsRa}"
                              ToolTip.Tip="Guide error on the right ascension axis, in arcseconds. A high figure points at periodic error or polar alignment drift." />
                   <TextBlock t:TableRow.Col="dec"
-                             Text="RMS Dec &quot;"
+                             Text="{x:Static t:TableHeads.RmsDec}"
                              ToolTip.Tip="Guide error on the declination axis, in arcseconds. A high figure points at balance or backlash." />
                   <TextBlock t:TableRow.Col="filtered"
                              Text="Filtered &quot;"
@@ -574,9 +574,9 @@
                     <TextBlock t:TableRow.Col="rig" Text="Rig" ToolTip.Tip="{x:Static stats:GuidingViewModel.RigTooltip}" />
                     <TextBlock t:TableRow.Col="band" Text="Band" />
                     <TextBlock t:TableRow.Col="sessions" Text="Sessions" />
-                    <TextBlock t:TableRow.Col="rms" Text="RMS total &quot;" />
-                    <TextBlock t:TableRow.Col="ra" Text="RMS RA &quot;" />
-                    <TextBlock t:TableRow.Col="dec" Text="RMS Dec &quot;" />
+                    <TextBlock t:TableRow.Col="rms" Text="{x:Static t:TableHeads.RmsTotal}" ToolTip.Tip="{x:Static t:TableHeads.RmsTotalTip}" />
+                    <TextBlock t:TableRow.Col="ra" Text="{x:Static t:TableHeads.RmsRa}" ToolTip.Tip="{x:Static t:TableHeads.RmsRaTip}" />
+                    <TextBlock t:TableRow.Col="dec" Text="{x:Static t:TableHeads.RmsDec}" ToolTip.Tip="{x:Static t:TableHeads.RmsDecTip}" />
                   </t:TableRow>
                   <ItemsControl x:Name="AltitudeTableRows" Classes="table" ItemsSource="{Binding Guiding.TableRows}">
                     <ItemsControl.ItemTemplate>

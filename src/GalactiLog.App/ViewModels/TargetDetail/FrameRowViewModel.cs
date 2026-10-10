@@ -129,7 +129,7 @@ public sealed partial class FrameRowViewModel : ObservableObject
     /// in the cell, so a column of figures shares one decimal axis, and the missing dash when the
     /// frame recorded no exposure. This was the only one of the 32 cells that carried a suffix.
     /// </summary>
-    public string ExposureText => MetricText.Cell(Row.ExposureTime, "#,0.##");
+    public string ExposureText => MetricText.ExposureFigure(Row.ExposureTime);
 
     /// <summary>design-spec 12.4's HFR column. <c>median_hfr</c> is the per-frame HFR the
     /// ingester recorded, not a session aggregate.</summary>

@@ -3,7 +3,8 @@ using GalactiLog.Data.Queries;
 namespace GalactiLog.App.ViewModels.TargetDetail;
 
 /// <summary>One row of five metric figures under a label. The one place the five-metric row
-/// format lives: Overall metrics (means) and Compare nights (medians) both print through it.</summary>
+/// format lives: Overall metrics (means), Compare nights and the per-filter table (medians) all
+/// print through it.</summary>
 public sealed record MetricRowViewModel(
     string Label, string HfrText, string EccentricityText, string FwhmText, string GuidingRmsText, string DetectedStarsText)
 {
@@ -23,8 +24,11 @@ public sealed record MetricRowViewModel(
 /// </summary>
 public sealed class OverallMetricsViewModel(TargetTotals totals, IReadOnlyList<FilterSwatchViewModel> filters)
 {
+    /// <summary>The label of a row over every frame, whatever its filter.</summary>
+    public const string AllFramesLabel = "All frames";
+
     public MetricRowViewModel AllFrames { get; } = MetricRowViewModel.Of(
-        "All frames", totals.AvgHfr, totals.AvgEccentricity, totals.AvgFwhm, totals.AvgGuidingRmsArcsec, totals.AvgDetectedStars);
+        AllFramesLabel, totals.AvgHfr, totals.AvgEccentricity, totals.AvgFwhm, totals.AvgGuidingRmsArcsec, totals.AvgDetectedStars);
 
     /// <summary>A filter with no means entry is a row of dashes.</summary>
     public IReadOnlyList<MetricRowViewModel> Filters { get; } = [.. filters.Select(filter =>

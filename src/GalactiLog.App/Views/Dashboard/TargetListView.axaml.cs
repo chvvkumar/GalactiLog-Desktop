@@ -54,11 +54,6 @@ namespace GalactiLog.App.Views.Dashboard;
 /// </remarks>
 public partial class TargetListView : UserControl
 {
-    /// <summary>The cell gutter, <see cref="TableMetrics.Gutter"/> left and right, so adjacent
-    /// columns sit 16 apart. Every cap below is a column width and includes it; the spine writes a
-    /// cap to the cell, whose gutter is a margin outside it, so the gutter is taken off first.</summary>
-    internal const double CellGutter = 2 * TableMetrics.Gutter;
-
     /// <summary>The Name column's floor. It is the one star column: it takes the remainder at a
     /// wide window and trims with an ellipsis down to this, which holds a catalogue designation
     /// and its two gutters.</summary>
@@ -126,33 +121,10 @@ public partial class TargetListView : UserControl
     /// </para></summary>
     internal const double ListMinWidth = 684d;
 
-    /// <summary>A check box cell (spec 12.15): <see cref="CustomCellWidths.Check"/>. An empty
-    /// <c>CheckBox</c> measures 18, which the ledger's own selection column comment records
-    /// (<c>Views/TargetDetail/TargetDetailView.axaml</c>), plus the cell's two 8 pixel
-    /// gutters.</summary>
-    internal const double BooleanCellWidth = CustomCellWidths.Check;
-
-    /// <summary>A dropdown cell: <see cref="CustomCellWidths.Choice"/>, the widest option plus the
-    /// combo's chevron, bounded so one long option cannot take the row.</summary>
-    internal const double DropdownCellWidth = CustomCellWidths.Choice;
-
-    /// <summary>A text cell: <see cref="CustomCellWidths.Text"/>. 120 rather than
-    /// <see cref="DataCap"/>, which is what every other text-bearing dashboard cell carries: the two
-    /// surfaces that draw a custom cell size its editor from one table.</summary>
-    internal const double TextCellWidth = CustomCellWidths.Text;
-
-    /// <summary>What one custom cell's editor needs, by the column's type and by nothing else
-    /// (spec 12.15). The dashboard's name for <see cref="CustomCellWidths.For"/>, which is the one
-    /// per-kind table; the Nights ledger reads the same one through
-    /// <c>TargetDetailViewModel.CustomCellWidth</c>. It is a floor under
-    /// <see cref="CustomCellWidthFor"/>, never the whole answer: a column whose name needs more than
-    /// its editor does is as wide as its name.</summary>
-    internal static double WidthFor(CustomColumnType type) => CustomCellWidths.For(type);
-
     /// <summary>
     /// The width one custom column takes, its header entry and its cell on every row alike: what
     /// its editor needs, or what its own heading needs when that is more, and never more than
-    /// <see cref="DropdownCellWidth"/> so one long column name cannot take the row.
+    /// <see cref="CustomCellWidths.Choice"/> so one long column name cannot take the row.
     /// </summary>
     /// <remarks>
     /// <para>
@@ -238,7 +210,7 @@ public partial class TargetListView : UserControl
     /// </para></summary>
     public static readonly StyledProperty<double> NameCellMaxWidthProperty =
         AvaloniaProperty.Register<TargetListView, double>(
-            nameof(NameCellMaxWidth), defaultValue: NameFloor - CellGutter);
+            nameof(NameCellMaxWidth), defaultValue: NameFloor - TableMetrics.ColumnGutters);
 
     /// <summary>The width rule's budget for Designation, Integration and Last session:
     /// <see cref="DataCap"/> while the list is wide enough to draw every shown column,
@@ -274,8 +246,10 @@ public partial class TargetListView : UserControl
         InitializeComponent();
         _cols = (TableColumns)Resources["TargetCols"]!;
         _sessCols = (TableColumns)Resources["SessCols"]!;
-        _cols["designation"].MaxWidth = DataCap - CellGutter;
-        _cols["equipment"].MaxWidth = EquipmentCap - CellGutter;
+        // Every cap here is a column width, gutters included; the spine writes a cap to the cell,
+        // whose gutters are a margin outside it, so they come off first.
+        _cols["designation"].MaxWidth = DataCap - TableMetrics.ColumnGutters;
+        _cols["equipment"].MaxWidth = EquipmentCap - TableMetrics.ColumnGutters;
     }
 
     public bool IsEquipmentShown
@@ -379,12 +353,6 @@ public partial class TargetListView : UserControl
         // DataContext, so a custom column's own width moves with it: the heading it is measured
         // from is drawn at this size (FrameTableView's file name column follows the same property
         // for the same reason).
-        if (change.Property == FontSizeProperty)
-        {
-            // A column measured at the old size would keep that width (a group only grows).
-            ResetColumns();
-        }
-
         if (change.Property == BoundsProperty || change.Property == FontSizeProperty)
         {
             Apply();
@@ -443,11 +411,11 @@ public partial class TargetListView : UserControl
             // The cap moved, so the groups are renamed and measured again rather than keeping the
             // width they last reserved.
             DataCellMaxWidth = cap;
-            _cols["designation"].MaxWidth = cap - CellGutter;
+            _cols["designation"].MaxWidth = cap - TableMetrics.ColumnGutters;
             _cols.Reset();
         }
 
-        NameCellMaxWidth = Math.Max(NameFloor, StarRemainderFor(customBudget)) - CellGutter;
+        NameCellMaxWidth = Math.Max(NameFloor, StarRemainderFor(customBudget)) - TableMetrics.ColumnGutters;
     }
 
     /// <summary>

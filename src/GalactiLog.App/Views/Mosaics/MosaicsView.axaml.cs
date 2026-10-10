@@ -1,5 +1,4 @@
 using System.ComponentModel;
-using Avalonia;
 using Avalonia.Controls;
 using GalactiLog.App.Controls.Table;
 using GalactiLog.App.ViewModels.Mosaics;
@@ -17,10 +16,9 @@ namespace GalactiLog.App.Views.Mosaics;
 /// </summary>
 public partial class MosaicsView : UserControl
 {
-    // ponytail: a deleted mosaic's wider cells keep their column width until the next font change
-    // or page visit; reset on a Mosaics removal if that is ever visible.
+    // ponytail: a deleted mosaic's wider cells keep their column width until the next text size
+    // change or page visit; reset on a Mosaics removal if that is ever visible.
     private readonly TableColumns _cols;
-    private readonly TableColumns _sessionCols;
     private MosaicsTableViewModel? _table;
     private ColumnPickerViewModel? _picker;
 
@@ -28,7 +26,6 @@ public partial class MosaicsView : UserControl
     {
         InitializeComponent();
         _cols = (TableColumns)Resources["MosaicCols"]!;
-        _sessionCols = (TableColumns)Resources["SuggestionSessionCols"]!;
     }
 
     protected override void OnDataContextChanged(EventArgs e)
@@ -47,18 +44,6 @@ public partial class MosaicsView : UserControl
 
         FollowPicker();
         base.OnDataContextChanged(e);
-    }
-
-    protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
-    {
-        base.OnPropertyChanged(change);
-
-        // A column measured at the old text size would keep that width (a group only grows).
-        if (change.Property == FontSizeProperty)
-        {
-            _cols.Reset();
-            _sessionCols.Reset();
-        }
     }
 
     // The picker is replaced when the custom columns load.

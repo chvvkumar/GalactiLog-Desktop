@@ -10,8 +10,10 @@ using Avalonia.Layout;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
+using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
+using GalactiLog.App.ViewModels.CustomColumns;
 using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.Views.Dashboard;
 using GalactiLog.Core.Settings;
@@ -166,7 +168,7 @@ public class TargetListCustomColumnTests
 
         var heading = Heading(view, longName);
 
-        Assert.Equal(TargetListView.DropdownCellWidth, heading.Bounds.Width);
+        Assert.Equal(CustomCellWidths.Choice, heading.Bounds.Width);
         Assert.True(IsTrimmed(heading), "The heading grew past the cap.");
         Assert.Equal(longName, ToolTip.GetTip(heading));
         Assert.Equal(longName, AutomationProperties.GetName(heading));
@@ -211,7 +213,7 @@ public class TargetListCustomColumnTests
                 Math.Abs(value - baseline) < ColumnSettle,
                 $"At {allotment}, the Last session value measures {value} with custom columns on "
                     + $"and {baseline} with none on.");
-            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor - TargetListView.CellGutter, "The star column went below its floor.");
+            Assert.True(both.NameCellMaxWidth >= TargetListView.NameFloor - TableMetrics.ColumnGutters, "The star column went below its floor.");
         }
     }
 
