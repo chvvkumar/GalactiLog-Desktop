@@ -186,6 +186,10 @@ public sealed partial class ReviewStep(WbppExportViewModel page, MethodStep meth
     [ObservableProperty]
     public partial string ProgressText { get; set; } = "";
 
+    /// <summary>Bytes done of total, speed and time left, under the file count.</summary>
+    [ObservableProperty]
+    public partial string ProgressStats { get; set; } = "";
+
     [ObservableProperty]
     public partial double ProgressPercent { get; set; }
 

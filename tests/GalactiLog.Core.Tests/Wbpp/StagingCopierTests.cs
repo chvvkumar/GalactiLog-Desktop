@@ -234,7 +234,7 @@ public sealed class StagingCopierTests : IDisposable
     }
 
     [Fact]
-    public async Task CancellationAfterTheFirstFileStopsTheRunAndListsEveryPartial()
+    public async Task CancellationFinishesTheFilesInFlightAndStartsNoOther()
     {
         Source("frame1.fits", 100);
         for (var i = 2; i <= 6; i++)
@@ -261,15 +261,13 @@ public sealed class StagingCopierTests : IDisposable
         var result = await new StagingCopier(io).RunAsync(Request(), progress, cts.Token);
 
         Assert.Equal(StagingOutcome.Cancelled, result.Outcome);
-        Assert.Equal(1, result.Copied);
-        Assert.NotEmpty(result.PartialPaths);
-        Assert.All(result.PartialPaths, path => Assert.True(File.Exists(path), path));
-        foreach (var copy in Directory.GetFiles(Path.Combine(_staging, Entry)))
+        Assert.Empty(result.PartialPaths);
+        var copies = Directory.GetFiles(Path.Combine(_staging, Entry));
+        Assert.Equal(StagingCopier.PoolSize, result.Copied);
+        Assert.Equal(result.Copied, copies.Length);
+        foreach (var copy in copies)
         {
-            if (!File.ReadAllBytes(copy).SequenceEqual(File.ReadAllBytes(Path.Combine(_source, Path.GetFileName(copy)))))
-            {
-                Assert.Contains(copy, result.PartialPaths);
-            }
+            Assert.Equal(File.ReadAllBytes(Path.Combine(_source, Path.GetFileName(copy))), File.ReadAllBytes(copy));
         }
     }
 

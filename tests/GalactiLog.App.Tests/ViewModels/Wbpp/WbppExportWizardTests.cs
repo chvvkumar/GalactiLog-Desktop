@@ -161,6 +161,36 @@ public class WbppExportWizardTests
         Assert.False(rig.Wizard.IsBusy);
     }
 
+    // A failure here is a Cancel button left disabled for the whole copy: the view only re-reads
+    // CanExecute when CanExecuteChanged fires.
+    [Fact]
+    public async Task CancelCopy_BecomesExecutableOnceTheCopyStarts()
+    {
+        using var rig = new Rig();
+        var enabledAtEvent = new List<bool>();
+        rig.Wizard.CancelCopyCommand.CanExecuteChanged +=
+            (_, _) => enabledAtEvent.Add(rig.Wizard.CancelCopyCommand.CanExecute(null));
+        rig.FakeIo(() => []);
+        await rig.ToReviewAsync();
+
+        await rig.Wizard.CommitCommand.ExecuteAsync(null);
+
+        Assert.Contains(true, enabledAtEvent);
+    }
+
+    // A failure here is a speed inflated by skipped bytes, or a speed shown before it means anything.
+    [Fact]
+    public void TransferStats_UsesBytesWrittenForSpeedAndTimeLeft()
+    {
+        // 4 GB done of 10 GB, but only 2 GB written in 20 s: 100 MB/s, 6 GB left is 60 s.
+        var p = new StagingProgress(10, 30, 4_000_000_000, 10_000_000_000, 2_000_000_000, "f");
+
+        Assert.Equal(
+            "4.0 GB of 10.0 GB, 100 MB/s, about 1m left",
+            WbppExportWizardViewModel.TransferStats(p, TimeSpan.FromSeconds(20)));
+        Assert.Equal("4.0 GB of 10.0 GB", WbppExportWizardViewModel.TransferStats(p, TimeSpan.FromMilliseconds(500)));
+    }
+
     // A failure here is a different-size file that is not listed, or no Save report beside it (R5, R14).
     [Fact]
     public async Task AResultWithADifferentSizeSkip_ListsItAndOffersSaveReport()
