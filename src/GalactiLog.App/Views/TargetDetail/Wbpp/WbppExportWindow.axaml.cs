@@ -35,18 +35,21 @@ public partial class WbppExportWindow : ModalPageWindow<WbppExportWizardViewMode
         InitializeComponent();
     }
 
-    /// <summary>The title bar and Alt+F4 are refused while a commit runs, and only then: the same
-    /// predicate Escape and Close use.</summary>
-    protected override bool RefuseClose(WindowCloseReason reason) => Page?.IsBusy == true;
+    /// <summary>The title bar and Alt+F4 share one predicate with Escape and Close,
+    /// <c>CloseCommand.CanExecute</c>: refused only during a script commit. A copy carries on in
+    /// the status bar.</summary>
+    protected override bool RefuseClose(WindowCloseReason reason)
+        => Page is { } wizard && !wizard.CloseCommand.CanExecute(null);
 
-    /// <summary>Escape closes the wizard except while a commit runs; it is swallowed either way so
-    /// the platform does not close the modal behind the wizard's back.</summary>
+    /// <summary>Escape closes the wizard on the same predicate, <c>CloseCommand.CanExecute</c>:
+    /// refused only during a script commit. It is swallowed either way so the platform does not
+    /// close the modal behind the wizard's back.</summary>
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Key == Key.Escape)
         {
             e.Handled = true;
-            if (Page is { IsBusy: false } wizard)
+            if (Page is { } wizard && wizard.CloseCommand.CanExecute(null))
             {
                 wizard.CloseCommand.Execute(null);
             }

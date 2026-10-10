@@ -5,6 +5,7 @@ using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.Core.Settings;
+using GalactiLog.Core.Wbpp;
 using GalactiLog.Data.Ingest;
 using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
@@ -276,6 +277,75 @@ public class AppShutdownTests
         Assert.Equal(0, worker.OutstandingCount);
 
         stalled.TrySetResult(null);
+        Assert.NotNull(scheduler.LoopTask);
+        await scheduler.LoopTask!.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    // The background stacking copy: cancel means no new file starts and files in flight finish,
+    // so the drain cancels it and waits for those files inside the one budget.
+    [Fact]
+    public async Task DrainForShutdown_CancelsTheStagingCopy_AndWaitsForItsFilesInFlight()
+    {
+        using var settings = new SettingsFixture();
+        settings.Save(general => general with { ScanRoots = [settings.Root], WatcherEnabled = false });
+        var coordinator = ScanCoordinatorTestFactory.Create(settings);
+        var (watcher, scheduler) = CreateTriggers(settings, coordinator);
+        var copies = new StagingCopyService();
+        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var sawCancel = false;
+        var run = copies.StartAsync("M 31", Path.Combine(settings.Root, "staging"), async (_, ct) =>
+        {
+            entered.TrySetResult();
+            try
+            {
+                await Task.Delay(Timeout.Infinite, ct);
+            }
+            catch (OperationCanceledException)
+            {
+                sawCancel = true;
+                await Task.Delay(100, CancellationToken.None);
+            }
+
+            return new StagingCopyResult(StagingOutcome.Cancelled, 0, 0, [], [], [], null);
+        }, null, CancellationToken.None);
+        await entered.Task.WaitAsync(TimeSpan.FromSeconds(30));
+
+        App.DrainForShutdown(watcher, scheduler, coordinator, null, TimeSpan.FromSeconds(30), copies: copies);
+
+        Assert.True(sawCancel);
+        Assert.True(run.IsCompleted, "the drain returned before the copy's files in flight finished");
+        Assert.NotNull(scheduler.LoopTask);
+        await scheduler.LoopTask!.WaitAsync(TimeSpan.FromSeconds(30));
+    }
+
+    // Spec 10.5's one budget. A failure here is a copy that ignores its cancel holding the exit
+    // past the shared five seconds.
+    [Fact]
+    public async Task DrainForShutdown_SharesOneBudget_WithTheStagingCopy()
+    {
+        using var settings = new SettingsFixture();
+        settings.Save(general => general with { ScanRoots = [settings.Root], WatcherEnabled = false });
+        var coordinator = ScanCoordinatorTestFactory.Create(settings);
+        var (watcher, scheduler) = CreateTriggers(settings, coordinator);
+        var copies = new StagingCopyService();
+        var release = new TaskCompletionSource<StagingCopyResult>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var run = copies.StartAsync("M 31", Path.Combine(settings.Root, "staging"), (_, _) => release.Task, null, CancellationToken.None);
+        try
+        {
+            var budget = TimeSpan.FromMilliseconds(400);
+            var clock = Stopwatch.StartNew();
+            App.DrainForShutdown(watcher, scheduler, coordinator, null, budget, copies: copies);
+            clock.Stop();
+
+            Assert.False(run.IsCompleted);
+            Assert.True(clock.Elapsed < budget + TimeSpan.FromSeconds(1), $"the drain took {clock.Elapsed.TotalSeconds:F1}s");
+        }
+        finally
+        {
+            release.SetResult(new StagingCopyResult(StagingOutcome.Cancelled, 0, 0, [], [], [], null));
+            await run.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+
         Assert.NotNull(scheduler.LoopTask);
         await scheduler.LoopTask!.WaitAsync(TimeSpan.FromSeconds(30));
     }

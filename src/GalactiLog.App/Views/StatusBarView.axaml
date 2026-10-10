@@ -50,6 +50,7 @@
                                    Foreground="{DynamicResource ColorTextPrimary}" />
                         <TextBlock Text="{Binding Message}"
                                    TextTrimming="CharacterEllipsis"
+                                   ToolTip.Tip="{Binding Message}"
                                    Foreground="{DynamicResource ColorTextSecondary}" />
                         <ProgressBar Height="4"
                                      Minimum="0" Maximum="100"
