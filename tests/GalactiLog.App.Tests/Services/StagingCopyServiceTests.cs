@@ -291,8 +291,8 @@ public class StagingCopyServiceTests
         service.CancelAll();
 
         Assert.True(service.WaitForIdle(TimeSpan.FromSeconds(30)));
-        Assert.True(run.IsCompletedSuccessfully);
-        Assert.Equal(StagingOutcome.Cancelled, (await run).Outcome);
+        // WaitForIdle wakes on the run's done signal, a moment before its task returns.
+        Assert.Equal(StagingOutcome.Cancelled, (await run.WaitAsync(TimeSpan.FromSeconds(30))).Outcome);
         Assert.Equal("GalactiLog is closing.", service.RefusalFor(Folder("z")));
         Assert.Equal(StagingOutcome.Aborted,
             (await service.StartAsync("M 31", Folder("z"), (_, _) => Task.FromResult(Clean()), null, CancellationToken.None)).Outcome);
@@ -332,7 +332,7 @@ public class StagingCopyServiceTests
         service.CancelAll();
 
         Assert.True(service.WaitForIdle(TimeSpan.FromSeconds(30)));
-        Assert.True(run.IsCompleted);
+        await run.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
     // Decision 8. A failure here is a copy that ended after the window closed with no trace of
