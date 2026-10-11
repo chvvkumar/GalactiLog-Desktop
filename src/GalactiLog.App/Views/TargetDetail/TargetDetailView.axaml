@@ -183,11 +183,11 @@
               </StackPanel>
               <StackPanel Orientation="Horizontal" IsVisible="{Binding HasRa}">
                 <TextBlock Classes="field-label" Text="Right ascension" />
-                <TextBlock Classes="field-value stat-value mono" Text="{Binding RaText}" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding RaText}" />
               </StackPanel>
               <StackPanel Orientation="Horizontal" IsVisible="{Binding HasDec}">
                 <TextBlock Classes="field-label" Text="Declination" />
-                <TextBlock Classes="field-value stat-value mono" Text="{Binding DecText}" />
+                <TextBlock Classes="field-value stat-value" Text="{Binding DecText}" />
               </StackPanel>
               <StackPanel Orientation="Horizontal" IsVisible="{Binding HasSize}">
                 <TextBlock Classes="field-label" Text="Size" />

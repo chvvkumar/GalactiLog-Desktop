@@ -159,7 +159,7 @@ public class InheritedInkTests
 
         Assert.True(Application.Current!.TryFindResource("ColorTextPrimary", out var primary));
         Assert.Equal(ColorOf((IBrush)primary!), ColorOf(window.Foreground));
-        Assert.Equal("Atkinson Hyperlegible Next", window.FontFamily.Name);
+        Assert.Equal("Inter", window.FontFamily.Name);
 
         window.Close();
     }

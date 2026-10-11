@@ -89,6 +89,8 @@ public sealed record GeneralSettings
     /// 12.6).</summary>
     [JsonPropertyName("activity_seen_at")] public DateTimeOffset? ActivitySeenAt { get; init; }
     [JsonPropertyName("theme")] public string Theme { get; init; } = "civil-dusk";
+    /// <summary>The interface typeface id (FontManager.Options); an unknown id renders as Inter.</summary>
+    [JsonPropertyName("font")] public string Font { get; init; } = "inter";
     [JsonPropertyName("text_size")] public string TextSize { get; init; } = "small";
     [JsonPropertyName("content_width")] public string ContentWidth { get; init; } = "extra-wide";
     [JsonPropertyName("setup_complete")] public bool SetupComplete { get; init; }

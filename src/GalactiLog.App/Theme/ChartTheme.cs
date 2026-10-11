@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Platform;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -160,6 +161,48 @@ public static class ChartTheme
         private void OnChanged(object? sender, EventArgs e) => _rebuild?.Invoke();
     }
 
+    // The interface font's Regular weight, which FontManager hands over on every font change, and
+    // the axis label size, which follows the root font size. Both are values LiveCharts2 holds
+    // rather than looks up, so each change re-runs Apply and Changed rebuilds the live charts.
+    private static SKTypeface? _typeface;
+
+    /// <summary>The window's root font size. Axis tick labels are drawn at this times
+    /// <see cref="AxisLabelRatio"/>. Set directly only before the first <see cref="Apply"/>, as
+    /// AppHost.Build does; afterwards through <see cref="ApplyRootFontSize"/>.</summary>
+    public static double RootFontSize { get; set; } = 14d;
+
+    /// <summary>The axis tick label size relative to the root font size.</summary>
+    public const double AxisLabelRatio = 0.786;
+
+    /// <summary>Loads the selected sans family's Regular TTF as the charts' global typeface and
+    /// re-applies. A missing asset leaves the previous typeface in place.</summary>
+    public static void ApplyTypeface(Uri regularTtf)
+    {
+        if (AssetLoader.Exists(regularTtf))
+        {
+            // Read whole into SKData: a typeface made from a managed stream reads it lazily,
+            // after the asset stream would already be disposed.
+            using var stream = AssetLoader.Open(regularTtf);
+            using var data = SKData.Create(stream);
+            _typeface = SKTypeface.FromData(data);
+        }
+
+        Apply();
+    }
+
+    /// <summary>Sets the axis label size from the window's root font size, re-applying only when
+    /// it changes, because every general settings save reaches here.</summary>
+    public static void ApplyRootFontSize(double rootFontSize)
+    {
+        if (rootFontSize == RootFontSize)
+        {
+            return;
+        }
+
+        RootFontSize = rootFontSize;
+        Apply();
+    }
+
     /// <summary>
     /// Installs the configuration. Safe to call again: a theme change calls it a second time and
     /// the second call replaces the first's paints. Idempotent with respect to the library's own
@@ -199,6 +242,11 @@ public static class ChartTheme
                 .WithLegendBackgroundPaint(new SolidColorPaint(palette.TooltipBackground))
                 .WithLegendTextPaint(new SolidColorPaint(palette.LegendText));
 
+            if (_typeface is not null)
+            {
+                config.HasGlobalSKTypeface(_typeface);
+            }
+
             // Spec 14.5: even the library's own fallback colour cycle comes from tokens, so a
             // series left unpainted still cannot show a colour that is not in the theme.
             config.GetTheme().Colors =
@@ -210,6 +258,7 @@ public static class ChartTheme
                 {
                     axis.LabelsPaint = new SolidColorPaint(Palette.AxisLabels);
                     axis.SeparatorsPaint = new SolidColorPaint(Palette.Separators);
+                    axis.TextSize = RootFontSize * AxisLabelRatio;
 
                     // An axis TITLE, which this rule left to the library's own axis rule until
                     // Phase 17. That rule paints every title in #FF232323 whatever theme is

@@ -77,6 +77,10 @@ public partial class App : Application
             // database in front of the first frame.
             Theme.ThemeManager.ApplyStored(Services?.GetService<Theme.StartupTheme>());
 
+            // The stored general.font, applied the same way and after the theme, so the charts
+            // re-read the palette and pick up the typeface in one more Apply.
+            Theme.FontManager.ApplyStored(Services?.GetService<Theme.StartupFont>());
+
             // Spec 12.11: hiding the window must not end the process, and a session that starts
             // into the tray has no window at all (behaviour 9). OnLastWindowClose, the framework
             // default, exits when the last window CLOSES; explicit is what makes the exit path

@@ -960,6 +960,13 @@ public static class AppHost
         // builds this too and never resolves it, exactly like StartupState above.
         builder.Services.AddSingleton(_ => new Theme.StartupTheme(initialGeneral.Theme));
 
+        // The stored general.font, carried by value for FontManager.ApplyStored exactly as the
+        // theme id above is. The chart axis label size is a process-wide value with no Avalonia
+        // dependency, so it is set here from the stored text size and followed on every general
+        // save below.
+        builder.Services.AddSingleton(_ => new Theme.StartupFont(initialGeneral.Font));
+        ChartTheme.RootFontSize = MainWindowViewModel.ResolveRootFontSize(initialGeneral.TextSize);
+
         builder.Services.AddSingleton(serviceProvider => new WindowResidencyService(
             settingsStore.GetGeneral,
             requestShutdown: () =>
@@ -2766,7 +2773,11 @@ public static class AppHost
             // region's maximum width follow the document rather than the value read at startup.
             // Posted to the UI thread because GeneralChanged is raised on the saving thread and
             // both properties drive layout.
-            settingsStore.GeneralChanged += (_, general) => UiPost.Default(() => shell.ApplyGeneral(general));
+            settingsStore.GeneralChanged += (_, general) => UiPost.Default(() =>
+            {
+                shell.ApplyGeneral(general);
+                ChartTheme.ApplyRootFontSize(shell.RootFontSize);
+            });
 
             return shell;
         });

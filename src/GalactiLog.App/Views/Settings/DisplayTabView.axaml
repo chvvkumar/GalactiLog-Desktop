@@ -4,6 +4,7 @@
              xmlns:conv="using:GalactiLog.App.Converters"
              xmlns:dashboard="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:theme="using:GalactiLog.App.Theme"
              x:Class="GalactiLog.App.Views.Settings.DisplayTabView"
              x:Name="Root"
              x:DataType="settings:DisplayTabViewModel">
@@ -60,6 +61,20 @@
               <ComboBox.ItemTemplate>
                 <DataTemplate DataType="settings:ThemeOption">
                   <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </StackPanel>
+
+          <StackPanel Spacing="4">
+            <TextBlock Text="Font" Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox x:Name="FontBox"
+                      HorizontalAlignment="Stretch"
+                      ItemsSource="{Binding FontChoices}"
+                      SelectedItem="{Binding SelectedFont, Mode=TwoWay}">
+              <ComboBox.ItemTemplate>
+                <DataTemplate DataType="theme:FontOption">
+                  <TextBlock Text="{Binding DisplayName}" FontFamily="{Binding FontFamily}" />
                 </DataTemplate>
               </ComboBox.ItemTemplate>
             </ComboBox>
