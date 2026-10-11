@@ -864,12 +864,15 @@ public class FrameTableViewTests
         var container = (ListBoxItem)list.ContainerFromIndex(0)!;
         Assert.True(container.IsSelected);
         Assert.True(view.TryFindResource("ColorBgElevated", out var lit));
+        // GetBaseValue: Theme/Controls.axaml fades a list item's fill over 120 ms and the headless
+        // clock does not advance, so the plain read would return the fade's first frame.
         Assert.Equal(
             ((ISolidColorBrush)lit!).Color,
             ((ISolidColorBrush)container.GetVisualDescendants()
                 .OfType<ContentPresenter>()
                 .First()
-                .Background!).Color);
+                .GetBaseValue(ContentPresenter.BackgroundProperty)
+                .GetValueOrDefault()!).Color);
 
         list.SelectAll();
         Dispatcher.UIThread.RunJobs();

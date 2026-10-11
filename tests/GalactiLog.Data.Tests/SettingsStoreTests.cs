@@ -104,7 +104,7 @@ public class SettingsStoreTests
         Assert.Equal(90, general.ActivityRetentionDays);
         Assert.Equal("Information", general.LogLevel);
         Assert.Equal("civil-dusk", general.Theme);
-        Assert.Equal("small", general.TextSize);
+        Assert.Equal("medium", general.TextSize);
         Assert.Equal("extra-wide", general.ContentWidth);
         Assert.False(general.SetupComplete);
         Assert.Equal(0, general.CatalogsLoadedVersion);

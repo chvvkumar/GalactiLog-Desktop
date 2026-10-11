@@ -551,20 +551,26 @@ public class MatrixTabTests
     // ratios were computed from the shipped token values with the WCAG 2.x formula and are
     // asserted to two decimals, so this table and the report's table cannot drift apart: if the
     // shipped tokens move, this case fails by name rather than the report going quietly stale.
+    //
+    // The ui-polish theme foundation moved the four dark themes' surfaces one step lighter, and the
+    // dark ink here is ColorBgElevated, so those twelve rows were re-measured from the new tokens.
+    // civil-dusk at r=+1 fell from 4.58 to 4.22 with it, below AA, which the AA clause below
+    // tolerates only because neither ink reaches 4.5 there; a darker dark ink is the matrix's own
+    // decision to make, not the theme's.
     public static TheoryData<string, double, bool, double> LabelInkRows => new()
     {
-        { "civil-dusk", -1d, true, 6.28d },
-        { "civil-dusk", 0d, false, 11.07d },
-        { "civil-dusk", 1d, true, 4.58d },
-        { "luminance", -1d, true, 6.59d },
-        { "luminance", 0d, false, 12.03d },
-        { "luminance", 1d, true, 4.80d },
+        { "civil-dusk", -1d, true, 5.79d },
+        { "civil-dusk", 0d, false, 10.20d },
+        { "civil-dusk", 1d, true, 4.22d },
+        { "luminance", -1d, true, 6.50d },
+        { "luminance", 0d, false, 11.88d },
+        { "luminance", 1d, true, 4.74d },
         { "red-light", -1d, true, 3.86d },
-        { "red-light", 0d, false, 4.49d },
-        { "red-light", 1d, true, 8.14d },
-        { "deep-sky", -1d, true, 6.75d },
-        { "deep-sky", 0d, false, 13.92d },
-        { "deep-sky", 1d, true, 6.20d },
+        { "red-light", 0d, false, 4.50d },
+        { "red-light", 1d, true, 8.15d },
+        { "deep-sky", -1d, true, 6.01d },
+        { "deep-sky", 0d, false, 12.39d },
+        { "deep-sky", 1d, true, 5.52d },
         { "atlas", -1d, true, 5.42d },
         { "atlas", 0d, false, 17.24d },
         { "atlas", 1d, true, 6.02d },
@@ -610,8 +616,8 @@ public class MatrixTabTests
             Assert.Equal(best, InkContrast.Contrast(chosen, cell), 6);
             Assert.Equal(expectedRatio, best, 2);
 
-            // And it clears WCAG AA wherever either ink can reach it. Two of the eighteen rows cannot,
-            // both on red-light, where every ink in the theme is a shade of one red; there the
+            // And it clears WCAG AA wherever either ink can reach it. Three of the eighteen rows
+            // cannot, civil-dusk at r=+1 and two on red-light, where every ink in the theme is a shade of one red; there the
             // rule promises only the better of the two, which the assertion above already pinned.
             if (best >= 4.5d)
             {

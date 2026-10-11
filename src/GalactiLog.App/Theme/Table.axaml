@@ -58,7 +58,12 @@
 
     <!-- A sort header's title over a ColumnViewModel (Title plus SortGlyph), for a Button cell in a
          Header row; the view keeps its own Command. TableRow puts tc-head and the column's kind
-         class on the Button. -->
+         class on the Button.
+
+         The title is the header tier, t-label: label size, weight 500, the tertiary ink and
+         0.6 pixels of tracking (spec 14.4), so the header row is a band of its own above rows set
+         at the body size in the primary ink. The custom head above takes the same tier. The sort
+         glyph keeps the accent ink, which tc-sortglyph below sets after the tier. -->
     <DataTemplate x:Key="TableSortTitle" x:DataType="dash:ColumnViewModel">
       <Grid ColumnDefinitions="*,Auto">
         <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis"

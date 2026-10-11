@@ -805,15 +805,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     // Design-spec 14.4's four sizes. An unrecognized value, which a hand-edited settings document
-    // can produce, falls back to the fresh profile's small, 14, rather than to zero, exactly as
+    // can produce, falls back to the fresh profile's medium, 16, rather than to zero, exactly as
     // ResolveContentMaxWidth falls back. SettingsStore.ValidateGeneral refuses
     // anything outside the four on the write path; this is the read side's backstop.
     internal static double ResolveRootFontSize(string textSize) => textSize switch
     {
-        "medium" => 16d,
+        "small" => 14d,
         "large" => 18d,
         "x-large" => 20d,
-        _ => 14d,
+        _ => 16d,
     };
 
     // Coordinator ruling Q2: the spec names the three values and no pixel figures. normal is

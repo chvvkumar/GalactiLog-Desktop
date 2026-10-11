@@ -8,7 +8,9 @@ namespace GalactiLog.App.Tests.Theme;
 // GalactiLog.Core.Tests FileSafetyTest: no shell, no rendering, a regex over the file.
 //
 // P12's direction refuses shaded buttons. A button is a 1 px outline over a transparent fill,
-// with exactly one filled exception (Button.primary, ColorAccent at full strength). The two rules
+// with exactly one filled exception (Button.primary, ColorAccent at full strength). The ui-polish
+// theme foundation adds the accent tier, an accent tint through the ColorAccentFill theme keys,
+// which is a token and not a literal and so passes; the full strength accent stays the primary's. The two rules
 // below are the choke point for that: the first keeps the gradient, the tinted fill and the drop
 // shadow out of every Button style, the second keeps button, tag and callout styling out of the
 // views entirely so it cannot be reintroduced one view at a time (design lesson 2).
@@ -57,6 +59,24 @@ public class ControlStyleScanTest
         @"BoxShadow",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // The accent at full strength as a fill. The ui-polish theme foundation adds the accent
+    // button tier, whose fill is a tint (ColorAccentFill15, 20 and 25 through DynamicResource), so
+    // "no accent fill" is no longer the rule; "no FULL STRENGTH accent fill outside Button.primary"
+    // is. The closing brace is what lets ColorAccentFill* through: ColorAccent, ColorAccentHover
+    // and ColorAccentPressed end the key there, a tint key does not.
+    private static readonly Regex SolidAccentFill = new(
+        @"Property\s*=\s*""[\w.]*Background""[^>]*\{DynamicResource\s+ColorAccent(?:Hover|Pressed)?\}",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    // An Opacity setter. Allowed only on a :disabled block, which is where the tiers' half-opacity
+    // disabled form lives; on any other Button or ToggleButton block it would override that
+    // inherited dim.
+    private static readonly Regex OpacitySetter = new(
+        @"<Setter\s+Property\s*=\s*""Opacity""",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private const string PrimarySelector = "<Style Selector=\"Button.primary";
+
     [Fact]
     public void NoButtonStyle_CarriesAGradientOrASemiTransparentAccentFill()
     {
@@ -98,13 +118,127 @@ public class ControlStyleScanTest
                     offenders.Add($"{selector}: {name}");
                 }
             }
+
+            // The one filled button: the accent at full strength is Button.primary's alone.
+            if (!selector.StartsWith(PrimarySelector, StringComparison.Ordinal)
+                && SolidAccentFill.IsMatch(block.Value))
+            {
+                offenders.Add($"{selector}: full strength accent fill outside Button.primary");
+            }
+
+            if (!selector.Contains(":disabled", StringComparison.Ordinal)
+                && OpacitySetter.IsMatch(block.Value))
+            {
+                offenders.Add($"{selector}: Opacity outside a :disabled block");
+            }
         }
 
         Assert.True(
             offenders.Count == 0,
-            "A Button style must be a 1 px outline over a transparent fill, or Button.primary's "
-            + "full strength ColorAccent. Offenders:" + Environment.NewLine
-            + string.Join(Environment.NewLine, offenders));
+            "A Button style must be an outline over a transparent fill, an accent tint through the "
+            + "ColorAccentFill keys, or Button.primary's full strength ColorAccent. Offenders:"
+            + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+    }
+
+    // The two selector-dependent rules above, made falsifiable the way the case below makes the
+    // five plain ones. The full strength accent fires outside Button.primary and not inside it,
+    // a tint passes everywhere, and an Opacity setter passes only on :disabled.
+    [Fact]
+    public void TheSelectorDependentRules_FireWhereTheyShouldAndOnlyThere()
+    {
+        const string solidOutsidePrimary = """
+            <Style Selector="Button.bad /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ColorAccent}" />
+            </Style>
+            """;
+        const string tint = """
+            <Style Selector="Button.accent /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+            </Style>
+            """;
+        const string hoverOutsidePrimary = """
+            <Style Selector="Button.bad:pointerover /template/ ContentPresenter">
+              <Setter Property="Background" Value="{DynamicResource ColorAccentHover}" />
+            </Style>
+            """;
+
+        Assert.Matches(SolidAccentFill, solidOutsidePrimary);
+        Assert.Matches(SolidAccentFill, hoverOutsidePrimary);
+        Assert.DoesNotMatch(SolidAccentFill, tint);
+        Assert.Matches(ButtonStyleBlock, tint);
+
+        Assert.Matches(OpacitySetter, """<Setter Property="Opacity" Value="0.5" />""");
+        Assert.DoesNotMatch(OpacitySetter, """<DoubleTransition Property="Opacity" Duration="0:0:0.15" />""");
+
+        // And the shipped file carries both halves: the primary's own full strength fill, which the
+        // exemption exists for, and the tint the accent tier uses.
+        var controls = File.ReadAllText(
+            Path.Combine(SourceScan.SrcRoot(), "GalactiLog.App", "Theme", "Controls.axaml"));
+        var primary = ButtonStyleBlock.Matches(controls).Cast<Match>()
+            .Where(block => block.Value.StartsWith(PrimarySelector, StringComparison.Ordinal))
+            .ToList();
+        Assert.Contains(primary, block => SolidAccentFill.IsMatch(block.Value));
+        Assert.Contains("{DynamicResource ColorAccentFill15}", controls, StringComparison.Ordinal);
+    }
+
+    // Spec 14.4: controls take RadiusSm and cards RadiusMd. The comp's 3 pixel literal is withdrawn,
+    // and a literal written back would be a second radius scale inside one file. Zero is not a
+    // radius choice but its absence (the tab strip's underline needs square ends), so it passes.
+    [Fact]
+    public void ControlsAxaml_CarriesNoCornerRadiusLiteral()
+    {
+        var literal = new Regex(
+            @"CornerRadius""\s+Value\s*=\s*""(?!0"")\d|CornerRadius\s*=\s*""(?!0"")\d",
+            RegexOptions.Compiled);
+
+        Assert.Matches(literal, """<Setter Property="CornerRadius" Value="3" />""");
+        Assert.Matches(literal, """<Border CornerRadius="4" />""");
+        Assert.DoesNotMatch(literal, """<Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />""");
+        Assert.DoesNotMatch(literal, """<Setter Property="CornerRadius" Value="0" />""");
+
+        var path = Path.Combine(SourceScan.SrcRoot(), "GalactiLog.App", "Theme", "Controls.axaml");
+        var text = Regex.Replace(File.ReadAllText(path), "<!--.*?-->", "", RegexOptions.Singleline);
+        var offenders = text.Split('\n')
+            .Select(line => line.Trim())
+            .Where(line => literal.IsMatch(line))
+            .ToList();
+
+        Assert.True(
+            offenders.Count == 0,
+            "Theme/Controls.axaml writes a CornerRadius literal; use RadiusSm or RadiusMd:"
+            + Environment.NewLine + string.Join(Environment.NewLine, offenders));
+        Assert.Contains("{StaticResource RadiusSm}", text, StringComparison.Ordinal);
+    }
+
+    // Every Button tier has a disabled form. The base Button:disabled block sets Opacity 0.5 on the
+    // control, which no presenter rule can outrank and which the case above keeps every other
+    // Button block from overriding, so a tier inherits it by being a Button. A tier that paints its
+    // own presenter ink or fill declares its own :disabled block as well, so Fluent's grey disabled
+    // wash or the base block's quiet ink does not replace the tier's colour at half strength.
+    [Fact]
+    public void EveryButtonTier_HasADisabledFormOrInheritsOne()
+    {
+        var controls = File.ReadAllText(
+            Path.Combine(SourceScan.SrcRoot(), "GalactiLog.App", "Theme", "Controls.axaml"));
+        var blocks = ButtonStyleBlock.Matches(controls).Cast<Match>().Select(block => block.Value).ToList();
+
+        // The inherited half: the base block exists and carries the dim.
+        var baseDisabled = blocks.SingleOrDefault(block =>
+            block.StartsWith("<Style Selector=\"Button:disabled\">", StringComparison.Ordinal));
+        Assert.NotNull(baseDisabled);
+        Assert.Contains("""<Setter Property="Opacity" Value="0.5" />""", baseDisabled, StringComparison.Ordinal);
+
+        // The declared half: each tier that paints its own state carries its own :disabled block.
+        foreach (var tier in new[] { "primary", "accent", "row", "link" })
+        {
+            Assert.Contains(
+                blocks,
+                block => block.StartsWith($"<Style Selector=\"Button.{tier}", StringComparison.Ordinal)
+                    && !block.StartsWith($"<Style Selector=\"Button.{tier}:disabled", StringComparison.Ordinal));
+            Assert.True(
+                blocks.Any(block => block.StartsWith($"<Style Selector=\"Button.{tier}:disabled", StringComparison.Ordinal)),
+                $"Button.{tier} paints its own presenter and declares no :disabled block.");
+        }
     }
 
     // The falsifiability check for the case above. That case scans a clean file, so it passes

@@ -33,6 +33,14 @@ public class ButtonStateStyleTest
     private static Color ColorOf(IBrush? brush)
         => Assert.IsAssignableFrom<ISolidColorBrush>(brush).Color;
 
+    // The brush the styles settle on, without the colour fade in flight. Theme/Controls.axaml fades
+    // a button presenter's Background and BorderBrush over 120 ms, and the headless platform's
+    // clock does not advance on its own, so the plain property read returns the fade's first
+    // frame, which is the previous state's colour. GetBaseValue reads beneath the animation layer,
+    // which is the value the selector chose and therefore what these cases are about.
+    private static IBrush? Settled(ContentPresenter presenter, StyledProperty<IBrush?> property)
+        => presenter.GetBaseValue(property).GetValueOrDefault();
+
     private static (Window Window, Button Button, ContentPresenter Presenter) ShowPrimaryButton()
     {
         var button = new Button { Name = "Primary", Content = "Run scan" };
@@ -60,13 +68,13 @@ public class ButtonStateStyleTest
 
         // The rest state first, so a pass on the disabled assertion cannot come from the fill
         // never having been there.
-        Assert.Equal(Token("ColorAccent"), ColorOf(presenter.Background));
+        Assert.Equal(Token("ColorAccent"), ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)));
 
         button.IsEnabled = false;
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal(0, ColorOf(presenter.Background).A);
-        Assert.Equal(Token("ColorBorderEmphasis"), ColorOf(presenter.BorderBrush));
+        Assert.Equal(0, ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)).A);
+        Assert.Equal(Token("ColorBorderEmphasis"), ColorOf(Settled(presenter, ContentPresenter.BorderBrushProperty)));
         Assert.Equal(Token("ColorTextTertiary"), ColorOf(TextElement.GetForeground(presenter)));
 
         window.Close();
@@ -83,11 +91,11 @@ public class ButtonStateStyleTest
 
         pseudo.Set(":pointerover", true);
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(Token("ColorAccentHover"), ColorOf(presenter.Background));
+        Assert.Equal(Token("ColorAccentHover"), ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)));
 
         pseudo.Set(":pressed", true);
         Dispatcher.UIThread.RunJobs();
-        Assert.Equal(Token("ColorAccentPressed"), ColorOf(presenter.Background));
+        Assert.Equal(Token("ColorAccentPressed"), ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)));
 
         // The ink is the surface colour throughout: the pressed block changes the fill only.
         Assert.Equal(Token("ColorBgSurface"), ColorOf(TextElement.GetForeground(presenter)));
@@ -106,14 +114,14 @@ public class ButtonStateStyleTest
         var (window, button, presenter) = ShowPrimaryButton();
         var pseudo = (IPseudoClasses)button.Classes;
 
-        var rest = ColorOf(presenter.Background);
+        var rest = ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty));
         Assert.Equal(Token("ColorAccent"), rest);
 
         pseudo.Set(":pressed", true);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.NotEqual(rest, ColorOf(presenter.Background));
-        Assert.Equal(Token("ColorAccentPressed"), ColorOf(presenter.Background));
+        Assert.NotEqual(rest, ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)));
+        Assert.Equal(Token("ColorAccentPressed"), ColorOf(Settled(presenter, ContentPresenter.BackgroundProperty)));
 
         window.Close();
     }

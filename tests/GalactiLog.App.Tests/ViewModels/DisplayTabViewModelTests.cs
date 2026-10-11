@@ -225,9 +225,9 @@ public class DisplayTabViewModelTests
     {
         var harness = await CreateAsync();
 
-        // The fresh default is small, so the round trip has to move away from it to be a change
+        // The fresh default is medium, so the round trip has to move away from it to be a change
         // at all.
-        Assert.Equal("small", harness.Tab.SelectedTextSize.Id);
+        Assert.Equal("medium", harness.Tab.SelectedTextSize.Id);
 
         harness.Tab.SelectedTextSize = DisplayTabViewModel.TextSizes.Single(option => option.Id == "large");
         await Settle(harness);
@@ -242,14 +242,14 @@ public class DisplayTabViewModelTests
     [InlineData("x-large", 20d)]
     public void TextSize_MapsToTheFourSpecPixelValues(string id, double pixels)
     {
-        // Design-spec 14.4: Small 14 (default), Medium 16, Large 18, Extra large 20.
+        // Design-spec 14.4: Small 14, Medium 16 (default), Large 18, Extra large 20.
         Assert.Equal(pixels, DisplayTabViewModel.TextSizes.Single(option => option.Id == id).Pixels);
         Assert.Equal(pixels, MainWindowViewModel.ResolveRootFontSize(id));
     }
 
     [Fact]
-    public void TextSize_UnknownValue_FallsBackToFourteen()
-        => Assert.Equal(14d, MainWindowViewModel.ResolveRootFontSize("gargantuan"));
+    public void TextSize_UnknownValue_FallsBackToSixteen()
+        => Assert.Equal(16d, MainWindowViewModel.ResolveRootFontSize("gargantuan"));
 
     [Theory]
     [InlineData("normal")]
@@ -745,7 +745,7 @@ public class DisplayTabViewModelTests
         harness.Tab.SelectedTextSize = DisplayTabViewModel.TextSizes.Single(option => option.Id == "large");
         await Settle(harness);
 
-        Assert.Equal("small", harness.Tab.SelectedTextSize.Id);
+        Assert.Equal("medium", harness.Tab.SelectedTextSize.Id);
         Assert.Equal("general.text_size is refused by this test", harness.Tab.ErrorMessage);
     }
 

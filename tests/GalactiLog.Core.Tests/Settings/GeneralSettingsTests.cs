@@ -14,7 +14,7 @@ namespace GalactiLog.Core.Tests.Settings;
 // silently invert shipped behaviour. The checkbox on the preview modal is what turns it off.
 public class GeneralSettingsTests
 {
-    // A fresh profile opens on Civil Dusk at the small text size. A failure looks like the previous defaults, luminance (then observing-ledger) and
+    // A fresh profile opens on Civil Dusk at the medium text size. A failure looks like the previous defaults, luminance (then observing-ledger) and
     // large, surviving in the record.
     [Fact]
     public void Theme_AndTextSize_FreshProfileDefaults()
@@ -22,7 +22,7 @@ public class GeneralSettingsTests
         var settings = JsonSerializer.Deserialize<GeneralSettings>("{}")!;
 
         Assert.Equal("civil-dusk", settings.Theme);
-        Assert.Equal("small", settings.TextSize);
+        Assert.Equal("medium", settings.TextSize);
     }
 
     [Fact]
