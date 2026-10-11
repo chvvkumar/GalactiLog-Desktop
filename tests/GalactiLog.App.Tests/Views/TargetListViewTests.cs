@@ -170,10 +170,11 @@ public class TargetListViewTests
         Assert.Contains("1 to 50 of 120", texts);
 
         // Phase 14C: the session count is the trailing button's tooltip, not a label on the row
-        // (spec 12.2, "The sessions control"). The fixture opens the row, so the button reads
-        // Collapse. View_TheSessionsControl_CarriesTheCountOnItsTooltip is the dedicated case.
+        // (spec 12.2, "The sessions control"). The button reads Nights in either state; the
+        // chevron beside it carries the state. View_TheSessionsControl_CarriesTheCountOnItsTooltip
+        // is the dedicated case.
         Assert.DoesNotContain("2 sessions", texts);
-        Assert.Contains("Collapse", texts);
+        Assert.Contains("Nights", texts);
     }
 
     // Phase 18 Task 6, spec 12.2: the mosaic link sits in the Name cell of a row whose target has
@@ -312,7 +313,7 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view, WidePageAllotment, 1900d);
 
-        Assert.Contains("Equipment", VisibleHeaderTitles(view));
+        Assert.Contains("EQUIPMENT", VisibleHeaderTitles(view));
         Assert.Contains("RC8 / ASI2600MM", VisibleCellTexts(view));
 
         var equipmentColumn = list.Columns.Single(column => column.Key == "equipment");
@@ -322,7 +323,7 @@ public class TargetListViewTests
         list.ToggleColumnCommand.Execute(equipmentColumn);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.DoesNotContain("Equipment", VisibleHeaderTitles(view));
+        Assert.DoesNotContain("EQUIPMENT", VisibleHeaderTitles(view));
         Assert.DoesNotContain("RC8 / ASI2600MM", VisibleCellTexts(view));
 
         // Review item 2: the whole header cell collapses, not just the button inside it. On the
@@ -341,7 +342,7 @@ public class TargetListViewTests
         AssertHeaderAlignsWithRows(view, list, skip: "equipment");
 
         // The name column's checkbox is the one that cannot be cleared (ruling Q5).
-        Assert.Contains("Name", VisibleHeaderTitles(view));
+        Assert.Contains("NAME", VisibleHeaderTitles(view));
     }
 
     // The six header cells: the sort buttons, whose Content is a column. Every button is a
@@ -576,6 +577,143 @@ public class TargetListViewTests
         Assert.Equal("Columns", ToolTip.GetTip(gear));
     }
 
+    // ---- Task 5 (ui-polish): one keyboard path into the list (ux-flow F8) ---------------------
+
+    [AvaloniaFact]
+    public void Tab_ReachesTheListOnce_StepsIntoTheFocusedRow_AndWalksItsControls()
+    {
+        // Fix round 1, I1. From outside, the list is one stop: Tab lands on the row, not on each
+        // row's controls. From the row, Tab steps in (OnRowKeyDown) and the row's Local tab
+        // navigation walks its controls, the mosaic link and then Nights, before leaving the list.
+        // Shift+Tab walks back through the row to the row itself. The row's full-width open
+        // button is a tab stop again (IsTabStop="False" is gone) and is reached on the way back.
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage(
+            [SampleRow with { Mosaics = [new MosaicLink(Guid.NewGuid(), "Alpha")] }, WideRow], 120, 44_640d, 148, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        var after = new Button { Content = "after" };
+        var host = new DockPanel { Width = PageAllotment, HorizontalAlignment = HorizontalAlignment.Left };
+        DockPanel.SetDock(after, Dock.Bottom);
+        host.Children.Add(after);
+        host.Children.Add(view);
+        var window = new Window { Width = 1280, Height = 800, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        var first = (ListBoxItem)rows.ContainerFromIndex(0)!;
+        var focus = window.FocusManager!;
+        object? Focused() => focus.GetFocusedElement();
+        string? NameOf(object? element) => (element as Control)?.Name;
+        void Tab(RawInputModifiers modifiers = RawInputModifiers.None)
+        {
+            window.KeyPressQwerty(PhysicalKey.Tab, modifiers);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Assert.All(
+            view.GetVisualDescendants().OfType<Button>().Where(b => b.Name == "RowOpen"),
+            button => Assert.True(button.IsTabStop));
+
+        // The column gear is the last stop before the rows (the toolbar and the header come first).
+        view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ColumnGearButton").Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+
+        Tab();
+        Assert.Same(first, Focused());
+
+        Tab();
+        Assert.Equal("MosaicLink", NameOf(Focused()));
+        Assert.Same(list.Rows[0], (Focused() as Control)?.DataContext);
+
+        Tab();
+        Assert.Equal("SessionsToggle", NameOf(Focused()));
+        Assert.Same(list.Rows[0], (Focused() as Control)?.DataContext);
+
+        // Row 0 is closed, so Nights is its last stop and the next Tab leaves the list.
+        Tab();
+        Assert.Same(after, Focused());
+
+        // Back in, then back out through the row to the row itself.
+        first.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+        Tab();
+        Tab();
+        Assert.Equal("SessionsToggle", NameOf(Focused()));
+
+        var walked = new List<string?>();
+        for (var step = 0; step < 4 && !ReferenceEquals(Focused(), first); step++)
+        {
+            Tab(RawInputModifiers.Shift);
+            walked.Add(NameOf(Focused()));
+            Assert.Contains(first, ((Visual)Focused()!).GetSelfAndVisualAncestors());
+        }
+
+        Assert.Same(first, Focused());
+        Assert.Contains("RowOpen", walked);
+    }
+
+    [AvaloniaFact]
+    public void TheList_OpensWithEnter_TogglesNightsWithSpace_AndMovesWithTheArrows()
+    {
+        var list = CreatePopulatedList(bothRows: true);
+        list.Rows[0].IsExpanded = false;
+        var opened = new List<TargetOpenRequest>();
+        list.TargetOpened += (_, request) => opened.Add(request);
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view);
+
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        var first = (ListBoxItem)rows.ContainerFromIndex(0)!;
+        first.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(list.Rows[1], rows.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(list.Rows[0], rows.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(list.Rows[0].IsExpanded);
+        Assert.Empty(opened);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        var request = Assert.Single(opened);
+        Assert.Equal(list.Rows[0].GroupKey, request.GroupKey);
+    }
+
+    [AvaloniaFact]
+    public void ARow_CarriesAContextMenu_WhoseOpenItemOpensThatRow()
+    {
+        var list = CreatePopulatedList();
+        var opened = new List<TargetOpenRequest>();
+        list.TargetOpened += (_, request) => opened.Add(request);
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        var row = view.GetVisualDescendants().OfType<Panel>()
+            .First(panel => panel.ContextFlyout is MenuFlyout && panel.DataContext is TargetRowViewModel);
+        var items = ((MenuFlyout)row.ContextFlyout!).Items.Cast<MenuItem>().ToList();
+        Assert.Equal(["Open", "Copy name"], items.Select(item => item.Header as string));
+
+        // Opened on its row, the menu's items carry that row, so Open runs the row's own open.
+        var flyout = (MenuFlyout)row.ContextFlyout!;
+        flyout.ShowAt(row);
+        Dispatcher.UIThread.RunJobs();
+        Assert.All(items, item => Assert.Same(list.Rows[0], item.DataContext));
+
+        items[0].Command!.Execute(items[0].CommandParameter);
+        flyout.Hide();
+        var request = Assert.Single(opened);
+        Assert.Equal(list.Rows[0].GroupKey, request.GroupKey);
+    }
+
     [AvaloniaFact]
     public void View_DeclaresNoStyleOfItsOwn()
     {
@@ -714,7 +852,12 @@ public class TargetListViewTests
         var row = RowGrids(view)[0];
 
         Assert.True(view.Bounds.Width >= WidePageAllotment - 0.5d);
-        Assert.Equal(view.Bounds.Width - TargetListView.TrailingInset, RightEdge(row, view), 1);
+        // The row starts inside the table card's left edge, so it ends one card edge short of
+        // the full inset.
+        Assert.Equal(
+            view.Bounds.Width - TargetListView.TrailingInset + (TargetListView.CardEdges / 2),
+            RightEdge(row, view),
+            1);
         Assert.True(
             RightEdge(row, view) - RightEdge(toggle, view) <= 12.5d,
             $"The sessions control ends {RightEdge(row, view) - RightEdge(toggle, view)} short of the row's trailing edge.");
@@ -776,8 +919,8 @@ public class TargetListViewTests
         Assert.Equal(header.Bounds.Height - 0.5d, rule.A.Y, 1);
 
         var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBorderDefault")!).Color;
-        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "TargetListRows");
-        Color? Band(int index) => (((ContentPresenter)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        Color? Band(int index) => (((ListBoxItem)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
         Assert.NotEqual(zebra, Band(0));
         Assert.Equal(zebra, Band(1));
 
@@ -944,20 +1087,28 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_TheSessionsControl_ReadsExpandThenCollapse()
+    public void View_TheSessionsControl_ReadsNights_AndTurnsItsChevronWhenOpen()
     {
+        // Task 5 (ui-polish): a quiet row button reading Nights, with a chevron that turns a
+        // quarter while the row is open, rather than the word flipping between Expand and
+        // Collapse. The state is still spoken: the automation name follows it.
         var list = CreatePopulatedList();
         list.Rows[0].IsExpanded = false;
         var view = new TargetListView { DataContext = list };
         ShowList(view);
 
         var toggle = Assert.Single(view.GetVisualDescendants().OfType<Button>(), b => b.Name == "SessionsToggle");
-        Assert.Equal("Expand", toggle.Content);
+        Assert.Contains("row", toggle.Classes);
+        Assert.Contains("Nights", toggle.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+        var chevron = Assert.Single(toggle.GetVisualDescendants().OfType<ShapePath>());
+        Assert.DoesNotContain("open", chevron.Classes);
+        Assert.Equal("Show nights", Avalonia.Automation.AutomationProperties.GetName(toggle));
 
         toggle.Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("Collapse", toggle.Content);
+        Assert.Contains("open", chevron.Classes);
+        Assert.Equal("Hide nights", Avalonia.Automation.AutomationProperties.GetName(toggle));
     }
 
     [AvaloniaFact]
@@ -1073,10 +1224,14 @@ public class TargetListViewTests
         var nameTop = blocks[0].TranslatePoint(default, view)!.Value.Y;
         var commonTop = blocks[1].TranslatePoint(default, view)!.Value.Y;
         var designation = Assert.Single(NamedCells(view, "DesignationCell"));
-        var designationTop = designation.TranslatePoint(default, view)!.Value.Y;
+
+        // The designation is the caption tier since Task 5 (ui-polish), smaller than the name, so
+        // the two share a line by their centres rather than by their tops.
+        static double Middle(Visual block, Visual root)
+            => block.TranslatePoint(new Point(0, block.Bounds.Height / 2), root)!.Value.Y;
 
         Assert.Equal(nameTop, commonTop, 1);
-        Assert.Equal(nameTop, designationTop, 1);
+        Assert.Equal(Middle(blocks[0], view), Middle(designation, view), 0);
     }
 
     [AvaloniaFact]
@@ -1124,7 +1279,8 @@ public class TargetListViewTests
         var pager = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListPager");
         var header = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow");
         Assert.True(
-            Grid.GetRow(pager) < Grid.GetRow(header),
+            pager.TranslatePoint(new Point(0, pager.Bounds.Height), view)!.Value.Y
+                <= header.TranslatePoint(default, view)!.Value.Y,
             "The pager no longer sits above the header row.");
     }
 
@@ -1189,7 +1345,7 @@ public class TargetListViewTests
         Assert.True(view.IsEquipmentShown);
         Assert.All(NamedCells(view, "EquipmentCell"), cell => Assert.True(cell.IsEffectivelyVisible));
         Assert.True(ColumnWidth(view, "TargetListHeaderRow", 4) > 0);
-        Assert.Contains("Equipment", VisibleHeaderTitles(view));
+        Assert.Contains("EQUIPMENT", VisibleHeaderTitles(view));
     }
 
     [AvaloniaFact]
@@ -1253,9 +1409,10 @@ public class TargetListViewTests
         var source = File.ReadAllText(FindTargetListViewAxaml());
 
         // The width rule's budget, summed: 120 Name floor + 208 Designation + 120 Palette
-        // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 12 trailing inset.
+        // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 14 trailing inset
+        // (the 12 pixel bar and the table card's two edges).
         // Integration and Last session are budgeted at 160, not capped there.
-        Assert.Equal(1176d, TargetListView.DefaultFitWidth);
+        Assert.Equal(1178d, TargetListView.DefaultFitWidth);
         Assert.Equal(
             TargetListView.DefaultFitWidth,
             TargetListView.FitWidthFor(CreatePopulatedList().Columns));
@@ -1478,7 +1635,7 @@ public class TargetListViewTests
     // one that carries the column's own title, whichever side of the marker it sits on.
     private static TextBlock HeaderTitle(ContentControl header)
         => header.GetVisualDescendants().OfType<TextBlock>()
-            .Single(block => block.Text == ((ColumnViewModel)header.Content!).Title);
+            .Single(block => block.Text == ((ColumnViewModel)header.Content!).HeaderTitle);
 
     private static double LeftEdge(Visual control, Visual root)
         => control.TranslatePoint(default, root)!.Value.X;

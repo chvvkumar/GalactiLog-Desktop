@@ -608,7 +608,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Raised by the notice's one action, Review. The shell opens Settings on the Library tab
+    /// Raised by the notice's one action, Review, and by the empty state's Open settings. The shell
+    /// opens Settings on the Library tab
     /// (spec 12.2); the route is <c>MainWindowViewModel</c>'s, the same idiom the Statistics
     /// timeline's <c>DateRangeRequested</c> already uses, rather than a second one.
     /// </summary>
@@ -640,6 +641,13 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         ReviewScanFiltersRequested?.Invoke(this, SettingsDestination.LibraryNameRules);
     }
+
+    /// <summary>The first-run empty state's Open settings action (spec 12.10): the Library tab,
+    /// where a library folder is added. It rides the same route as Review, so the shell's one
+    /// Settings handler answers both.</summary>
+    [RelayCommand]
+    private void OpenLibrarySettings()
+        => ReviewScanFiltersRequested?.Invoke(this, SettingsDestination.Library);
 
     /// <summary>The in-flight debounce-and-search, so a test can await it instead of sleeping.</summary>
     internal Task? PendingSearch { get; private set; }

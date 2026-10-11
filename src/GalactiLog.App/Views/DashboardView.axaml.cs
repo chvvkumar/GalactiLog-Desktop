@@ -11,10 +11,6 @@ public partial class DashboardView : UserControl
     /// <summary>The target list column's leading margin, declared 8,0,0,0 in the markup.</summary>
     private const double ListColumnMargin = 8d;
 
-    /// <summary>What TargetListRegion costs the list inside it: Padding 16 and BorderThickness 1,
-    /// both sides, as the markup declares them.</summary>
-    private const double ListRegionChrome = (2 * 16d) + (2 * 1d);
-
     public DashboardView()
     {
         InitializeComponent();
@@ -109,7 +105,7 @@ public partial class DashboardView : UserControl
             if (args.Property == Visual.BoundsProperty && DataContext is DashboardViewModel page)
             {
                 page.MaxRenderedPanelWidth = root.Bounds.Width
-                    - splitter.Width - ListColumnMargin - ListRegionChrome - TargetListView.ListMinWidth;
+                    - splitter.Width - ListColumnMargin - TargetListView.ListMinWidth;
             }
         };
     }

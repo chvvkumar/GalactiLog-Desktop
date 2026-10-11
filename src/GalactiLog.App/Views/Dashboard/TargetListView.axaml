@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:avc="using:Avalonia.Data.Converters"
+             xmlns:conv="using:GalactiLog.App.Converters"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
              xmlns:t="using:GalactiLog.App.Controls.Table"
@@ -75,114 +76,126 @@
            Border.tag's chrome (ColorBadgeBg base, 1 px edge, radius 3) with the edge and shadow
            re-tinted from the view model; the inner Border is the tint wash inside the edge, which
            is the one way to layer a translucent tint over a themed base without a literal. The
-           label is the tint, as on the web. -->
+           label is the tint, as on the web, where the tint reads against the surface
+           (TintInkConverter, 3:1, the filter panel's own rule); otherwise the primary ink the inner
+           Border hands down. -->
       <Border Classes="tag" Margin="0,0,6,0" Padding="0"
               BorderBrush="{Binding GlassEdge}"
               BoxShadow="{Binding GlassShadow}">
-        <Border Background="{Binding GlassFill}" Padding="6,1">
+        <Border Background="{Binding GlassFill}"
+                Padding="6,1"
+                TextElement.Foreground="{DynamicResource ColorTextPrimary}">
           <TextBlock Text="{Binding CanonicalName}"
                      FontWeight="SemiBold"
-                     Foreground="{Binding Tint}"
-                     ToolTip.Tip="{Binding FrameCountText}" />
+                     Tag="{DynamicResource ColorBgSurface}"
+                     ToolTip.Tip="{Binding FrameCountText}">
+            <TextBlock.Foreground>
+              <MultiBinding Converter="{x:Static conv:TintInkConverter.Instance}">
+                <Binding Path="Tint" />
+                <Binding Path="Tag" RelativeSource="{RelativeSource Self}" />
+              </MultiBinding>
+            </TextBlock.Foreground>
+          </TextBlock>
         </Border>
       </Border>
     </DataTemplate>
   </UserControl.Resources>
 
-  <Grid RowDefinitions="Auto,Auto,*" Grid.IsSharedSizeScope="True">
-    <!-- The pager (spec 12.2 Pager paragraph, Phase 14C Task 4), above the header row, where the
-         count is read before the rows rather than at the bottom (questions.md Q5, which is why
-         PageStatusText stays and stays rendered here). It carries the header row's ScrollInset, so
-         its trailing edge, the page-size select, lines up with the header's, the column gear.
+  <Grid RowDefinitions="Auto,*" Grid.IsSharedSizeScope="True">
+    <!-- The toolbar bar (spec 12.2 Pager paragraph, Phase 14C Task 4): one card above the table,
+         the web's own arrangement. The count and the page size read together on the left, the
+         count first because it is read before the rows (questions.md Q5, which is why
+         PageStatusText stays and stays rendered here); the pager sits on the right.
 
-         Three columns, not two (launched-app look): Previous, the page numbers and Next are
-         Auto, and spec 12.2's own pageRange rule caps that set at seven slots whatever the total
-         page count, so the column is inherently bounded. PageStatusText gets the middle column,
-         and only that column is starred: a bare TextBlock in a star column measures within the
-         width the Grid actually offers it and trims there, where a StackPanel does not, because
-         a horizontal StackPanel's own MeasureOverride offers each child infinite width regardless
-         of what its own parent offered it. The page-size select stays Auto on the trailing end. -->
-    <Grid Grid.Row="0"
-          x:Name="TargetListPager"
-          Margin="{x:Static t:TableMetrics.ScrollInset}"
-          ColumnDefinitions="Auto,*,Auto">
-      <StackPanel Grid.Column="0"
-                  Orientation="Horizontal"
-                  Spacing="6"
-                  VerticalAlignment="Center">
-        <Button Classes="sm" Content="Previous" Command="{Binding PreviousPageCommand}" />
+         The left group is a DockPanel left-aligned in the star column: the page-size select docks
+         after the count and the count fills, so the group is as wide as its content and, when the
+         bar is short, the count is the one element that trims, since the lit page button already
+         carries the current page. Spec 12.2's own pageRange rule caps the page buttons at seven
+         slots whatever the total, so the pager's Auto column is inherently bounded. -->
+    <Border Grid.Row="0"
+            x:Name="TargetListToolbar"
+            Classes="card"
+            Padding="12,8"
+            Margin="0,0,0,8">
+      <Grid x:Name="TargetListPager" ColumnDefinitions="*,Auto">
+        <DockPanel Grid.Column="0" HorizontalAlignment="Left" VerticalAlignment="Center">
+          <!-- Spec 5.8.1's four choices, writing general.default_page_size on selection through
+               TargetListViewModel.SelectedPageSize. An unlisted stored value reads as the select's
+               own default, 50 (NormalizePageSize), rather than clamping to the nearest option. -->
+          <StackPanel DockPanel.Dock="Right"
+                      Orientation="Horizontal"
+                      Spacing="8"
+                      Margin="16,0,0,0"
+                      VerticalAlignment="Center">
+            <TextBlock Text="Rows per page"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <ComboBox ItemsSource="{x:Static dash:TargetListViewModel.PageSizeOptions}"
+                      SelectedItem="{Binding SelectedPageSize}" />
+          </StackPanel>
+          <!-- Fix pass (task4-review.md P2): the range alone ("1 to 25 of 120"), the web's own
+               line, rather than repeating the page count the buttons already show. -->
+          <TextBlock Text="{Binding PageStatusText}"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </DockPanel>
 
-        <!-- The web's own pageRange rule (TargetFeed.tsx), transcribed in
-             TargetListViewModel.BuildPageButtons: one button per page number, and the ellipsis a
-             non-interactive text run of three ASCII full stops rather than a Button (task4.md
-             section 6). Neither carries a TargetRowViewModel as its CommandParameter, so a page
-             click can never be mistaken for a row click. -->
-        <ItemsControl ItemsSource="{Binding PageButtons}">
-          <ItemsControl.ItemsPanel>
-            <ItemsPanelTemplate>
-              <StackPanel Orientation="Horizontal" Spacing="4" />
-            </ItemsPanelTemplate>
-          </ItemsControl.ItemsPanel>
-          <ItemsControl.ItemTemplate>
-            <DataTemplate x:DataType="dash:PageButtonViewModel">
-              <Panel>
-                <TextBlock Text="..."
-                           IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNull}}"
-                           Padding="6,0"
-                           VerticalAlignment="Center"
-                           Foreground="{DynamicResource ColorTextTertiary}" />
-                <!-- Button.page.current (Theme/Controls.axaml, Phase 14C Task 4) marks the current
-                     page; Button.sm keeps every page button the pager's own row height. No new
-                     button style lives here: both classes are the shared vocabulary's.
-                     GoToPageCommand carries no CanExecute (TRACKING item 13: the gate is the
-                     body's, past a click that reaches it directly), so the numbered buttons grey
-                     through a direct IsEnabled binding instead (fix pass, task4-review.md P3),
-                     the same affordance NextPageCommand and PreviousPageCommand now get through
-                     their own CanExecute. -->
-                <Button Classes="sm page"
-                        Classes.current="{Binding IsCurrent}"
-                        IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNotNull}}"
-                        IsEnabled="{Binding #Root.((dash:TargetListViewModel)DataContext).IsRefetching, Converter={x:Static avc:BoolConverters.Not}}"
-                        Content="{Binding Page}"
-                        Command="{Binding #Root.((dash:TargetListViewModel)DataContext).GoToPageCommand}"
-                        CommandParameter="{Binding Page}" />
-              </Panel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+        <StackPanel Grid.Column="1"
+                    Orientation="Horizontal"
+                    Spacing="4"
+                    Margin="16,0,0,0"
+                    VerticalAlignment="Center">
+          <Button Classes="sm" Content="Previous" Command="{Binding PreviousPageCommand}" />
 
-        <Button Classes="sm" Content="Next" Command="{Binding NextPageCommand}" />
-      </StackPanel>
+          <!-- The web's own pageRange rule (TargetFeed.tsx), transcribed in
+               TargetListViewModel.BuildPageButtons: one button per page number, and the ellipsis a
+               non-interactive text run of three ASCII full stops rather than a Button (task4.md
+               section 6). Neither carries a TargetRowViewModel as its CommandParameter, so a page
+               click can never be mistaken for a row click. -->
+          <ItemsControl ItemsSource="{Binding PageButtons}">
+            <ItemsControl.ItemsPanel>
+              <ItemsPanelTemplate>
+                <StackPanel Orientation="Horizontal" Spacing="4" />
+              </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="dash:PageButtonViewModel">
+                <Panel>
+                  <TextBlock Text="..."
+                             IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNull}}"
+                             Padding="4,0"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource ColorTextTertiary}" />
+                  <!-- Button.page.current (Theme/Controls.axaml, Phase 14C Task 4) marks the
+                       current page; Button.sm keeps every page button the pager's own row height.
+                       GoToPageCommand carries no CanExecute (TRACKING item 13: the gate is the
+                       body's, past a click that reaches it directly), so the numbered buttons grey
+                       through a direct IsEnabled binding instead (fix pass, task4-review.md P3). -->
+                  <Button Classes="sm page"
+                          Classes.current="{Binding IsCurrent}"
+                          IsVisible="{Binding Page, Converter={x:Static ObjectConverters.IsNotNull}}"
+                          IsEnabled="{Binding #Root.((dash:TargetListViewModel)DataContext).IsRefetching, Converter={x:Static avc:BoolConverters.Not}}"
+                          Content="{Binding Page}"
+                          Command="{Binding #Root.((dash:TargetListViewModel)DataContext).GoToPageCommand}"
+                          CommandParameter="{Binding Page}" />
+                </Panel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-      <!-- questions.md Q5: the count read before the rows is the Pager paragraph's own reason
-           for the move, so PageStatusText stays and stays rendered; here it is the one element
-           that gives way first, since the lit page button already carries the current page.
-           Fix pass (task4-review.md P2): the text itself is now the range alone ("1 to 25 of
-           120"), the web's own line, rather than repeating the page count the buttons beside it
-           already show; a trailing margin keeps a trimmed run clear of the select even when the
-           leading one alone would not. -->
-      <TextBlock Grid.Column="1"
-                 Text="{Binding PageStatusText}"
-                 Margin="8,0,8,0"
-                 VerticalAlignment="Center"
-                 TextTrimming="CharacterEllipsis"
-                 Foreground="{DynamicResource ColorTextSecondary}" />
+          <Button Classes="sm" Content="Next" Command="{Binding NextPageCommand}" />
+        </StackPanel>
+      </Grid>
+    </Border>
 
-      <!-- Spec 5.8.1's four choices, writing general.default_page_size on selection through
-           TargetListViewModel.SelectedPageSize. An unlisted stored value reads as the select's
-           own default, 50 (NormalizePageSize), rather than clamping to the nearest option. -->
-      <StackPanel Grid.Column="2"
-                  Orientation="Horizontal"
-                  Spacing="6"
-                  VerticalAlignment="Center">
-        <TextBlock Text="Rows per page"
-                   VerticalAlignment="Center"
-                   Foreground="{DynamicResource ColorTextSecondary}" />
-        <ComboBox ItemsSource="{x:Static dash:TargetListViewModel.PageSizeOptions}"
-                  SelectedItem="{Binding SelectedPageSize}" />
-      </StackPanel>
-    </Grid>
-
+    <!-- The table card. No padding, so the header rule and the zebra bands run edge to edge inside
+         its hairline; the cells' own gutters are the inset. -->
+    <Border Grid.Row="1"
+            x:Name="TargetListCard"
+            Classes="card"
+            Padding="0">
+    <Grid RowDefinitions="Auto,*">
     <!-- Header row, one cell per column in the order DisplaySettings.DefaultColumns["dashboard"]
          declares, then the custom strip and the sessions column. The sessions column is not a
          persistable column key (spec 5.8.2's default list holds six): its header cell holds the
@@ -196,7 +209,7 @@
          Name carries NameCellMaxWidth on the header cell and on every row cell: a star column in
          Avalonia does not shrink below its cell's desired width, so bounding both by one computed
          figure is what stops the header and the rows resolving different column sets. -->
-    <t:TableRow Grid.Row="1"
+    <t:TableRow Grid.Row="0"
                 x:Name="TargetListHeaderRow"
                 Kind="Header"
                 Columns="{StaticResource TargetCols}"
@@ -268,8 +281,8 @@
           <!-- Phase 14B fixer, fixer list item 41: Path.icon-glyph from Theme/Controls.axaml,
                which is the one declaration of these four stroke setters and carries the
                pointer-over ink this icon had none of. The 16 square here is the icon's own size,
-               not a cell width: it is the one Width in this file and
-               View_NoCellDeclaresAFixedWidth allows it by name. -->
+               not a cell width: View_NoCellDeclaresAFixedWidth allows an icon's Path by name,
+               this one and the Nights chevron. -->
           <Path Width="16"
                 Height="16"
                 Classes="icon-glyph"
@@ -320,7 +333,7 @@
 
          The vertical bar is a table bar (spec.md item 8): always drawn and never auto-hidden, so it
          reserves its width and the rows end where the header's ScrollInset ends. -->
-    <ScrollViewer Grid.Row="2"
+    <ScrollViewer Grid.Row="1"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Visible"
                   t:Table.Scroller="True">
@@ -330,14 +343,34 @@
            adds. IsHitTestVisible carries the input-disable half, not IsEnabled: an
            IsEnabled="False" subtree drops keyboard focus in Avalonia and never restores it, and the
            web's own treatment is pointer-events-none, a hit-test rule rather than a disablement.
-           Classes.refetching carries the dim, its Opacity setter on ItemsControl.refetching in
-           Theme/Controls.axaml rather than inline. Classes="table" is the zebra. -->
-      <ItemsControl x:Name="TargetListRows"
-                    Classes="table"
-                    ItemsSource="{Binding Rows}"
-                    IsHitTestVisible="{Binding !IsRefetching}"
-                    Classes.refetching="{Binding IsRefetching}">
-        <ItemsControl.ItemTemplate>
+           Classes.refetching carries the dim (ListBox.table.refetching in Theme/Table.axaml).
+           t:Table.Scroller adds the table class, the zebra, and keeps the list's own (disabled)
+           scroller from auto-hiding like any table host.
+
+           One ListBox, one tab stop (ux-flow F8): Tab lands on the list once, Up and Down move the
+           selection, Enter opens the selected target and Space opens or closes its nights. Those
+           two keys are TargetListView.axaml.cs's, on the ListBoxItem only, so a key typed into a
+           custom cell's editor inside a row stays that editor's. The panel is a plain StackPanel,
+           as the ItemsControl's was, because the outer scroller already carries the rows and every
+           row has to be realized for the shared size groups to measure the page. -->
+      <ListBox x:Name="TargetListRows"
+               t:Table.Scroller="True"
+               ItemsSource="{Binding Rows}"
+               SelectionMode="Single"
+               Background="Transparent"
+               BorderThickness="0"
+               Padding="0"
+               ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+               ScrollViewer.VerticalScrollBarVisibility="Disabled"
+               AutomationProperties.Name="Targets"
+               IsHitTestVisible="{Binding !IsRefetching}"
+               Classes.refetching="{Binding IsRefetching}">
+        <ListBox.ItemsPanel>
+          <ItemsPanelTemplate>
+            <StackPanel />
+          </ItemsPanelTemplate>
+        </ListBox.ItemsPanel>
+        <ListBox.ItemTemplate>
           <DataTemplate DataType="dash:TargetRowViewModel">
             <!-- One zebra band per target, the night expander inside it under the cells. -->
             <StackPanel>
@@ -349,21 +382,32 @@
                    It is a sibling of the row inside this Panel, not a cell of it, so it stretches
                    the whole row including the sessions column and takes part in no column at all:
                    inside the row it added about 20 pixels to the star share that the header did
-                   not have (measured). What keeps a click on Expand off it is z-order alone: the
+                   not have (measured). What keeps a click on Nights off it is z-order alone: the
                    row is declared after the button and therefore paints and hit tests above it.
 
-                   IsTabStop is off and the automation name is the row's own (phase-review P3): an
-                   empty, nameless, focusable Button per row put up to 250 unlabelled stops in the
-                   tab order at the largest page size. The keyboard reaches the row through its
-                   cells; the name is still set, so a screen reader that walks the tree reads it. -->
+                   It is no longer taken out of the tab order. The ListBox around the rows is the
+                   one tab stop (its TabNavigation is Once), so a row's buttons cost the page no
+                   stops of their own, and the automation name is still the row's.
+
+                   The context flyout is the row's right-click menu (ux-flow F9): Open is the same
+                   command the click runs, Copy name puts the target's name on the clipboard. -->
               <Panel>
-                <Button Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
+                <Panel.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuItem Header="Open"
+                              Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="Copy name"
+                              Click="OnCopyNameClick" />
+                  </MenuFlyout>
+                </Panel.ContextFlyout>
+                <Button x:Name="RowOpen"
+                        Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
                         CommandParameter="{Binding}"
                         HorizontalAlignment="Stretch"
                         VerticalAlignment="Stretch"
                         Background="Transparent"
                         BorderThickness="0"
-                        IsTabStop="False"
                         AutomationProperties.Name="{Binding Name}"
                         MinHeight="0"
                         Padding="0" />
@@ -405,7 +449,6 @@
                         <Path Width="14" Height="14" Stroke="{DynamicResource ColorAccent}" StrokeThickness="1.4" Data="M1,1 h5 v5 h-5 z M8,1 h5 v5 h-5 z M1,8 h5 v5 h-5 z M8,8 h5 v5 h-5 z" />
                       </Button>
                       <TextBlock Text="{Binding Name}"
-                                 FontWeight="SemiBold"
                                  VerticalAlignment="Center"
                                  TextTrimming="CharacterEllipsis"
                                  Foreground="{DynamicResource ColorTextPrimary}" />
@@ -417,9 +460,12 @@
                                TextTrimming="CharacterEllipsis" />
                   </DockPanel>
 
+                  <!-- Small muted mono, the web's designation: the caption tier in the secondary
+                       ink (Theme/Table.axaml's tc-sub), never a local Foreground, so a missing
+                       value's "-" still takes the faint ink. -->
                   <TextBlock t:TableRow.Col="designation"
                              x:Name="DesignationCell"
-                             Classes="mono"
+                             Classes="mono t-caption tc-sub"
                              Text="{Binding Designation}"
                              ToolTip.Tip="{Binding Designation}" />
 
@@ -468,16 +514,27 @@
                                 ItemsSource="{Binding CustomCells}"
                                 ItemTemplate="{StaticResource TableCustomCell}" />
 
-                  <!-- The sessions control, at the row's trailing end in the web application's own
-                       form (spec 12.2, user ruling U3 item 3): the word, not a chevron, and the
-                       session count on the tooltip rather than as a label beside the name. -->
+                  <!-- The sessions control, at the row's trailing end (spec 12.2, user ruling U3
+                       item 3): the word Nights and a chevron that turns a quarter while the row is
+                       open, with the session count on the tooltip rather than as a label beside the
+                       name. Button.row, the tier for an action repeated on every row, so the column
+                       of them recedes into the rows instead of reading as a column of boxes. -->
                   <Button t:TableRow.Col="sessions"
                           x:Name="SessionsToggle"
-                          Classes="sm"
+                          Classes="sm row"
                           HorizontalAlignment="Right"
-                          Content="{Binding SessionsToggleText}"
                           Command="{Binding ToggleSessionsCommand}"
-                          ToolTip.Tip="{Binding SessionsSummaryText}" />
+                          AutomationProperties.Name="{Binding SessionsToggleText}"
+                          ToolTip.Tip="{Binding SessionsSummaryText}">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Text="Nights" VerticalAlignment="Center" />
+                      <Path Width="16" Height="16"
+                            Classes="icon-glyph tc-disclosure"
+                            Classes.open="{Binding IsExpanded}"
+                            Data="{StaticResource IconChevronRight}"
+                            VerticalAlignment="Center" />
+                    </StackPanel>
+                  </Button>
                 </t:TableRow>
               </Panel>
 
@@ -537,7 +594,7 @@
                         <Button t:TableRow.Col="action"
                                 x:Name="DeepDiveButton"
                                 Content="Deep dive"
-                                Classes="sm"
+                                Classes="sm row"
                                 Command="{Binding #Root.((dash:TargetListViewModel)DataContext).DeepDiveCommand}"
                                 CommandParameter="{Binding}" />
                       </t:TableRow>
@@ -547,8 +604,10 @@
               </StackPanel>
             </StackPanel>
           </DataTemplate>
-        </ItemsControl.ItemTemplate>
-      </ItemsControl>
+        </ListBox.ItemTemplate>
+      </ListBox>
     </ScrollViewer>
+    </Grid>
+    </Border>
   </Grid>
 </UserControl>

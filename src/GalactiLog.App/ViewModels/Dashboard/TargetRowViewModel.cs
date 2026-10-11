@@ -283,9 +283,10 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(SessionsToggleText))]
     private bool _isExpanded;
 
-    /// <summary>The trailing sessions button's label, the web application's own wording (spec 12.2,
-    /// user ruling U3). It replaces the chevron pair the leading toggle cell carried.</summary>
-    public string SessionsToggleText => IsExpanded ? "Collapse" : "Expand";
+    /// <summary>The trailing sessions button's automation name. The button itself
+    /// reads "Nights" beside a chevron that turns when the row is open, so the state is drawn
+    /// rather than written; this is what a screen reader hears in its place.</summary>
+    public string SessionsToggleText => IsExpanded ? "Hide nights" : "Show nights";
 
     private readonly Func<bool>? _isRefetching;
 

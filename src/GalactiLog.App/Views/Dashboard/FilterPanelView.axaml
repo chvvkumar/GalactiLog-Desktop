@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
+             xmlns:conv="using:GalactiLog.App.Converters"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              x:Class="GalactiLog.App.Views.Dashboard.FilterPanelView"
              x:DataType="dash:FilterPanelViewModel">
@@ -36,21 +37,41 @@
                     CornerRadius="{DynamicResource RadiusSm}" />
     </DataTemplate>
 
-    <!-- Spec 12.2: "each tinted with its configured colour". The tint is carried on the border so
-         the pill's own surface stays on tokens in both the checked and unchecked states. -->
+    <!-- Spec 12.2: "each tinted with its configured colour". A tinted chip, never a coloured block:
+         the name over a 1 px tint edge, and once selected the tint's 18 percent wash on a Border
+         behind the label, the target list's badge figure. The wash sits inside rather than on the
+         ToggleButton because the shared toggle style owns the presenter's own fill. The name takes
+         the tint only where it reads against the surface (TintInkConverter, 3:1); otherwise the
+         primary ink the StackPanel hands down, which is what keeps L legible on the light themes. -->
     <DataTemplate x:Key="FilterPill" DataType="dash:ToggleOptionViewModel">
       <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
                     BorderBrush="{Binding Tint}"
-                    BorderThickness="2"
                     Margin="0,0,4,4"
-                    Padding="8,3"
+                    Padding="0"
                     CornerRadius="{DynamicResource RadiusSm}">
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-          <TextBlock Text="{Binding FrameCount}"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorTextTertiary}" />
-        </StackPanel>
+        <Panel>
+          <Border Background="{Binding Fill18}"
+                  CornerRadius="{DynamicResource RadiusSm}"
+                  IsVisible="{Binding IsSelected}" />
+          <StackPanel Orientation="Horizontal"
+                      Spacing="4"
+                      Margin="8,4"
+                      TextElement.Foreground="{DynamicResource ColorTextPrimary}">
+            <TextBlock Text="{Binding Label}"
+                       VerticalAlignment="Center"
+                       Tag="{DynamicResource ColorBgSurface}">
+              <TextBlock.Foreground>
+                <MultiBinding Converter="{x:Static conv:TintInkConverter.Instance}">
+                  <Binding Path="Tint" />
+                  <Binding Path="Tag" RelativeSource="{RelativeSource Self}" />
+                </MultiBinding>
+              </TextBlock.Foreground>
+            </TextBlock>
+            <TextBlock Text="{Binding FrameCount}"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextTertiary}" />
+          </StackPanel>
+        </Panel>
       </ToggleButton>
     </DataTemplate>
 
@@ -398,21 +419,31 @@
     <!-- The name, like the collapse chevron's in DashboardView.axaml, is this control's only text
          (fixer-list item 21): the strip's one way back to the panel was unreachable from outside
          the process and announced as a bare "button". -->
-    <Button Grid.Row="0"
-            x:Name="FilterStripToggle"
-            Classes="chevron"
-            HorizontalAlignment="Center"
-            Margin="0,4,0,4"
-            Command="{Binding TogglePanelCommand}"
-            AutomationProperties.Name="Expand filters"
-            ToolTip.Tip="Show the filter panel">
-      <Path Data="{StaticResource IconChevronRight}"
-            Classes="icon-glyph"
-            Width="16"
-            Height="16" />
-    </Button>
+    <!-- A labelled toggle rather than a bare chevron (ux-flow F13): beside the navigation rail's
+         own collapsed column of icons, the word is what says these are the page's filters and not
+         more navigation. A hairline below it parts the toggle from the section icons. -->
+    <Border Grid.Row="0" Classes="rule" Padding="0,4,0,4">
+      <Button x:Name="FilterStripToggle"
+              Classes="chevron"
+              HorizontalAlignment="Center"
+              Padding="4"
+              Command="{Binding TogglePanelCommand}"
+              AutomationProperties.Name="Expand filters"
+              ToolTip.Tip="Filters">
+        <StackPanel Spacing="4">
+          <Path Data="{StaticResource IconChevronRight}"
+                Classes="icon-glyph"
+                HorizontalAlignment="Center"
+                Width="16"
+                Height="16" />
+          <TextBlock Text="Filters"
+                     Classes="t-caption"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </Border>
 
-    <ItemsControl Grid.Row="1" x:Name="FilterStripSections" ItemsSource="{Binding Sections}">
+    <ItemsControl Grid.Row="1" x:Name="FilterStripSections" ItemsSource="{Binding Sections}" Margin="0,4,0,0">
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="dash:FilterSectionViewModel">
           <Button Classes="quiet sm strip-item"

@@ -184,7 +184,10 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
         foreach (var key in DisplaySettings.DefaultColumns[DisplaySettings.DashboardTableId])
         {
             Columns.Add(new ColumnViewModel(
-                key, ColumnTitles[key], visible.Contains(key), canHide: key != "name"));
+                key, ColumnTitles[key], visible.Contains(key), canHide: key != "name")
+            {
+                HeaderTitle = ColumnTitles[key].ToUpperInvariant(),
+            });
         }
 
         // Spec 12.2's landing state: newest session first, page one, page size from

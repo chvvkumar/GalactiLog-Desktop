@@ -505,6 +505,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             case SettingsDestination.LibraryNameRules:
                 OpenSettingsAt("library", page => (page as LibraryTabViewModel)?.RequestNameRulesInView());
                 break;
+            case SettingsDestination.Library:
+                OpenSettingsAt("library", _ => { });
+                break;
 
             // Review P3-1. The comment above promises that a fourth destination is a member and an
             // arm; without this, forgetting the arm routes the user silently nowhere and the notice

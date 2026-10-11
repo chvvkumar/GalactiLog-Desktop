@@ -28,20 +28,27 @@
       <ColumnDefinition Width="*" />
     </Grid.ColumnDefinitions>
 
-    <Grid Grid.Column="0" RowDefinitions="Auto,Auto,*">
-      <!-- The panel's own collapse chevron and the Filters heading. Both belong to the expanded
-           state: at 48 pixels neither fits, and the strip carries its own chevron instead. The
-           dashboard carries no help glyph. -->
+    <!-- The filter rail sits on the surface tier, one step lighter than the page the navigation
+         rail stands on, so the two left-hand columns read as page filters beside app navigation
+         rather than as two look-alike rails. A card with no padding: the sections inside carry
+         their own insets, as they did on the page. -->
+    <Border Grid.Column="0"
+            x:Name="FilterPanelCard"
+            Classes="card"
+            Padding="0">
+    <Grid RowDefinitions="Auto,Auto,*">
+      <!-- The panel's own collapse chevron and the Filters caption. Both belong to the expanded
+           state: at 48 pixels neither fits, and the strip carries its own labelled toggle instead.
+           The dashboard carries no help glyph. -->
       <Grid Grid.Row="0"
             x:Name="FilterPanelHeading"
             ColumnDefinitions="*,Auto"
-            Margin="4,0,0,4"
+            Margin="12,8,4,4"
             IsVisible="{Binding !IsFilterPanelShowingStrip}">
         <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
           <TextBlock Text="Filters"
-                     FontWeight="SemiBold"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
+                     Classes="t-label"
+                     VerticalAlignment="Center" />
         </StackPanel>
         <!-- A drawn Path, never a Unicode guillemet: DESIGN.md section 8 refuses a glyph standing
              in for an icon, and the pair now lives once in Theme/Controls.axaml (ruling E2).
@@ -113,6 +120,7 @@
         <dashViews:FilterPanelView DataContext="{Binding Filters}" />
       </Border>
     </Grid>
+    </Border>
 
     <!-- Ruling E1's splitter, in an 8 pixel column of its own: one with no column overlays its
          neighbour and makes the committed width ambiguous. The GridSplitter style in
@@ -209,26 +217,12 @@
 
       <!-- The target list (Task 7) and, in its place, spec 12.10's empty states (Task 8).
 
-           Phase 20: the rows inside moved to the Ledger vocabulary at Phase 14C and the shell
-           around them follows now. The card fill and the radius are gone, so nothing here draws a
-           card any more.
-
-           The 16 padding and the 1 pixel edge on ALL FOUR sides stay, and deliberately.
-           DashboardView.axaml.cs's ListRegionChrome is the literal (2 * 16) + (2 * 1), the figure
-           the panel's layout bound is computed from, and this file's own markup is what that
-           constant reads. A top-only rule was tried as one edit with that constant and was
-           reverted: with the border costing the list nothing across, the constant drops to 32, the
-           panel's bound grows by 2, and three DashboardViewTests pins go red by exactly those two
-           pixels (the forced-open panel reads 636 against 634, the re-applied bound 316 against 314,
-           the collapsed strip 60 against 58). Those pins are not this phase's to move, so the
-           four-sided hairline stays. DESIGN.md section 4's rule is about the radius and the card,
-           not about a 1 px outline, and TargetListView.axaml and TargetDetailView.axaml already
-           carry plain edges. -->
+           No chrome of its own: the list draws two cards inside itself, the toolbar bar and the
+           table, so a frame here would be a card around cards. DashboardView.axaml.cs's panel
+           bound therefore charges this region nothing, and TargetListView.ListMinWidth carries the
+           cards' own edges. -->
       <Border Grid.Row="2"
-              x:Name="TargetListRegion"
-              Padding="16"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1">
+              x:Name="TargetListRegion">
         <Panel>
           <!-- The visibility binding sits on the wrapper, not on TargetListView: that control's
                DataContext is Targets, and a compiled binding there would be typed against
