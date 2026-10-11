@@ -279,7 +279,7 @@ public class ActivityViewTests
         var (_, view) = Show(page);
 
         Assert.True(page.Rows.Single().IsUnseen);
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
         Assert.True(badge.IsVisible);
     }
 
@@ -293,8 +293,8 @@ public class ActivityViewTests
         var (_, view) = Show(page);
 
         Assert.False(page.Rows.Single().IsUnseen);
-        var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("tag")).ToList();
-        Assert.All(badges, b => Assert.False(b.IsVisible));
+        var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Name == "NewBadge").ToList();
+        Assert.False(Assert.Single(badges).IsVisible);
     }
 
     [AvaloniaFact]
@@ -304,7 +304,8 @@ public class ActivityViewTests
             page: (_, _, _) => Factory.Page([Factory.Row(1, timestamp: Factory.Noon)]));
         var (_, view) = Show(page);
 
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
+        Assert.Contains("tag", badge.Classes);
         Assert.Equal("new", (badge.Child as TextBlock)?.Text);
     }
 
@@ -318,7 +319,7 @@ public class ActivityViewTests
             page: (_, _, _) => Factory.Page([Factory.Row(1, timestamp: instant)]));
         var (_, view) = Show(page);
 
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
         var date = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "2025-03-04");
 
         Assert.Same(date.GetVisualParent(), badge.GetVisualParent());

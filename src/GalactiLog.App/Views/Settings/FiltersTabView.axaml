@@ -79,14 +79,10 @@
            editor", built from the same GroupingEditorViewModel the web's GroupingEditor
            component drives with showColorPicker true. -->
       <Border x:Name="FilterGroupsCard"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Text="Filter Groups"
+            <TextBlock Text="Filter groups"
                        FontWeight="SemiBold"
                        Foreground="{DynamicResource ColorTextPrimary}" />
             <controls:HelpButton Topic="settings.filters.groups" />
@@ -106,7 +102,7 @@
             </TextBox>
             <Button Grid.Column="1"
                     x:Name="AddFilterButton"
-                    Content="Add Filter"
+                    Content="Add filter"
                     Margin="6,0,0,0"
                     Padding="10,3"
                     Command="{Binding AddFilterCommand}" />

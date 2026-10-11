@@ -222,6 +222,36 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal("90°", tile.StateBadge);
     }
 
+    // Rotate CCW is three clockwise turns; Flip V is stored as the (rotation, flip H) pair that
+    // draws the same image, so applying it twice returns the tile to where it started.
+    [Fact]
+    public void RotateCcw_AndFlipVertical_StayInTheStoredPair()
+    {
+        var arranger = Arranger();
+        arranger.Apply(Detail(Panels(1)));
+        var tile = arranger.Tiles[0];
+        arranger.Select(tile);
+        Assert.True(arranger.RotateSelectedCcwCommand.CanExecute(null));
+        Assert.True(arranger.FlipSelectedVerticalCommand.CanExecute(null));
+
+        arranger.RotateSelectedCcwCommand.Execute(null);
+        Assert.Equal(270, tile.Rotation);
+
+        arranger.RotateCcw(tile);
+        arranger.RotateCcw(tile);
+        arranger.RotateCcw(tile);
+        Assert.Equal(0, tile.Rotation);
+
+        arranger.FlipSelectedVerticalCommand.Execute(null);
+        Assert.Equal((180, true), (tile.Rotation, tile.FlipH));
+
+        arranger.Rotate(tile);
+        arranger.FlipVertical(tile);
+        Assert.Equal((270, false), (tile.Rotation, tile.FlipH));
+        arranger.FlipVertical(tile);
+        Assert.Equal((270, true), (tile.Rotation, tile.FlipH));
+    }
+
     [Fact]
     public void ResetAll_ZeroesRotationFlipAndGlobalRotation_AndKeepsPositions()
     {

@@ -39,11 +39,7 @@
            content_width). -->
       <Border x:Name="AppearanceSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Appearance"
@@ -114,11 +110,7 @@
            (spec 5.8.3, questions.md Q23). -->
       <Border x:Name="DefaultsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Defaults"
@@ -164,11 +156,7 @@
            app-wide save bar. -->
       <Border x:Name="MetricVisibilitySection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Metric visibility"
@@ -228,11 +216,7 @@
       <!-- A column picker per persisted table (spec 12.7's Display row, spec 5.8.2). -->
       <Border x:Name="DashboardColumnsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <ContentControl x:Name="DashboardColumnsRegion" Content="{Binding DashboardColumns}">
           <ContentControl.ContentTemplate>
             <DataTemplate DataType="settings:ColumnPickerViewModel">
@@ -292,11 +276,7 @@
 
       <Border x:Name="FrameColumnsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="6">
           <TextBlock Text="{Binding FramesColumns.Title}"
                      FontWeight="SemiBold"
@@ -326,11 +306,7 @@
            custom slugs alone, so it can legally hold none, which is amendment 2.9's empty state. -->
       <Border x:Name="LedgerColumnsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="6">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="{Binding LedgerColumns.Title}"

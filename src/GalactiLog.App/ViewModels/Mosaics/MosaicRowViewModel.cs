@@ -155,7 +155,8 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(ExpandText))]
     public partial bool IsExpanded { get; private set; }
 
-    public string ExpandText => IsExpanded ? "Collapse" : "Expand";
+    /// <summary>"Open" shows the mosaic's panels under its row; "Close" hides them again.</summary>
+    public string ExpandText => IsExpanded ? "Close" : "Open";
 
     /// <summary>The add panel form, built on the first expand.</summary>
     [ObservableProperty]

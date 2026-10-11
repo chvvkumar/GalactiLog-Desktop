@@ -424,6 +424,7 @@ public class MosaicsPageViewModelTests
         Assert.Equal(
             "Dismiss 1 suggestion? It comes back only if new nights of its panels are catalogued.",
             harness.Page.DismissAllConfirmText);
+        Assert.Equal("Dismiss 1 suggestion", harness.Page.DismissAllConfirmButtonText);
 
         await harness.Page.DismissAllCommand.ExecuteAsync(null);
         await harness.Page.PendingLoad;

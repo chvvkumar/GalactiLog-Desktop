@@ -18,10 +18,10 @@
     <StackPanel Spacing="16">
 
       <!-- A read that threw. The error state in place of the controls, not above them: every
-           section below binds IsReady (spec 12.10, review finding I1). No Retry: this tab has no
-           reload command to bind it to. -->
+           section below binds IsReady (spec 12.10, review finding I1). Retry re-runs the read. -->
       <controls:ErrorState x:Name="LoadFailedText"
                            Message="The library settings could not be read."
+                           RetryCommand="{Binding ReloadCommand}"
                            IsVisible="{Binding LoadFailed}" />
 
       <!-- The first read, in flight. Without this the tab renders four empty lists and a slow
@@ -49,7 +49,7 @@
       </ContentControl>
 
       <!-- Scan roots (spec 10.1). Port-only: the web has one environment-supplied root. -->
-      <Border x:Name="ScanRootsSection"
+      <Border x:Name="ScanRootsSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -122,7 +122,7 @@
       </Border>
 
       <!-- Include and exclude paths (spec 10.2). Same shape, the web's copy verbatim. -->
-      <Border x:Name="IncludePathsSection"
+      <Border x:Name="IncludePathsSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -194,7 +194,7 @@
         </StackPanel>
       </Border>
 
-      <Border x:Name="ExcludePathsSection"
+      <Border x:Name="ExcludePathsSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -289,7 +289,7 @@
       </ContentControl>
 
       <!-- Name rules (spec 10.2), the web's six-column editor. -->
-      <Border x:Name="NameRulesSection"
+      <Border x:Name="NameRulesSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -394,7 +394,7 @@
       <!-- This Border switches DataContext to the test-a-path box, so its own IsVisible is
            evaluated against that box. IsReady belongs to the tab, so it is reached through the
            root element, the same way the row templates reach the tab's commands. -->
-      <Border x:Name="TestPathSection"
+      <Border x:Name="TestPathSection" Classes="card"
               IsVisible="{Binding #Root.((settings:LibraryTabViewModel)DataContext).IsReady}"
               DataContext="{Binding TestPath}">
         <StackPanel Spacing="10" x:DataType="settings:TestPathViewModel">
@@ -470,7 +470,7 @@
       </Border>
 
       <!-- Calibration, auto-scan and the watcher. Each saves immediately (spec 12.7's table). -->
-      <Border x:Name="ScanOptionsSection"
+      <Border x:Name="ScanOptionsSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -524,7 +524,7 @@
       </Border>
 
       <!-- Manual scan with progress and cancel (spec 10.4, 10.5, 12.7). -->
-      <Border x:Name="ManualScanSection"
+      <Border x:Name="ManualScanSection" Classes="card"
               IsVisible="{Binding IsReady}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
@@ -590,7 +590,7 @@
       <!-- design-spec 12.1's last sentence: "The wizard is also reachable from Settings as
            'Run setup again'." One link, opening the one SetupWizardService the first-run branch
            uses (Phase 9 Task 9). Hidden when no wizard was supplied. -->
-      <Border x:Name="SetupSection"
+      <Border x:Name="SetupSection" Classes="card"
               IsVisible="{Binding CanRunSetupAgain}">
         <StackPanel Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">

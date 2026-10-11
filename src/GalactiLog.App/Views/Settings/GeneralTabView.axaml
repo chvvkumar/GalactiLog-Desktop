@@ -26,11 +26,7 @@
       <!-- Window behaviour (spec 12.11 behaviours 5 and 6). -->
       <Border x:Name="WindowBehaviourSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Window behaviour"
@@ -67,11 +63,7 @@
       <!-- Startup (spec 12.11 behaviours 8 and 9). -->
       <Border x:Name="StartupSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Startup"
@@ -107,11 +99,7 @@
       <!-- Notifications (spec 12.11 behaviour 10). -->
       <Border x:Name="NotificationsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Notifications"
@@ -135,11 +123,7 @@
       <!-- Survey downloads (spec 12.7): the Sky view window's network switch. -->
       <Border x:Name="SurveyDownloadsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Survey downloads"

@@ -491,7 +491,7 @@ public static class HelpTopics
             + "H-alpha and Halpha under one canonical name makes every page count them as the "
             + "same filter. A filter with no colour of its own takes its category's default until "
             + "you pick one. When GalactiLog finds likely alias pairs it lists them above: Merge "
-            + "folds them into one group and Dismiss hides the pair. Add Filter creates a new "
+            + "folds them into one group and Dismiss hides the pair. Add filter creates a new "
             + "canonical name, and nothing is written until you press Save changes in the bar at the "
             + "bottom of the window."),
 

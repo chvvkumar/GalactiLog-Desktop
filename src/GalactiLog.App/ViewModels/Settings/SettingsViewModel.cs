@@ -105,10 +105,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
                    : new NavigationItem("general", "General", () => general()),
                customColumns is null
                    ? null
-                   : new NavigationItem("custom-columns", "Custom Columns", () => customColumns()),
+                   : new NavigationItem("custom-columns", "Custom columns", () => customColumns()),
                externalTools is null
                    ? null
-                   : new NavigationItem("external-tools", "External Tools", () => externalTools()))
+                   : new NavigationItem("external-tools", "External tools", () => externalTools()))
     {
     }
 
@@ -181,12 +181,12 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             // Spec amendment 2.8, user choice 18: "so the pages that decide what a table shows
             // sit together." Between Display and Storage; the first hyphenated tab key, because
             // "customcolumns" is unreadable and the key is never persisted anywhere.
-            customColumns ?? new NavigationItem("custom-columns", "Custom Columns", new PlaceholderPageViewModel(
-                "Custom Columns", "The Custom Columns settings tab is not available on this surface.")),
+            customColumns ?? new NavigationItem("custom-columns", "Custom columns", new PlaceholderPageViewModel(
+                "Custom columns", "The custom columns settings tab is not available on this surface.")),
 
             // Spec amendment 4c: the thirteenth entry, after Custom Columns and before Storage.
-            externalTools ?? new NavigationItem("external-tools", "External Tools", new PlaceholderPageViewModel(
-                "External Tools", "The External Tools settings tab is not available on this surface.")),
+            externalTools ?? new NavigationItem("external-tools", "External tools", new PlaceholderPageViewModel(
+                "External tools", "The external tools settings tab is not available on this surface.")),
             storage,
             targets,
             maintenance,

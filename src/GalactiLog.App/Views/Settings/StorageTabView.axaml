@@ -31,11 +31,7 @@
            as a pending move and the copy happens on the next start. -->
       <Border x:Name="DataLocationSection"
               IsVisible="{Binding HasDataLocation}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Data location"
@@ -104,11 +100,7 @@
       <!-- Cache location (spec 11.3). -->
       <Border x:Name="CacheLocationSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Thumbnail cache location"
@@ -158,11 +150,7 @@
       <!-- Preview rendering and its cache bound (spec 11.3, 11.5). -->
       <Border x:Name="PreviewSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="File preview"
@@ -219,11 +207,7 @@
       <!-- Thumbnail width (spec 11.3). -->
       <Border x:Name="ThumbnailSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Thumbnails"

@@ -210,6 +210,12 @@ public sealed partial class ActivityRowViewModel : ObservableObject
 
     public string ChildAlertGlyph => ChildAlertSeverity is { } severity ? GlyphFor(severity) : "";
 
+    /// <summary>The collapsed parent's alert glyph takes the same warning and error ink as the
+    /// row's own severity glyph (<see cref="IsWarning"/>, <see cref="IsError"/>).</summary>
+    public bool ChildAlertIsWarning => ChildAlertSeverity == "warning";
+
+    public bool ChildAlertIsError => ChildAlertSeverity == "error";
+
     public string ChildAlertTitle => ChildAlertSeverity switch
     {
         "error" => "This scan recorded an error",

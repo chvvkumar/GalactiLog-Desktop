@@ -113,7 +113,12 @@ public class LibraryTabViewTests
                 $"{section} is still visible after a failed read.");
         }
 
-        Assert.Empty(ButtonTexts(view));
+        // UI polish Task 8: the one visible button is the error state's Retry, bound to the tab's
+        // reload. No editor control shows.
+        Assert.Equal(["Retry"], ButtonTexts(view));
+        Assert.Same(
+            harness.ViewModel.ReloadCommand,
+            view.GetControl<GalactiLog.App.Controls.ErrorState>("LoadFailedText").RetryCommand);
         Assert.False(harness.ViewModel.IsReady);
     }
 
@@ -359,7 +364,7 @@ public class LibraryTabViewTests
         Assert.False(harness.ViewModel.IsReady);
         Assert.False(harness.ViewModel.ShowScanFilterNotice);
         Assert.False(view.GetControl<ContentControl>("ScanFilterNoticeBanner").IsEffectivelyVisible);
-        Assert.Empty(ButtonTexts(view));
+        Assert.Equal(["Retry"], ButtonTexts(view));
     }
 
     // The one mechanical measure of the Observing Ledger vocabulary move (roadmap section 0):

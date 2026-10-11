@@ -48,12 +48,20 @@
                    Classes.band-reject="{Binding IsError}"
                    Width="18"
                    TextAlignment="Center" />
-        <!-- Wide enough for the longest full-word label, "Enrichment". -->
-        <TextBlock Grid.Column="3"
-                   Text="{Binding CategoryLabel}"
-                   Width="96"
-                   TextTrimming="CharacterEllipsis"
-                   Classes="t-caption" />
+        <!-- Wide enough for the longest full-word label, "Enrichment". The category is a tinted
+             pill (the tag's shape over the accent tint), left aligned in its fixed column so the
+             messages after it start on one line. -->
+        <Panel Grid.Column="3" Width="96">
+          <Border Classes="tag"
+                  HorizontalAlignment="Left"
+                  Background="{DynamicResource ColorAccentFill15}"
+                  BorderBrush="{DynamicResource ColorAccentBorder30}">
+            <TextBlock Text="{Binding CategoryLabel}"
+                       TextTrimming="CharacterEllipsis"
+                       Classes="t-caption"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+          </Border>
+        </Panel>
         <TextBlock Grid.Column="4"
                    Text="{Binding Message}"
                    Margin="4,0"
@@ -62,7 +70,8 @@
         <!-- Spec 12.6, PAR-017: the seen marker's "new" badge, in an Auto column of its own after
              the message. It used to share the fixed-width date cell and was drawn on top of the
              date; a column of its own cannot overlap anything. Collapsed, it takes no width. -->
-        <Border Grid.Column="5"
+        <Border x:Name="NewBadge"
+                Grid.Column="5"
                 Classes="tag"
                 Margin="4,0"
                 VerticalAlignment="Top"
@@ -80,8 +89,15 @@
                 Classes="chevron"
                 IsVisible="{Binding IsExpandable}"
                 Command="{Binding ToggleDetailsCommand}"
-                ToolTip.Tip="Details">
-          <TextBlock Text="{Binding DetailsToggleGlyph}" />
+                ToolTip.Tip="Details"
+                AutomationProperties.Name="Details">
+          <!-- A drawn 14 px chevron rather than the 6 px Unicode triangle the text face gave. -->
+          <Panel>
+            <Path Width="14" Height="14" Stretch="Uniform" Classes="icon-glyph" Data="{StaticResource IconChevronRight}"
+                  IsVisible="{Binding !IsDetailsExpanded}" />
+            <Path Width="14" Height="14" Stretch="Uniform" Classes="icon-glyph" Data="{StaticResource IconChevronRight}"
+                  RenderTransform="rotate(90deg)" IsVisible="{Binding IsDetailsExpanded}" />
+          </Panel>
         </Button>
       </Grid>
     </DataTemplate>
@@ -131,9 +147,9 @@
        fills. -->
 
   <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="16">
-    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,8">
+    <Grid Grid.Row="0" ColumnDefinitions="*,Auto,Auto" Margin="0,0,0,16">
       <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-        <TextBlock Text="Activity" Classes="t-label section" VerticalAlignment="Center" />
+        <TextBlock Text="Activity" Classes="t-title" VerticalAlignment="Center" />
         <controls:HelpButton Topic="page.activity" />
         <TextBlock x:Name="TotalLine"
                    Text="{Binding TotalText}"
@@ -157,9 +173,12 @@
               ToolTip.Tip="Applies the activity retention window immediately" />
     </Grid>
 
-    <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,6">
-      <StackPanel Grid.Column="0" Orientation="Vertical" Spacing="4">
-        <ItemsControl x:Name="SeverityPills" ItemsSource="{Binding SeverityOptions}">
+    <Grid Grid.Row="1" ColumnDefinitions="Auto,*" Margin="0,0,0,12">
+      <!-- Each chip row is captioned, so the two leading "all" chips say what they are all of. -->
+      <Grid Grid.Column="0" ColumnDefinitions="Auto,Auto" RowDefinitions="Auto,Auto">
+        <TextBlock Grid.Row="0" Grid.Column="0" Classes="t-label" Text="Severity" VerticalAlignment="Center" Margin="0,0,8,4" />
+        <TextBlock Grid.Row="1" Grid.Column="0" Classes="t-label" Text="Category" VerticalAlignment="Center" Margin="0,0,8,0" />
+        <ItemsControl x:Name="SeverityPills" Grid.Row="0" Grid.Column="1" Margin="0,0,0,4" ItemsSource="{Binding SeverityOptions}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <WrapPanel />
@@ -175,7 +194,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-        <ItemsControl x:Name="CategoryPills" ItemsSource="{Binding CategoryOptions}">
+        <ItemsControl x:Name="CategoryPills" Grid.Row="1" Grid.Column="1" ItemsSource="{Binding CategoryOptions}">
           <ItemsControl.ItemsPanel>
             <ItemsPanelTemplate>
               <WrapPanel />
@@ -191,7 +210,7 @@
             </DataTemplate>
           </ItemsControl.ItemTemplate>
         </ItemsControl>
-      </StackPanel>
+      </Grid>
       <TextBox x:Name="SearchBox"
                Grid.Column="1"
                Margin="12,0,0,0"
@@ -213,20 +232,20 @@
          gated on ShowLoadingLine, not on IsLoading: every reload sets IsLoading, and gating on it
          collapsed the whole feed on Refresh, on Load older and on every post-scan reload (review
          finding 1). -->
+    <!-- The list and its three states sit in one card (spec 14.3). -->
+    <Border Grid.Row="3" Classes="card">
+    <Panel>
     <TextBlock x:Name="LoadingLine"
-               Grid.Row="3"
                Text="Loading activity..."
                Classes="t-caption"
                TextWrapping="Wrap"
                VerticalAlignment="Top"
                IsVisible="{Binding ShowLoadingLine}" />
     <controls:ErrorState x:Name="FailureLine"
-                         Grid.Row="3"
                          Message="The activity log could not be loaded."
                          RetryCommand="{Binding RefreshCommand}"
                          IsVisible="{Binding LoadFailed}" />
     <TextBlock x:Name="EmptyState"
-               Grid.Row="3"
                Text="No activity recorded."
                Classes="t-caption"
                TextWrapping="Wrap"
@@ -234,7 +253,6 @@
                IsVisible="{Binding IsEmpty}" />
 
     <ScrollViewer x:Name="ActivityRowsScroller"
-                  Grid.Row="3"
                   IsVisible="{Binding ShowList}"
                   HorizontalScrollBarVisibility="Disabled"
                   VerticalScrollBarVisibility="Auto">
@@ -268,6 +286,8 @@
                   <TextBlock Grid.Column="2"
                              Text="{Binding ChildAlertGlyph}"
                              ToolTip.Tip="{Binding ChildAlertTitle}"
+                             Classes.band-watch="{Binding ChildAlertIsWarning}"
+                             Classes.band-reject="{Binding ChildAlertIsError}"
                              IsVisible="{Binding HasChildAlert}"
                              VerticalAlignment="Center"
                              Margin="2,0" />
@@ -340,6 +360,8 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
     </ScrollViewer>
+    </Panel>
+    </Border>
 
     <!-- Shown only while the query reported a next cursor, which is the web's rule for its "Load
          older" button. A failed append is reported here rather than in place of the list, so the
