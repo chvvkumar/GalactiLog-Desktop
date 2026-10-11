@@ -34,6 +34,33 @@ public partial class StatisticsView : UserControl
         // wheel handled before it reads ZoomMode (rc5.4 CartesianChart.axaml.cs:812), so a handler
         // attached after it in markup never ran.
         TimelineChart.AddHandler(PointerWheelChangedEvent, OnTimelineWheel, handledEventsToo: true);
+
+        AltitudeArcs.SizeChanged += (_, e) => FitArcColumns(e.NewSize.Width);
+    }
+
+    // The narrowest slot a quarter dome takes, its 12 pixel gutter included, so every dome is at
+    // least 200 pixels wide.
+    internal const double MinArcSlot = 212d;
+
+    /// <summary>
+    /// Fills the RMS by altitude card: as many columns of at least <see cref="MinArcSlot"/> as fit
+    /// across the card, each widened to share the leftover width, so the domes reach the card's
+    /// right edge instead of leaving it empty. Only the panel's ItemWidth moves, which changes the
+    /// rows' height and never the width this reads, so it settles in one pass.
+    /// </summary>
+    private void FitArcColumns(double width)
+    {
+        if (AltitudeArcs.ItemsPanelRoot is not WrapPanel panel || width <= 0d)
+        {
+            return;
+        }
+
+        var columns = Math.Max(1d, Math.Floor(width / MinArcSlot));
+        var slot = Math.Floor(width / columns);
+        if (Math.Abs(slot - panel.ItemWidth) > 0.5d || double.IsNaN(panel.ItemWidth))
+        {
+            panel.ItemWidth = slot;
+        }
     }
 
     private ImagingTimelineViewModel? Timeline => (DataContext as StatisticsViewModel)?.Timeline;

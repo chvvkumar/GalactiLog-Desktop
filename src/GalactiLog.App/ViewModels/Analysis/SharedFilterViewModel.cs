@@ -328,11 +328,12 @@ public sealed partial class SharedFilterViewModel : ObservableObject
     [RelayCommand]
     private void SelectGranularity(AnalysisGranularity granularity) => Granularity = granularity;
 
-    private DateTimeOffset? _dateFrom;
+    private DateTime? _dateFrom;
 
     /// <summary>The inclusive lower bound on <c>images.session_date</c>, or null. Never stored
-    /// (spec 12.14: a date range is a question, not a preference).</summary>
-    public DateTimeOffset? DateFrom
+    /// (spec 12.14: a date range is a question, not a preference). A <c>DateTime</c> because
+    /// that is what the page's <c>CalendarDatePicker</c> binds; only its date part is read.</summary>
+    public DateTime? DateFrom
     {
         get => _dateFrom;
         set
@@ -344,10 +345,10 @@ public sealed partial class SharedFilterViewModel : ObservableObject
         }
     }
 
-    private DateTimeOffset? _dateTo;
+    private DateTime? _dateTo;
 
     /// <summary>The inclusive upper bound on <c>images.session_date</c>, or null.</summary>
-    public DateTimeOffset? DateTo
+    public DateTime? DateTo
     {
         get => _dateTo;
         set
@@ -359,8 +360,8 @@ public sealed partial class SharedFilterViewModel : ObservableObject
         }
     }
 
-    /// <summary>Clears the lower bound. A <c>DatePicker</c> has no clear gesture of its own, which
-    /// is why the dashboard's date range carries the same pair of buttons.</summary>
+    /// <summary>Clears the lower bound. A <c>CalendarDatePicker</c> has no clear gesture of its
+    /// own, so each field carries a clear button beside it.</summary>
     [RelayCommand]
     private void ClearDateFrom() => DateFrom = null;
 
@@ -390,7 +391,7 @@ public sealed partial class SharedFilterViewModel : ObservableObject
             DateFrom is { } from ? From(from) : null,
             DateTo is { } to ? From(to) : null);
 
-    private static DateOnly From(DateTimeOffset value) => DateOnly.FromDateTime(value.Date);
+    private static DateOnly From(DateTime value) => DateOnly.FromDateTime(value);
 
     // The two lists arrive together, on the UI thread, and the collection instances are the ones
     // built in the constructor: the rows are written in place, so neither bound control is ever

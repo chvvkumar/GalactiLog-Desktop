@@ -55,7 +55,7 @@ public class StatisticsViewModelTests
 
         var tile = page.Overview.Tiles[4];
 
-        Assert.Equal("Avg Rig-Session Length", tile.Label);
+        Assert.Equal("Avg rig-session length", tile.Label);
         Assert.Equal(MetricText.Integration(9_000d), tile.Value);
         Assert.Equal("4 rig-sessions", tile.Subtitle);
     }
@@ -68,7 +68,7 @@ public class StatisticsViewModelTests
 
         var tile = page.Overview.Tiles[5];
 
-        Assert.Equal("Avg per Target", tile.Label);
+        Assert.Equal("Avg per target", tile.Label);
         Assert.Equal(MetricText.Integration(12_000d), tile.Value);
         Assert.Equal("3 resolved targets", tile.Subtitle);
     }
@@ -112,7 +112,7 @@ public class StatisticsViewModelTests
         // questions.md Q11 dropped fits_disk_bytes, so the web's "<x> on disk" subtitle has no
         // figure to carry and the card says what its own number is instead.
         var tile = page.Overview.Tiles[2];
-        Assert.Equal("Catalogued Size", tile.Label);
+        Assert.Equal("Catalogued size", tile.Label);
         Assert.Contains("catalogued bytes", tile.Subtitle, StringComparison.Ordinal);
         Assert.DoesNotContain("on disk", tile.Subtitle, StringComparison.Ordinal);
     }

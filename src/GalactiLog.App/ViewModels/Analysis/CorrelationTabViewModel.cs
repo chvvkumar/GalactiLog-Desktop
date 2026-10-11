@@ -78,10 +78,10 @@ public sealed class CorrelationTabViewModel : AnalysisTabViewModel<CorrelationRe
 
     /// <summary>The toggle's label while the outliers are drawn: it states the action it will
     /// perform, which is the web's own wording.</summary>
-    public const string HideOutliersLabel = "Hide Outliers";
+    public const string HideOutliersLabel = "Hide outliers";
 
     /// <inheritdoc cref="HideOutliersLabel"/>
-    public const string ShowOutliersLabel = "Show Outliers";
+    public const string ShowOutliersLabel = "Show outliers";
 
     /// <summary>The scatter's height floor, which is what the chart is at the two smaller standard
     /// window sizes: the smallest of the page's other charts. <c>CorrelationTabView</c> sizes the

@@ -57,7 +57,7 @@ public class AnalysisPageTests
             new[] { "correlation", "distributions", "timeseries", "matrix", "compare" },
             page.Tabs.Select(tab => tab.Key));
         Assert.Equal(
-            new[] { "Correlation", "Distributions", "Time Series", "Matrix", "Compare" },
+            new[] { "Correlation", "Distributions", "Time series", "Matrix", "Compare" },
             page.Tabs.Select(tab => tab.Title));
         Assert.Equal(
             new[]
@@ -200,9 +200,9 @@ public class AnalysisPageTests
 
         // One end alone is a legal one-sided bound, so that edit refreshes like any other; the
         // range only becomes reversed on the second.
-        page.SharedFilter.DateTo = new DateTimeOffset(new DateTime(2025, 6, 1), TimeSpan.Zero);
+        page.SharedFilter.DateTo = new DateTime(2025, 6, 1);
         Settle(page);
-        page.SharedFilter.DateFrom = new DateTimeOffset(new DateTime(2025, 6, 10), TimeSpan.Zero);
+        page.SharedFilter.DateFrom = new DateTime(2025, 6, 10);
         Settle(page);
         var reversed = counts.Total;
 

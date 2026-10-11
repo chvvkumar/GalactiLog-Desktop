@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
              xmlns:analysisviews="using:GalactiLog.App.Views.Analysis"
+             xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              x:Class="GalactiLog.App.Views.Analysis.CorrelationTabView"
              x:DataType="analysis:CorrelationTabViewModel">
@@ -38,7 +39,7 @@
          clipped control hides an affordance the reader cannot then find. -->
     <WrapPanel x:Name="MetricControls">
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
-        <TextBlock Text="X Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <TextBlock Text="X axis" Classes="t-caption" VerticalAlignment="Center" />
         <!-- Avalonia has no optgroup, so the "Guiding (PHD2)" group is one flat list with a header
              entry in it. The container's IsEnabled follows the entry's own IsSelectable, and the
              view-model's setter refuses the header as well, so neither half alone can let an
@@ -64,7 +65,7 @@
       </StackPanel>
 
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
-        <TextBlock Text="Y Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <TextBlock Text="Y axis" Classes="t-caption" VerticalAlignment="Center" />
         <ComboBox x:Name="YPicker"
                   Width="230"
                   ItemsSource="{Binding YOptions}"
@@ -117,8 +118,8 @@
            CorrelationChartViewModel.MaskTokenKey and the two must agree.
 
            The height is the page viewport less everything else on the page, floored at 280, the
-           smallest of this page's other charts, and the code behind sets it after each layout
-           pass. A star row is not available: the tab body hangs off AnalysisView.axaml's one
+           smallest of this page's other charts, and Controls/FillViewport.cs sets it after each
+           layout pass, the one rule every Analysis tab's chart takes. A star row is not available: the tab body hangs off AnalysisView.axaml's one
            ScrollViewer over a StackPanel, which measures its content with unbounded height. The
            "everything else" is MEASURED, never a constant: a constant missed the sampling line,
            the plate scale callout, the PHD2 note, a wrapped verdict and every text size above the
@@ -142,7 +143,7 @@
                           XAxes="{Binding Chart.XAxes}"
                           YAxes="{Binding Chart.YAxes}"
                           Background="{DynamicResource ColorBgElevated}"
-                          Height="{x:Static analysis:CorrelationTabViewModel.ChartMinimumHeight}" />
+                          controls:FillViewport.MinHeight="{x:Static analysis:CorrelationTabViewModel.ChartMinimumHeight}" />
 
       <!-- The verdict, then its point count in the tertiary ink, which is spec 12.14 line 7679 and
            the pinned CorrelationChart.tsx's own opacity-60 span. Two runs in one block rather than

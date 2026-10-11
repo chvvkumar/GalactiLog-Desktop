@@ -181,15 +181,16 @@ public sealed partial class AnalysisViewModel : ObservableObject, IDisposable
     /// assigns visibility and calls nothing else.
     /// </summary>
     /// <remarks>Hand-written rather than <c>[ObservableProperty]</c> for those side effects. The
-    /// strip is a row of <c>Button</c>s and not a <c>ListBox</c>, so there is no ctrl-click that
-    /// writes null and no null arm is needed here.</remarks>
+    /// strip is a <c>ListBox.tabs</c> bound two-way here. Its AlwaysSelected mode keeps a
+    /// ctrl-click from clearing the selection, and the null arm below refuses one anyway, because
+    /// a page with no current tab has no body to show.</remarks>
     public AnalysisTabViewModel SelectedTab
     {
         get => _selectedTab;
         set
         {
             var previous = _selectedTab;
-            if (_disposed || !SetProperty(ref _selectedTab, value))
+            if (value is null || _disposed || !SetProperty(ref _selectedTab, value))
             {
                 return;
             }

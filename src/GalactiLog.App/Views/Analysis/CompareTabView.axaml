@@ -3,6 +3,7 @@
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
              xmlns:queries="using:GalactiLog.Data.Queries"
+             xmlns:controls="using:GalactiLog.App.Controls"
              x:Class="GalactiLog.App.Views.Analysis.CompareTabView"
              x:DataType="analysis:CompareTabViewModel">
   <!-- design-spec 12.14's Compare tab body.
@@ -14,8 +15,8 @@
 
        Ledger vocabulary: Theme/Controls.axaml classes only, theme tokens only, x:DataType on the
        root, no Border.card, no non-zero CornerRadius and no local Button, Border.tag or
-       Border.callout style. The segment takes the same shipped Button.sm page pair the filter
-       bar's granularity segment takes. -->
+       Border.callout style. The mode choice takes the same pill group the filter bar's
+       granularity takes. -->
   <UserControl.Resources>
     <!-- The grouped marker on the label half only and never in the wire value:
          the page's one marker, the literal the Statistics equipment rows draw in tertiary ink,
@@ -47,16 +48,16 @@
     <WrapPanel x:Name="Controls">
       <StackPanel Spacing="2" Margin="0,0,12,8">
         <TextBlock Text="Compare by" Classes="t-caption" />
-        <StackPanel Orientation="Horizontal" Spacing="4">
+        <StackPanel Orientation="Horizontal">
           <Button x:Name="EquipmentButton"
-                  Classes="sm page"
-                  Classes.current="{Binding IsEquipmentMode}"
+                  Classes="pill"
+                  Classes.selected="{Binding IsEquipmentMode}"
                   Content="Equipment"
                   Command="{Binding SelectModeCommand}"
                   CommandParameter="{x:Static queries:CompareMode.Equipment}" />
           <Button x:Name="FilterButton"
-                  Classes="sm page"
-                  Classes.current="{Binding IsFilterMode}"
+                  Classes="pill"
+                  Classes.selected="{Binding IsFilterMode}"
                   Content="Filter"
                   Command="{Binding SelectModeCommand}"
                   CommandParameter="{x:Static queries:CompareMode.Filter}" />
@@ -100,7 +101,7 @@
                           XAxes="{Binding Chart.XAxes}"
                           YAxes="{Binding Chart.YAxes}"
                           Background="Transparent"
-                          Height="280" />
+                          controls:FillViewport.MinHeight="280" />
 
       <!-- Spec 12.14's verdict, printed exactly as Analysis.CompareVerdict built it. -->
       <TextBlock x:Name="Verdict"
@@ -119,10 +120,12 @@
                  Foreground="{DynamicResource ColorTextSecondary}"
                  IsVisible="{Binding IsNotComparable}" />
 
-      <StackPanel Orientation="Horizontal" Spacing="24">
-        <ContentControl x:Name="CardA" Content="{Binding CardA}" />
-        <ContentControl x:Name="CardB" Content="{Binding CardB}" />
-      </StackPanel>
+      <!-- The two stats cards under the chart, side by side, as the Correlation tab lays its
+           pair out. -->
+      <Grid ColumnDefinitions="*,*" ColumnSpacing="12">
+        <ContentControl x:Name="CardA" Grid.Column="0" Content="{Binding CardA}" />
+        <ContentControl x:Name="CardB" Grid.Column="1" Content="{Binding CardB}" />
+      </Grid>
     </StackPanel>
   </StackPanel>
 </UserControl>

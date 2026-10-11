@@ -63,6 +63,10 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
     private readonly Func<StatsResponse> _loadStats;
     private readonly Func<GeneralSettings> _general;
     private readonly Func<AliasMap> _aliases;
+
+    // The alias map's filter-colour resolver from the last applied response, kept so a theme swap's
+    // rebuild of the performance rows tints the filter chips without re-reading the alias map.
+    private Func<string, string>? _filterColor;
     private readonly Action? _invalidate;
     private readonly ScanStatusService? _scanStatus;
     private readonly Action<Action> _post;
@@ -416,7 +420,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
             .Select(row => row.Name)
             .ToHashSet(StringComparer.Ordinal);
 
-        Performance = new EquipmentPerformanceViewModel(stats.EquipmentPerformance, _bands);
+        Performance = new EquipmentPerformanceViewModel(stats.EquipmentPerformance, _bands, _filterColor);
         foreach (var row in Performance.Rows)
         {
             row.IsExpanded = expanded.Contains(row.Name);
@@ -506,8 +510,9 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         }
 
         _stats = stats;
+        _filterColor = aliases.FilterColor;
         Overview = new OverviewTilesViewModel(stats.Overview, stats.Storage);
-        Performance = new EquipmentPerformanceViewModel(stats.EquipmentPerformance, _bands);
+        Performance = new EquipmentPerformanceViewModel(stats.EquipmentPerformance, _bands, _filterColor);
         Guiding = BuildGuiding(stats);
         Inventory = new EquipmentInventoryViewModel(stats.Cameras, stats.Telescopes);
         DataQuality = new DataQualityViewModel(stats.DataQuality);

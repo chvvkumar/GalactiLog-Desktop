@@ -63,7 +63,7 @@ public sealed class TimeSeriesTabViewModel : AnalysisTabViewModel<TimeSeriesResu
         Func<AnalysisMetric, AnalysisFilter, TimeSeriesResult> query,
         Action<Action>? post = null,
         ILogger? logger = null)
-        : base(AnalysisDisplay.TimeSeriesTab, "Time Series", "analysis.timeseries", filter, post, logger)
+        : base(AnalysisDisplay.TimeSeriesTab, "Time series", "analysis.timeseries", filter, post, logger)
     {
         _query = query;
         SelectSmoothingCommand = new RelayCommand<TimeSeriesSmoothing>(SelectSmoothing);

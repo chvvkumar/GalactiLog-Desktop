@@ -32,15 +32,15 @@ public sealed class OverviewTilesViewModel
         Tiles =
         [
             new OverviewTile(
-                "Total Integration",
+                "Total integration",
                 MetricText.Integration(overview.TotalIntegrationSeconds),
                 "all LIGHT frames"),
             new OverviewTile(
-                "Total Frames",
+                "Total frames",
                 MetricText.Count(overview.TotalFrames),
                 "all LIGHT frames"),
             new OverviewTile(
-                "Catalogued Size",
+                "Catalogued size",
                 // Review finding M10: unconditional, as the web renders it. MetricText.Bytes(0) is
                 // "0 B", which is the honest reading of a catalogue that holds no bytes; the
                 // missing placeholder would claim there is no figure.
@@ -50,18 +50,18 @@ public sealed class OverviewTilesViewModel
                 // instead, which is what Q11's ruling asks for.
                 "catalogued bytes, from the database",
                 // The web's own tooltip for this card, because it is what explains the figure.
-                "Catalogued Size: total size of FITS files recorded in the catalog (sum of file "
+                "Catalogued size: total size of FITS files recorded in the catalog (sum of file "
                     + "sizes in the database; reflects the include-calibration setting)."),
             new OverviewTile(
-                "Active Span",
+                "Active span",
                 Span(overview.FirstSessionDate, overview.LastSessionDate),
                 SpanSubtitle(overview.FirstSessionDate, overview.LastSessionDate)),
             new OverviewTile(
-                "Avg Rig-Session Length",
+                "Avg rig-session length",
                 Average(overview.TotalIntegrationSeconds, overview.RigSessionCount),
                 string.Create(CultureInfo.InvariantCulture, $"{overview.RigSessionCount:N0} rig-sessions")),
             new OverviewTile(
-                "Avg per Target",
+                "Avg per target",
                 Average(overview.TotalIntegrationSeconds, overview.TargetCount),
                 string.Create(CultureInfo.InvariantCulture, $"{overview.TargetCount:N0} resolved targets")),
         ];
