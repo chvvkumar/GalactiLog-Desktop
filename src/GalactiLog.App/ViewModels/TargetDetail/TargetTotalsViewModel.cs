@@ -142,6 +142,15 @@ public sealed class TargetTotalsViewModel
             };
         })];
 
+        IntegrationTileText = integrationText;
+        NightsTileText = sessionCountText;
+        FramesTileText = frameCountText;
+        DateSpanTileText = firstSessionText.Length > 0 && lastSessionText.Length > 0
+            ? firstSessionText == lastSessionText
+                ? firstSessionText
+                : string.Create(CultureInfo.InvariantCulture, $"{firstSessionText} to {lastSessionText}")
+            : MetricText.Missing;
+
         LogLineRuns = BuildLogLine(totals, integrationText, sessionCountText, frameCountText, firstSessionText, lastSessionText);
         LogLineEquipmentText = equipmentText.Length > 0
             ? string.Create(CultureInfo.InvariantCulture, $"on {equipmentText}.")
@@ -175,6 +184,23 @@ public sealed class TargetTotalsViewModel
     /// <summary>The bars' labels as one line, filters in the bars' order.</summary>
     public string IntegrationFiguresText
         => string.Join("  ", IntegrationBars.Select(bar => $"{bar.FilterName} {bar.HoursText}"));
+
+    // ---- The header's stat tiles ---------------------------------------------------------------
+    // The header draws these four figures as a row of tiles rather than the log line's sentence
+    // (ui-polish Task 6): the same words the log line is built from, one tile each.
+
+    /// <summary>"12.4 h", the Integration tile's figure.</summary>
+    public string IntegrationTileText { get; }
+
+    /// <summary>The Nights tile's figure, the session count.</summary>
+    public string NightsTileText { get; }
+
+    /// <summary>The Light frames tile's figure.</summary>
+    public string FramesTileText { get; }
+
+    /// <summary>"2023-02-09 to 2026-10-05", one date for a single night, the missing dash with no
+    /// dated session.</summary>
+    public string DateSpanTileText { get; }
 
     // ---- P12: the comp's log line ------------------------------------------------------------
 

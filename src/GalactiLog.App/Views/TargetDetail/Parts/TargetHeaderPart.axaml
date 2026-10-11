@@ -97,10 +97,11 @@
                  nights. On the same rule, the NINA and Stellarium sends live on the night heading
                  (NightHeaderPart), because they carry the night's own pointing. -->
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-              <Button x:Name="RevealFolderButton" Content="Reveal folder" Command="{Binding RevealFolderCommand}" />
+              <Button x:Name="RevealFolderButton" Classes="quiet" Content="Reveal folder" Command="{Binding RevealFolderCommand}" />
               <!-- Spec 12.4: absent, not disabled, with no RA, Dec or target id;
                    disabled with a tooltip while Survey downloads is off. -->
               <Button x:Name="SurveyViewButton"
+                      Classes="quiet"
                       Content="Sky view"
                       Command="{Binding OpenSurveyViewCommand}"
                       IsVisible="{Binding ShowsSurveyViewButton}"
@@ -187,55 +188,107 @@
             <Button Content="Cancel" Command="{Binding CancelRenameCommand}" />
           </StackPanel>
 
-          <!-- The log line. The figures carry the figure class (weight 600, tabular, primary
-               ink); the connecting words inherit secondary ink from the panel, so a style setter
-               on a figure still wins over the inherited value. The wording is built once in
-               TargetTotalsViewModel rather than as a dozen literals here. -->
-          <WrapPanel Grid.Row="2" Grid.Column="0"
-                     x:Name="LogLine"
-                     Orientation="Horizontal"
-                     Margin="0,8,0,0"
-                     TextElement.Foreground="{DynamicResource ColorTextSecondary}">
-            <ItemsControl ItemsSource="{Binding Totals.LogLineRuns}" Margin="0,0,10,0">
+          <!-- The stat tiles (ui-polish Task 6, visual-craft F8): the four figures the log line
+               used to run together as a sentence, each a panel with its figure in the stat tier
+               and its caption below. Each figure takes its metric's own token; the date span has no
+               metric, so it keeps the stat tier's primary ink. Beside the tiles, one tinted chip
+               per filter with its hours: beside rather than below, because every line this header
+               takes is a frame row taken from the table at the 1280 x 720 floor. The tiles'
+               padding is the 8 pixel step vertically, and the caption sits on the figure's own
+               line height with no gap, for the same reason. -->
+          <Grid Grid.Row="2" Grid.Column="0"
+                x:Name="LogLine"
+                ColumnDefinitions="Auto,*"
+                ColumnSpacing="16"
+                Margin="0,8,0,0">
+            <StackPanel x:Name="StatTiles" Orientation="Horizontal" Spacing="8">
+              <Border Classes="panel" Padding="12,8" x:Name="IntegrationTile">
+                <StackPanel>
+                  <TextBlock Classes="t-stat"
+                             Foreground="{DynamicResource ColorMetricIntegration}"
+                             Text="{Binding Totals.IntegrationTileText, FallbackValue=-}" />
+                  <TextBlock Classes="t-caption" Text="Integration" />
+                </StackPanel>
+              </Border>
+              <Border Classes="panel" Padding="12,8" x:Name="NightsTile">
+                <StackPanel>
+                  <TextBlock Classes="t-stat"
+                             Foreground="{DynamicResource ColorMetricTime}"
+                             Text="{Binding Totals.NightsTileText, FallbackValue=-}" />
+                  <TextBlock Classes="t-caption" Text="Nights" />
+                </StackPanel>
+              </Border>
+              <Border Classes="panel" Padding="12,8" x:Name="FramesTile">
+                <StackPanel>
+                  <TextBlock Classes="t-stat"
+                             Foreground="{DynamicResource ColorMetricFrames}"
+                             Text="{Binding Totals.FramesTileText, FallbackValue=-}" />
+                  <TextBlock Classes="t-caption" Text="Light frames" />
+                </StackPanel>
+              </Border>
+              <Border Classes="panel" Padding="12,8" x:Name="DateSpanTile">
+                <StackPanel>
+                  <TextBlock Classes="t-stat"
+                             Text="{Binding Totals.DateSpanTileText, FallbackValue=-}" />
+                  <TextBlock Classes="t-caption" Text="Date span" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+
+            <!-- One chip per filter in the bars' order: the filter's colour at 18 percent behind
+                 its name and hours in the full colour. The tint is a Border of its own under the
+                 text, because Opacity on the chip itself would fade the text with it. The brush is
+                 the filter's configured colour, user data rather than a theme token.
+
+                 The chips fill columns top to bottom inside the tiles' height rather than lines
+                 left to right, so a dozen filters add columns and never a line: a third line of
+                 chips was a frame row, and at 1280 x 720 the second Compare lane, taken from the
+                 table. -->
+            <ItemsControl x:Name="FilterChips"
+                          Grid.Column="1"
+                          VerticalAlignment="Center"
+                          MaxHeight="{Binding #StatTiles.Bounds.Height}"
+                          ItemsSource="{Binding Totals.IntegrationBars}"
+                          IsVisible="{Binding Totals.HasIntegrationBars, FallbackValue=False}">
               <ItemsControl.ItemsPanel>
                 <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
+                  <WrapPanel Orientation="Vertical" ItemSpacing="4" LineSpacing="4" />
                 </ItemsPanelTemplate>
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="detail:LogLineRunViewModel">
-                  <TextBlock Text="{Binding Text}" Classes.figure="{Binding IsFigure}" Margin="0,0,5,0" />
+                <DataTemplate x:DataType="detail:IntegrationBarViewModel">
+                  <Panel>
+                    <Border Background="{Binding Brush}" Opacity="0.18" CornerRadius="{StaticResource RadiusSm}" />
+                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="8,4">
+                      <TextBlock Classes="t-label" Text="{Binding FilterName}" FontWeight="SemiBold" Foreground="{Binding Brush}" />
+                      <TextBlock Classes="t-label" Text="{Binding HoursText}" Foreground="{Binding Brush}" />
+                    </StackPanel>
+                  </Panel>
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
+          </Grid>
 
-            <ItemsControl x:Name="LogLineFilters" ItemsSource="{Binding Totals.FilterSwatches}" Margin="0,0,10,0" ItemTemplate="{StaticResource FilterSwatchTemplate}">
-              <ItemsControl.ItemsPanel>
-                <ItemsPanelTemplate>
-                  <WrapPanel Orientation="Horizontal" />
-                </ItemsPanelTemplate>
-              </ItemsControl.ItemsPanel>
-            </ItemsControl>
-
+          <!-- The caption line: the equipment, then spec 12.4's two disclosures joined into one
+               tertiary sentence. The two share a line when they fit and each wraps on its own line
+               when not, since a WrapPanel measures each child at the full width. Each hides when
+               it has nothing to say. -->
+          <WrapPanel Grid.Row="4" Grid.Column="0"
+                     x:Name="CaptionLine"
+                     Orientation="Horizontal"
+                     ItemSpacing="8"
+                     Margin="0,4,0,0">
             <TextBlock x:Name="LogLineEquipment"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
                        Text="{Binding Totals.LogLineEquipmentText}"
                        IsVisible="{Binding Totals.HasLogLineEquipment, FallbackValue=False}" />
-
-            <TextBlock x:Name="IntegrationFigures"
-                       Margin="10,0,0,0"
-                       Text="{Binding Totals.IntegrationFiguresText}"
-                       IsVisible="{Binding Totals.HasIntegrationBars, FallbackValue=False}" />
+            <TextBlock x:Name="LogLineDisclosure"
+                       Classes="t-caption"
+                       TextWrapping="Wrap"
+                       Text="{Binding Totals.LogLineDisclosureText}"
+                       IsVisible="{Binding Totals.HasLogLineDisclosure, FallbackValue=False}" />
           </WrapPanel>
-
-          <!-- Spec 12.4's two disclosures, joined into one tertiary sentence. Hidden when neither
-               applies. -->
-          <TextBlock Grid.Row="4" Grid.Column="0"
-                     x:Name="LogLineDisclosure"
-                     Classes="t-caption"
-                     Margin="0,4,0,0"
-                     TextWrapping="Wrap"
-                     Text="{Binding Totals.LogLineDisclosureText}"
-                     IsVisible="{Binding Totals.HasLogLineDisclosure, FallbackValue=False}" />
         </Grid>
 
         <!-- Row 1: the six status lines, which are absent on a healthy page. -->

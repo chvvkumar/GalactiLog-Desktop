@@ -161,10 +161,12 @@
     <Style Selector="TextBlock.cell.q">
       <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
     </Style>
-    <!-- A file name is what the user copies and reads, so it takes the primary ink; the mono
-         family itself comes from Theme/Controls.axaml's TextBlock.mono. -->
+    <!-- The file name is long and the same prefix repeats on every row, so it recedes to the
+         caption tier in the secondary ink and the metric columns carry the row (ui-polish Task 6).
+         The mono family comes from Theme/Controls.axaml's TextBlock.mono and the size from its
+         t-caption tier; only the ink is set here, because TextBlock.cell above would otherwise win. -->
     <Style Selector="TextBlock.cell.mono">
-      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
     </Style>
     <!-- A row with a finding lifts its whole line to the primary ink, which is the comp's
          .tbl.fr .row.out .c rule: the row a user is hunting for comes forward by weight of ink,
@@ -344,15 +346,19 @@
       </Button>
     </Grid>
 
-    <!-- Spec 12.4's legend, the two marked bands only (P24 R23), under the toolbar line and above
-         the column header, with the rows it explains. The sentence is not optional chrome: this
-         application writes no user file (spec 2.1) and a page that colours frames red owes the
-         reader that statement where the colour is. -->
+    <!-- Spec 12.4's legend, under the toolbar line and above the column header, with the rows it
+         explains: one dot per grading band in the band's own ink, the same three tokens the cells
+         use, so the green, amber and red figures read as a scale rather than as noise (ui-polish
+         Task 6 adds "good"; P24 R23 had the two marked bands only). The sentence is not optional
+         chrome: this application writes no user file (spec 2.1) and a page that colours frames red
+         owes the reader that statement where the colour is. -->
     <WrapPanel Grid.Row="1" x:Name="GradingLegend" Orientation="Horizontal" Margin="0,0,0,6">
+      <Ellipse Width="8" Height="8" Fill="{DynamicResource ColorSuccess}" VerticalAlignment="Center" Margin="0,0,4,0" />
+      <TextBlock Classes="t-label muted" Text="good" VerticalAlignment="Center" Margin="0,0,12,0" />
       <Ellipse Width="8" Height="8" Fill="{DynamicResource ColorWarning}" VerticalAlignment="Center" Margin="0,0,4,0" />
-      <TextBlock Classes="t-label muted" Text="watch" VerticalAlignment="Center" Margin="0,0,14,0" />
+      <TextBlock Classes="t-label muted" Text="watch" VerticalAlignment="Center" Margin="0,0,12,0" />
       <Ellipse Width="8" Height="8" Fill="{DynamicResource ColorError}" VerticalAlignment="Center" Margin="0,0,4,0" />
-      <TextBlock Classes="t-label muted" Text="reject" VerticalAlignment="Center" Margin="0,0,14,0" />
+      <TextBlock Classes="t-label muted" Text="reject" VerticalAlignment="Center" Margin="0,0,12,0" />
       <TextBlock Classes="t-label muted"
                  x:Name="GradingAdvisory"
                  Text="Grading is advisory. No frame is deleted or hidden."
@@ -575,6 +581,21 @@
                       PointerPressed="OnRowPointerPressed"
                       PointerReleased="OnRowPointerReleased"
                       MinHeight="28">
+                <!-- The right-click menu (ux-flow F9): the three actions a Windows user reaches
+                     for on a file row, bound to the same commands as the row-end menu's items. -->
+                <Border.ContextFlyout>
+                  <MenuFlyout>
+                    <MenuItem Header="Preview"
+                              Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).OpenPreviewCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="Reveal in Explorer"
+                              Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).RevealFrameCommand}"
+                              CommandParameter="{Binding}" />
+                    <MenuItem Header="Copy path"
+                              Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).CopyFramePathCommand}"
+                              CommandParameter="{Binding}" />
+                  </MenuFlyout>
+                </Border.ContextFlyout>
                 <StackPanel Orientation="Horizontal">
                   <TextBlock Classes="cell tc-text"
                              Width="{Binding Columns[0].Width}"
@@ -597,7 +618,7 @@
                        TextTrimming is set inline rather than by a narrower style selector,
                        because a local value outranks TextBlock.cell.tc-text's setter and that is exactly
                        what is wanted for this one cell. -->
-                  <TextBlock Classes="cell mono tc-text"
+                  <TextBlock Classes="cell mono t-caption tc-text"
                              Width="{Binding Columns[1].Width}"
                              TextTrimming="None"
                              ToolTip.Tip="{Binding FilePath}"

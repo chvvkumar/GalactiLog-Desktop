@@ -235,9 +235,23 @@ public abstract partial class MetricChartViewModel : ObservableObject, IDisposab
     {
         PrimaryMetric = plan.Primary;
         Series = series;
-        XAxes = xAxes;
+        XAxes = HorizontalSeparatorsOnly(xAxes);
         YAxes = plan.YAxes;
         Sections = sections ?? [];
+    }
+
+    /// <summary>Horizontal grid lines only (visual-craft F9): every x axis of both charts drops its
+    /// vertical separators here, the one place both charts and their lanes publish through, so the
+    /// y axis' rules are the plot's only grid. A flag rather than a null paint, because the theme's
+    /// axis rule writes the separator paint on every axis.</summary>
+    private static IReadOnlyList<ICartesianAxis> HorizontalSeparatorsOnly(IReadOnlyList<ICartesianAxis> xAxes)
+    {
+        foreach (var axis in xAxes)
+        {
+            axis.ShowSeparatorLines = false;
+        }
+
+        return xAxes;
     }
 
     /// <summary>
@@ -277,7 +291,7 @@ public abstract partial class MetricChartViewModel : ObservableObject, IDisposab
             lanes.Add(new ChartLane(
                 LaneTitle(metric),
                 seriesOf(metric),
-                [xAxisOf(bottom)],
+                HorizontalSeparatorsOnly([xAxisOf(bottom)]),
                 [AxisPlan.NumberAxis(metric)],
                 new Margin((float)plotLeft, LaneMarginTop, (float)plotRight, bottom && labelsBottom ? LaneMarginBottomLabelled : LaneMarginBottom)));
         }
@@ -358,8 +372,9 @@ public abstract partial class MetricChartViewModel : ObservableObject, IDisposab
                 : new SolidColorPaint(colour) { StrokeThickness = 2 },
             // These are lines, not areas (spec 13).
             Fill = null,
-            // Spec 13: "points on".
-            GeometrySize = 6,
+            // Spec 13's "points on", while the series is sparse: a dense one (a night's frames)
+            // draws the bare line and leaves its points to the outlier rings (ChartTheme.MarkerSize).
+            GeometrySize = ChartTheme.MarkerSize(values.Count),
             GeometryStroke = new SolidColorPaint(colour) { StrokeThickness = 2 },
             GeometryFill = new SolidColorPaint(colour),
             LineSmoothness = 0,

@@ -467,6 +467,32 @@ public class FrameTableViewTests
             ((ISolidColorBrush)row.Background!).Color);
     }
 
+    // ux-flow F9: a right-click on a frame row offers the three file actions a Windows user expects,
+    // each bound to the row-end menu's own command with the row as its parameter. A failure is a
+    // missing menu, a fourth or fifth entry, or a dead binding inside the flyout.
+    [AvaloniaFact]
+    public void FrameRow_ContextFlyout_OffersPreviewRevealAndCopyPath()
+    {
+        var view = new FrameTableView { DataContext = CreateTable() };
+        ShowTable(view);
+
+        var row = RowBorder(view);
+        var menu = Assert.IsType<MenuFlyout>(row.ContextFlyout);
+        menu.ShowAt(row);
+        Dispatcher.UIThread.RunJobs();
+
+        var items = menu.Items.OfType<MenuItem>().ToList();
+        Assert.Equal(["Preview", "Reveal in Explorer", "Copy path"], items.Select(item => item.Header as string));
+        Assert.All(items, item =>
+        {
+            Assert.NotNull(item.Command);
+            Assert.Same(row.DataContext, item.CommandParameter);
+        });
+
+        menu.Hide();
+        Dispatcher.UIThread.RunJobs();
+    }
+
     [AvaloniaFact]
     public void FrameTableView_TemplatedCommandBindings_Resolve()
     {
@@ -727,8 +753,8 @@ public class FrameTableViewTests
     [AvaloniaFact]
     public void FrameTableView_TheFileNameCell_UsesTheMonoFamily()
     {
-        // A file name is what the user copies and reads, so it takes the mono family and the
-        // primary ink rather than the secondary ink every other text cell carries.
+        // The file name takes the mono family in the caption tier and the secondary ink, so the
+        // long repeated name recedes and the metric columns carry the row (ui-polish Task 6).
         var view = new FrameTableView { DataContext = CreateTable() };
         ShowTable(view);
 
@@ -736,9 +762,10 @@ public class FrameTableViewTests
         Assert.True(view.TryFindResource("FontMono", out var mono));
         Assert.Equal(mono, fileName.FontFamily);
 
-        Assert.True(view.TryFindResource("ColorTextPrimary", out var primary));
+        Assert.Contains("t-caption", fileName.Classes);
+        Assert.True(view.TryFindResource("ColorTextSecondary", out var secondary));
         Assert.Equal(
-            ((ISolidColorBrush)primary!).Color,
+            ((ISolidColorBrush)secondary!).Color,
             ((ISolidColorBrush)fileName.Foreground!).Color);
     }
 

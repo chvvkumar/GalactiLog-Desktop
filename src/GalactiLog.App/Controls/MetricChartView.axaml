@@ -34,8 +34,32 @@
     <Style Selector="controls|MetricChartView.fills Border#PlotHost">
       <Setter Property="MinHeight" Value="0" />
     </Style>
+
+    <!-- The card around the overlaid chart has no horizontal padding, and the text rows carry
+         their own 8 pixel inset instead: the plot shares the night's lane axis with the timeline
+         above the card (NightLaneAxis), whose plot edges are fixed offsets from the host's edges,
+         so an inset plot would sit off the timeline's x. The card's 1 pixel edge is inside the
+         axis's tolerance. -->
+    <Style Selector="Border#ChartCard.card">
+      <Setter Property="Padding" Value="0,8" />
+    </Style>
+    <Style Selector="StackPanel#SessionScope, StackPanel#GuidingStats, TextBlock#EmptyState">
+      <Setter Property="Margin" Value="0,6,0,0" />
+    </Style>
+    <Style Selector="Border#ChartCard.card WrapPanel#PillRow">
+      <Setter Property="Margin" Value="8,0" />
+    </Style>
+    <Style Selector="Border#ChartCard.card StackPanel#SessionScope, Border#ChartCard.card StackPanel#GuidingStats, Border#ChartCard.card TextBlock#EmptyState">
+      <Setter Property="Margin" Value="8,8,8,0" />
+    </Style>
   </UserControl.Styles>
 
+  <!-- The overlaid chart sits in a card (ui-polish Task 6, visual-craft F1 and F9), so the pill row
+       and the plot read as one framed section rather than a lighter rectangle on the page. The
+       laned form takes none: its lanes are already titled charts of their own, and at the
+       1280 x 720 floor the card's height is the second Compare lane. The styles above carry the
+       card's padding and the text rows' inset, since a local value would beat them. -->
+  <Border x:Name="ChartCard" Classes.card="{Binding !$parent[controls:MetricChartView].IsLaned}">
   <Grid RowDefinitions="Auto,Auto,Auto,*">
     <!-- R9's one pill row. The two strips keep their own names, their own sources and their own
          templates; what changed is that they sit side by side with a 1 px rule between them
@@ -273,7 +297,6 @@
                 x:Name="SessionScope"
                 Orientation="Horizontal"
                 Spacing="8"
-                Margin="0,6,0,0"
                 IsVisible="{Binding HasSessionScope}">
       <CheckBox Content="All sessions" IsChecked="{Binding ShowAllSessions, Mode=TwoWay}" />
       <TextBlock Text="{Binding SessionScopeText}"
@@ -287,7 +310,6 @@
     <StackPanel Grid.Row="1"
                 x:Name="GuidingStats"
                 Spacing="4"
-                Margin="0,6,0,0"
                 IsVisible="{Binding ShowsGuiding}">
       <WrapPanel Orientation="Horizontal" IsVisible="{Binding Guiding.HasSummary, FallbackValue=False}">
         <StackPanel Orientation="Horizontal"
@@ -368,7 +390,6 @@
     <TextBlock Grid.Row="2"
                x:Name="EmptyState"
                Text="No data for the selected metrics."
-               Margin="0,6,0,0"
                IsVisible="{Binding ShowsEmpty}"
                Foreground="{DynamicResource ColorTextTertiary}" />
 
@@ -463,4 +484,5 @@
       </ItemsControl>
     </ScrollViewer>
   </Grid>
+  </Border>
 </UserControl>

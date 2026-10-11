@@ -42,6 +42,13 @@
       <Setter Property="Grid.Column" Value="1" />
       <Setter Property="Orientation" Value="Horizontal" />
     </Style>
+    <!-- The open night's row takes the accent at 15 percent (ui-polish Task 6), the web's selected
+         row, rather than the spine's elevated field: the list is a navigator and its one lit row is
+         the night the pane is showing. Declared here, after Theme/Table.axaml's rule for the same
+         container, so it wins on this list alone. -->
+    <Style Selector="ListBox#NightsLedger ListBoxItem:selected /template/ ContentPresenter">
+      <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+    </Style>
     <Style Selector="parts|NightsLedgerPart:stacked StackPanel#LedgerActions">
       <Setter Property="Grid.Column" Value="0" />
       <Setter Property="Grid.ColumnSpan" Value="2" />
@@ -86,6 +93,7 @@
            on the button, never in a Setter, because a Setter's value is one shared instance. Spec
            12.13 disables the entries via CanExecute; each header is bound to append the count. -->
       <Button x:Name="ExportButton"
+              Classes="accent"
               Content="{Binding ExportLabel}"
               VerticalAlignment="Center"
               Margin="0,0,6,0">

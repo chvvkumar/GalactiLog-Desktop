@@ -174,6 +174,22 @@ public static class ChartTheme
     /// <summary>The axis tick label size relative to the root font size.</summary>
     public const double AxisLabelRatio = 0.786;
 
+    /// <summary>A line series' point marker diameter while the series is sparse.</summary>
+    public const double SeriesMarkerSize = 6d;
+
+    /// <summary>Above this many points a line series is dense and draws no point markers.</summary>
+    public const int DenseSeriesPoints = 40;
+
+    /// <summary>
+    /// The point marker size for a line series of <paramref name="pointCount"/> points (visual-craft
+    /// F9): <see cref="SeriesMarkerSize"/> while a marker still reads as a point, zero once the
+    /// series is dense, where a dot on every sample turns a trend into beads. A night of frames is
+    /// dense and a run of nights is not. Outliers keep their own ring series, so a dense line
+    /// still marks the points that matter.
+    /// </summary>
+    public static double MarkerSize(int pointCount)
+        => pointCount > DenseSeriesPoints ? 0d : SeriesMarkerSize;
+
     /// <summary>Loads the selected sans family's Regular TTF as the charts' global typeface and
     /// re-applies. A missing asset leaves the previous typeface in place.</summary>
     public static void ApplyTypeface(Uri regularTtf)

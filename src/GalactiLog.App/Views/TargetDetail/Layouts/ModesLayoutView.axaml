@@ -14,14 +14,24 @@
   <Grid x:Name="PageRows" RowDefinitions="Auto,Auto,*" Margin="20,18,20,12">
     <parts:TargetHeaderPart x:Name="TargetHeaderPart" Grid.Row="0" />
 
-    <StackPanel x:Name="ModeSwitch" Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+    <!-- The mode strip is the page's own tab strip (ui-polish Task 6): borderless tabs with the
+         accent underline on the open mode, so it reads as navigation and not as three more pills.
+         The 4 pixel vertical padding keeps the strip at the old toggles' height, which the frame
+         rows below are measured against at the 1280 x 720 floor. -->
+    <StackPanel x:Name="ModeSwitch" Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,12,0,0">
       <ToggleButton x:Name="NightReviewButton"
+                    Classes="tab"
+                    Padding="12,4"
                     Content="Night review"
                     CommandParameter="{x:Static layouts:TargetPageMode.NightReview}" />
       <ToggleButton x:Name="CompareNightsButton"
+                    Classes="tab"
+                    Padding="12,4"
                     Content="Compare nights"
                     CommandParameter="{x:Static layouts:TargetPageMode.CompareNights}" />
       <ToggleButton x:Name="IntegrationButton"
+                    Classes="tab"
+                    Padding="12,4"
                     Content="Integration"
                     CommandParameter="{x:Static layouts:TargetPageMode.Integration}" />
     </StackPanel>
