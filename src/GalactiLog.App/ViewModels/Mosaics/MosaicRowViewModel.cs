@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -56,7 +57,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
 
     public string PanelsText => MetricText.Count(Panels);
 
-    public string IntegrationText => MetricText.Integration(IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(IntegrationSeconds);
 
     public string FramesText => MetricText.Count(Frames);
 
@@ -295,7 +296,7 @@ public sealed partial class PanelLineViewModel : ObservableObject
 
     public string TargetsText => string.Join(", ", Panel.TargetNames);
 
-    public string IntegrationText => MetricText.Integration(Panel.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(Panel.IntegrationSeconds);
 
     public string FramesText => MosaicsPageViewModel.Plural(Panel.Frames, "frame");
 

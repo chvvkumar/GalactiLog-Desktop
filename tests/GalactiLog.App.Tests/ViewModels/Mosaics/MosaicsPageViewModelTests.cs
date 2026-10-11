@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using GalactiLog.App.Services;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Mosaics;
@@ -210,7 +211,7 @@ public class MosaicsPageViewModelTests
         var suggestion = Assert.Single(harness.Page.VisibleSuggestions);
         Assert.Equal("2 panels, ", suggestion.TotalsText);
         Assert.Equal("5 frames", suggestion.FramesText);
-        Assert.Equal(", 00h 25m", suggestion.IntegrationText);
+        Assert.Equal(", 25 m", suggestion.IntegrationText);
         Assert.Equal("+1 more night", suggestion.MoreNightsText);
         Assert.Equal(2, suggestion.Sessions.Count);
 
@@ -266,7 +267,7 @@ public class MosaicsPageViewModelTests
         await suggestion.Preview.PendingFrames;
 
         Assert.Equal(new[] { "Panel 1", "panel 2", "Panel 3" }, suggestion.Preview.Tiles.Select(tile => tile.Label));
-        Assert.Equal(MetricText.Integration(1200), suggestion.Preview.Tiles[1].IntegrationText);
+        Assert.Equal(DurationFormat.Prose(1200), suggestion.Preview.Tiles[1].IntegrationText);
         var panelTwo = Assert.Single(asked, entry => entry.Item2 == "panel 2");
         Assert.Equal(TargetA, panelTwo.Item1);
         Assert.Equal(new[] { Night(1), Night(2) }, panelTwo.Item3.Order());

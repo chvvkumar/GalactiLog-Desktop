@@ -47,7 +47,7 @@ public class DashboardEmptyStateViewTests
 
     [AvaloniaTheory]
     [InlineData(DashboardContentState.NoFramesYet, "No frames catalogued yet", "Open settings,Run scan")]
-    [InlineData(DashboardContentState.NoMatches, "No targets match these filters", "Reset Filters")]
+    [InlineData(DashboardContentState.NoMatches, "No targets match these filters", "Reset filters")]
     public void DashboardEmptyStateView_RendersEachState(DashboardContentState state, string message, string buttonTexts)
     {
         var view = new DashboardEmptyStateView { DataContext = EmptyDashboard(state) };

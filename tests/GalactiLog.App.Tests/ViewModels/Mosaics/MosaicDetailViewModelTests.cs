@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Text;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
@@ -84,7 +85,7 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         var page = await Open(TwoPanels());
 
         Assert.Equal("M 31 mosaic", page.Name);
-        Assert.Equal($"2 panels, {MetricText.Integration(1800)} total, 6 frames", page.SummaryText);
+        Assert.Equal($"2 panels, {DurationFormat.Prose(1800)} total, 6 frames", page.SummaryText);
         Assert.Equal(new[] { "Panel 1", "Panel 2" }, page.Panels.Select(panel => panel.Label));
         Assert.False(page.LoadFailed);
         Assert.False(page.CompositeCommand.CanExecute(null));
@@ -316,15 +317,15 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         panel.Available.Single(night => night.Night.Date == Night(2)).IncludeCommand.Execute(null);
         await page.PendingLoad;
 
-        Assert.Equal($"2 panels, {MetricText.Integration(3600)} total, 12 frames", page.SummaryText);
-        Assert.Equal(MetricText.Integration(3000), page.Panels[0].IntegrationText);
+        Assert.Equal($"2 panels, {DurationFormat.Prose(3600)} total, 12 frames", page.SummaryText);
+        Assert.Equal(DurationFormat.Prose(3000), page.Panels[0].IntegrationText);
         Assert.Equal("2", page.Panels[0].NightsText);
         Assert.False(page.Panels[0].HasAvailable);
 
         page.Panels[0].Included.Single(night => night.Night.Date == Night(1)).RemoveCommand.Execute(null);
         await page.PendingLoad;
 
-        Assert.Equal(MetricText.Integration(1800), page.Panels[0].IntegrationText);
+        Assert.Equal(DurationFormat.Prose(1800), page.Panels[0].IntegrationText);
         Assert.Equal("1 available", page.Panels[0].AvailableText);
         Assert.Same(panel, page.Panels[0]);
     }
@@ -454,7 +455,7 @@ public sealed class MosaicDetailViewModelTests : IDisposable
         var page = await Open(TwoPanels());
 
         Assert.Equal("", page.Panels[0].DeficitText);
-        Assert.Equal(MetricText.Integration(600) + " behind", page.Panels[1].DeficitText);
+        Assert.Equal(DurationFormat.Prose(600) + " behind", page.Panels[1].DeficitText);
     }
 
     [Fact]

@@ -475,6 +475,7 @@ public class JobRegistryTests
     [InlineData(JobResult.Cancelled, 5, "Cancelled after 5 s")]
     [InlineData(JobResult.Succeeded, 0, "Succeeded in under 1 s")]
     [InlineData(JobResult.Succeeded, 3725, "Succeeded in 1 h 2 m")]
+    [InlineData(JobResult.Succeeded, 60, "Succeeded in 1 m")]
     public void StatusLine_SaysTheResultAndHowLongItTook(JobResult result, int seconds, string expected)
     {
         var now = new DateTimeOffset(2026, 10, 11, 9, 0, 0, TimeSpan.Zero);

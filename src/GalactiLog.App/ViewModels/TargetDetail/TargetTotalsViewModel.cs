@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using Avalonia.Media.Immutable;
 using GalactiLog.Core.Aliases;
@@ -97,7 +98,7 @@ public sealed class TargetTotalsViewModel
 
         // Locals rather than properties: the log line is the only reader left, so they are the
         // words it is built from and not a surface (phase review escalation 4, coordinator round 2).
-        var integrationText = MetricText.Hours(totals.IntegrationSeconds);
+        var integrationText = DurationFormat.Table(totals.IntegrationSeconds);
         var frameCountText = MetricText.Count(totals.FrameCount);
         var sessionCountText = MetricText.Count(totals.SessionCount);
         var firstSessionText = FormatDate(totals.FirstSessionDate);

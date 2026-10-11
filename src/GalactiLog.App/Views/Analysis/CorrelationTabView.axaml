@@ -35,7 +35,7 @@
     </ItemsControl>
 
     <!-- The two pickers and the toggle, in spec 12.14's order. A WrapPanel and never one
-         non-wrapping row: at the 1024 by 700 minimum the content region is about 824 wide and a
+         non-wrapping row: at the 960 by 720 minimum the content region is 760 to 912 wide and a
          clipped control hides an affordance the reader cannot then find. -->
     <WrapPanel x:Name="MetricControls">
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">

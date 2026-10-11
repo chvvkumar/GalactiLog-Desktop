@@ -100,8 +100,8 @@
             <controls:HelpButton Topic="analysis.filters" />
           </StackPanel>
 
-          <!-- A WrapPanel and never one non-wrapping row: at the 1024 by 700 minimum the content
-               region is about 824 wide and the five controls do not fit across it, and a clipped
+          <!-- A WrapPanel and never one non-wrapping row: at the 960 by 720 minimum the content
+               region is 760 to 912 wide (rail open or shut) and the five controls do not fit across it, and a clipped
                control hides an affordance the reader cannot then find. -->
           <WrapPanel x:Name="FilterControls">
             <StackPanel Spacing="2" Margin="0,0,12,8">

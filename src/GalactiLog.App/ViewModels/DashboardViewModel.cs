@@ -47,8 +47,10 @@ public enum DashboardContentState
 /// preserves every value, and nothing is written to disk.
 /// </para>
 /// </summary>
-public sealed partial class DashboardViewModel : ObservableObject, IDisposable
+public sealed partial class DashboardViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>Coordinator ruling Q3. Spec 12.2 says the inputs are debounced without giving a
     /// figure; one shared window for every input, not a fast path and a slow path.</summary>
     internal static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(250);
@@ -902,7 +904,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// thread by the composition root's own route.</summary>
     internal void RefreshMosaicLinks() => RequestQuery(quiet: true);
 
-    private void OnScanFinished(object? sender, EventArgs e)
+    private void OnScanFinished(object? sender, EventArgs e) => Refresh();
+
+    /// <summary>The page's re-read: what a finished scan runs, and the shell's F5.</summary>
+    [RelayCommand]
+    private void Refresh()
     {
         // A root that came back (or went away) since the last scan is picked up here, which is
         // also when its frames appear or stop appearing (ruling Q18).

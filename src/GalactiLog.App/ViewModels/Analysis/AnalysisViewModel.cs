@@ -32,8 +32,10 @@ namespace GalactiLog.App.ViewModels.Analysis;
 /// life of the process.
 /// </para>
 /// </remarks>
-public sealed partial class AnalysisViewModel : ObservableObject, IDisposable
+public sealed partial class AnalysisViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     private readonly Action<Func<DisplaySettings, DisplaySettings>>? _writeDisplay;
     private readonly Action<Action> _post;
     private readonly Action? _unfollowDerivedData;
@@ -327,7 +329,12 @@ public sealed partial class AnalysisViewModel : ObservableObject, IDisposable
     /// the tab base's generation token already collapses.
     /// </para>
     /// </remarks>
-    private void OnDerivedDataChanged(object? sender, EventArgs e) => _post(() =>
+    private void OnDerivedDataChanged(object? sender, EventArgs e) => _post(Refresh);
+
+    /// <summary>The page's re-read: the bar's lists, every tab marked stale, the showing tab
+    /// re-queried. What a derived-data rewrite runs, and the shell's F5.</summary>
+    [RelayCommand]
+    private void Refresh()
     {
         if (_disposed)
         {
@@ -336,7 +343,7 @@ public sealed partial class AnalysisViewModel : ObservableObject, IDisposable
 
         SharedFilter.Reload();
         OnFilterChanged(this, EventArgs.Empty);
-    });
+    }
 
     // The two metric writers of spec 5.8.2, one call each, through the one seam that applies each
     // mutation to the document as loaded inside the queued write (ruling Q17).

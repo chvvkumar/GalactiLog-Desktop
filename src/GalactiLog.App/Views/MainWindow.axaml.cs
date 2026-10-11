@@ -3,6 +3,9 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
 
@@ -19,6 +22,28 @@ public partial class MainWindow : Window
         // windows ignore the two buttons. Alt+Left, Alt+Right, BrowserBack and BrowserForward are
         // the window KeyBindings in the markup.
         AddHandler(PointerPressedEvent, OnPointerPressedTunnel, RoutingStrategies.Tunnel);
+
+        // Ctrl+F (ux-flow F8), beside the markup's other window shortcuts: the shell opens the
+        // dashboard's Search section, and focus moves into the box once that layout has run.
+        KeyBindings.Add(new KeyBinding
+        {
+            Gesture = new KeyGesture(Key.F, KeyModifiers.Control),
+            Command = new RelayCommand(FocusSearch),
+        });
+    }
+
+    private void FocusSearch()
+    {
+        if (DataContext is not MainWindowViewModel shell)
+        {
+            return;
+        }
+
+        shell.ShowSearch();
+        Dispatcher.UIThread.Post(
+            () => this.GetVisualDescendants().OfType<TextBox>()
+                .FirstOrDefault(box => box.Name == "DashboardSearchBox")?.Focus(NavigationMethod.Tab),
+            DispatcherPriority.Loaded);
     }
 
     private void OnPointerPressedTunnel(object? sender, PointerPressedEventArgs e)

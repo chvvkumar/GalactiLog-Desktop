@@ -46,7 +46,7 @@ public static class HelpTopics
             + "Shared filters card sets the scope once: equipment combination, filter, "
             + "granularity and the date range, which bounds the imaging night. Four of the five "
             + "tabs are views of that one slice: Correlation plots two metrics as a scatter, "
-            + "Distributions shows one metric as a histogram or box plot, Time Series plots a "
+            + "Distributions shows one metric as a histogram or box plot, Time series plots a "
             + "nightly median over time, and Matrix grids the Pearson correlations between the X "
             + "and Y metrics. Compare is the exception: it picks its own two groups, takes only "
             + "the shared date range, and places them side by side."),
@@ -177,10 +177,10 @@ public static class HelpTopics
             + "starting the scan later from Settings loses nothing."),
 
         new("stats.overview", "Overview",
-            "Six library-wide figures: Total Integration, Total Frames, Catalogued Size, Active "
-            + "Span, Avg Rig-Session Length and Avg per Target. Total Integration and Total "
-            + "Frames count light frames only. Catalogued Size is the sum of the file sizes "
-            + "recorded in the database, not a measurement of your disk. Active Span is the time "
+            "Six library-wide figures: Total integration, Total frames, Catalogued size, Active "
+            + "span, Avg rig-session length and Avg per target. Total integration and Total "
+            + "frames count light frames only. Catalogued size is the sum of the file sizes "
+            + "recorded in the database, not a measurement of your disk. Active span is the time "
             + "between the first and last imaging night in the library. The two averages divide "
             + "total integration by the number of rig-sessions and by the number of resolved "
             + "targets."),
@@ -263,29 +263,29 @@ public static class HelpTopics
         new("analysis.filters", "Shared filters",
             "Five controls set the scope for the tabs below. Equipment combination picks one "
             + "telescope and camera pairing or All equipment, Filter restricts to a single "
-            + "optical filter, Granularity switches between Per Frame and Per Session, and Date "
+            + "optical filter, Granularity switches between Per frame and Per session, and Date "
             + "from and Date to bound the imaging night, both ends inclusive. Granularity reaches "
             + "only the Correlation tab and the Distributions histogram; the Distributions box "
-            + "plot, Time Series, Matrix and Compare ignore it, and Compare also ignores the "
+            + "plot, Time series, Matrix and Compare ignore it, and Compare also ignores the "
             + "equipment and filter choices, reading only the date range. A per-session point is "
             + "one night and one target. A combination marked (grouped) folds several header "
             + "spellings into one, as configured on the Equipment settings tab."),
 
         new("analysis.correlation", "Correlation",
-            "A scatter of one X Axis metric against one Y Axis metric across the filtered "
+            "A scatter of one X axis metric against one Y axis metric across the filtered "
             + "frames, with a trend line, a shaded confidence band, a verdict sentence and two "
             + "stats cards; six preset buttons set common pairs. The trend, the band, the cards "
             + "and the point count use every point that matches the filters, and past 5,000 "
             + "points the chart draws an even sample while those figures still use every frame. "
-            + "Hide Outliers hides only the points outside 1.5 times the interquartile range on "
+            + "Hide outliers hides only the points outside 1.5 times the interquartile range on "
             + "either axis and changes none of those figures. The band is a rough guide rather "
             + "than a true 95 percent interval, and it is narrower than that interval on a small "
-            + "point set. The Guiding (PHD2) metrics on the X Axis are night-level figures joined "
+            + "point set. The Guiding (PHD2) metrics on the X axis are night-level figures joined "
             + "by rig and imaging night; a night with no mapped PHD2 profile is omitted."),
 
         new("analysis.distributions", "Distributions",
             "Histogram bins one metric across the filtered frames with a dashed line at the "
-            + "median; Box Plot draws one box per group, grouped By Filter, By Equipment, By "
+            + "median; Box plot draws one box per group, grouped By Filter, By Equipment, By "
             + "Month or By Target, with rings for the outliers. A group with fewer than four "
             + "frames is not drawn, and when no group has enough the tab says so. By Month groups "
             + "by the calendar month of the frame's capture date, while the shared date range "
@@ -293,14 +293,14 @@ public static class HelpTopics
             + "different month from its night. HFR is a pixel figure comparable only within one "
             + "optical train; use FWHM in arcseconds across telescopes."),
 
-        new("analysis.timeseries", "Time Series",
+        new("analysis.timeseries", "Time series",
             "One point per imaging night: the median of that night's values across every target "
             + "and rig the filters admit, and a night imaged under more than one target reads "
-            + "Mixed in its tooltip. Per Frame and Per Session draw the same chart here, since "
+            + "Mixed in its tooltip. Per frame and Per session draw the same chart here, since "
             + "the granularity segment does not reach this tab. Each point is tinted by how far "
             + "it sits from the median of your nights. The shaded band is that median plus or "
             + "minus one MAD, with a dashed line at three MAD on the worse side; the band and the "
-            + "tints need at least eight nights. Smoothing adds a 7-Night MA or 30-Night MA line; "
+            + "tints need at least eight nights. Smoothing adds a 7-night or 30-night moving average; "
             + "both windows count nights that have a frame, not calendar days, and the line "
             + "starts once a full window exists."),
 
@@ -712,7 +712,7 @@ public static class HelpTopics
             + "and category, constellation, coordinates, size, position angle, magnitude, surface "
             + "brightness, the SAC notes, the catalogue memberships and the mean HFR in "
             + "arcseconds. The pencil beside Object type opens a list of categories; choosing one "
-            + "saves at once and changes how the target groups under the dashboard's Object Type "
+            + "saves at once and changes how the target groups under the dashboard's Object type "
             + "filter and in the target list. Correcting it changes no frame."),
 
         new("target.notes", "Notes",
@@ -912,7 +912,7 @@ public static class HelpTopics
         new("mosaics.about", "Mosaics",
             "A mosaic collects the panels of one large field, each panel a set of nights from any "
             + "target. It totals the integration of each panel so you can see which one needs more "
-            + "time. Suggestions come from Run Detection and from every scan, and Create mosaic makes "
+            + "time. Suggestions come from Run detection and from every scan, and Create mosaic makes "
             + "one by hand. Only light frames are counted."),
 
         new("mosaics.keywords", "Detection keywords",
@@ -929,7 +929,7 @@ public static class HelpTopics
             + "position or both, as the source badge says. High confidence means name and "
             + "position agree; low means review the notes before accepting. The Campaign gap "
             + "selector splits nights more than the gap apart into separate suggestions at the "
-            + "next Run Detection. Accept creates the mosaic from the checked panels; Accept all "
+            + "next Run detection. Accept creates the mosaic from the checked panels; Accept all "
             + "and Dismiss all act on the checked rows, or on every row when none is checked. "
             + "Dismiss asks twice, and a dismissed suggestion comes back only when new nights of "
             + "its panels are catalogued."),

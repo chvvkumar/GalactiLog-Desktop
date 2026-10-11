@@ -31,8 +31,10 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// subscribes when it builds the page, the way it routes the Statistics page's events.
 /// </para>
 /// </remarks>
-public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
+public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>Spec 7.7's detection job kind, shared with the scan path.</summary>
     public const string DetectionJobKind = ScanStatusService.MosaicDetectionJobKind;
 
@@ -52,7 +54,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     internal const string DetectionFailedSummary = "Mosaic detection failed. See the log for details.";
 
     /// <summary>Spec 12.17's empty suggestions sentence.</summary>
-    public const string NoSuggestionsText = "No suggestions. Run Detection looks for panels in your target names and sky positions.";
+    public const string NoSuggestionsText = "No suggestions. Run detection looks for panels in your target names and sky positions.";
 
     /// <summary>What a failed suggestions read shows in place of the list.</summary>
     public const string SuggestionsLoadFailedText = "The suggestions could not be loaded.";
@@ -565,6 +567,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task RetrySuggestions() => ReloadAsync();
+
+    // The shell's F5: both lists, as a finished job re-reads them.
+    [RelayCommand]
+    private Task Refresh() => ReloadAsync();
 
     // ---- loading -------------------------------------------------------------------------
 

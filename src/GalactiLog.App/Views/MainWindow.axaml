@@ -10,7 +10,7 @@
         Icon="avares://GalactiLog/Assets/GalactiLog.ico"
         Title="GalactiLog"
         Width="1280" Height="800"
-        MinWidth="1280" MinHeight="720"
+        MinWidth="960" MinHeight="720"
         Background="{DynamicResource BrushPageBackground}"
         FontSize="{Binding RootFontSize}">
   <!-- FIXER item 2, spec 14.4: the root font size is a setting, carried here as FontSize so every
@@ -24,6 +24,20 @@
     <KeyBinding Gesture="BrowserBack" Command="{Binding BackCommand}" />
     <KeyBinding Gesture="Alt+Right" Command="{Binding ForwardCommand}" />
     <KeyBinding Gesture="BrowserForward" Command="{Binding ForwardCommand}" />
+    <!-- ux-flow F8. Ctrl+F is added by the code-behind, because moving focus into the search
+         box is a view concern. A KeyBinding whose command cannot execute leaves the key alone,
+         so Ctrl+S reaches the save bar only while it is showing. Escape is not bound here: a
+         window KeyBinding runs before any control sees the key, so it would beat every
+         dropdown, editor and Back. SaveBarView binds Escape for focus inside the bar. -->
+    <KeyBinding Gesture="F5" Command="{Binding RefreshPageCommand}" />
+    <KeyBinding Gesture="Ctrl+S" Command="{Binding PendingEdits.SaveAllCommand}" />
+    <KeyBinding Gesture="Ctrl+D1" Command="{Binding SelectRailCommand}" CommandParameter="0" />
+    <KeyBinding Gesture="Ctrl+D2" Command="{Binding SelectRailCommand}" CommandParameter="1" />
+    <KeyBinding Gesture="Ctrl+D3" Command="{Binding SelectRailCommand}" CommandParameter="2" />
+    <KeyBinding Gesture="Ctrl+D4" Command="{Binding SelectRailCommand}" CommandParameter="3" />
+    <KeyBinding Gesture="Ctrl+D5" Command="{Binding SelectRailCommand}" CommandParameter="4" />
+    <KeyBinding Gesture="Ctrl+D6" Command="{Binding SelectRailCommand}" CommandParameter="5" />
+    <KeyBinding Gesture="Ctrl+D7" Command="{Binding SelectRailCommand}" CommandParameter="6" />
   </Window.KeyBindings>
   <Grid RowDefinitions="*,Auto,Auto" ColumnDefinitions="Auto,*">
     <!-- The rail collapses to a 48px strip on the chevron: the item labels hide and each
@@ -106,10 +120,17 @@
       </ListBox>
      </Grid>
     </Border>
-    <ContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
-                    Content="{Binding CurrentPage}"
-                    MaxWidth="{Binding ContentMaxWidth}"
-                    HorizontalAlignment="Stretch" />
+    <!-- A page switch cross-fades over 150 ms rather than swapping in one frame (ux-flow F3).
+         Avalonia exposes no reading of the Windows "Animation effects" setting, so the fade
+         always runs. -->
+    <TransitioningContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
+                                 Content="{Binding CurrentPage}"
+                                 MaxWidth="{Binding ContentMaxWidth}"
+                                 HorizontalAlignment="Stretch">
+      <TransitioningContentControl.PageTransition>
+        <CrossFade Duration="0:0:0.15" />
+      </TransitioningContentControl.PageTransition>
+    </TransitioningContentControl>
     <!-- The in-window notice stack, over the page's top centre. Declared after ContentRegion so
          it draws above it; the status bar view-model carries the notifier, as it carries the job
          registry, so the shell needs no property of its own for it. -->

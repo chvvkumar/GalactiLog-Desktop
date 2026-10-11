@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GalactiLog.App.ViewModels.TargetDetail;
@@ -169,7 +170,7 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
     internal void SetFigures(string label, double integrationSeconds, double deficitSeconds, double leaderSeconds)
     {
         Label = label;
-        IntegrationText = MetricText.Integration(integrationSeconds);
+        IntegrationText = DurationFormat.Prose(integrationSeconds);
 
         // Spec 12.17's deficit badge: none at 60 seconds or less, none while the leader is zero,
         // else banded by share of the leader at 0.8 and 0.4 (the web's DELTA thresholds).
@@ -181,7 +182,7 @@ public sealed partial class TileViewModel : ObservableObject, IDisposable
         }
 
         var share = integrationSeconds / leaderSeconds;
-        DeficitText = "-" + MetricText.Integration(deficitSeconds);
+        DeficitText = "-" + DurationFormat.Prose(deficitSeconds);
         Deficit = share >= 0.8 ? DeficitBand.Success : share >= 0.4 ? DeficitBand.Warning : DeficitBand.Error;
     }
 

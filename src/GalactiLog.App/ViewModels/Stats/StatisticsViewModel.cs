@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using Avalonia.Media;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -44,8 +45,10 @@ public sealed record TopTargetRow(int Rank, string Name, string Integration);
 /// failure line in place of the sections rather than spec 12.10's empty state.
 /// </para>
 /// </remarks>
-public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
+public sealed partial class StatisticsViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>Spec 12.10's Statistics empty state, verbatim.</summary>
     public const string EmptyStateText = "No data yet. Run a scan.";
 
@@ -537,7 +540,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
         TopTargetRows =
         [
             .. stats.TopTargets.Take(TopTargetLimit).Select((entry, index) => new TopTargetRow(
-                index + 1, entry.PrimaryName, MetricText.Integration(entry.IntegrationSeconds))),
+                index + 1, entry.PrimaryName, DurationFormat.Prose(entry.IntegrationSeconds))),
         ];
         TopTargetsChart.Update(
             [.. stats.TopTargets.Take(TopTargetLimit).Select(entry => entry.PrimaryName)],
@@ -624,7 +627,7 @@ public sealed partial class StatisticsViewModel : ObservableObject, IDisposable
                 .Select(entry => new FilterUsageRow(
                     entry.FilterName,
                     TargetRowViewModel.ParseTint(aliases.FilterColor(entry.FilterName)),
-                    MetricText.Integration(entry.IntegrationSeconds))),
+                    DurationFormat.Prose(entry.IntegrationSeconds))),
         ];
 
     // One series per filter, carrying a value only at its own category index, which is how the

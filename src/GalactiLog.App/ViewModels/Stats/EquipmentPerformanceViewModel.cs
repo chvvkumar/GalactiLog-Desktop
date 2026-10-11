@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
@@ -59,9 +60,9 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
         Grouped = combo.Grouped;
         FrameCount = MetricText.Count(combo.FrameCount);
         AvgSession = combo.AvgSessionSeconds is { } average
-            ? MetricText.Integration(average)
+            ? DurationFormat.Prose(average)
             : MetricText.Missing;
-        Integration = MetricText.Integration(combo.IntegrationSeconds);
+        Integration = DurationFormat.Prose(combo.IntegrationSeconds);
         MedianHfr = Metric(combo.MedianHfr);
         BestHfr = Metric(combo.BestHfr);
         MedianEccentricity = MetricGrading.Grade(combo.MedianEccentricity, eccentricityBaseline, "Ecc", brushes);
@@ -88,7 +89,7 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
             .. combo.FilterBreakdown.Select(filter => new EquipmentFilterRow(
                 filter.FilterName,
                 MetricText.Count(filter.FrameCount),
-                MetricText.Integration(filter.IntegrationSeconds),
+                DurationFormat.Prose(filter.IntegrationSeconds),
                 Metric(filter.MedianHfr),
                 Metric(filter.BestHfr),
                 Metric(filter.MedianEccentricity),

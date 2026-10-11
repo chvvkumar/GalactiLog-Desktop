@@ -58,7 +58,7 @@
                  Foreground="{DynamicResource ColorTextPrimary}" />
       <!-- The panel's own Reset command, not a second implementation of it. -->
       <Button x:Name="ResetFiltersButton"
-              Content="Reset Filters"
+              Content="Reset filters"
               HorizontalAlignment="Center"
               Padding="12,4"
               Command="{Binding Filters.ResetCommand}" />

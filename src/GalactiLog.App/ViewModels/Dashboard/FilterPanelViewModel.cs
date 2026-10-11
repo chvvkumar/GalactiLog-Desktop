@@ -136,17 +136,17 @@ public sealed partial class FilterPanelViewModel : ObservableObject
             PinnedTargetId is not null
             || !string.IsNullOrWhiteSpace(PinnedUnresolvedObject)
             || !string.IsNullOrWhiteSpace(SearchText));
-        ObjectTypeSection = new FilterSectionViewModel("object_type", "Object Type", "Type", "IconObjectType", () =>
+        ObjectTypeSection = new FilterSectionViewModel("object_type", "Object type", "Type", "IconObjectType", () =>
             ObjectTypes.Any(pill => pill.IsSelected));
-        DateRangeSection = new FilterSectionViewModel("date_range", "Date Range", "Date", "IconDateRange", () =>
+        DateRangeSection = new FilterSectionViewModel("date_range", "Date range", "Date", "IconDateRange", () =>
             DateFrom is not null || DateTo is not null);
         FiltersSection = new FilterSectionViewModel("filters", "Filters", "Filt", "IconFilters", () =>
             Filters.Any(pill => pill.IsSelected));
         EquipmentSection = new FilterSectionViewModel("equipment", "Equipment", "Eqp", "IconEquipment", () =>
             Chosen(SelectedCamera) is not null || Chosen(SelectedTelescope) is not null);
-        MetricsSection = new FilterSectionViewModel("metrics", "Metrics Quality", "Metr", "IconMetrics", () =>
+        MetricsSection = new FilterSectionViewModel("metrics", "Metrics quality", "Metr", "IconMetrics", () =>
             AllMetrics.Any(metric => metric.Range.IsSet));
-        HeaderQuerySection = new FilterSectionViewModel("header_query", "FITS Header Query", "FITS", "IconHeaderQuery", () =>
+        HeaderQuerySection = new FilterSectionViewModel("header_query", "FITS header query", "FITS", "IconHeaderQuery", () =>
             HeaderConditions.Count > 0);
 
         // Spec 12.15's eighth section. Built like the other seven and held here whether or not it

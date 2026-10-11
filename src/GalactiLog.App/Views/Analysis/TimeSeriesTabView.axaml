@@ -21,7 +21,7 @@
     <!-- OUTSIDE the result region, and live in every state including Empty, TooFew, Failed and
          Loading: a reader who filtered the chart into emptiness has to be able to filter back out
          of it. A WrapPanel rather than one row, for the reason the filter bar's own controls wrap
-         at the 1024 by 700 minimum: a clipped control hides an affordance the reader cannot then
+         at the 960 by 720 minimum: a clipped control hides an affordance the reader cannot then
          find. -->
     <WrapPanel x:Name="TimeSeriesControls">
       <StackPanel Spacing="2" Margin="0,0,12,8">

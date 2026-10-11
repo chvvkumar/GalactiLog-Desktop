@@ -8,6 +8,12 @@
        scan ignored the folder. Shown only while something is pending, so the notice the manual
        scan gate sets is always visible when the gate refuses. The warn callout is the theme's
        own composite, so the bar carries no colour of its own. -->
+  <!-- Escape discards only while keyboard focus is inside the bar (ux-flow F8). Bound here and
+       not on the window, because a window KeyBinding runs before any control sees the key and
+       would throw away every pending edit on an Escape meant for a dropdown or an editor. -->
+  <UserControl.KeyBindings>
+    <KeyBinding Gesture="Escape" Command="{Binding DiscardAllCommand}" />
+  </UserControl.KeyBindings>
   <ContentControl x:Name="SaveBarCallout"
                   Classes="callout warn"
                   Margin="8,4"

@@ -1147,10 +1147,10 @@
   <Style Selector="ListBox.rail.compact ListBoxItem">
     <Setter Property="Padding" Value="14,8" />
   </Style>
-  <!-- The collapsed navigation rail: the item's title rides the ListBoxItem as its tip, so the whole
+  <!-- The collapsed navigation rail: the item's title and its Ctrl+N shortcut ride the ListBoxItem as its tip, so the whole
        48 px entry answers a hover; the expanded rail shows the title and the tip goes with the class. -->
   <Style Selector="ListBox.rail.collapsed ListBoxItem" x:DataType="vm:NavigationItem">
-    <Setter Property="ToolTip.Tip" Value="{Binding Title}" />
+    <Setter Property="ToolTip.Tip" Value="{Binding Tip}" />
   </Style>
 
   <!-- Phase 14C Task 4 appends everything below, and nothing above it changed. -->

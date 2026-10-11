@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Data.Queries;
@@ -33,7 +34,7 @@ public sealed class OverviewTilesViewModel
         [
             new OverviewTile(
                 "Total integration",
-                MetricText.Integration(overview.TotalIntegrationSeconds),
+                DurationFormat.Prose(overview.TotalIntegrationSeconds),
                 "all LIGHT frames"),
             new OverviewTile(
                 "Total frames",
@@ -74,7 +75,7 @@ public sealed class OverviewTilesViewModel
     /// Internal so the divide-by-zero guard is asserted directly rather than through the tile list.
     /// </summary>
     internal static string Average(double totalSeconds, int count)
-        => count > 0 ? MetricText.Integration(totalSeconds / count) : MetricText.Missing;
+        => count > 0 ? DurationFormat.Prose(totalSeconds / count) : MetricText.Missing;
 
     /// <summary>
     /// <c>StatsOverview.tsx::formatSpan</c>, transcribed. Whole months between the two dates, one

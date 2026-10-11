@@ -72,7 +72,7 @@ public class FilterPanelViewTests
         Assert.Equal(7, view.GetVisualDescendants().OfType<Expander>().Count());
         Assert.Contains(
             view.GetVisualDescendants().OfType<Button>(),
-            button => button.Content as string == "Reset Filters");
+            button => button.Content as string == "Reset filters");
         Assert.Contains(
             view.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == "OBJECT contains NGC" || text.Text == "OBJECT = NGC");

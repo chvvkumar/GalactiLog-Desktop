@@ -6,7 +6,7 @@
              x:Class="GalactiLog.App.Views.Dashboard.FilterPanelView"
              x:DataType="dash:FilterPanelViewModel">
   <!-- design-spec 12.2: the collapsible left filter panel. Seven collapsible sections, each with
-       an active marker, a Reset Filters button, and nothing else: this control never queries.
+       an active marker, a Reset filters button, and nothing else: this control never queries.
        Every colour is a theme token (spec 14) except a Filters pill's tint, which is the
        configured filter colour and therefore user data, not a token.
 
@@ -203,7 +203,7 @@
           <ContentControl Content="{Binding SearchSection}" ContentTemplate="{StaticResource SectionHeader}" />
         </Expander.Header>
         <StackPanel Spacing="6">
-          <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="Target or OBJECT name">
+          <TextBox x:Name="DashboardSearchBox" Text="{Binding SearchText, Mode=TwoWay}" Watermark="Target or OBJECT name">
             <!-- Escape dismisses the results dropdown without pinning anything (review E1). -->
             <TextBox.KeyBindings>
               <KeyBinding Gesture="Escape" Command="{Binding CloseSearchDropdownCommand}" />
@@ -394,7 +394,7 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <Button Content="Reset Filters"
+      <Button Content="Reset filters"
               Command="{Binding ResetCommand}"
               HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Center"

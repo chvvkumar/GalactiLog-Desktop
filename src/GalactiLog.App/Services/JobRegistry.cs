@@ -301,22 +301,13 @@ public sealed partial class JobViewModel : ObservableObject
             ? at.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)
             : at.ToString("MMM d HH:mm", System.Globalization.CultureInfo.InvariantCulture);
 
-    /// <summary>"under 1 s", "12 s", "1 m 12 s", "2 h 5 m".</summary>
+    /// <summary>"under 1 s", then <see cref="GalactiLog.Core.Text.DurationFormat.Prose"/> over the
+    /// whole seconds elapsed: "12 s", "1 m", "1 m 12 s", "2 h 5 m". Truncated rather than rounded,
+    /// so 0.9 s stays "under 1 s".</summary>
     internal static string FormatDuration(TimeSpan span)
-    {
-        if (span < TimeSpan.FromSeconds(1))
-        {
-            return "under 1 s";
-        }
-
-        var seconds = (long)span.TotalSeconds;
-        return seconds switch
-        {
-            < 60 => $"{seconds} s",
-            < 3600 => $"{seconds / 60} m {seconds % 60} s",
-            _ => $"{seconds / 3600} h {seconds % 3600 / 60} m",
-        };
-    }
+        => span < TimeSpan.FromSeconds(1)
+            ? "under 1 s"
+            : GalactiLog.Core.Text.DurationFormat.Prose(Math.Floor(span.TotalSeconds));
 
     /// <summary>The stable snake_case kind token the job registered with.</summary>
     public string Kind { get; }

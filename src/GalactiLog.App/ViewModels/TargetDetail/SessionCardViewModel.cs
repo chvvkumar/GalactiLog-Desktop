@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.ComponentModel;
 using System.Globalization;
 using Avalonia.Media.Immutable;
@@ -278,7 +279,7 @@ public sealed partial class SessionCardViewModel : ObservableObject, IStripItem,
 
     bool IStripItem.IsMonospace => true;
 
-    public string IntegrationText => MetricText.Hours(Overview.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Table(Overview.IntegrationSeconds);
 
     public int FrameCount => Overview.FrameCount;
 

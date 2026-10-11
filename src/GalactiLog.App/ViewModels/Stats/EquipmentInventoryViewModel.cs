@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Data.Queries;
 
@@ -60,8 +61,8 @@ public sealed class EquipmentInventoryViewModel
         MetricText.Count(item.FrameCount),
         MetricText.Count(item.Nights),
         MetricText.Count(item.TargetCount),
-        item.AvgSessionSeconds is { } average ? MetricText.Integration(average) : MetricText.Missing,
-        MetricText.Integration(item.IntegrationSeconds),
+        item.AvgSessionSeconds is { } average ? DurationFormat.Prose(average) : MetricText.Missing,
+        DurationFormat.Prose(item.IntegrationSeconds),
         // Arcseconds, unit in the column header.
         MetricText.Cell(item.MedianFwhmArcsec, "0.00"),
         item.FwhmFrameCount > 0 ? $"n={MetricText.Count(item.FwhmFrameCount)}" : MetricText.Missing,

@@ -174,7 +174,7 @@
          separate flags and ShowSections is derived from all three (spec 12.10). -->
     <TextBlock x:Name="LoadingLine"
                Grid.Row="1"
-               Text="Loading analytics..."
+               Text="Loading statistics..."
                Classes="t-caption"
                TextWrapping="Wrap"
                IsVisible="{Binding IsLoading}" />

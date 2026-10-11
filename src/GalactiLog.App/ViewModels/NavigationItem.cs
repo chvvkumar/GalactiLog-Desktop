@@ -73,6 +73,13 @@ public sealed class NavigationItem
 
     public string Title { get; }
 
+    /// <summary>The key that selects this destination, for example <c>Ctrl+1</c>, or null. Set by
+    /// the shell for the rail; a Settings tab has none.</summary>
+    public string? Shortcut { get; internal set; }
+
+    /// <summary>The hover label: the title, followed by the shortcut when there is one.</summary>
+    public string Tip => Shortcut is null ? Title : $"{Title}  {Shortcut}";
+
     /// <summary>The resource key of the icon a collapsed rail draws, or null.</summary>
     public string? IconKey { get; }
 

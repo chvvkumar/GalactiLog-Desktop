@@ -41,12 +41,6 @@ internal static class MetricText
     /// <summary>An exposure length as a table figure, no unit (the heading carries it).</summary>
     public static string ExposureFigure(double? seconds) => Cell(seconds, ExposureFormat);
 
-    /// <summary>Hours with one decimal, for example <c>3.2 h</c>. The same rendering
-    /// <c>TargetRowViewModel</c> and <c>TargetTotalsViewModel</c> use, so a dashboard row, a
-    /// totals row and a session card cannot disagree on the same integration.</summary>
-    public static string Hours(double seconds)
-        => string.Create(CultureInfo.InvariantCulture, $"{seconds / 3600d:0.0} h");
-
     public static string Count(int value) => value.ToString("N0", CultureInfo.InvariantCulture);
 
     public static string Date(DateOnly date) => date.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
@@ -55,38 +49,6 @@ internal static class MetricText
     /// renders an em dash there; this repository forbids em dashes outright, and the hyphen
     /// carries the same "nothing to show" meaning.</summary>
     public const string Missing = "-";
-
-    /// <summary>
-    /// An integration total as hours, minutes and seconds, ported from
-    /// <c>frontend/src/utils/format.ts::formatIntegration</c>: hours and minutes zero-padded to
-    /// two digits, the seconds field appended only when the total is not a whole minute.
-    /// </summary>
-    /// <remarks>
-    /// Added by Phase 9 Task 3 for the Statistics page, which renders this figure in eight places.
-    /// The collision map's designated-owner table names <see cref="MetricText"/> as the owner of
-    /// the web's three format helpers, "extended by 3", so this lives beside <see cref="Hours"/>
-    /// rather than in a second formatter under <c>ViewModels/Stats</c>.
-    /// <para>
-    /// Hours are deliberately not capped at 24 and there is no day field: a library total reads
-    /// <c>312h 05m</c>, exactly as the web renders it. The seconds field is conditional because
-    /// every figure is formatted from its own rounded-to-the-second value, which is what makes a
-    /// breakdown sum exactly to its displayed total (the web source's AUD-027).
-    /// </para>
-    /// </remarks>
-    public static string Integration(double seconds)
-    {
-        // JavaScript's Math.round is half-up and .NET's default is banker's rounding; they differ
-        // only on an exact half second, and AwayFromZero is the matching one for the clamped
-        // non-negative total the web computes.
-        var total = (long)Math.Max(0d, Math.Round(seconds, MidpointRounding.AwayFromZero));
-        var hours = total / 3600;
-        var minutes = total % 3600 / 60;
-        var remainder = total % 60;
-        var head = string.Create(CultureInfo.InvariantCulture, $"{hours:00}h {minutes:00}m");
-        return remainder == 0
-            ? head
-            : head + string.Create(CultureInfo.InvariantCulture, $" {remainder:00}s");
-    }
 
     /// <summary>
     /// A byte count in decimal SI units, ported from
