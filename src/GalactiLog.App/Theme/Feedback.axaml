@@ -1,0 +1,123 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:controls="using:GalactiLog.App.Controls">
+  <!-- Feedback: the in-window notice, the error state, the loading placeholder and the delayed
+       reveal they share. Kept out of Controls.axaml so the feedback surfaces have one file of
+       their own. No Button style lives here (ControlStyleScanTest keeps those in Controls.axaml):
+       the notice's dismiss button is the shared chevron button and the error state's retry is the
+       base button. Every colour is a theme key. -->
+  <Styles.Resources>
+    <!-- The notice's dismiss cross, drawn in the chevrons' stroke weight. -->
+    <StreamGeometry x:Key="IconDismiss">M4,4 L12,12 M12,4 L4,12</StreamGeometry>
+  </Styles.Resources>
+
+  <!-- The notice. The outer border is opaque, the elevated surface, because a notice floats over
+       page content and the callout composites are 20 percent fills. The inner border carries the
+       kind's callout fill and edge. It fades in over 150 ms when it appears and fades out over the
+       same 150 ms when the closing class lands; Notifier removes it once the fade has run. -->
+  <Style Selector="Border.notice">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+    <Setter Property="BoxShadow" Value="{StaticResource ShadowMd}" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
+    <Style.Animations>
+      <Animation Duration="0:0:0.15">
+        <KeyFrame Cue="0%">
+          <Setter Property="Opacity" Value="0" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="Opacity" Value="1" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+  <Style Selector="Border.notice.closing">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+  <Style Selector="Border.notice > Border">
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+    <Setter Property="Padding" Value="12,8,8,8" />
+    <Setter Property="Background" Value="{DynamicResource ColorInfoCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorInfoCalloutBorder}" />
+  </Style>
+  <Style Selector="Border.notice.success > Border">
+    <Setter Property="Background" Value="{DynamicResource ColorSuccessCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorSuccessCalloutBorder}" />
+  </Style>
+  <Style Selector="Border.notice.warning > Border">
+    <Setter Property="Background" Value="{DynamicResource ColorWarningCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorWarningCalloutBorder}" />
+  </Style>
+  <Style Selector="Border.notice.error > Border">
+    <Setter Property="Background" Value="{DynamicResource ColorErrorCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorErrorCalloutBorder}" />
+  </Style>
+  <Style Selector="Border.notice TextBlock">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+
+  <!-- The error state: a page or section that could not load says so in the error callout's
+       colours, with what to do next, instead of a grey caption that reads like an empty state. -->
+  <Style Selector="Border.error-state">
+    <Setter Property="Background" Value="{DynamicResource ColorErrorCalloutFill}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorErrorCalloutBorder}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+  <!-- The loading placeholder's bars, and their pulse. The pulse runs only while the control is
+       shown, so a page that has loaded carries no running animation. -->
+  <Style Selector="Border.loading-bar">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    <Setter Property="Margin" Value="0,4" />
+  </Style>
+  <Style Selector="controls|LoadingRows[IsVisible=True] Border.loading-bar">
+    <Style.Animations>
+      <Animation Duration="0:0:1.2" IterationCount="Infinite">
+        <KeyFrame Cue="0%">
+          <Setter Property="Opacity" Value="1" />
+        </KeyFrame>
+        <KeyFrame Cue="50%">
+          <Setter Property="Opacity" Value="0.4" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="Opacity" Value="1" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- The delayed reveal. A loading indicator that appears and vanishes inside 150 ms is a
+       flash, not information, so anything with this class stays transparent for its first 150 ms
+       on screen and then fades in. It restarts each time IsVisible turns true. -->
+  <Style Selector=":is(Control).reveal-delayed">
+    <Setter Property="Opacity" Value="0" />
+  </Style>
+  <Style Selector=":is(Control).reveal-delayed[IsVisible=True]">
+    <Style.Animations>
+      <Animation Delay="0:0:0.15" Duration="0:0:0.15" FillMode="Forward">
+        <KeyFrame Cue="0%">
+          <Setter Property="Opacity" Value="0" />
+        </KeyFrame>
+        <KeyFrame Cue="100%">
+          <Setter Property="Opacity" Value="1" />
+        </KeyFrame>
+      </Animation>
+    </Style.Animations>
+  </Style>
+
+  <!-- A list whose items are separated by a hairline, for a list read top to bottom where the
+       order matters, such as the jobs flyout's newest-first recent list. -->
+  <Style Selector="ItemsControl.divided > ContentPresenter:nth-child(n+2)">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+    <Setter Property="Padding" Value="0,8,0,0" />
+  </Style>
+</Styles>

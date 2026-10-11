@@ -626,7 +626,14 @@ public static class AppHost
         // AppHostTests.RegistrationBlock slices a block from its constructor call to the next
         // literal builder.Services. It owns no thread and no handle and is deliberately not
         // IDisposable, so the host's disposal order is unchanged.
-        builder.Services.AddSingleton(_ => new JobRegistry());
+        builder.Services.AddSingleton(serviceProvider => new JobRegistry(
+            notifier: serviceProvider.GetRequiredService<INotifier>()));
+
+        // The in-window notice stack. One instance behind both names: the registry, the save bar
+        // and anything else that confirms an action take the interface, and the shell's notice
+        // host binds the concrete list through the status bar.
+        builder.Services.AddSingleton(_ => new Notifier());
+        builder.Services.AddSingleton<INotifier>(serviceProvider => serviceProvider.GetRequiredService<Notifier>());
 
         // Spec 12.7's out-of-scan correlation re-run (Phase 15A Task 6, ruling F5), census member
         // eleven. A factory, never an instance, and the type is deliberately not IDisposable, so
@@ -894,7 +901,8 @@ public static class AppHost
         // tabs with staged edits register with it as they are built (RegisterPending below), the
         // shell's save bar binds it, and the manual scan gate reads it.
         builder.Services.AddSingleton(serviceProvider => new PendingEditsRegistry(
-            serviceProvider.GetRequiredService<ILogger<PendingEditsRegistry>>()));
+            serviceProvider.GetRequiredService<ILogger<PendingEditsRegistry>>(),
+            serviceProvider.GetRequiredService<INotifier>()));
         // The one manual-scan delegate. The status bar, the dashboard's empty state and the Library
         // tab all call this gate, so all three refuse while an edit is staged (a scan reads disk
         // and would ignore it) and none of them can disagree about what a manual scan is.
@@ -918,7 +926,8 @@ public static class AppHost
             // Spec 12's job monitor (PAR-015, ruling D1), beside the update indicator and for the
             // same reason: a trailing optional parameter, named rather than positional, so dropping
             // it fails a test instead of compiling.
-            jobs: serviceProvider.GetRequiredService<JobRegistry>()));
+            jobs: serviceProvider.GetRequiredService<JobRegistry>(),
+            notifier: serviceProvider.GetRequiredService<Notifier>()));
 
         // Spec 12.11's residency owner and notification-area icon (Phase 11 Task 2). Factories,
         // like every other Phase 11 registration; neither is resolved until

@@ -112,7 +112,9 @@ public class ActivityViewTests
             page: (_, _, _) => throw new InvalidOperationException("no database"));
         var (_, view) = Show(page);
 
-        Assert.True(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        var failure = view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine");
+        Assert.True(failure.IsVisible);
+        Assert.Same(page.RefreshCommand, failure.RetryCommand);
         Assert.False(view.GetControl<TextBlock>("EmptyState").IsVisible);
     }
 

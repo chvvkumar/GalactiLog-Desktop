@@ -361,4 +361,129 @@ public class JobRegistryTests
         Assert.Equal(handles.Length, registry.Running.Count);
         Assert.Equal(handles.Length, registry.RunningCount);
     }
+
+    // Task 3 (feedback): every job reports through Finish, so the notice is the registry's to
+    // raise. The kind follows the result; an empty summary falls back to the title.
+    private sealed class RecordingNotifier : INotifier
+    {
+        public List<(string Text, NoticeKind Kind)> Shown { get; } = [];
+
+        public void Show(string text, NoticeKind kind, TimeSpan? autoDismiss = null) => Shown.Add((text, kind));
+    }
+
+    [Theory]
+    [InlineData(JobResult.Succeeded, "Pruned 12 entries.", "Pruned 12 entries.", NoticeKind.Success)]
+    [InlineData(JobResult.Succeeded, "", "Prune activity log finished", NoticeKind.Success)]
+    [InlineData(JobResult.Failed, "The database is locked.", "The database is locked.", NoticeKind.Error)]
+    [InlineData(JobResult.Cancelled, "Stopped.", "Stopped.", NoticeKind.Info)]
+    public void Finish_PushesTheNoticeForItsResult(JobResult result, string summary, string text, NoticeKind kind)
+    {
+        var notices = new RecordingNotifier();
+        var registry = new JobRegistry(action => action(), notices);
+
+        registry.Begin("prune_activity", "Prune activity log").Finish(result, summary);
+
+        Assert.Equal((text, kind), Assert.Single(notices.Shown));
+    }
+
+    // Review fix round 1, I1: a quiet job (a scan step, a survey fetch) raises a notice only when
+    // it fails.
+    [Theory]
+    [InlineData(JobResult.Succeeded, false)]
+    [InlineData(JobResult.Cancelled, false)]
+    [InlineData(JobResult.Failed, true)]
+    public void AQuietJob_RaisesANoticeOnlyWhenItFails(JobResult result, bool notifies)
+    {
+        var notices = new RecordingNotifier();
+        var registry = new JobRegistry(action => action(), notices);
+
+        registry.Begin("phd2_ingest", "Reading PHD2 guide logs", notify: false).Finish(result, "The guiding step finished.");
+
+        if (notifies)
+        {
+            Assert.Equal(("The guiding step finished.", NoticeKind.Error), Assert.Single(notices.Shown));
+        }
+        else
+        {
+            Assert.Empty(notices.Shown);
+        }
+    }
+
+    [Fact]
+    public void Finish_WithNoticeText_ShowsItInPlaceOfTheSummary_AndKeepsTheSummary()
+    {
+        var notices = new RecordingNotifier();
+        var registry = new JobRegistry(action => action(), notices);
+
+        registry.Begin("scan", "Library scan").Finish(JobResult.Succeeded, "The scan finished.", "Scan complete: 3 new files");
+
+        Assert.Equal(("Scan complete: 3 new files", NoticeKind.Success), Assert.Single(notices.Shown));
+        Assert.Equal("The scan finished.", registry.Recent[0].Summary);
+    }
+
+    [Theory]
+    [InlineData(100, false)]
+    [InlineData(800, true)]
+    public void Dispose_WithoutFinish_IsQuietUnderHalfASecond(int ranMilliseconds, bool notifies)
+    {
+        var notices = new RecordingNotifier();
+        var now = new DateTimeOffset(2026, 10, 11, 14, 31, 0, TimeSpan.Zero);
+        var registry = new JobRegistry(action => action(), notices, () => now);
+
+        var handle = registry.Begin("prune_activity", "Prune activity log");
+        now = now.AddMilliseconds(ranMilliseconds);
+        handle.Dispose();
+
+        Assert.Equal(JobResult.Succeeded, registry.Recent[0].Result);
+        if (notifies)
+        {
+            Assert.Equal(("Prune activity log finished", NoticeKind.Success), Assert.Single(notices.Shown));
+        }
+        else
+        {
+            Assert.Empty(notices.Shown);
+        }
+    }
+
+    [Fact]
+    public void AJob_RecordsItsTimes_AndTheFlyoutLinesReadThem()
+    {
+        var now = new DateTimeOffset(2026, 10, 11, 14, 31, 5, TimeSpan.Zero);
+        var registry = new JobRegistry(action => action(), now: () => now);
+
+        var handle = registry.Begin("scan", "Library scan");
+        var job = registry.Running[0];
+        Assert.Equal(now, job.StartedAt);
+        Assert.Null(job.FinishedAt);
+        Assert.Equal("started 14:31", job.TimeText);
+        Assert.Equal("", job.StatusLine);
+
+        now = now.AddSeconds(72);
+        handle.Finish(JobResult.Succeeded, "The scan finished.");
+
+        Assert.Equal(now, job.FinishedAt);
+        Assert.Equal("14:32", job.TimeText);
+        Assert.Equal("Succeeded in 1 m 12 s", job.StatusLine);
+
+        // Read the next day, the time carries its date, and there is no "yesterday" form.
+        now = now.AddDays(1);
+        Assert.Equal("Oct 11 14:32", job.TimeText);
+    }
+
+    [Theory]
+    [InlineData(JobResult.Failed, 12, "Failed after 12 s")]
+    [InlineData(JobResult.Cancelled, 5, "Cancelled after 5 s")]
+    [InlineData(JobResult.Succeeded, 0, "Succeeded in under 1 s")]
+    [InlineData(JobResult.Succeeded, 3725, "Succeeded in 1 h 2 m")]
+    public void StatusLine_SaysTheResultAndHowLongItTook(JobResult result, int seconds, string expected)
+    {
+        var now = new DateTimeOffset(2026, 10, 11, 9, 0, 0, TimeSpan.Zero);
+        var registry = new JobRegistry(action => action(), now: () => now);
+
+        var handle = registry.Begin("prune_activity", "Prune activity log");
+        now = now.AddSeconds(seconds);
+        handle.Finish(result, "");
+
+        Assert.Equal(expected, registry.Recent[0].StatusLine);
+    }
 }

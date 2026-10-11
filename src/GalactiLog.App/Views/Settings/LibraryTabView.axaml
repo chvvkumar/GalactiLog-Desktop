@@ -17,12 +17,12 @@
   <ScrollViewer>
     <StackPanel Spacing="16">
 
-      <!-- A read that threw. One neutral line in place of the controls, not above them: every
-           section below binds IsReady (spec 12.10, review finding I1). -->
-      <TextBlock x:Name="LoadFailedText"
-                 Text="The library settings could not be read."
-                 IsVisible="{Binding LoadFailed}"
-                 Classes="t-caption" />
+      <!-- A read that threw. The error state in place of the controls, not above them: every
+           section below binds IsReady (spec 12.10, review finding I1). No Retry: this tab has no
+           reload command to bind it to. -->
+      <controls:ErrorState x:Name="LoadFailedText"
+                           Message="The library settings could not be read."
+                           IsVisible="{Binding LoadFailed}" />
 
       <!-- The first read, in flight. Without this the tab renders four empty lists and a slow
            read looks like an empty configuration (review finding M8). -->

@@ -125,7 +125,39 @@ public class StatusBarViewTests
         var texts = recent.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text ?? "");
         Assert.Contains("Library scan", texts);
         Assert.Contains("The scan finished.", texts);
-        Assert.Contains("Succeeded", texts);
+        Assert.Contains(texts, text => text.StartsWith("Succeeded in ", StringComparison.Ordinal));
+    }
+
+    // Task 3 (feedback): a failure nobody has looked at is counted beside the monitor in error ink
+    // until the flyout opens, and the recent list shows a finish time and one status line, with no
+    // progress line that only repeats the summary.
+    [AvaloniaFact]
+    public void View_AnUnseenFailure_IsCountedUntilTheFlyoutOpens()
+    {
+        using var harness = Show();
+
+        var detection = harness.Jobs.Begin("mosaic_detection", "Mosaic detection");
+        detection.Report("34 suggestions");
+        detection.Finish(JobResult.Succeeded, "34 suggestions");
+        harness.Jobs.Begin("prune_activity", "Prune activity log").Finish(JobResult.Failed, "The database is locked.");
+        Dispatcher.UIThread.RunJobs();
+
+        var button = ButtonNamed(harness.View, "JobMonitorButton");
+        Assert.Contains("1 failed", VisibleTextsIn(button));
+
+        var content = OpenFlyout(harness);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal(0, harness.ViewModel.UnseenFailedCount);
+        Assert.DoesNotContain("1 failed", VisibleTextsIn(button));
+
+        var recent = content.GetVisualDescendants().OfType<ItemsControl>().Single(list => list.Name == "RecentJobList");
+        Assert.Contains("divided", recent.Classes);
+        var texts = VisibleTextsIn(recent);
+        Assert.Contains(texts, text => text.StartsWith("Failed after ", StringComparison.Ordinal));
+        Assert.Contains(DateTimeOffset.Now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), texts);
+
+        // The detection job's last message equals its summary, so it is drawn once, not twice.
+        Assert.Single(texts, text => text == "34 suggestions");
     }
 
     [AvaloniaFact]

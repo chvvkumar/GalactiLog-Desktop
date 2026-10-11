@@ -28,7 +28,7 @@
                   Margin="12,0,0,0"
                   VerticalAlignment="Center">
         <Button x:Name="SaveAllButton"
-                Classes="primary"
+                Classes="accent"
                 Content="Save changes"
                 Command="{Binding SaveAllCommand}" />
         <Button x:Name="DiscardAllButton"

@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GalactiLog.Core.Scanning;
+using GalactiLog.Data.Entities;
 using GalactiLog.Data.Ingest;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -26,6 +27,12 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
     private readonly Action<Action> _post;
     private readonly ILogger _logger;
     private readonly JobRegistry? _jobs;
+    private readonly Action<TimeSpan, Action> _schedule;
+
+    /// <summary>Bumped by every status change, so a finished scan's held summary is replaced by
+    /// "Ready" only if nothing has said anything since. Read and written only inside the post seam.
+    /// </summary>
+    private int _messageGeneration;
 
     /// <summary>The handle for the run in flight, or null between runs. Read and written only
     /// inside the post seam, which is what serializes it.</summary>
@@ -53,16 +60,21 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
     /// registration site and the spec names it, because this type already sees every progress
     /// envelope and every finish. The registry is a second reader, never a second source of truth:
     /// nothing below reads back from it and the bar's own state is unchanged.</param>
+    /// <param name="schedule">Runs an action after a delay, through the post seam. It times the
+    /// finished scan's summary back to "Ready"; a test passes one it fires by hand.</param>
     public ScanStatusService(
         ScanCoordinator coordinator,
         Action<Action>? post = null,
         ILogger? logger = null,
-        JobRegistry? jobs = null)
+        JobRegistry? jobs = null,
+        Action<TimeSpan, Action>? schedule = null)
     {
         _coordinator = coordinator;
         _post = post ?? UiPost.Default;
         _logger = logger ?? NullLogger.Instance;
         _jobs = jobs;
+        _schedule = schedule ?? ((delay, action) =>
+            _ = Task.Delay(delay).ContinueWith(_ => _post(action), TaskScheduler.Default));
 
         TaskName = "";
         Message = "Ready";
@@ -125,6 +137,7 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
     {
         _post(() =>
         {
+            _messageGeneration++;
             IsRunning = true;
             TaskName = progress.Task;
             Message = progress.Message;
@@ -207,7 +220,9 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
             }
 
             _phd2JobKind = kind;
-            _phd2Job = _jobs?.Begin(kind, Phd2JobTitle(kind), _coordinator.Cancel);
+            // Quiet: a step of the scan, which raises the one notice for the whole run. A failed
+            // step still raises its own Error notice.
+            _phd2Job = _jobs?.Begin(kind, Phd2JobTitle(kind), _coordinator.Cancel, notify: false);
         }
 
         _phd2Job?.Report(progress.Message, progress.Percent);
@@ -255,17 +270,36 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
                 _ => (JobResult.Succeeded, ScanJobSummary),
             };
 
+            // The run's counts, in the composer the tray tooltip already uses, so the status bar,
+            // the in-window notice and the tooltip read the same sentence.
+            var completion = CompletionText(e);
+
             // Any PHD2 sub-job still open goes first, and with the run's own result: a scan the
             // user stopped inside the guide-log pass must not leave that pass reading Succeeded
             // in the flyout, and a sub-job left running would outlive the scan that owns it.
             FinishPhd2SubJob(result, summary == ScanJobSummary ? SubJobSummary : summary);
-            finished?.Finish(result, summary);
+
+            // The notice goes through the job's own Finish, the one path every job reports by,
+            // carrying the counts rather than the flyout's generic summary. A second Show here
+            // would put two notices up for one scan.
+            finished?.Finish(result, summary, completion);
 
             IsRunning = _coordinator.IsRunning;
             if (!IsRunning)
             {
+                // The outcome stays on the bar for ScanSummaryHold, or until the next status
+                // change, and then the bar goes back to "Ready". A finished scan used to read
+                // "Ready" at once, which told the user nothing about what it found.
                 Percent = 0;
-                Message = "Ready";
+                Message = completion;
+                var generation = ++_messageGeneration;
+                _schedule(ScanSummaryHold, () =>
+                {
+                    if (generation == _messageGeneration && !IsRunning)
+                    {
+                        Message = "Ready";
+                    }
+                });
             }
 
             // Review fix pass item 2: a throwing subscriber (Task 7/8's page refresh) must not
@@ -295,6 +329,31 @@ public sealed partial class ScanStatusService : ObservableObject, IDisposable
     // the same reason OnScanFinished reads IsRunning live.
     private void OnResolutionStateChanged(object? sender, EventArgs e)
         => _post(() => ResolutionInProgress = _coordinator.ResolutionInProgress);
+
+    /// <summary>How long a finished scan's outcome stays on the status bar before "Ready".</summary>
+    internal static readonly TimeSpan ScanSummaryHold = TimeSpan.FromSeconds(10);
+
+    /// <summary>"Scan complete: 3 files discovered, 3 new files", from the event's own outcome
+    /// record. Built through <see cref="ScanCompletionNotice.From"/> so the wording has one owner;
+    /// the outcome carries the same counts the scan_runs row does, so no database read is needed.
+    /// </summary>
+    internal static string CompletionText(ScanFinishedEventArgs e)
+    {
+        var outcome = e.Outcome;
+        var notice = ScanCompletionNotice.From(new ScanRun
+        {
+            State = e.State,
+            Discovered = outcome?.Discovered ?? 0,
+            NewFiles = outcome?.NewFiles ?? 0,
+            ChangedFiles = outcome?.ChangedFiles ?? 0,
+            Completed = outcome?.Completed ?? 0,
+            Failed = outcome?.Failed ?? 0,
+            SkippedCalibration = outcome?.SkippedCalibration ?? 0,
+            Removed = outcome?.Removed ?? 0,
+            ErrorText = e.Error?.Message,
+        });
+        return notice.Title + ": " + notice.Body;
+    }
 
     /// <summary>The scan's snake_case job kind token (spec 12). One token, not a second
     /// vocabulary beside <c>ScanTaskNames</c>: the seven task names are phases within this one

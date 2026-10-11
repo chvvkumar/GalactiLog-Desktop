@@ -237,6 +237,10 @@
             <dashViews:TargetListView DataContext="{Binding Targets}" />
           </Panel>
           <dashViews:DashboardEmptyStateView IsVisible="{Binding ShowEmptyState}" />
+          <!-- Before the first query comes back the region shows placeholder rows, not nothing.
+               LoadingRows holds itself back 150 ms, so a fast load never flashes them. -->
+          <controls:LoadingRows x:Name="LoadingPlaceholder"
+                                IsVisible="{Binding ContentState, Converter={x:Static ObjectConverters.Equal}, ConverterParameter={x:Static vm:DashboardContentState.Loading}}" />
         </Panel>
       </Border>
     </Grid>

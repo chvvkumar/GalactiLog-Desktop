@@ -93,7 +93,7 @@ public class LibraryTabViewTests
         Show(view);
 
         // Spec 12.10: a failure is reported, never a silent empty page.
-        Assert.True(view.GetControl<TextBlock>("LoadFailedText").IsEffectivelyVisible);
+        Assert.True(view.GetControl<GalactiLog.App.Controls.ErrorState>("LoadFailedText").IsEffectivelyVisible);
 
         // Review finding I1 and minor 9: "in place of" the controls, not above them. A live
         // editor over a document that failed to read shows four empty lists, and one edit would

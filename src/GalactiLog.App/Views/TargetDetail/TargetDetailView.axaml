@@ -312,7 +312,22 @@
 
     <!-- The layout the registry resolves; it inherits this page's DataContext. -->
     <SplitView.Content>
-      <ContentControl x:Name="LayoutHost" />
+      <Panel>
+        <ContentControl x:Name="LayoutHost" />
+        <!-- A thin indeterminate line along the top edge while the page reads. The layout owns
+             the header, so the line sits over the content's top edge rather than inside it. It
+             holds back 150 ms (reveal-delayed) so a fast load never flashes it. -->
+        <ProgressBar x:Name="PageLoadingLine"
+                     Classes="reveal-delayed"
+                     VerticalAlignment="Top"
+                     Height="2"
+                     MinHeight="2"
+                     IsIndeterminate="True"
+                     IsHitTestVisible="False"
+                     IsVisible="{Binding IsLoading}"
+                     Foreground="{DynamicResource ColorAccent}"
+                     Background="Transparent" />
+      </Panel>
     </SplitView.Content>
   </SplitView>
 </UserControl>

@@ -1,0 +1,32 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GalactiLog.App.Controls.ErrorState"
+             x:Name="ErrorRoot"
+             VerticalAlignment="Top">
+  <!-- One shape for "this could not be loaded": the error callout's colours, the message, an
+       optional detail line, and Retry wired to the page's own reload. The look is
+       Border.error-state in Theme/Feedback.axaml. -->
+  <Border Classes="error-state">
+    <Grid ColumnDefinitions="*,Auto">
+      <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center">
+        <TextBlock x:Name="MessageText"
+                   Text="{Binding #ErrorRoot.Message}"
+                   TextWrapping="Wrap"
+                   Foreground="{DynamicResource ColorTextPrimary}" />
+        <TextBlock x:Name="DetailText"
+                   Classes="t-caption"
+                   Text="{Binding #ErrorRoot.Detail}"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding #ErrorRoot.Detail, Converter={x:Static StringConverters.IsNotNullOrEmpty}}" />
+      </StackPanel>
+      <!-- Drawn only when the host has a reload to offer. -->
+      <Button Grid.Column="1"
+              x:Name="RetryButton"
+              Content="Retry"
+              Margin="12,0,0,0"
+              VerticalAlignment="Center"
+              Command="{Binding #ErrorRoot.RetryCommand}"
+              IsVisible="{Binding #ErrorRoot.RetryCommand, Converter={x:Static ObjectConverters.IsNotNull}}" />
+    </Grid>
+  </Border>
+</UserControl>

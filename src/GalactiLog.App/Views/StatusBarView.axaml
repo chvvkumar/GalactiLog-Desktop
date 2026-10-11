@@ -6,6 +6,17 @@
              x:DataType="vm:StatusBarViewModel">
   <!-- design-spec 12: scan state, message, percent, a cancel button while a scan runs, and the
        update indicator (Phase 10 Task 4, at the end of this file). -->
+  <Panel>
+  <!-- A 2 px accent line across the top of the bar while any job runs, so background work is
+       visible from every page. Indeterminate: there is no aggregate percent across jobs. -->
+  <ProgressBar x:Name="JobsRunningLine"
+               VerticalAlignment="Top"
+               Height="2"
+               MinHeight="2"
+               IsIndeterminate="True"
+               IsVisible="{Binding HasRunningJobs}"
+               Foreground="{DynamicResource ColorAccent}"
+               Background="Transparent" />
   <Grid ColumnDefinitions="Auto,*,Auto,Auto" Margin="8,0">
     <TextBlock Grid.Column="0"
                Text="{Binding StateText}"
@@ -25,7 +36,14 @@
            RunScanButton below is it. -->
       <Button x:Name="JobMonitorButton"
               IsVisible="{Binding HasJobsToShow}">
-        <StackPanel Orientation="Horizontal" Spacing="6">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <!-- The accent dot: something is running. -->
+          <Ellipse x:Name="JobsRunningDot"
+                   Width="8"
+                   Height="8"
+                   VerticalAlignment="Center"
+                   Fill="{DynamicResource ColorAccent}"
+                   IsVisible="{Binding HasRunningJobs}" />
           <TextBlock Text="Jobs" VerticalAlignment="Center" />
           <!-- The count alone hides at zero; the button stays, because it is the only way to
                reach the recent list. -->
@@ -33,9 +51,15 @@
                      Text="{Binding RunningJobsText}"
                      IsVisible="{Binding HasRunningJobs}"
                      VerticalAlignment="Center" />
+          <!-- Failures the user has not seen yet, in error ink. Opening the flyout clears it. -->
+          <TextBlock x:Name="UnseenFailures"
+                     Text="{Binding UnseenFailuresText}"
+                     IsVisible="{Binding HasUnseenFailures}"
+                     Foreground="{DynamicResource ColorError}"
+                     VerticalAlignment="Center" />
         </StackPanel>
         <Button.Flyout>
-          <Flyout>
+          <Flyout Opened="OnJobsFlyoutOpened">
             <StackPanel MinWidth="320" MaxWidth="420" Spacing="8">
               <!-- Phase 14B fixer, fixer list item 18: each heading goes with its own list, so the
                    first flyout of a session no longer shows a section label with nothing under
@@ -46,8 +70,16 @@
                   <DataTemplate DataType="svc:JobViewModel">
                     <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                       <StackPanel Grid.Column="0" Spacing="2">
-                        <TextBlock Text="{Binding Title}"
-                                   Foreground="{DynamicResource ColorTextPrimary}" />
+                        <Grid ColumnDefinitions="*,Auto">
+                          <TextBlock Text="{Binding Title}"
+                                     Foreground="{DynamicResource ColorTextPrimary}" />
+                          <TextBlock Grid.Column="1"
+                                     Classes="t-caption"
+                                     FontFeatures="tnum=1"
+                                     Margin="8,0,0,0"
+                                     VerticalAlignment="Center"
+                                     Text="{Binding TimeText}" />
+                        </Grid>
                         <TextBlock Text="{Binding Message}"
                                    TextTrimming="CharacterEllipsis"
                                    ToolTip.Tip="{Binding Message}"
@@ -72,25 +104,36 @@
                 </ItemsControl.ItemTemplate>
               </ItemsControl>
               <!-- Spec 12: the outcomes are kept after completion, newest first, capped at ten,
-                   and nothing clears them on a timer. -->
+                   and nothing clears them on a timer. The hairline between items (the divided
+                   class) and the finish time on each title row make the order readable. -->
               <TextBlock Classes="t-label" Text="Recent" IsVisible="{Binding HasRecentJobs}" />
-              <ItemsControl x:Name="RecentJobList" ItemsSource="{Binding Jobs.Recent}">
+              <ItemsControl x:Name="RecentJobList" Classes="divided" ItemsSource="{Binding Jobs.Recent}">
                 <ItemsControl.ItemTemplate>
                   <DataTemplate DataType="svc:JobViewModel">
                     <StackPanel Spacing="2" Margin="0,0,0,8">
-                      <TextBlock Text="{Binding Title}"
-                                 Foreground="{DynamicResource ColorTextPrimary}" />
-                      <TextBlock Text="{Binding ResultText}"
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}"
+                                   Foreground="{DynamicResource ColorTextPrimary}" />
+                        <TextBlock Grid.Column="1"
+                                   x:Name="RecentJobTime"
+                                   Classes="t-caption"
+                                   FontFeatures="tnum=1"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Text="{Binding TimeText}" />
+                      </Grid>
+                      <TextBlock Text="{Binding StatusLine}"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
                       <TextBlock Text="{Binding Summary}"
                                  TextWrapping="Wrap"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
                       <!-- Phase 14B fixer, fixer list item 17: the last progress line the job
-                           reported, which is what keeping Message past the finish is for. -->
+                           reported, which is what keeping Message past the finish is for. Hidden
+                           when it repeats the summary word for word. -->
                       <TextBlock x:Name="RecentJobMessage"
                                  Text="{Binding Message}"
                                  TextTrimming="CharacterEllipsis"
-                                 IsVisible="{Binding HasMessage}"
+                                 IsVisible="{Binding ShowRecentMessage}"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
                     </StackPanel>
                   </DataTemplate>
@@ -146,4 +189,5 @@
               Command="{Binding ShowUpdatePromptCommand}" />
     </StackPanel>
   </Grid>
+  </Panel>
 </UserControl>

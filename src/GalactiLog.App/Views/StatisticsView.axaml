@@ -170,12 +170,11 @@
                Classes="t-caption"
                TextWrapping="Wrap"
                IsVisible="{Binding IsLoading}" />
-    <TextBlock x:Name="FailureLine"
-               Grid.Row="1"
-               Text="Statistics could not be loaded."
-               Classes="t-caption"
-               TextWrapping="Wrap"
-               IsVisible="{Binding LoadFailed}" />
+    <controls:ErrorState x:Name="FailureLine"
+                         Grid.Row="1"
+                         Message="Statistics could not be loaded."
+                         RetryCommand="{Binding RefreshCommand}"
+                         IsVisible="{Binding LoadFailed}" />
     <TextBlock x:Name="EmptyState"
                Grid.Row="1"
                Text="No data yet. Run a scan."

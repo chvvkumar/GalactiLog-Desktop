@@ -122,7 +122,7 @@ public class StatisticsViewTests
         var empty = view.GetControl<TextBlock>("EmptyState");
         Assert.True(empty.IsVisible);
         Assert.Equal(StatisticsViewModel.EmptyStateText, empty.Text);
-        Assert.False(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        Assert.False(view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine").IsVisible);
         page.Dispose();
     }
 
@@ -132,7 +132,9 @@ public class StatisticsViewTests
         var (_, view, page) = Show(Factory.Create(
             loadStats: () => throw new InvalidOperationException("no database")));
 
-        Assert.True(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        var failure = view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine");
+        Assert.True(failure.IsVisible);
+        Assert.Same(page.RefreshCommand, failure.RetryCommand);
         Assert.False(view.GetControl<TextBlock>("EmptyState").IsVisible);
         page.Dispose();
     }
