@@ -161,6 +161,7 @@
                  TextWrapping="Wrap"
                  MinHeight="50"
                  MaxHeight="120"
+                 Watermark="Add notes about this mosaic project..."
                  Text="{Binding Notes.Text, Mode=TwoWay}" />
         <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
         <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">

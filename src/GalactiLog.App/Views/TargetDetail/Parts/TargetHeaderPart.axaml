@@ -106,7 +106,11 @@
                       IsVisible="{Binding ShowsSurveyViewButton}"
                       ToolTip.Tip="{Binding SurveyViewTooltip}"
                       ToolTip.ShowOnDisabled="True" />
-              <Button x:Name="OverflowButton" Classes="quiet" Padding="9,0">
+              <Button x:Name="OverflowButton"
+                      Classes="quiet"
+                      Padding="9,0"
+                      ToolTip.Tip="More actions"
+                      AutomationProperties.Name="More actions">
                 <Button.Content>
                   <!-- Drawn, never a Unicode glyph. Three dots as three filled circles on a 16
                        box, which is the path the comp uses; filled, so this is the one icon here

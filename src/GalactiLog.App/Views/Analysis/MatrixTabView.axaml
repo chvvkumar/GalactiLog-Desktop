@@ -134,7 +134,9 @@
                     KeyDown="OnCellKeyDown">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
-            <UniformGrid Columns="10" Rows="10" />
+            <!-- The column count follows the chart's drawn columns, which drop an X metric no
+                 frame carries (MatrixChartViewModel.DrawnColumns). -->
+            <UniformGrid Columns="{Binding Chart.DrawnColumns.Count, FallbackValue=10}" Rows="10" />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>

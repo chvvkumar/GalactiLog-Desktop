@@ -200,6 +200,22 @@ public class MatrixTabViewTests : IDisposable
         Assert.True(region.IsEffectivelyVisible);
     }
 
+    // A library with no sky quality meter: the SQM column is dropped, and the keyboard layer's
+    // grid follows it to nine columns so every button still sits over its drawn cell.
+    [AvaloniaFact]
+    public void ADroppedColumn_NarrowsTheKeyboardGridWithIt()
+    {
+        var full = AnalysisViewModelTestFactory.Matrix();
+        var noSqm = new MatrixResult(
+            [.. full.Cells.Select(cell => cell.X == AnalysisMetric.SkyQuality ? cell with { PearsonR = null, NPoints = 0 } : cell)],
+            full.DistinctPlateScales);
+        var (_, body, _) = ShowMatrix(matrix: _ => noSqm);
+
+        var grid = Named<ItemsControl>(body, "MatrixCellKeys").GetVisualDescendants().OfType<UniformGrid>().Single();
+        Assert.Equal(9, grid.Columns);
+        Assert.Equal(90, CellButtons(body).Count);
+    }
+
     // ---- the keyboard route -----------------------------------------------------------------------
 
     private static List<Button> CellButtons(MatrixTabView body)

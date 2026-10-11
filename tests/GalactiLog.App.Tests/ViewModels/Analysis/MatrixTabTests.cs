@@ -388,6 +388,37 @@ public class MatrixTabTests
     }
 
     [AvaloniaFact]
+    public async Task AnXMetricNoFrameCarries_IsDroppedFromTheGrid()
+    {
+        // A library with no sky quality meter: every SQM pair has zero paired points. The column
+        // used to draw as an empty band under its label. It is dropped, and the remaining columns
+        // shift left with their pairs intact.
+        var tab = await Loaded(Grid((x, _) => x == AnalysisMetric.SkyQuality ? (null, 0) : (0.5d, 40)));
+
+        var expected = AnalysisMetrics.X.Where(x => x != AnalysisMetric.SkyQuality).ToList();
+        Assert.Equal(expected, tab.Chart!.DrawnColumns);
+        Assert.Equal(
+            expected.Select(metric => AnalysisMetricLabels.For(metric).Matrix),
+            Assert.Single(tab.Chart.XAxes).Labels!);
+        Assert.Equal(90, tab.Chart.Cells.Count);
+        Assert.Equal(90, Drawn(tab).Count);
+        Assert.DoesNotContain(tab.Chart.Cells, cell => cell.X == AnalysisMetric.SkyQuality);
+
+        // The column after the dropped one resolves to its own pair at the shifted index.
+        var shifted = expected.IndexOf(AnalysisMetric.FocuserTemp);
+        Assert.Equal(AnalysisMetric.FocuserTemp, tab.Chart.Resolve(shifted, 0)!.X);
+    }
+
+    [AvaloniaFact]
+    public async Task EveryPairWithZeroPoints_KeepsAllTenColumns()
+    {
+        var tab = await Loaded(Grid((_, _) => (null, 0)));
+
+        Assert.Equal(AnalysisMetrics.X, tab.Chart!.DrawnColumns);
+        Assert.Equal(100, tab.Chart.Cells.Count);
+    }
+
+    [AvaloniaFact]
     public async Task NoCellAtAll_IsTheEmptyState_WithOneBareAxisPerSide()
     {
         // The row above case 21's in the same table: the filters matched no frame, so the query

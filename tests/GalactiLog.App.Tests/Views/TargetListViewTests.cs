@@ -808,6 +808,29 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
+    public void View_AWideList_DrawsHorseheadNebulaWhole_AtTheDefaultTextSize()
+    {
+        // "Horsehead Nebula" trimmed to "Horsehead N..." on a wide dashboard while Name had
+        // hundreds of spare pixels: the designation cap was sized for a monospace designation at
+        // the small text size, and the default is Medium (16).
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([WideRow with { CatalogId = "Horsehead Nebula" }], 1, 0d, 0, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view, WidePageAllotment, 1900d);
+        window.FontSize = 16;
+        Dispatcher.UIThread.RunJobs();
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+
+        var cell = Assert.IsType<TextBlock>(Assert.Single(NamedCells(view, "DesignationCell")));
+        Assert.Equal("Horsehead Nebula", cell.Text);
+        Assert.False(
+            cell.TextLayout.TextLines[0].HasCollapsed,
+            $"The designation trimmed at {cell.Bounds.Width} under a {cell.MaxWidth} cap.");
+    }
+
+    [AvaloniaFact]
     public void View_ANewPage_MeasuresItsColumnsAfresh()
     {
         // A new page is measured on its own cells: the short page below must not keep the wide
@@ -1135,7 +1158,7 @@ public class TargetListViewTests
 
         // Equipment is not drawn, and it has taken its width with it. The tight cap is pinned here
         // so the pair with View_HidingEquipmentInTheGear_DoesNotTightenTheOtherColumns, which pins
-        // DataCap at a wide window, cannot both pass with the tight cap never applied at all.
+        // DesignationCap at a wide window, cannot both pass with the tight cap never applied at all.
         Assert.Equal(TargetListView.TightCap, view.DataCellMaxWidth);
         Assert.False(view.IsEquipmentShown);
         Assert.All(NamedCells(view, "EquipmentCell"), cell => Assert.False(cell.IsEffectivelyVisible));
@@ -1229,10 +1252,10 @@ public class TargetListViewTests
         // on the header cell and the row cell of every column that carries one.
         var source = File.ReadAllText(FindTargetListViewAxaml());
 
-        // The width rule's budget, summed: 120 Name floor + 160 Designation + 120 Palette
+        // The width rule's budget, summed: 120 Name floor + 208 Designation + 120 Palette
         // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 12 trailing inset.
         // Integration and Last session are budgeted at 160, not capped there.
-        Assert.Equal(1128d, TargetListView.DefaultFitWidth);
+        Assert.Equal(1176d, TargetListView.DefaultFitWidth);
         Assert.Equal(
             TargetListView.DefaultFitWidth,
             TargetListView.FitWidthFor(CreatePopulatedList().Columns));
@@ -1286,7 +1309,7 @@ public class TargetListViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(
-            TargetListView.DefaultFitWidth - (2 * TargetListView.DataCap),
+            TargetListView.DefaultFitWidth - TargetListView.DesignationCap - TargetListView.DataCap,
             TargetListView.FitWidthFor(list.Columns));
         Assert.True(
             view.IsEquipmentShown,
@@ -1303,7 +1326,7 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view, WidePageAllotment, 1900d);
 
-        Assert.Equal(TargetListView.DataCap, view.DataCellMaxWidth);
+        Assert.Equal(TargetListView.DesignationCap, view.DataCellMaxWidth);
 
         list.ToggleColumnCommand.Execute(list.Columns.Single(column => column.Key == "equipment"));
         Dispatcher.UIThread.RunJobs();
@@ -1311,7 +1334,7 @@ public class TargetListViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(view.IsEquipmentShown);
-        Assert.Equal(TargetListView.DataCap, view.DataCellMaxWidth);
+        Assert.Equal(TargetListView.DesignationCap, view.DataCellMaxWidth);
 
         foreach (var cell in HeaderCells(view).Where(cell => cell.IsEffectivelyVisible))
         {

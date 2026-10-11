@@ -30,44 +30,53 @@
          parent's rail, so a child row and a top-level row cannot drift apart (design-lessons
          rule 1). Only the top-level template adds the sub-task rail around it. -->
     <DataTemplate x:Key="ActivityRowBody" DataType="activity:ActivityRowViewModel">
-      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto" Margin="0,3">
-        <!-- Spec 12.6, PAR-017: the seen marker's "new" badge sits inside this cell rather than in
-             a column of its own, so no Grid.Column index below shifts (section 7.3). -->
-        <Panel Grid.Column="0" Width="92">
-          <TextBlock Text="{Binding DateText}" Classes="t-caption" />
-          <Border Classes="tag"
-                  HorizontalAlignment="Right"
-                  VerticalAlignment="Top"
-                  IsVisible="{Binding IsUnseen}">
-            <TextBlock Text="new" />
-          </Border>
-        </Panel>
+      <Grid ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="0,3">
+        <TextBlock Grid.Column="0"
+                   Text="{Binding DateText}"
+                   Width="92"
+                   Classes="t-caption" />
         <TextBlock Grid.Column="1"
                    Text="{Binding TimeText}"
                    Width="68"
                    Classes="t-caption" />
+        <!-- The glyph's shape carries the severity on its own; the band classes add the theme's
+             warning and error ink on top of it. -->
         <TextBlock Grid.Column="2"
                    Text="{Binding SeverityGlyph}"
                    ToolTip.Tip="{Binding SeverityTitle}"
+                   Classes.band-watch="{Binding IsWarning}"
+                   Classes.band-reject="{Binding IsError}"
                    Width="18"
                    TextAlignment="Center" />
+        <!-- Wide enough for the longest full-word label, "Enrichment". -->
         <TextBlock Grid.Column="3"
                    Text="{Binding CategoryLabel}"
-                   Width="60"
+                   Width="96"
+                   TextTrimming="CharacterEllipsis"
                    Classes="t-caption" />
         <TextBlock Grid.Column="4"
                    Text="{Binding Message}"
                    Margin="4,0"
                    TextWrapping="Wrap"
                    Foreground="{DynamicResource ColorTextPrimary}" />
-        <TextBlock Grid.Column="5"
+        <!-- Spec 12.6, PAR-017: the seen marker's "new" badge, in an Auto column of its own after
+             the message. It used to share the fixed-width date cell and was drawn on top of the
+             date; a column of its own cannot overlap anything. Collapsed, it takes no width. -->
+        <Border Grid.Column="5"
+                Classes="tag"
+                Margin="4,0"
+                VerticalAlignment="Top"
+                IsVisible="{Binding IsUnseen}">
+          <TextBlock Text="new" />
+        </Border>
+        <TextBlock Grid.Column="6"
                    Text="{Binding DurationText}"
                    Width="68"
                    TextAlignment="Right"
                    Classes="t-caption num" />
         <!-- The details chevron, shown only when the web's hasDetails() gate says the payload adds
              something the message does not already carry. -->
-        <Button Grid.Column="6"
+        <Button Grid.Column="7"
                 Classes="chevron"
                 IsVisible="{Binding IsExpandable}"
                 Command="{Binding ToggleDetailsCommand}"

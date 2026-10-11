@@ -224,7 +224,7 @@ public class TargetListCustomColumnTests
         // visible custom columns reports the same fit width as a row carrying none, and a strip
         // that costs the width rule nothing is a strip drawn past the list's right edge.
         //
-        // The band is where that shows: at 1200 the six default columns fit (1128) and the same six
+        // The band is where that shows: at 1200 the six default columns fit (1176) and the same six
         // plus the strip do not. What gives way there is the strip, not Equipment, because a custom
         // column is the first thing to give way and no built-in column pays for one.
         var list = Populated(TwoColumns());

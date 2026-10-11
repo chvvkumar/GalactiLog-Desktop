@@ -59,15 +59,18 @@ public partial class TargetListView : UserControl
     /// and its two gutters.</summary>
     internal const double NameFloor = 120d;
 
-    /// <summary>The cap Designation, Integration and Last session carry while the list is wide
-    /// enough to draw every shown column. One figure for the three, not three, because the three
-    /// were only ever round numbers and the arithmetic below is the only thing that read them
-    /// apart. It is what a long catalogue designation needs: the fixture's "PGC 123456.789" cell
-    /// measures 156 with its two gutters. It caps Designation alone, written to the column through
-    /// <see cref="DataCellMaxWidth"/>; Integration is a figure and Last session a date, and neither
-    /// ever trims (spec.md item 3), so for those two it is the budget the arithmetic sums and
-    /// nothing in the table.</summary>
+    /// <summary>The budget Integration and Last session carry in the width arithmetic while the
+    /// list is wide enough to draw every shown column. Integration is a figure and Last session a
+    /// date, and neither ever trims (spec.md item 3), so this is the budget the arithmetic sums and
+    /// nothing in the table caps them at it.</summary>
     internal const double DataCap = 160d;
+
+    /// <summary>Designation's cap, gutters included, while the list is wide enough to draw every
+    /// shown column, written to the column through <see cref="DataCellMaxWidth"/>. It used to be
+    /// <see cref="DataCap"/>, sized for "PGC 123456.789" at the small text size, and the monospace
+    /// cell trimmed "Horsehead Nebula" to "Horsehead N..." at the Medium default while Name had
+    /// hundreds of spare pixels. This holds sixteen monospace characters at Medium.</summary>
+    internal const double DesignationCap = 208d;
 
     /// <summary>What those same three are capped at while the list is too narrow to draw every
     /// shown column. It is bounded above, not chosen: at the 720 pixels the shipped 1280 window
@@ -101,7 +104,7 @@ public partial class TargetListView : UserControl
     /// floor. The shipped figure for the default set; the rule itself runs over the shown set
     /// (<see cref="FitWidthFor"/>), which is what spec 12.2's "every shown column" says.</summary>
     internal const double DefaultFitWidth =
-        NameFloor + DataCap + PaletteBudget + DataCap + EquipmentCap + DataCap
+        NameFloor + DesignationCap + PaletteBudget + DataCap + EquipmentCap + DataCap
         + SessionsBudget + TrailingInset;
 
     /// <summary>The narrowest list that still draws a row whole, with Equipment already
@@ -156,7 +159,8 @@ public partial class TargetListView : UserControl
         "name" => NameFloor,
         "palette" => PaletteBudget,
         "equipment" => EquipmentCap,
-        "designation" or "integration" or "last_session" => DataCap,
+        "designation" => DesignationCap,
+        "integration" or "last_session" => DataCap,
         _ => 0d,
     };
 
@@ -213,7 +217,7 @@ public partial class TargetListView : UserControl
             nameof(NameCellMaxWidth), defaultValue: NameFloor - TableMetrics.ColumnGutters);
 
     /// <summary>The width rule's budget for Designation, Integration and Last session:
-    /// <see cref="DataCap"/> while the list is wide enough to draw every shown column,
+    /// <see cref="DesignationCap"/> while the list is wide enough to draw every shown column,
     /// <see cref="TightCap"/> while it is not, and Designation's cap (less its gutters). It is
     /// driven by the width rule alone: the user's own hide is the column's
     /// <see cref="ColumnViewModel.IsShown"/> and nothing else, so unticking Equipment in the
@@ -226,7 +230,7 @@ public partial class TargetListView : UserControl
     /// </para></summary>
     public static readonly StyledProperty<double> DataCellMaxWidthProperty =
         AvaloniaProperty.Register<TargetListView, double>(
-            nameof(DataCellMaxWidth), defaultValue: DataCap);
+            nameof(DataCellMaxWidth), defaultValue: DesignationCap);
 
     private IReadOnlyList<ColumnViewModel> _columns = [];
 
@@ -248,7 +252,7 @@ public partial class TargetListView : UserControl
         _sessCols = (TableColumns)Resources["SessCols"]!;
         // Every cap here is a column width, gutters included; the spine writes a cap to the cell,
         // whose gutters are a margin outside it, so they come off first.
-        _cols["designation"].MaxWidth = DataCap - TableMetrics.ColumnGutters;
+        _cols["designation"].MaxWidth = DesignationCap - TableMetrics.ColumnGutters;
         _cols["equipment"].MaxWidth = EquipmentCap - TableMetrics.ColumnGutters;
     }
 
@@ -405,7 +409,7 @@ public partial class TargetListView : UserControl
         // these three are the columns that used to pay. The cap is a maximum and not a width, so
         // the tight cap here is exactly what a library with no custom column at all gets at the
         // same allotment.
-        var cap = fits ? DataCap : TightCap;
+        var cap = fits ? DesignationCap : TightCap;
         if (cap != DataCellMaxWidth)
         {
             // The cap moved, so the groups are renamed and measured again rather than keeping the
@@ -471,6 +475,7 @@ public partial class TargetListView : UserControl
                 "equipment" => equipmentShown && fits ? EquipmentCap : 0d,
                 _ when !column.IsShown => 0d,
                 "palette" => PaletteBudget,
+                "designation" => fits ? DesignationCap : TightCap,
                 _ when CustomColumnSlug.IsCustom(column.Key) => 0d,
                 _ => cap,
             };
