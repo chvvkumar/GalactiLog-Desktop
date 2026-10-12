@@ -16,6 +16,7 @@ using GalactiLog.App.ViewModels.Setup;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
+using GalactiLog.App.ViewModels.Telemetry;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.App.ViewModels.Update;
 using GalactiLog.App.Views.Mosaics;
@@ -2239,6 +2240,7 @@ public static class AppHost
             settingsStore.MutateGeneral,
             serviceProvider.GetRequiredService<IStartupShortcut>(),
             logger: serviceProvider.GetRequiredService<ILogger<GeneralTabViewModel>>(),
+            telemetry: serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()(),
             subscribeGeneralChanged: handler => settingsStore.GeneralChanged += handler,
             unsubscribeGeneralChanged: handler => settingsStore.GeneralChanged -= handler));
 
@@ -2751,6 +2753,22 @@ public static class AppHost
             errorTemplateCounter,
             appWriter.AppDataRoot,
             serviceProvider.GetRequiredService<ILogger<TelemetryService>>()));
+        // The telemetry preview and public statistics link, one instance per surface (the prompt,
+        // the setup wizard and the General tab). The preview calls the builder above, the same
+        // function the sender posts, so the user reads exactly what leaves the machine.
+        builder.Services.AddSingleton<Func<TelemetryDisclosureViewModel>>(serviceProvider => () =>
+            new TelemetryDisclosureViewModel(
+                () => serviceProvider.GetRequiredService<TelemetryReportBuilder>()
+                    .Build(includeCrash: true, indented: true),
+                serviceProvider.GetRequiredService<ShellIntegration>().OpenWithDefaultApplication,
+                serviceProvider.GetRequiredService<ILogger<TelemetryDisclosureViewModel>>()));
+        // The sixth user of the one modal host: the one-time telemetry question.
+        builder.Services.AddSingleton(serviceProvider => new TelemetryPromptService(
+            () => new TelemetryPromptViewModel(
+                settingsStore.MutateGeneral,
+                serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()(),
+                serviceProvider.GetRequiredService<ILogger<TelemetryPromptViewModel>>()),
+            serviceProvider.GetRequiredService<ModalHost>()));
         // The fifth user of the one modal host (TRACKING section 6 item 22). The page is built
         // from the update service's current state at show time, and is null when that state has
         // moved on, which is the case the service's own prompt request cannot rule out.
@@ -2905,7 +2923,8 @@ public static class AppHost
                 // Settings Storage tab takes, so the two surfaces record a move one way.
                 dataRoot: () => resolution,
                 requestDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Request,
-                cancelDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Cancel));
+                cancelDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Cancel,
+                telemetry: serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()()));
 
         // Phase 10 Task 9's four registrations, appended rather than inserted among the lists
         // above. All four are factories, so none of them hands the container an object it did not
@@ -3001,7 +3020,7 @@ public static class AppHost
         => string.Equals(WithoutInertKeys(before), WithoutInertKeys(after), StringComparison.Ordinal);
 
     // THE INERT LIST, and the only place it is written: spec 5.8.1's four wbpp_ keys, which are the
-    // export page's own settings, plus general.telemetry_last_sent, the daily sender's stamp. Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
+    // export page's own settings, plus the four general.telemetry_* keys (the decision and the daily sender's stamp). Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
     // reads one, and the quality panel writes the last of them once per coalesced chip edit and
     // again when the page closes.
     private static string WithoutInertKeys(Core.Settings.GeneralSettings general)
@@ -3013,6 +3032,10 @@ public static class AppHost
             WbppQualityByRigDocument = null,
             // Written by the telemetry sender once a day; feeds no derived data.
             TelemetryLastSent = null,
+            // The telemetry decision keys: read only by the sender and the builder.
+            TelemetryEnabled = false,
+            TelemetryPrompted = false,
+            TelemetryId = null,
         });
 
     // Spec 12.5's "thumbnail cache bytes" figure (Phase 9 Task 2, questions.md Q12). Sums the

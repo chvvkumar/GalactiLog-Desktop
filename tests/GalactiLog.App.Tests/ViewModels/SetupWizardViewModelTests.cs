@@ -673,6 +673,46 @@ public class SetupWizardViewModelTests
         Assert.True(closed);
     }
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Finish_WritesTheTelemetryAnswer_InTheSameWrite(bool send)
+    {
+        using var harness = SetupWizardViewModelTestFactory.Create();
+        Assert.True(harness.Options.SendStatistics);
+        await Advance(harness, 4);
+        harness.Options.SendStatistics = send;
+
+        await harness.ViewModel.FinishCommand.ExecuteAsync(null);
+
+        var stored = harness.Stored;
+        Assert.True(stored.SetupComplete);
+        Assert.True(stored.TelemetryPrompted);
+        Assert.Equal(send, stored.TelemetryEnabled);
+        if (send)
+        {
+            Assert.True(Guid.TryParse(stored.TelemetryId, out _));
+            Assert.Equal(stored.TelemetryId!.ToLowerInvariant(), stored.TelemetryId);
+        }
+        else
+        {
+            Assert.Null(stored.TelemetryId);
+        }
+    }
+
+    [Fact]
+    public async Task SkipSetup_LeavesTheTelemetryQuestionUnanswered()
+    {
+        // The one-time prompt then asks it on a later start.
+        using var harness = SetupWizardViewModelTestFactory.Create();
+
+        await harness.ViewModel.SkipSetupCommand.ExecuteAsync(null);
+
+        Assert.True(harness.Stored.SetupComplete);
+        Assert.False(harness.Stored.TelemetryPrompted);
+        Assert.False(harness.Stored.TelemetryEnabled);
+    }
+
     [Fact]
     public async Task Back_DoesNotSave()
     {

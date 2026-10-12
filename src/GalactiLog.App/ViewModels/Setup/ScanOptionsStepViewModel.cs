@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GalactiLog.App.ViewModels.Settings;
+using GalactiLog.App.ViewModels.Telemetry;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
 using Microsoft.Extensions.Logging;
@@ -42,13 +43,18 @@ public sealed partial class ScanOptionsStepViewModel : SetupStepViewModel
 
     /// <param name="chosenFolders">The folders chosen on step 1, read when the wizard navigates
     /// onto this step, so the copy names them the way the web's does.</param>
+    /// <param name="telemetry">The shared telemetry preview and link. Null in tests, which get one
+    /// with an empty preview.</param>
     public ScanOptionsStepViewModel(
         Func<IReadOnlyList<string>> chosenFolders,
         Action<Action>? post = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        TelemetryDisclosureViewModel? telemetry = null)
         : base(post, logger)
     {
         _chosenFolders = chosenFolders;
+        Telemetry = telemetry ?? new TelemetryDisclosureViewModel(() => "", _ => { });
+        SendStatistics = true;
 
         AutoScanEnabled = true;
         WatcherEnabled = true;
@@ -86,6 +92,14 @@ public sealed partial class ScanOptionsStepViewModel : SetupStepViewModel
     [ObservableProperty]
     public partial bool IncludeCalibration { get; set; }
 
+    /// <summary>The telemetry checkbox. Checked by default on a first run; written by the
+    /// wizard's Finish, not by this step's Next (<c>SetupWizardViewModel</c>).</summary>
+    [ObservableProperty]
+    public partial bool SendStatistics { get; set; }
+
+    /// <summary>The shared telemetry preview and link.</summary>
+    public TelemetryDisclosureViewModel Telemetry { get; }
+
     /// <inheritdoc />
     public override void OnEntered() => Intro = BuildIntro();
 
@@ -95,6 +109,9 @@ public sealed partial class ScanOptionsStepViewModel : SetupStepViewModel
         AutoScanEnabled = general.AutoScanEnabled;
         WatcherEnabled = general.WatcherEnabled;
         IncludeCalibration = general.IncludeCalibration;
+
+        // A re-run shows the stored answer; before any answer the box starts checked.
+        SendStatistics = !general.TelemetryPrompted || general.TelemetryEnabled;
 
         // The same body the Library tab publishes its interval list through, so a re-run of the
         // wizard over a hand-edited document offers the extra entry on the same rule, and neither

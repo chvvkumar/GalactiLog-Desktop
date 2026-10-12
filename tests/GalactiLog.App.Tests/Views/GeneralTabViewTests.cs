@@ -63,6 +63,7 @@ public class GeneralTabViewTests
         Assert.False(view.GetControl<CheckBox>("StartWithWindowsBox").IsChecked);
         Assert.True(view.GetControl<CheckBox>("StartMinimizedBox").IsChecked);
         Assert.False(view.GetControl<CheckBox>("NotifyOnScanCompleteBox").IsChecked);
+        Assert.False(view.GetControl<CheckBox>("TelemetryEnabledBox").IsChecked);
 
         var texts = VisibleTexts(view);
         Assert.Contains("Window behaviour", texts);
@@ -76,6 +77,37 @@ public class GeneralTabViewTests
         // Ruling Q6: the control says what the notice actually is, so it cannot promise a toast
         // that never appears.
         Assert.Contains(GeneralTabViewModel.NotifyOnScanCompleteDescription, texts);
+    }
+
+    [AvaloniaFact]
+    public async Task View_TelemetryCard_ShowsThePreviewAfterTheButton()
+    {
+        var current = new GeneralSettings { TelemetryEnabled = true, TelemetryId = Guid.NewGuid().ToString() };
+        var opened = new List<string>();
+        using var tab = new GeneralTabViewModel(
+            () => current,
+            mutate => current = mutate(current),
+            post: action => action(),
+            telemetry: new GalactiLog.App.ViewModels.Telemetry.TelemetryDisclosureViewModel(
+                () => "{\"schema\": 1}", opened.Add));
+        await tab.SettleAsync();
+        var view = new GeneralTabView { DataContext = tab };
+        Show(view);
+
+        Assert.True(view.GetControl<CheckBox>("TelemetryEnabledBox").IsChecked);
+        Assert.False(view.GetControl<TextBox>("TelemetryPreviewBox").IsVisible);
+
+        view.GetControl<Button>("TelemetryPreviewButton").Command!.Execute(null);
+        await tab.Telemetry.PendingPreview!;
+        Dispatcher.UIThread.RunJobs();
+
+        var box = view.GetControl<TextBox>("TelemetryPreviewBox");
+        Assert.True(box.IsVisible);
+        Assert.True(box.IsReadOnly);
+        Assert.Equal("{\"schema\": 1}", box.Text);
+
+        view.GetControl<Button>("TelemetryPublicStatsButton").Command!.Execute(null);
+        Assert.Equal([GalactiLog.App.Services.Telemetry.TelemetryEndpoints.PublicStatsUrl], opened);
     }
 
     [AvaloniaFact]
