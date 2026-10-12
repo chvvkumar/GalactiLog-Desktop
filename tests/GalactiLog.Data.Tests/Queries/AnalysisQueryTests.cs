@@ -1407,7 +1407,7 @@ public class AnalysisQueryTests(ITestOutputHelper output)
         // All three budgets are MULTIPLES of this case's own one scan figure, measured in the same
         // case on the same machine under the same load, and not absolute milliseconds. An absolute
         // figure measures the machine as much as the code: the same three measurements are 20 to
-        // 30 per cent apart between two runs on one machine with other agents active, so an
+        // 30 per cent apart between two runs on one machine with other processes active, so an
         // absolute budget either flakes or excludes nothing. The ratios are stable across both
         // readings taken so far (1.08, 1.05 and 1.63, then 1.08, 1.12 and 1.58). The absolute
         // figures stay in output.WriteLine above as the baseline for the next phase.

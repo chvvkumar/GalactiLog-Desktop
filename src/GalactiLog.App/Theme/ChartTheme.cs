@@ -191,20 +191,35 @@ public static class ChartTheme
         => pointCount > DenseSeriesPoints ? 0d : SeriesMarkerSize;
 
     /// <summary>Loads the selected sans family's Regular TTF as the charts' global typeface and
-    /// re-applies. A missing asset leaves the previous typeface in place.</summary>
+    /// re-applies. A missing asset, or one Skia cannot read, leaves the previous typeface in
+    /// place. One face per asset is loaded and kept, so switching fonts back and forth creates
+    /// no new typefaces and leaves none undisposed.</summary>
     public static void ApplyTypeface(Uri regularTtf)
     {
-        if (AssetLoader.Exists(regularTtf))
+        if (!Typefaces.TryGetValue(regularTtf, out var face) && AssetLoader.Exists(regularTtf))
         {
             // Read whole into SKData: a typeface made from a managed stream reads it lazily,
             // after the asset stream would already be disposed.
             using var stream = AssetLoader.Open(regularTtf);
             using var data = SKData.Create(stream);
-            _typeface = SKTypeface.FromData(data);
+            face = SKTypeface.FromData(data);
+            if (face is not null)
+            {
+                Typefaces[regularTtf] = face;
+            }
+        }
+
+        if (face is not null)
+        {
+            _typeface = face;
         }
 
         Apply();
     }
+
+    // One face per bundled font, kept for the process lifetime. Five fonts ship, so the cache is
+    // bounded by the picker.
+    private static readonly Dictionary<Uri, SKTypeface> Typefaces = [];
 
     /// <summary>Sets the axis label size from the window's root font size, re-applying only when
     /// it changes, because every general settings save reaches here.</summary>

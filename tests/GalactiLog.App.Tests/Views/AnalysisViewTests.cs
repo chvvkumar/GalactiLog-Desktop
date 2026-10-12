@@ -106,6 +106,30 @@ public class AnalysisViewTests : IDisposable
         Assert.Contains(view.GetVisualDescendants(), visual => visual is MatrixTabView);
     }
 
+    // Task 7 review M5: the strip is AlwaysSelected, and a ListBox that selects its first item when
+    // ItemsSource arrives, before the two-way SelectedItem reads the page, would write that first
+    // tab back and persist it over the stored one. A failure is the strip on Correlation, or
+    // display.analysis.tab rewritten.
+    [AvaloniaFact]
+    public void AStoredNonFirstTab_SurvivesTheStripBinding_AndIsNotOverwritten()
+    {
+        var display = new GalactiLog.Core.Settings.DisplaySettings
+        {
+            Analysis = new GalactiLog.Core.Settings.AnalysisDisplaySettings { Tab = "matrix" },
+        };
+        var page = AnalysisViewModelTestFactory.Create(
+            display: display,
+            writeDisplay: mutate => display = mutate(display),
+            post: AnalysisShellHarness.Post);
+
+        var (_, view, shown) = ShowAnalysis(analysis: page);
+        var strip = Named<ListBox>(view, "TabStrip");
+
+        Assert.Same(shown.Tabs[3], strip.SelectedItem);
+        Assert.Equal("matrix", shown.SelectedTab.Key);
+        Assert.Equal("matrix", display.Analysis.Tab);
+    }
+
     [AvaloniaFact]
     public void TheMixedPlateScaleCallout_IsShownOverTheTabBody_OnlyWhenTheCountAndTheMetricBothSaySo()
     {

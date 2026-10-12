@@ -193,7 +193,7 @@
                and its caption below. Each figure takes its metric's own token; the date span has no
                metric, so it keeps the stat tier's primary ink. Beside the tiles, one tinted chip
                per filter with its hours: beside rather than below, because every line this header
-               takes is a frame row taken from the table at the 1280 x 720 floor. The tiles'
+               takes is a frame row taken from the table at the 720 pixel height floor. The tiles'
                padding is the 8 pixel step vertically, and the caption sits on the figure's own
                line height with no gap, for the same reason. -->
           <Grid Grid.Row="2" Grid.Column="0"
@@ -235,15 +235,14 @@
               </Border>
             </StackPanel>
 
-            <!-- One chip per filter in the bars' order: the filter's colour at 18 percent behind
-                 its name and hours in the full colour. The tint is a Border of its own under the
-                 text, because Opacity on the chip itself would fade the text with it. The brush is
-                 the filter's configured colour, user data rather than a theme token.
+            <!-- One shared filter chip (Theme/Controls.axaml) per filter in the bars' order, its
+                 hours as the chip's detail. The brush is the filter's configured colour, user data
+                 rather than a theme token.
 
                  The chips fill columns top to bottom inside the tiles' height rather than lines
                  left to right, so a dozen filters add columns and never a line: a third line of
-                 chips was a frame row, and at 1280 x 720 the second Compare lane, taken from the
-                 table. -->
+                 chips was a frame row, and at the 720 pixel height floor the second Compare lane,
+                 taken from the table. -->
             <ItemsControl x:Name="FilterChips"
                           Grid.Column="1"
                           VerticalAlignment="Center"
@@ -257,13 +256,10 @@
               </ItemsControl.ItemsPanel>
               <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="detail:IntegrationBarViewModel">
-                  <Panel>
-                    <Border Background="{Binding Brush}" Opacity="0.18" CornerRadius="{StaticResource RadiusSm}" />
-                    <StackPanel Orientation="Horizontal" Spacing="4" Margin="8,4">
-                      <TextBlock Classes="t-label" Text="{Binding FilterName}" FontWeight="SemiBold" Foreground="{Binding Brush}" />
-                      <TextBlock Classes="t-label" Text="{Binding HoursText}" Foreground="{Binding Brush}" />
-                    </StackPanel>
-                  </Panel>
+                  <controls:FilterChip Classes="label"
+                                       Tint="{Binding Brush}"
+                                       Text="{Binding FilterName}"
+                                       Detail="{Binding HoursText}" />
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>

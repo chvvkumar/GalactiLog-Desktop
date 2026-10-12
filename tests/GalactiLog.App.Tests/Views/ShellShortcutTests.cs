@@ -270,6 +270,74 @@ public class ShellShortcutTests : IDisposable
         window.Close();
     }
 
+    // Task 9 review m1: a field bound on LostFocus (latitude, longitude, tool paths) has not
+    // written its value when Ctrl+S arrives. The shortcut commits the focused box first, so the
+    // save takes the value just typed. A failure is Saves at 0 (the key passed through with
+    // nothing pending yet) or the holder still empty.
+    [AvaloniaFact]
+    public void CtrlS_CommitsTheFocusedLostFocusTextBox_ThenSaves()
+    {
+        var pending = new PendingEditsRegistry(post: action => action());
+        var source = new Source();
+        pending.Register(source);
+        var (window, _) = ShowShell(pendingEdits: pending);
+
+        var holder = new Holder(source);
+        var box = new TextBox();
+        box.Bind(TextBox.TextProperty, new Avalonia.Data.Binding(nameof(Holder.Value))
+        {
+            Source = holder,
+            Mode = Avalonia.Data.BindingMode.TwoWay,
+            UpdateSourceTrigger = Avalonia.Data.UpdateSourceTrigger.LostFocus,
+        });
+        ((Grid)window.Content!).Children.Add(box);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(box.Focus());
+        box.Text = "51.5";
+        Assert.Null(holder.Value);
+
+        Press(window, PhysicalKey.S, RawInputModifiers.Control);
+
+        Assert.Equal("51.5", holder.Value);
+        Assert.Equal(1, source.Saves);
+        window.Close();
+    }
+
+    // ux-flow F3 with final review minor 3: the outgoing page stays in the tree for the 150 ms
+    // fade, so focus moves to the content region on the switch and an Enter during the fade has
+    // nothing on the old page to act on.
+    [AvaloniaFact]
+    public void APageSwitch_MovesFocusOffTheOutgoingPage_ToTheContentRegion()
+    {
+        var (window, viewModel) = ShowShell();
+        var region = window.GetControl<TransitioningContentControl>("ContentRegion");
+        region.PageTransition = null;
+        var inside = region.GetVisualDescendants().OfType<Button>()
+            .First(button => button.IsEffectivelyVisible && button.IsEffectivelyEnabled);
+        Assert.True(inside.Focus());
+
+        viewModel.Selected = viewModel.Items.First(item => item.Key == "activity");
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Same(region, window.FocusManager!.GetFocusedElement());
+        window.Close();
+    }
+
+    private sealed class Holder(Source source)
+    {
+        private string? _value;
+
+        public string? Value
+        {
+            get => _value;
+            set
+            {
+                _value = value;
+                source.Dirty = true;
+            }
+        }
+    }
+
     private sealed class Source : IPendingEdits
     {
         private bool _dirty;

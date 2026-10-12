@@ -253,7 +253,7 @@
 
                   <!-- The overlays, upright, 4 pixels in from the tile's edges (3 inside the 1 pixel
                        border), so on the image. The web's tile label: one dark pill along the
-                       bottom reading "Panel 2  02h 56m  -00h 41m", the surface ink at 0.85 under
+                       bottom reading "Panel 2  2 h 56 m  -41 m", the surface ink at 0.85 under
                        caption text at full strength so it reads over a photograph. The deficit
                        keeps its band's ink (Theme/Controls.axaml's band classes). The rotation and
                        flip badge takes the same pill in the top left corner. -->

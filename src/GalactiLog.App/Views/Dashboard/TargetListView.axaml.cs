@@ -127,8 +127,9 @@ public partial class TargetListView : UserControl
     /// <c>DashboardView.axaml.cs</c> is what reads it: the filter panel's rendered width is
     /// bounded so the list keeps at least this much, and below the panel's own 220 floor the panel
     /// renders as its 48 pixel strip instead (fixer-list item 6, phase-review P2).
-    /// <c>DashboardViewTests</c> lays the page out at the 1024 by 700 floor and at the shipped
-    /// 1280 by 800 and asserts the Expand button and the page-size select are inside the list,
+    /// <c>DashboardViewTests</c> lays the page out at 1024 by 700, near the 960 by 720 minimum,
+    /// and at the shipped 1280 by 800 and asserts the Expand button and the page-size select are
+    /// inside the list,
     /// which is what fails if this figure drifts from what the row measures.
     /// </para></summary>
     internal const double ListMinWidth = 686d;
@@ -571,7 +572,8 @@ public partial class TargetListView : UserControl
         if ((sender as Control)?.DataContext is TargetRowViewModel row
             && TopLevel.GetTopLevel(this)?.Clipboard is { } clipboard)
         {
-            await new ShellIntegration(clipboard.SetTextAsync).CopyTextAsync(row.Name);
+            var shell = (DataContext as TargetListViewModel)?.Shell ?? new ShellIntegration(clipboard.SetTextAsync);
+            await shell.CopyTextAsync(row.Name);
         }
     }
 

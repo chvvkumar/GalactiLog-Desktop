@@ -1124,6 +1124,10 @@ public static class AppHost
             loadValuesForTarget: serviceProvider.GetRequiredService<CustomColumnRepository>().ValuesForTarget,
             writeCustomValue: serviceProvider.GetRequiredService<CustomColumnRepository>().SetValue);
 
+            // A row's Copy name takes the registered clipboard path and its logger rather than an
+            // unlogged copy of its own.
+            dashboard.Targets.Shell = serviceProvider.GetRequiredService<ShellIntegration>();
+
             // Phase 9 FIXER item 5. TargetListViewModel seeds PageSize once at construction from
             // general.default_page_size and is a singleton underneath this page, so a page size
             // saved on the Settings Display tab would otherwise not take effect until a restart.
@@ -2285,7 +2289,10 @@ public static class AppHost
             // from here: resolving this tab inside an AppHost handler would build it and read four
             // documents for a reader who never opened it.
             subscribeCustomColumnsChanged: handler => customColumns.Changed += handler,
-            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler));
+            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler,
+            // The font picker's live swap, named here as the theme's is above: replaces the
+            // FontSans resource and the charts' typeface.
+            applyFont: FontManager.Apply));
         });
 
         builder.Services.AddSingleton(serviceProvider => new StorageTabViewModel(

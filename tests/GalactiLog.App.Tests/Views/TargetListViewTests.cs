@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls;
 using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Dashboard;
@@ -450,14 +451,12 @@ public class TargetListViewTests
         var cell = view.GetVisualDescendants().OfType<ItemsControl>()
             .Single(c => c.Name == "SessionFiltersCell" && ReferenceEquals(c.ItemsSource, filters));
 
-        // Re-pointed for Phase 14C. The predicate used to be "the one Border carrying a brush",
-        // which no longer separates a badge from anything: under Border.tag the outline comes from
-        // the style, so every badge Border has a non-null brush and so may a template root. The
-        // class is the selector now.
+        // Re-pointed for the ui-polish final wave: a badge is the shared FilterChip, so the chip
+        // type is the selector.
         var badge = Assert.Single(Badges(cell));
 
-        // Spec 12.2: both cells draw the same Border.tag badge. Both share the one
-        // TargetFilterBadge template, so the shape is identical by construction rather than by two
+        // Spec 12.2: both cells draw the same badge. Both share the one FilterBadgeTemplate in
+        // Theme/Controls.axaml, so the shape is identical by construction rather than by two
         // copies of the same markup, and the 2 pixel tinted border is retired.
         Assert.Equal(1d, badge.BorderThickness.Left);
         Assert.NotNull(badge.BorderBrush);
@@ -924,12 +923,11 @@ public class TargetListViewTests
         Assert.NotEqual(zebra, Band(0));
         Assert.Equal(zebra, Band(1));
 
-        // No rounded or filled container anywhere in a row but the badges themselves, which since
-        // the frosted-glass port carry their tint wash on an inner Border of their own.
+        // No rounded or filled container anywhere in a row but the badges themselves: the shared
+        // filter chip (Theme/Controls.axaml) carries its tint wash and edge itself.
         Assert.All(
             RowGrids(view).SelectMany(grid => grid.GetVisualDescendants().OfType<Border>())
-                .Where(border => !border.Classes.Contains("tag")
-                    && !border.GetVisualAncestors().OfType<Border>().Any(b => b.Classes.Contains("tag"))),
+                .Where(border => !border.GetVisualAncestors().OfType<FilterChip>().Any()),
             border => Assert.Equal(default, border.CornerRadius));
     }
 
@@ -1132,7 +1130,7 @@ public class TargetListViewTests
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         Assert.Equal(
             ["L", "B", "Ha"],
-            Badges(cell).Select(badge => badge.GetVisualDescendants().OfType<TextBlock>().Single().Text));
+            Badges(cell).Select(badge => BadgeLabel(badge).Text));
     }
 
     [AvaloniaFact]
@@ -1155,15 +1153,17 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_ABadge_IsBorderTag_WithTheFilterColourAsItsOutline()
+    public void View_ABadge_IsTheSharedFilterChip_WithTheFilterColourAsItsOutline()
     {
         // A failure is the 2 pixel tinted border of the old build surviving, a solid filled pill,
         // or the filter colour being thrown away so every badge reads the same.
         //
         // Re-pointed 2026-10-05 (user request): the badge is the web app's frosted-glass style,
         // ported figure for figure from the frontend's utils/filterStyles.ts. The 1 pixel edge is
-        // the tint at 25%, the wash inside it is the tint at 18%, and the label is the tint itself,
-        // which reverses the earlier ColorBadgeText ruling in favour of matching the web app.
+        // the tint at 25%, the wash inside it is the tint at 18%, and the label is the tint itself
+        // where it reads, which reverses the earlier ColorBadgeText ruling in favour of matching
+        // the web app. Re-pointed again in the ui-polish final wave: the badge is the shared
+        // FilterChip, one Border carrying edge, wash and shadow.
         var list = CreatePopulatedList();
         var view = new TargetListView { DataContext = list };
         ShowList(view);
@@ -1171,7 +1171,6 @@ public class TargetListViewTests
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         var badge = Badges(cell)[2];
 
-        Assert.Contains("tag", badge.Classes);
         Assert.Equal(1d, badge.BorderThickness.Left);
 
         // Filter order L, B, Ha (polish ruling 5), so index 2 is Ha, whose stored colour is #FF0000.
@@ -1181,12 +1180,10 @@ public class TargetListViewTests
         var edge = Assert.IsAssignableFrom<ISolidColorBrush>(badge.BorderBrush);
         Assert.Equal(Color.FromArgb(0x40, tint.R, tint.G, tint.B), edge.Color);
 
-        var wash = Assert.IsAssignableFrom<ISolidColorBrush>(
-            badge.GetVisualDescendants().OfType<Border>().Single().Background);
+        var wash = Assert.IsAssignableFrom<ISolidColorBrush>(badge.Background);
         Assert.Equal(Color.FromArgb(0x2E, tint.R, tint.G, tint.B), wash.Color);
 
-        var ink = Assert.IsAssignableFrom<ISolidColorBrush>(
-            badge.GetVisualDescendants().OfType<TextBlock>().Single().Foreground);
+        var ink = Assert.IsAssignableFrom<ISolidColorBrush>(BadgeLabel(badge).Foreground);
         Assert.Equal(tint, ink.Color);
 
         // The soft tinted drop shadow and the inset top highlight, in that order.
@@ -1203,10 +1200,10 @@ public class TargetListViewTests
 
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         // Filter order L, B, Ha (polish ruling 5), so index 2 is Ha.
-        var text = Badges(cell)[2].GetVisualDescendants().OfType<TextBlock>().Single();
+        var chip = cell.GetVisualDescendants().OfType<FilterChip>().ElementAt(2);
 
-        Assert.Equal("Ha", text.Text);
-        Assert.Equal("Ha, 40 frames", ToolTip.GetTip(text));
+        Assert.Equal("Ha", BadgeLabel(Badges(cell)[2]).Text);
+        Assert.Equal("Ha, 40 frames", ToolTip.GetTip(chip));
     }
 
     [AvaloniaFact]
@@ -1248,7 +1245,7 @@ public class TargetListViewTests
             view.GetVisualDescendants().OfType<ItemsControl>(), c => c.Name == "SessionsExpander");
 
         Assert.All(
-            expander.GetVisualDescendants().OfType<Border>().Where(border => !border.Classes.Contains("tag")),
+            expander.GetVisualDescendants().OfType<Border>().Where(border => !border.GetVisualAncestors().OfType<FilterChip>().Any()),
             border => Assert.Equal(new Thickness(0), border.BorderThickness));
 
         Assert.All(
@@ -1622,8 +1619,14 @@ public class TargetListViewTests
     // A badge is a Border wearing the tag class. Selected by class rather than by "has a border
     // brush": under Border.tag the outline comes from the style, so a template root can carry one
     // too (Phase 14C re-point of the two predicates that used the brush).
+    // Each badge is the shared FilterChip (Theme/Controls.axaml); its template's one Border carries
+    // the edge, the wash and the shadow together.
     private static IReadOnlyList<Border> Badges(Visual root)
-        => [.. root.GetVisualDescendants().OfType<Border>().Where(border => border.Classes.Contains("tag"))];
+        => [.. root.GetVisualDescendants().OfType<FilterChip>()
+            .Select(chip => chip.GetVisualDescendants().OfType<Border>().First())];
+
+    private static TextBlock BadgeLabel(Border badge)
+        => badge.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Name == "PART_Label");
 
     private static ContentControl HeaderCell(TargetListView view, TargetListViewModel list, string key)
     {

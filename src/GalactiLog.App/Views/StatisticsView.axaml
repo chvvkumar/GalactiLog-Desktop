@@ -2,7 +2,6 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:stats="using:GalactiLog.App.ViewModels.Stats"
-             xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:t="using:GalactiLog.App.Controls.Table"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              x:Class="GalactiLog.App.Views.StatisticsView"
@@ -39,23 +38,6 @@
                             Height="260"
                             IsVisible="{Binding !IsEmpty}" />
       </StackPanel>
-    </DataTemplate>
-
-    <!-- One filter chip in the Equipment performance Filters cell, in place of the comma list:
-         the dashboard's own frosted badge over the same PaletteBadgeViewModel, so a filter reads
-         in its configured tint here as it does on the target list. Border.tag carries the chrome;
-         the edge, shadow and wash are the view-model's, derived from the tint. -->
-    <DataTemplate x:Key="FilterChipTemplate" x:DataType="dash:PaletteBadgeViewModel">
-      <Border Classes="tag" Margin="0,0,4,0" Padding="0"
-              BorderBrush="{Binding GlassEdge}"
-              BoxShadow="{Binding GlassShadow}">
-        <Border Background="{Binding GlassFill}" Padding="6,1">
-          <TextBlock Text="{Binding CanonicalName}"
-                     FontWeight="SemiBold"
-                     Foreground="{Binding Tint}"
-                     ToolTip.Tip="{Binding FrameCountText}" />
-        </Border>
-      </Border>
     </DataTemplate>
 
     <!-- The chevron band's two arms, the one disclosure idiom in the application (DESIGN.md
@@ -316,7 +298,7 @@
                              application draws in each filter's own colour. -->
                         <ItemsControl t:TableRow.Col="filters"
                                       ItemsSource="{Binding FilterChips}"
-                                      ItemTemplate="{StaticResource FilterChipTemplate}"
+                                      ItemTemplate="{StaticResource FilterBadgeTemplate}"
                                       VerticalAlignment="Center"
                                       ToolTip.Tip="{Binding Filters}">
                           <ItemsControl.ItemsPanel>

@@ -154,7 +154,12 @@ public class StatusBarViewTests
         Assert.Contains("divided", recent.Classes);
         var texts = VisibleTextsIn(recent);
         Assert.Contains(texts, text => text.StartsWith("Failed after ", StringComparison.Ordinal));
-        Assert.Contains(DateTimeOffset.Now.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture), texts);
+        // The failed job's own finish time, not the clock now, which a minute boundary between
+        // the finish and this line would move (Task 3 review finding 5). EndsWith, because a
+        // finish on another day than the flyout's opening reads with its date in front.
+        var failed = harness.Jobs.Recent.Single(job => job.Result == JobResult.Failed);
+        var finishedAt = failed.FinishedAt!.Value.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+        Assert.Contains(texts, text => text.EndsWith(finishedAt, StringComparison.Ordinal));
 
         // The detection job's last message equals its summary, so it is drawn once, not twice.
         Assert.Single(texts, text => text == "34 suggestions");

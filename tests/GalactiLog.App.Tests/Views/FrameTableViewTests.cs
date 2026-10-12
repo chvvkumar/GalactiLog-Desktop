@@ -145,7 +145,7 @@ public class FrameTableViewTests
         // 12.4, Phase 15A), never an emoji or a private-use glyph. SampleFrame's source is phd2,
         // so the dagger renders; this is the render-time proof that the font tables' claim of
         // ruling F4 holds in the actual control tree and not only on paper.
-        Assert.Contains("Time (GMT+00:00)", texts);
+        Assert.Contains("TIME (GMT+00:00)", texts);
         Assert.Contains("†", texts);
 
         // The spine's census at 1280x800 and at the x-large root size. The frame table has no
@@ -257,7 +257,7 @@ public class FrameTableViewTests
         Assert.Null(AutomationProperties.GetName(csvMark));
     }
 
-    // FIXER LIST F12. The verification agent measured a 605 ms median UI-thread stall expanding a
+    // FIXER LIST F12. The verification pass measured a 605 ms median UI-thread stall expanding a
     // 200 frame session, because every row of 32 cells was realised at once. The rows now sit in a
     // VirtualizingStackPanel inside a bounded ScrollViewer, so only the viewport's rows exist.
     [AvaloniaFact]
@@ -292,7 +292,7 @@ public class FrameTableViewTests
         ShowTable(view);
 
         // P12 Task 6: the unit lives in the header now, in the inch-mark style.
-        Assert.Contains(TableHeads.Fwhm, VisibleHeaderTitles(view));
+        Assert.Contains(TableHeads.Fwhm.ToUpperInvariant(), VisibleHeaderTitles(view));
         Assert.Contains("1.88", VisibleCellTexts(view));
 
         var fwhm = table.Columns.Single(column => column.Key == "fwhm");
@@ -305,7 +305,7 @@ public class FrameTableViewTests
         table.ToggleColumnCommand.Execute(fwhm);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.DoesNotContain(TableHeads.Fwhm, VisibleHeaderTitles(view));
+        Assert.DoesNotContain(TableHeads.Fwhm.ToUpperInvariant(), VisibleHeaderTitles(view));
         Assert.DoesNotContain("1.88", VisibleCellTexts(view));
 
         // Phase 5 review item 2, ported: the whole header cell collapses, not just the button
@@ -387,13 +387,13 @@ public class FrameTableViewTests
         var titles = VisibleHeaderTitles(view);
         foreach (var column in FrameColumns.All.Where(column => column.Group == "weather"))
         {
-            Assert.DoesNotContain(column.Title, titles);
+            Assert.DoesNotContain(column.Title.ToUpperInvariant(), titles);
         }
 
         // The rest of the table is untouched, including the other gated-by-default groups that
         // this document turned on.
-        Assert.Contains("Airmass", titles);
-        Assert.Contains("ADU mean", titles);
+        Assert.Contains("AIRMASS", titles);
+        Assert.Contains("ADU MEAN", titles);
     }
 
     [AvaloniaFact]
@@ -532,7 +532,7 @@ public class FrameTableViewTests
 
         // Open preview is spec 11.5's modal and has no delegate in Phase 6, so its item is the
         // one that renders disabled.
-        Assert.False(actionItems.Single(button => button.Content as string == "Open preview").IsEffectivelyEnabled);
+        Assert.False(actionItems.Single(button => button.Content as string == "Preview").IsEffectivelyEnabled);
         actionButton.Flyout.Hide();
         Dispatcher.UIThread.RunJobs();
 
@@ -1260,7 +1260,7 @@ public class FrameTableViewTests
     public void FrameTableView_AClickOnTheRowEndButton_OpensNoPreview()
     {
         // Without the Button-ancestor guard a click on the row-end flyout button, and on the
-        // flyout's own "Open preview" item, would open the preview twice.
+        // flyout's own "Preview" item, would open the preview twice.
         var previews = new List<(IReadOnlyList<FrameRowViewModel> Rows, int Index)>();
         var table = CreateTable(frames: TwoFrames(), previews: previews);
         var view = new FrameTableView { DataContext = table };
@@ -1882,6 +1882,18 @@ public class FrameTableViewTests
     private static IReadOnlyList<ContentControl> HeaderCells(FrameTableView view)
         => [.. view.GetVisualDescendants().OfType<ContentControl>().Where(cell => cell.Content is ColumnViewModel)];
 
+    // Final review I1: the frame table's sort heads read in uppercase, as the dashboard's do. The
+    // column picker keeps the mixed-case Title and the header tips keep their sentence case.
+    [AvaloniaFact]
+    public void FrameTableView_HeaderTitles_AreUppercase_WhileTitlesAndTipsKeepTheirCase()
+    {
+        var table = CreateTable();
+
+        Assert.All(table.Columns, column => Assert.Equal(column.Title.ToUpperInvariant(), column.HeaderTitle));
+        Assert.Contains(table.Columns, column => column.Title != column.HeaderTitle);
+        Assert.Contains(table.Columns, column => column.Tip is { } tip && tip != tip.ToUpperInvariant());
+    }
+
     private static ContentControl HeaderCell(FrameTableView view, ColumnViewModel column)
         => HeaderCells(view).Single(cell => ReferenceEquals(cell.Content, column));
 
@@ -1889,7 +1901,7 @@ public class FrameTableViewTests
     // hidden, and the sort glyph beside the title is a TextBlock too.
     private static TextBlock HeaderTitle(ContentControl cell)
         => cell.GetVisualDescendants().OfType<TextBlock>().Single(block =>
-            block.IsEffectivelyVisible && block.Text == ((ColumnViewModel)cell.Content!).Title);
+            block.IsEffectivelyVisible && block.Text == ((ColumnViewModel)cell.Content!).HeaderTitle);
 
     private static IReadOnlyList<string> VisibleHeaderTitles(FrameTableView view)
         => [.. HeaderCells(view)

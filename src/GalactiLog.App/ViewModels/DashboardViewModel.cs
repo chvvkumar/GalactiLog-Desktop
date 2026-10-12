@@ -8,6 +8,7 @@ using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.Core.Aliases;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
+using GalactiLog.Core.Text;
 using GalactiLog.Data.Queries;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -308,7 +309,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable, 
     /// on load and on resize; a gesture the user makes in the window in front of them wins, because
     /// the alternative is a chevron that toggles a stored flag and changes nothing on screen, which
     /// reads as a broken button, with the filters unreachable at every window below about 1186
-    /// pixels, the shipped 1024 minimum included.</summary>
+    /// pixels, the 960 window minimum included.</summary>
     /// <remarks>
     /// A view flag and nothing else: it is never read from the document, never written to it, and
     /// <see cref="PersistPanelState"/> is not called for it. It is cleared by a collapse and by any
@@ -326,8 +327,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable, 
 
     /// <summary>The widest the panel may be rendered at the page's current width, written by
     /// <c>DashboardView.axaml.cs</c> from the view's own Bounds (fixer-list item 6, phase-review
-    /// P2's interaction between the 1024 window minimum, the 480 panel maximum and the target
-    /// list's no-scroller trimming rule). It is a layout bound and nothing else: it is never read
+    /// P2's interaction between the window minimum (1024 then, 960 now), the 480 panel maximum
+    /// and the target list's no-scroller trimming rule). It is a layout bound and nothing else: it is never read
     /// from the document, never written to it, and <see cref="PersistPanelState"/> is not called
     /// for it, so widening the window gives the stored width and the stored state straight
     /// back.</summary>
@@ -481,7 +482,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable, 
 
     /// <summary>Total integration of the filtered set, in hours.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TotalIntegrationText))]
     private double _totalIntegrationHours;
+
+    /// <summary>The summary strip's integration figure, in the one table form
+    /// (<see cref="DurationFormat.Table"/>), for example <c>1,250.0 h</c>.</summary>
+    public string TotalIntegrationText => DurationFormat.Table(TotalIntegrationHours * 3600d);
 
     [ObservableProperty]
     private int _totalGroups;

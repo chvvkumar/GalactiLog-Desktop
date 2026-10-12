@@ -44,7 +44,7 @@
       <Setter Property="Padding" Value="0,8" />
     </Style>
     <Style Selector="StackPanel#SessionScope, StackPanel#GuidingStats, TextBlock#EmptyState">
-      <Setter Property="Margin" Value="0,6,0,0" />
+      <Setter Property="Margin" Value="0,4,0,0" />
     </Style>
     <Style Selector="Border#ChartCard.card WrapPanel#PillRow">
       <Setter Property="Margin" Value="8,0" />
@@ -57,7 +57,7 @@
   <!-- The overlaid chart sits in a card (ui-polish Task 6, visual-craft F1 and F9), so the pill row
        and the plot read as one framed section rather than a lighter rectangle on the page. The
        laned form takes none: its lanes are already titled charts of their own, and at the
-       1280 x 720 floor the card's height is the second Compare lane. The styles above carry the
+       720 pixel height floor the card's height is the second Compare lane. The styles above carry the
        card's padding and the text rows' inset, since a local value would beat them. -->
   <Border x:Name="ChartCard" Classes.card="{Binding !$parent[controls:MetricChartView].IsLaned}">
   <Grid RowDefinitions="Auto,Auto,Auto,*">
@@ -85,7 +85,7 @@
             <ToggleButton IsChecked="{Binding Toggle.IsSelected, Mode=TwoWay}"
                           Margin="0,0,4,0"
                           Padding="8,3"
-                          CornerRadius="3">
+                          Classes="metric">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Ellipse Width="7" Height="7" Fill="{Binding Tint}" VerticalAlignment="Center" />
                 <TextBlock Text="{Binding Toggle.Label}" />
@@ -119,7 +119,7 @@
             <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
                           Margin="0,0,4,0"
                           Padding="8,3"
-                          CornerRadius="3">
+                          Classes="metric">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Ellipse Width="7"
                          Height="7"
@@ -146,7 +146,7 @@
         <ToggleButton x:Name="GuideLegendRa"
                       Margin="0,0,4,0"
                       Padding="8,3"
-                      CornerRadius="3"
+                      Classes="metric"
                       IsChecked="{Binding Guiding.Graph.Legend[0].IsShown, Mode=TwoWay, FallbackValue=True}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricGuiding}" />
@@ -159,7 +159,7 @@
         <ToggleButton x:Name="GuideLegendDec"
                       Margin="0,0,4,0"
                       Padding="8,3"
-                      CornerRadius="3"
+                      Classes="metric"
                       IsChecked="{Binding Guiding.Graph.Legend[1].IsShown, Mode=TwoWay, FallbackValue=True}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricFwhm}" />
@@ -172,7 +172,7 @@
         <ToggleButton x:Name="GuideLegendStarLost"
                       Margin="0,0,4,0"
                       Padding="8,3"
-                      CornerRadius="3"
+                      Classes="metric"
                       IsChecked="{Binding Guiding.Graph.Legend[2].IsShown, Mode=TwoWay, FallbackValue=True}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricWorst}" />
@@ -185,7 +185,7 @@
         <ToggleButton x:Name="GuideLegendDither"
                       Margin="0,0,4,0"
                       Padding="8,3"
-                      CornerRadius="3"
+                      Classes="metric"
                       IsChecked="{Binding Guiding.Graph.Legend[3].IsShown, Mode=TwoWay, FallbackValue=True}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <Rectangle Width="10" Height="2" VerticalAlignment="Center" Fill="{DynamicResource ColorMetricEccentricity}" />
@@ -198,7 +198,7 @@
         <ToggleButton x:Name="GuideLegendSettling"
                       Margin="0,0,4,0"
                       Padding="8,3"
-                      CornerRadius="3"
+                      Classes="metric"
                       IsChecked="{Binding Guiding.Graph.Legend[4].IsShown, Mode=TwoWay, FallbackValue=True}">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <!-- The settle band's own ink is a background, so on a swatch sitting on a
@@ -247,7 +247,7 @@
             <ToggleButton IsChecked="{Binding Toggle.IsSelected, Mode=TwoWay}"
                           Margin="0,0,4,0"
                           Padding="8,3"
-                          CornerRadius="3">
+                          Classes="metric">
               <StackPanel Orientation="Horizontal" Spacing="6">
                 <Line StartPoint="0,0"
                       EndPoint="18,0"
@@ -273,7 +273,7 @@
       <ToggleButton x:Name="GuidingPill"
                     Margin="0,0,10,0"
                     Padding="8,3"
-                    CornerRadius="3"
+                    Classes="metric"
                     VerticalAlignment="Center"
                     IsVisible="{Binding HasGuidingPill}"
                     IsEnabled="{Binding IsGuidingAvailable}"

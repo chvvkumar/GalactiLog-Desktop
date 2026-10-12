@@ -1,7 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:avc="using:Avalonia.Data.Converters"
-             xmlns:conv="using:GalactiLog.App.Converters"
              xmlns:dash="using:GalactiLog.App.ViewModels.Dashboard"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
              xmlns:t="using:GalactiLog.App.Controls.Table"
@@ -61,44 +60,6 @@
       <t:TableColumn Key="custom" Kind="Strip" />
       <t:TableColumn Key="action" />
     </t:TableColumns>
-
-    <!-- One filter badge, shared by the Palette column and the session line's Filters cell
-         (spec 12.2: both cells draw the same Border.tag badge), so the two agree by construction
-         rather than by two copies of the same markup.
-
-         Border.tag from Theme/Controls.axaml carries the chrome: ColorBadgeBg at radius 3, padding
-         6,1. The frame count is on the tooltip rather than inside the badge, which is what kept the
-         cell to one line (user ruling U3 item 4). The tint is parsed by
-         TargetRowViewModel.ParseTint (FIXER F10, F29) and is the one non-token colour in this
-         view. -->
-    <DataTemplate x:Key="TargetFilterBadge" x:DataType="dash:PaletteBadgeViewModel">
-      <!-- 2026-10-05, user request: the web app's frosted-glass badge. The outer Border keeps
-           Border.tag's chrome (ColorBadgeBg base, 1 px edge, radius 3) with the edge and shadow
-           re-tinted from the view model; the inner Border is the tint wash inside the edge, which
-           is the one way to layer a translucent tint over a themed base without a literal. The
-           label is the tint, as on the web, where the tint reads against the surface
-           (TintInkConverter, 3:1, the filter panel's own rule); otherwise the primary ink the inner
-           Border hands down. -->
-      <Border Classes="tag" Margin="0,0,6,0" Padding="0"
-              BorderBrush="{Binding GlassEdge}"
-              BoxShadow="{Binding GlassShadow}">
-        <Border Background="{Binding GlassFill}"
-                Padding="6,1"
-                TextElement.Foreground="{DynamicResource ColorTextPrimary}">
-          <TextBlock Text="{Binding CanonicalName}"
-                     FontWeight="SemiBold"
-                     Tag="{DynamicResource ColorBgSurface}"
-                     ToolTip.Tip="{Binding FrameCountText}">
-            <TextBlock.Foreground>
-              <MultiBinding Converter="{x:Static conv:TintInkConverter.Instance}">
-                <Binding Path="Tint" />
-                <Binding Path="Tag" RelativeSource="{RelativeSource Self}" />
-              </MultiBinding>
-            </TextBlock.Foreground>
-          </TextBlock>
-        </Border>
-      </Border>
-    </DataTemplate>
   </UserControl.Resources>
 
   <Grid RowDefinitions="Auto,*" Grid.IsSharedSizeScope="True">
@@ -133,6 +94,14 @@
             <ComboBox ItemsSource="{x:Static dash:TargetListViewModel.PageSizeOptions}"
                       SelectedItem="{Binding SelectedPageSize}" />
           </StackPanel>
+          <!-- The page's own title, the left-most element of the bar rather than a row of its own
+               above it, so the table keeps every pixel of height it had. -->
+          <TextBlock x:Name="PageTitle"
+                     DockPanel.Dock="Left"
+                     Classes="t-title"
+                     Text="Dashboard"
+                     Margin="0,0,16,0"
+                     VerticalAlignment="Center" />
           <!-- Fix pass (task4-review.md P2): the range alone ("1 to 25 of 120"), the web's own
                line, rather than repeating the page count the buttons already show. -->
           <TextBlock Text="{Binding PageStatusText}"
@@ -477,7 +446,7 @@
                   <Panel t:TableRow.Col="palette">
                     <ItemsControl x:Name="PaletteCell"
                                   ItemsSource="{Binding PaletteBadges}"
-                                  ItemTemplate="{StaticResource TargetFilterBadge}">
+                                  ItemTemplate="{StaticResource FilterBadgeTemplate}">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <StackPanel Orientation="Horizontal" />
@@ -562,13 +531,13 @@
                         <TextBlock t:TableRow.Col="date" Text="{Binding DateText}" />
                         <TextBlock t:TableRow.Col="frames" Text="{Binding FrameCountText}" />
                         <TextBlock t:TableRow.Col="hours" Text="{Binding IntegrationText}" />
-                        <!-- The same Border.tag badges the Palette column draws (spec 12.2), in
+                        <!-- The same filter badges the Palette column draws (spec 12.2), in
                              the same filter order. A night whose frames carry no filter reads
                              the faint dash, as the Palette cell does (spec.md item 6). -->
                         <Panel t:TableRow.Col="filters">
                           <ItemsControl x:Name="SessionFiltersCell"
                                         ItemsSource="{Binding Filters}"
-                                        ItemTemplate="{StaticResource TargetFilterBadge}">
+                                        ItemTemplate="{StaticResource FilterBadgeTemplate}">
                             <ItemsControl.ItemsPanel>
                               <ItemsPanelTemplate>
                                 <StackPanel Orientation="Horizontal" />

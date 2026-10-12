@@ -33,10 +33,10 @@
       <!-- Spec 14.4's typefaces. FontSans is Inter by default; FontManager replaces it with the
            stored general.font at startup and on every pick in Settings > Display. Each family
            and Atkinson Hyperlegible Mono, SIL Open Font License 1.1, is embedded under
-           Assets/Fonts with its licence. The
-           assembly name is GalactiLog (csproj AssemblyName), not GalactiLog.App. The fragment
-           after the # is the family name in the font's own name table, which is what Avalonia
-           matches, and the names after the comma are the system fallbacks R8 names.
+           Assets/Fonts with its licence. The assembly name is GalactiLog (csproj AssemblyName),
+           not GalactiLog.App. The fragment after the # is the family name in the font's own name
+           table, which is what Avalonia matches, and the names after the comma are the system
+           fallbacks R8 names.
 
            Applying FontSans application-wide is Theme/Controls.axaml's Window style, not an
            attribute on each Window, so a sixth dialog cannot forget it. -->

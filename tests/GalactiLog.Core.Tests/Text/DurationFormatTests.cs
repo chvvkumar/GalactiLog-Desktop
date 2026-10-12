@@ -11,6 +11,10 @@ public class DurationFormatTests
     [InlineData(0d, "0.0 h")]
     [InlineData(471_960d, "131.1 h")]
     [InlineData(4_500_000d, "1,250.0 h")]
+    [InlineData(-10d, "0.0 h")]
+    [InlineData(double.NaN, "0.0 h")]
+    [InlineData(double.PositiveInfinity, "0.0 h")]
+    [InlineData(double.NegativeInfinity, "0.0 h")]
     public void Table_IsHoursWithOneDecimal(double seconds, string expected)
         => Assert.Equal(expected, DurationFormat.Table(seconds));
 

@@ -25,6 +25,12 @@ namespace GalactiLog.App.ViewModels.Dashboard;
 /// </summary>
 public sealed partial class TargetListViewModel : ObservableObject, IDisposable
 {
+    /// <summary>The application's one clipboard path, with its registered logger, set by AppHost.
+    /// A row's Copy name goes through it, so a clipboard failure is logged rather than lost. Null
+    /// in a test surface, where the view falls back to an unlogged copy over its own clipboard.
+    /// </summary>
+    internal ShellIntegration? Shell { get; set; }
+
     /// <summary>Spec 12.2's six sort keys and the direction a fresh click on each starts in:
     /// descending for the numeric and date keys (most integration, newest session first),
     /// ascending for the two textual ones. <c>frames</c> and <c>sessions</c> are sortable without

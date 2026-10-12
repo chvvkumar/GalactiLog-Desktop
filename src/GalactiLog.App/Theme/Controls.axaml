@@ -237,6 +237,67 @@
       <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
       <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
     </ControlTheme>
+
+    <!-- The filter chip (Controls/FilterChip.cs), the one shape a filter colour takes behind a
+         label: the tint's 18 percent wash inside its 25 percent edge, with the frosted badge's
+         inset highlight and tinted shadow. The name takes the tint only where it reads against
+         the surface (TintInkConverter, 3:1); otherwise the primary ink the chip hands down, which
+         is what keeps L legible on the light themes. The detail figure sits in the quiet ink. -->
+    <ControlTheme x:Key="{x:Type controls:FilterChip}" TargetType="controls:FilterChip">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="PART_Chip"
+                  Background="{TemplateBinding Wash}"
+                  BorderBrush="{TemplateBinding Edge}"
+                  BorderThickness="1"
+                  BoxShadow="{TemplateBinding Shadow}"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Padding="{TemplateBinding Padding}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Name="PART_Label"
+                         Text="{TemplateBinding Text}"
+                         FontWeight="SemiBold"
+                         VerticalAlignment="Center"
+                         Tag="{DynamicResource ColorBgSurface}">
+                <TextBlock.Foreground>
+                  <MultiBinding Converter="{x:Static conv:TintInkConverter.Instance}">
+                    <Binding Path="Tint" RelativeSource="{RelativeSource TemplatedParent}" />
+                    <Binding Path="Tag" RelativeSource="{RelativeSource Self}" />
+                  </MultiBinding>
+                </TextBlock.Foreground>
+              </TextBlock>
+              <TextBlock Name="PART_Detail"
+                         Text="{TemplateBinding Detail}"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding Detail, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}"
+                         Foreground="{DynamicResource ColorTextTertiary}" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <!-- The label tier, for a chip beside the target header's stat tiles, where every pixel of
+           height is a frame row taken from the table. -->
+      <Style Selector="^.label /template/ TextBlock">
+        <Setter Property="FontSize"
+                Value="{Binding $parent[Window].FontSize,
+                                Converter={StaticResource Multiply},
+                                ConverterParameter={StaticResource FontSizeLabel}}" />
+      </Style>
+    </ControlTheme>
+
+    <!-- One filter badge over vm:PaletteBadgeViewModel: the target list's Palette column and
+         session line, and the Statistics Filters cell. The frame count is on the tooltip rather
+         than inside the badge, which keeps a table cell to one line (user ruling U3 item 4). -->
+    <DataTemplate x:Key="FilterBadgeTemplate" x:DataType="vm:PaletteBadgeViewModel">
+      <controls:FilterChip Tint="{Binding Tint}"
+                           Text="{Binding CanonicalName}"
+                           Margin="0,0,8,0"
+                           ToolTip.Tip="{Binding FrameCountText}" />
+    </DataTemplate>
   </Styles.Resources>
 
   <!-- The rig label row's placement inside a table row slot, shared by the per-filter and ranges
@@ -593,6 +654,13 @@
   <Style Selector="Border.tag TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
   </Style>
+  <!-- The tinted tag: the tag's shape over the accent tint (the accent button's 15 percent fill
+       and 30 percent edge), so a status tag reads at a glance instead of as a faint grey outline.
+       The mosaic suggestions' confidence and source tags and the activity log's category. -->
+  <Style Selector="Border.tag.tint">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccentBorder30}" />
+  </Style>
 
   <!-- The hairline rule. One bottom edge, one border token, no card. -->
   <Style Selector="Border.rule">
@@ -748,6 +816,19 @@
   </Style>
   <Style Selector="ToggleButton:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!-- The target page's chart pills (Controls/MetricChartView.axaml): checked is Button.pill's
+       selected form, the accent edge over the accent at 20 percent and 25 under the pointer,
+       so a chosen series reads as chosen the way a chosen pill does everywhere else. The pill's
+       own colour stays the dot or swatch its template draws beside the label. -->
+  <Style Selector="ToggleButton.metric:checked">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="ToggleButton.metric:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill20}" />
+  </Style>
+  <Style Selector="ToggleButton.metric:checked:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill25}" />
   </Style>
 
   <!-- The tab strip (spec 14.5), for navigation inside a page: the Analysis tabs, the target page's

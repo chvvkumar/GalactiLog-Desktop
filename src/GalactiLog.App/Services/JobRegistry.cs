@@ -56,11 +56,6 @@ public sealed partial class JobRegistry : ObservableObject
     /// until an eleventh newer one pushes it out, and nothing clears it on a timer.</summary>
     public const int RecentCap = 10;
 
-    /// <summary>A job ended by <see cref="JobHandle.Dispose"/> alone, with no summary, that ran for
-    /// less than this raises no notice: a trivial job that finished before anyone could look is
-    /// noise, not news.</summary>
-    public static readonly TimeSpan QuietImplicitFinish = TimeSpan.FromMilliseconds(500);
-
     private readonly Action<Action> _post;
     private readonly INotifier? _notifier;
     private readonly Func<DateTimeOffset> _now;
@@ -118,6 +113,17 @@ public sealed partial class JobRegistry : ObservableObject
         return new JobHandle(this, job);
     }
 
+    /// <summary>Re-reads every listed job's clock text. The flyout calls it on opening: the
+    /// application stays resident, so a job finished before midnight would otherwise keep showing
+    /// a bare "14:32" the next day (Task 3 review finding 4). UI thread only.</summary>
+    public void RefreshTimes()
+    {
+        foreach (var job in Running.Concat(Recent))
+        {
+            job.RefreshTime();
+        }
+    }
+
     internal void Report(JobViewModel job, string message, double? percent)
         => _post(() =>
         {
@@ -130,7 +136,7 @@ public sealed partial class JobRegistry : ObservableObject
         // Stamped here, on the caller's thread, rather than inside the post, so the duration is
         // the job's and not the job's plus the dispatcher queue's.
         var finishedAt = _now();
-        var notice = NoticeFor(job.Title, result, summary, noticeText, implicitFinish, finishedAt - job.StartedAt, job.Notify);
+        var notice = NoticeFor(job.Title, result, summary, noticeText, implicitFinish, job.Notify);
 
         _post(() =>
         {
@@ -156,18 +162,14 @@ public sealed partial class JobRegistry : ObservableObject
 
     /// <summary>What a finished job says in the notice stack, or null for nothing. Succeeded is
     /// a Success notice with the summary (the title plus " finished" when there is none), Failed
-    /// is an Error, Cancelled is Info. A job ended only by <see cref="JobHandle.Dispose"/> with no
-    /// summary in under <see cref="QuietImplicitFinish"/> says nothing.</summary>
+    /// is an Error, Cancelled is Info. A job ended only by <see cref="JobHandle.Dispose"/> says
+    /// nothing: its caller may have thrown past its own Finish, so a green "finished" would claim
+    /// a success nobody reported (Task 3 review finding 7). A failure always says so.</summary>
     internal static (string Text, NoticeKind Kind)? NoticeFor(
-        string title, JobResult result, string summary, string? noticeText, bool implicitFinish, TimeSpan ran,
+        string title, JobResult result, string summary, string? noticeText, bool implicitFinish,
         bool notify = true)
     {
-        if (!notify && result != JobResult.Failed)
-        {
-            return null;
-        }
-
-        if (implicitFinish && summary.Length == 0 && ran < QuietImplicitFinish)
+        if ((!notify || implicitFinish) && result != JobResult.Failed)
         {
             return null;
         }
@@ -227,7 +229,7 @@ public sealed class JobHandle : IDisposable
     /// <summary>Finishes an unfinished job as <see cref="JobResult.Succeeded"/> with an empty
     /// summary, so a caller that throws past its own <see cref="Finish(JobResult, string, string?)"/>
     /// leaves no phantom running job in the flyout. Does nothing to a job that already finished.
-    /// A job this ends in under <see cref="JobRegistry.QuietImplicitFinish"/> raises no notice.
+    /// It raises no notice, since its caller may have thrown.
     /// </summary>
     public void Dispose() => Finish(JobResult.Succeeded, "", null, implicitFinish: true);
 
@@ -273,6 +275,9 @@ public sealed partial class JobViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(TimeText))]
     [NotifyPropertyChangedFor(nameof(StatusLine))]
     public partial DateTimeOffset? FinishedAt { get; private set; }
+
+    /// <summary>Raises <see cref="TimeText"/> again, so a clock read against a past day re-reads.</summary>
+    internal void RefreshTime() => OnPropertyChanged(nameof(TimeText));
 
     /// <summary>The flyout's right-aligned time: the finish time once finished, "started 14:31"
     /// while running.</summary>

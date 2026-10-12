@@ -54,7 +54,7 @@ public class FolderLevelsTests
     {
         var chains = Golden().GetProperty("chains");
 
-        // The goldens live in the docs tree, where a later agent may regenerate them. Without this
+        // The goldens live in the docs tree, where a later task may regenerate them. Without this
         // the loop below walks an emptied or trimmed file and passes green, and W15's only
         // machine-checked parity vanishes with no red anywhere.
         Assert.Equal(2, chains.GetArrayLength());

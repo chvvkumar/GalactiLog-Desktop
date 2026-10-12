@@ -446,6 +446,13 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     // and a refused write rolls the picker and the typeface back together.
     partial void OnSelectedFontChanged(FontOption oldValue, FontOption newValue)
     {
+        // A ComboBox clears its selection to null when its items are replaced; there is nothing
+        // to apply or save.
+        if (newValue is null)
+        {
+            return;
+        }
+
         var id = newValue.Id;
         if (!IsApplying && IsReadyToSave)
         {
@@ -458,12 +465,20 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
             () =>
             {
                 SelectedFont = oldValue;
-                _applyFont(oldValue.Id);
+                if (oldValue is not null)
+                {
+                    _applyFont(oldValue.Id);
+                }
             });
     }
 
     partial void OnSelectedTextSizeChanged(TextSizeOption oldValue, TextSizeOption newValue)
     {
+        if (newValue is null)
+        {
+            return;
+        }
+
         var id = newValue.Id;
         ImmediateSave(
             general => general with { TextSize = id },

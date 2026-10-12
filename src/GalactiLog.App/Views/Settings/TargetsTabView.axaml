@@ -211,8 +211,7 @@
            SearchResultViewModel: one ranking, one threshold (spec 12.9). -->
       <Border Classes="card" IsVisible="{Binding RetargetingRow, Converter={x:Static ObjectConverters.IsNotNull}}">
         <StackPanel x:Name="RetargetPanel"
-                    Spacing="10"
-  >
+                    Spacing="10">
           <Border Classes="rule" Padding="0,0,0,6">
             <Grid ColumnDefinitions="*,Auto">
               <TextBlock Grid.Column="0"

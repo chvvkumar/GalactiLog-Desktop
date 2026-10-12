@@ -1,5 +1,4 @@
 using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace GalactiLog.App.ViewModels.Dashboard;
@@ -39,11 +38,4 @@ public sealed partial class ToggleOptionViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _isSelected;
-
-    /// <summary>A Filters pill's wash: its tint at 18 percent, the same figure the target list's
-    /// palette badges use (<see cref="PaletteBadgeViewModel.GlassFill"/>), so a chosen filter reads
-    /// as a tinted chip rather than a coloured block. The view shows it while the pill is
-    /// selected; it is fixed here so selecting raises nothing but <see cref="IsSelected"/>, which
-    /// is the one change the panel's query listens for. Null for a pill with no tint.</summary>
-    public IBrush? Fill18 => Tint is { } tint ? new ImmutableSolidColorBrush(tint.Color, 0.18) : null;
 }

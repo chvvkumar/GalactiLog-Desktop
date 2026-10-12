@@ -30,7 +30,6 @@
                 Command="{Binding OpenLibrarySettingsCommand}" />
         <Button x:Name="RunScanButton"
                 Content="Run scan"
-                Padding="12,4"
                 Command="{Binding RunScanCommand}" />
       </StackPanel>
     </StackPanel>

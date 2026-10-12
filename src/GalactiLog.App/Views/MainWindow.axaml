@@ -24,13 +24,14 @@
     <KeyBinding Gesture="BrowserBack" Command="{Binding BackCommand}" />
     <KeyBinding Gesture="Alt+Right" Command="{Binding ForwardCommand}" />
     <KeyBinding Gesture="BrowserForward" Command="{Binding ForwardCommand}" />
-    <!-- ux-flow F8. Ctrl+F is added by the code-behind, because moving focus into the search
-         box is a view concern. A KeyBinding whose command cannot execute leaves the key alone,
-         so Ctrl+S reaches the save bar only while it is showing. Escape is not bound here: a
-         window KeyBinding runs before any control sees the key, so it would beat every
-         dropdown, editor and Back. SaveBarView binds Escape for focus inside the bar. -->
+    <!-- ux-flow F8. Ctrl+F and Ctrl+S are added by the code-behind: moving focus into the search
+         box is a view concern, and so is committing the focused text box before a save (a
+         field bound on LostFocus has not written its value yet when the key arrives). A
+         KeyBinding whose command cannot execute leaves the key alone, so Ctrl+S reaches the
+         save bar only while it is showing. Escape is not bound here: a window KeyBinding runs
+         before any control sees the key, so it would beat every dropdown, editor and Back.
+         SaveBarView binds Escape for focus inside the bar. -->
     <KeyBinding Gesture="F5" Command="{Binding RefreshPageCommand}" />
-    <KeyBinding Gesture="Ctrl+S" Command="{Binding PendingEdits.SaveAllCommand}" />
     <KeyBinding Gesture="Ctrl+D1" Command="{Binding SelectRailCommand}" CommandParameter="0" />
     <KeyBinding Gesture="Ctrl+D2" Command="{Binding SelectRailCommand}" CommandParameter="1" />
     <KeyBinding Gesture="Ctrl+D3" Command="{Binding SelectRailCommand}" CommandParameter="2" />
@@ -122,8 +123,11 @@
     </Border>
     <!-- A page switch cross-fades over 150 ms rather than swapping in one frame (ux-flow F3).
          Avalonia exposes no reading of the Windows "Animation effects" setting, so the fade
-         always runs. -->
+         always runs. Focusable but no tab stop: the code-behind parks focus here on a switch,
+         so the outgoing page keeps none during the fade. -->
     <TransitioningContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
+                                 Focusable="True"
+                                 IsTabStop="False"
                                  Content="{Binding CurrentPage}"
                                  MaxWidth="{Binding ContentMaxWidth}"
                                  HorizontalAlignment="Stretch">

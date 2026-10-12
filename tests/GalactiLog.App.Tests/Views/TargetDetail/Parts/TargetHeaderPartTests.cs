@@ -223,10 +223,14 @@ public class TargetHeaderPartTests
             .ToList();
         Assert.Equal(["SII 0.5 h", "Ha 2.0 h", "OIII 1.0 h"], labels);
 
-        // The tint sits under the text at 18 percent, so the label keeps the full colour.
-        Assert.Equal(
-            3,
-            chips.GetVisualDescendants().OfType<Border>().Count(border => Math.Abs(border.Opacity - 0.18d) < 1e-6));
+        // The shared filter chip: the tint's 18 percent wash as the chip's own fill, so the label
+        // is never faded with it.
+        var washes = chips.GetVisualDescendants().OfType<GalactiLog.App.Controls.FilterChip>()
+            .Select(chip => chip.Wash)
+            .OfType<Avalonia.Media.ISolidColorBrush>()
+            .ToList();
+        Assert.Equal(3, washes.Count);
+        Assert.All(washes, wash => Assert.Equal(0x2E, wash.Color.A));
 
         using var empty = With(Factory.PopulatedTotals() with
         {

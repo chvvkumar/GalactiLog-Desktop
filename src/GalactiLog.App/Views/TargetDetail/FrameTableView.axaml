@@ -38,7 +38,7 @@
        The rows no longer carry a MaxHeight of their own (P12 Task 6). FrameRowsViewportHeight was
        a fixed 420 px bound that existed only because the table's host, the session accordion card,
        sat inside the detail page's vertical ScrollViewer and measured the rows against infinite
-       height, so every row realised: the verification agent measured a 605 ms median UI-thread
+       height, so every row realised: the verification pass measured a 605 ms median UI-thread
        stall expanding a 200 frame session that way (FIXER LIST F12). The host is Task 5's session
        pane now and it gives the table a starred grid row, so the pane's own height is the viewport
        and VirtualizingStackPanel has something finite to virtualise against without this file
@@ -612,7 +612,7 @@
                              ToolTip.Tip="{Binding RigText}"
                              Text="{Binding RigText}" />
                   <!-- The file name is the cell a user reads and copies, so it is the one text
-                       cell in the mono family and in the primary ink.
+                       cell in the mono family, at the caption tier in the secondary ink.
 
                        R6: it never trims, and the full path is on the tip (ruling Q8).
                        TextTrimming is set inline rather than by a narrower style selector,
@@ -817,13 +817,13 @@
                              Text="{Binding CameraGainText}" />
 
                   <!-- Spec 12.4's five per-frame actions, behind one row-end button so the row
-                       stays readable. Open preview is spec 11.5's modal and stays disabled until
+                       stays readable. Preview is spec 11.5's modal and stays disabled until
                        Phase 8 binds the delegate. -->
                   <Button Content="..." Padding="6,0" Margin="8,0,0,0" Width="{StaticResource FrameColActionsWidth}">
                     <Button.Flyout>
                       <Flyout>
                         <StackPanel Spacing="2">
-                          <Button Content="Open preview"
+                          <Button Content="Preview"
                                   HorizontalAlignment="Stretch"
                                   HorizontalContentAlignment="Left"
                                   Command="{Binding #Root.((detail:FrameTableViewModel)DataContext).OpenPreviewCommand}"

@@ -421,10 +421,13 @@ public class JobRegistryTests
         Assert.Equal("The scan finished.", registry.Recent[0].Summary);
     }
 
+    // Task 3 review finding 7: a job ended only by Dispose may be one whose caller threw past its
+    // own Finish, so it raises no green "finished" however long it ran. The flyout still keeps it.
     [Theory]
-    [InlineData(100, false)]
-    [InlineData(800, true)]
-    public void Dispose_WithoutFinish_IsQuietUnderHalfASecond(int ranMilliseconds, bool notifies)
+    [InlineData(100)]
+    [InlineData(800)]
+    [InlineData(60_000)]
+    public void Dispose_WithoutFinish_RaisesNoNotice_WhateverItsDuration(int ranMilliseconds)
     {
         var notices = new RecordingNotifier();
         var now = new DateTimeOffset(2026, 10, 11, 14, 31, 0, TimeSpan.Zero);
@@ -435,14 +438,33 @@ public class JobRegistryTests
         handle.Dispose();
 
         Assert.Equal(JobResult.Succeeded, registry.Recent[0].Result);
-        if (notifies)
-        {
-            Assert.Equal(("Prune activity log finished", NoticeKind.Success), Assert.Single(notices.Shown));
-        }
-        else
-        {
-            Assert.Empty(notices.Shown);
-        }
+        Assert.Empty(notices.Shown);
+    }
+
+    [Fact]
+    public void AnImplicitFinish_ThatFailed_StillRaisesAnError()
+        => Assert.Equal(
+            ("Prune activity log failed", NoticeKind.Error),
+            JobRegistry.NoticeFor("Prune activity log", JobResult.Failed, "", null, implicitFinish: true));
+
+    // Task 3 review finding 4: the flyout re-reads the clock text when it opens, so a job
+    // finished yesterday gains its date instead of keeping a bare time.
+    [Fact]
+    public void RefreshTimes_ReRaisesTheClockText_SoAPastDayReadsWithItsDate()
+    {
+        var now = new DateTimeOffset(2026, 10, 10, 23, 58, 0, TimeSpan.Zero);
+        var registry = new JobRegistry(action => action(), now: () => now);
+        registry.Begin("scan", "Library scan").Finish(JobResult.Succeeded, "Done.");
+        var job = registry.Recent[0];
+        Assert.Equal("23:58", job.TimeText);
+
+        var raised = new List<string?>();
+        job.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        now = now.AddMinutes(5);
+        registry.RefreshTimes();
+
+        Assert.Contains(nameof(JobViewModel.TimeText), raised);
+        Assert.Equal("Oct 10 23:58", job.TimeText);
     }
 
     [Fact]

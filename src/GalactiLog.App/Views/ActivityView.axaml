@@ -48,14 +48,12 @@
                    Classes.band-reject="{Binding IsError}"
                    Width="18"
                    TextAlignment="Center" />
-        <!-- Wide enough for the longest full-word label, "Enrichment". The category is a tinted
-             pill (the tag's shape over the accent tint), left aligned in its fixed column so the
-             messages after it start on one line. -->
+        <!-- Wide enough for the longest full-word label, "Enrichment". The category is the tinted
+             tag (the tag and tint classes), left aligned in its fixed column so the messages after it start
+             on one line. -->
         <Panel Grid.Column="3" Width="96">
-          <Border Classes="tag"
-                  HorizontalAlignment="Left"
-                  Background="{DynamicResource ColorAccentFill15}"
-                  BorderBrush="{DynamicResource ColorAccentBorder30}">
+          <Border Classes="tag tint"
+                  HorizontalAlignment="Left">
             <TextBlock Text="{Binding CategoryLabel}"
                        TextTrimming="CharacterEllipsis"
                        Classes="t-caption"

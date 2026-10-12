@@ -460,44 +460,6 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
                 : Color.Parse(FilterColor.Fallback));
 }
 
-/// <summary>One filter badge of spec 12.2's Palette column: the read model plus its parsed colour,
-/// so the view binds a brush and holds no conversion logic.</summary>
-/// <remarks>FIXER LIST F29, widened: <see cref="Tint"/> is only ever
-/// <see cref="TargetRowViewModel.ParseTint"/>'s result, so the type says immutable rather than
-/// leaving spec 14.5's rule to convention, exactly as <c>FilterUsageRow.Tint</c> does.</remarks>
-public sealed record PaletteBadgeViewModel(FilterBadge Badge, IImmutableSolidColorBrush Tint)
-{
-    public string CanonicalName => Badge.CanonicalName;
-    public int FrameCount => Badge.FrameCount;
-
-    /// <summary>The web app's "frosted-glass" badge (GalactiLog frontend
-    /// <c>utils/filterStyles.ts</c>), ported figure for figure: an 18% tint fill inside a 25%
-    /// tint edge, a 6% white inset top highlight and a soft 15% tinted drop shadow, with the label
-    /// in the tint itself. The three are derived from <see cref="Tint"/> here so the template binds
-    /// brushes and holds no arithmetic.</summary>
-    public IImmutableSolidColorBrush GlassFill { get; } = WithAlpha(Tint, 0.18);
-    public IImmutableSolidColorBrush GlassEdge { get; } = WithAlpha(Tint, 0.25);
-    public BoxShadows GlassShadow { get; } = new(
-        new BoxShadow { OffsetY = 1, Color = Color.FromArgb(0x0F, 0xFF, 0xFF, 0xFF), IsInset = true },
-        [new BoxShadow { OffsetY = 2, Blur = 8, Color = Alpha(Tint.Color, 0.15) }]);
-
-    private static ImmutableSolidColorBrush WithAlpha(IImmutableSolidColorBrush tint, double alpha)
-        => new(Alpha(tint.Color, alpha));
-
-    private static Color Alpha(Color c, double alpha)
-        => Color.FromArgb((byte)Math.Round(alpha * 255), c.R, c.G, c.B);
-
-    /// <summary>The badge's tooltip since Phase 14C (spec 12.2, user ruling U3): the badge draws
-    /// <see cref="CanonicalName"/> alone, so the figure that used to sit inside it and wrap the
-    /// cell to a second line reads on hover instead. Singular at one frame.
-    /// <para>
-    /// <see cref="FrameCount"/> stays public beside it: showing the figure in the badge again is a
-    /// one line template change rather than a view-model change (Q1, provisional).
-    /// </para></summary>
-    public string FrameCountText
-        => FrameCount == 1 ? $"{CanonicalName}, 1 frame" : $"{CanonicalName}, {FrameCount} frames";
-}
-
 /// <summary>One line inside the Sessions expander: date, frames, hours, and, since Phase
 /// 14B Task 6, the raw <see cref="SessionDate"/> and owning <see cref="GroupKey"/> the Deep dive
 /// action needs and the night's <see cref="Filters"/> badges (spec 12.2, "a fifth column is an

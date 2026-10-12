@@ -10,6 +10,7 @@
   <!-- A 2 px accent line across the top of the bar while any job runs, so background work is
        visible from every page. Indeterminate: there is no aggregate percent across jobs. -->
   <ProgressBar x:Name="JobsRunningLine"
+               IsHitTestVisible="False"
                VerticalAlignment="Top"
                Height="2"
                MinHeight="2"
