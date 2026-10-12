@@ -14,25 +14,25 @@
        the page always has a tab. Every colour is a theme token (spec 14); nothing here sets
        FontSize, because Scales.axaml's FontSize* keys are ratios. -->
   <Grid ColumnDefinitions="Auto,*">
-    <!-- Spec 12.12 places page.settings on the tab strip, which carries no heading of its own, so
-         the glyph takes a row above the strip and no page title is invented for it. The strip's
-         width, surface and right rule move to this border, so the glyph row shares them and the
-         vertical rule between the strip and the content region stays unbroken. -->
+    <!-- The page title heads the section list, with spec 12.12's page.settings glyph beside it.
+         The column sits on the page colour rather than a fill of its own: a surface fill here made
+         the rail, this list and the content three different greys side by side. The right rule
+         stays, so the list and the content region are still divided. The list takes the rail's
+         selected look (accent text over the elevated fill) through ListBox.rail. -->
     <Border Grid.Column="0"
             x:Name="SettingsTabStripColumn"
             Width="180"
-            Background="{DynamicResource ColorBgSurface}"
             BorderBrush="{DynamicResource ColorBorderDefault}"
             BorderThickness="0,0,1,0">
       <Grid RowDefinitions="Auto,*">
-        <controls:HelpButton Grid.Row="0"
-                             Topic="page.settings"
-                             HorizontalAlignment="Right"
-                             Margin="0,8,8,0" />
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="16,16,8,8">
+          <TextBlock x:Name="SettingsTitle" Text="Settings" Classes="t-title" VerticalAlignment="Center" />
+          <controls:HelpButton Topic="page.settings" />
+        </StackPanel>
         <ListBox Grid.Row="1"
                  x:Name="SettingsTabStrip"
                  Classes="rail compact"
-                 Padding="0,8"
+                 Padding="0,0,0,8"
                  SelectionMode="AlwaysSelected"
                  Background="Transparent"
                  BorderThickness="0"

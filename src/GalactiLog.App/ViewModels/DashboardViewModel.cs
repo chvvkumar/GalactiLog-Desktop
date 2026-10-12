@@ -8,6 +8,7 @@ using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.Core.Aliases;
 using GalactiLog.Core.Scanning;
 using GalactiLog.Core.Settings;
+using GalactiLog.Core.Text;
 using GalactiLog.Data.Queries;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -47,8 +48,10 @@ public enum DashboardContentState
 /// preserves every value, and nothing is written to disk.
 /// </para>
 /// </summary>
-public sealed partial class DashboardViewModel : ObservableObject, IDisposable
+public sealed partial class DashboardViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>Coordinator ruling Q3. Spec 12.2 says the inputs are debounced without giving a
     /// figure; one shared window for every input, not a fast path and a slow path.</summary>
     internal static readonly TimeSpan DebounceWindow = TimeSpan.FromMilliseconds(250);
@@ -306,7 +309,7 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// on load and on resize; a gesture the user makes in the window in front of them wins, because
     /// the alternative is a chevron that toggles a stored flag and changes nothing on screen, which
     /// reads as a broken button, with the filters unreachable at every window below about 1186
-    /// pixels, the shipped 1024 minimum included.</summary>
+    /// pixels, the 960 window minimum included.</summary>
     /// <remarks>
     /// A view flag and nothing else: it is never read from the document, never written to it, and
     /// <see cref="PersistPanelState"/> is not called for it. It is cleared by a collapse and by any
@@ -324,8 +327,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
     /// <summary>The widest the panel may be rendered at the page's current width, written by
     /// <c>DashboardView.axaml.cs</c> from the view's own Bounds (fixer-list item 6, phase-review
-    /// P2's interaction between the 1024 window minimum, the 480 panel maximum and the target
-    /// list's no-scroller trimming rule). It is a layout bound and nothing else: it is never read
+    /// P2's interaction between the window minimum (1024 then, 960 now), the 480 panel maximum
+    /// and the target list's no-scroller trimming rule). It is a layout bound and nothing else: it is never read
     /// from the document, never written to it, and <see cref="PersistPanelState"/> is not called
     /// for it, so widening the window gives the stored width and the stored state straight
     /// back.</summary>
@@ -479,7 +482,12 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
     /// <summary>Total integration of the filtered set, in hours.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TotalIntegrationText))]
     private double _totalIntegrationHours;
+
+    /// <summary>The summary strip's integration figure, in the one table form
+    /// (<see cref="DurationFormat.Table"/>), for example <c>1,250.0 h</c>.</summary>
+    public string TotalIntegrationText => DurationFormat.Table(TotalIntegrationHours * 3600d);
 
     [ObservableProperty]
     private int _totalGroups;
@@ -608,7 +616,8 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Raised by the notice's one action, Review. The shell opens Settings on the Library tab
+    /// Raised by the notice's one action, Review, and by the empty state's Open settings. The shell
+    /// opens Settings on the Library tab
     /// (spec 12.2); the route is <c>MainWindowViewModel</c>'s, the same idiom the Statistics
     /// timeline's <c>DateRangeRequested</c> already uses, rather than a second one.
     /// </summary>
@@ -640,6 +649,13 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
 
         ReviewScanFiltersRequested?.Invoke(this, SettingsDestination.LibraryNameRules);
     }
+
+    /// <summary>The first-run empty state's Open settings action (spec 12.10): the Library tab,
+    /// where a library folder is added. It rides the same route as Review, so the shell's one
+    /// Settings handler answers both.</summary>
+    [RelayCommand]
+    private void OpenLibrarySettings()
+        => ReviewScanFiltersRequested?.Invoke(this, SettingsDestination.Library);
 
     /// <summary>The in-flight debounce-and-search, so a test can await it instead of sleeping.</summary>
     internal Task? PendingSearch { get; private set; }
@@ -894,7 +910,11 @@ public sealed partial class DashboardViewModel : ObservableObject, IDisposable
     /// thread by the composition root's own route.</summary>
     internal void RefreshMosaicLinks() => RequestQuery(quiet: true);
 
-    private void OnScanFinished(object? sender, EventArgs e)
+    private void OnScanFinished(object? sender, EventArgs e) => Refresh();
+
+    /// <summary>The page's re-read: what a finished scan runs, and the shell's F5.</summary>
+    [RelayCommand]
+    private void Refresh()
     {
         // A root that came back (or went away) since the last scan is picked up here, which is
         // also when its frames appear or stop appearing (ruling Q18).

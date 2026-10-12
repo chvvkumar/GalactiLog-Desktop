@@ -144,6 +144,12 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             new NavigationItem("settings", "Settings", settings, "IconGear"),
         ];
 
+        // The rail's tips name the Ctrl+1 to Ctrl+7 shortcut that selects each entry.
+        for (var at = 0; at < Items.Count; at++)
+        {
+            Items[at].Shortcut = $"Ctrl+{at + 1}";
+        }
+
         // Assigned to the field, not through the generated setter, so the compiler sees the
         // non-nullable property as definitely assigned and no PropertyChanged fires during
         // construction.
@@ -193,6 +199,49 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private void ToggleNavRail() => IsNavRailCollapsed = !IsNavRailCollapsed;
+
+    // ---- Window shortcuts (ux-flow F8) -----------------------------------------------------------
+    //
+    // MainWindow.axaml's KeyBindings land here. Ctrl+1 to Ctrl+7 pass the rail index as text,
+    // which is how a KeyBinding's CommandParameter arrives from markup.
+
+    [RelayCommand]
+    private void SelectRail(string? index)
+    {
+        if (int.TryParse(index, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out var at)
+            && at >= 0 && at < Items.Count)
+        {
+            Selected = Items[at];
+        }
+    }
+
+    // F5: the showing page's own refresh, when it has one. A detail page and a page without a
+    // refresh action ignore the key.
+    [RelayCommand]
+    private void RefreshPage()
+    {
+        if (CurrentPage is IRefreshable { RefreshCommand: var command } && command.CanExecute(null))
+        {
+            command.Execute(null);
+        }
+    }
+
+    /// <summary>Ctrl+F: the dashboard, with its filter panel open on the Search section. The window
+    /// then moves focus into the search box, which is a view concern.</summary>
+    public void ShowSearch()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        if (!ReferenceEquals(CurrentPage, _dashboard))
+        {
+            Selected = Items.First(item => item.Key == "dashboard");
+        }
+
+        _dashboard.ExpandFilterPanelOnCommand.Execute("search");
+    }
 
     // NavigationItem memoizes the factory result, so each of these runs once, on the first read of
     // that rail entry's Page, on the UI thread.
@@ -505,6 +554,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
             case SettingsDestination.LibraryNameRules:
                 OpenSettingsAt("library", page => (page as LibraryTabViewModel)?.RequestNameRulesInView());
                 break;
+            case SettingsDestination.Library:
+                OpenSettingsAt("library", _ => { });
+                break;
 
             // Review P3-1. The comment above promises that a fourth destination is a member and an
             // arm; without this, forgetting the arm routes the user silently nowhere and the notice
@@ -805,15 +857,15 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     }
 
     // Design-spec 14.4's four sizes. An unrecognized value, which a hand-edited settings document
-    // can produce, falls back to the fresh profile's small, 14, rather than to zero, exactly as
+    // can produce, falls back to the fresh profile's medium, 16, rather than to zero, exactly as
     // ResolveContentMaxWidth falls back. SettingsStore.ValidateGeneral refuses
     // anything outside the four on the write path; this is the read side's backstop.
     internal static double ResolveRootFontSize(string textSize) => textSize switch
     {
-        "medium" => 16d,
+        "small" => 14d,
         "large" => 18d,
         "x-large" => 20d,
-        _ => 14d,
+        _ => 16d,
     };
 
     // Coordinator ruling Q2: the spec names the three values and no pixel figures. normal is

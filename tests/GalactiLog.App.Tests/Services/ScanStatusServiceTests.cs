@@ -93,7 +93,9 @@ public class ScanStatusServiceTests
         using var settings = new SettingsFixture();
         settings.Save(general => general with { ScanRoots = [settings.Root] });
         var coordinator = ScanCoordinatorTestFactory.Create(settings);
-        using var service = new ScanStatusService(coordinator, action => action());
+        var scheduled = new List<Action>();
+        using var service = new ScanStatusService(
+            coordinator, action => action(), schedule: (_, action) => scheduled.Add(action));
 
         var raisedCount = 0;
         service.ScanFinished += (_, _) => raisedCount++;
@@ -102,8 +104,67 @@ public class ScanStatusServiceTests
 
         Assert.False(service.IsRunning);
         Assert.Equal(0d, service.Percent);
-        Assert.Equal("Ready", service.Message);
         Assert.Equal(1, raisedCount);
+
+        // The outcome is held on the bar, then the hold's timer puts "Ready" back.
+        Assert.StartsWith(ScanCompletionNotice.CompleteTitle + ": ", service.Message, StringComparison.Ordinal);
+        Assert.Single(scheduled)();
+        Assert.Equal("Ready", service.Message);
+    }
+
+    // Task 3 (feedback): a finished scan says what it found, on the bar for ScanSummaryHold and in
+    // one notice through the scan job's own Finish, and a status change inside the hold wins over
+    // the timer's "Ready".
+    [Fact]
+    public async Task ScanFinished_HoldsTheSummary_RaisesOneNotice_AndANewStatusBeatsTheTimer()
+    {
+        using var settings = new SettingsFixture();
+        settings.Save(general => general with { ScanRoots = [settings.Root] });
+        var coordinator = ScanCoordinatorTestFactory.Create(settings);
+        var notices = new RecordingNotifier();
+        var jobs = new JobRegistry(action => action(), notices);
+        var holds = new List<TimeSpan>();
+        var scheduled = new List<Action>();
+        using var service = new ScanStatusService(
+            coordinator,
+            action => action(),
+            jobs: jobs,
+            schedule: (delay, action) =>
+            {
+                holds.Add(delay);
+                scheduled.Add(action);
+            });
+
+        // Two sub-jobs opened and finished inside the run, so the single-notice assertion below
+        // covers them: each envelope of another task closes the open one Succeeded.
+        coordinator.RaiseProgress(ScanTaskNames.Phd2Ingest, 1, 3, "Reading guide logs 1/3", force: true);
+        coordinator.RaiseProgress(ScanTaskNames.MosaicDetection, 1, 2, "34 suggestions", force: true);
+        await coordinator.RunAsync(ScanTrigger.Manual, null, CancellationToken.None);
+        Assert.Contains(jobs.Recent, job => job.Kind == ScanTaskNames.Phd2Ingest);
+        Assert.Contains(jobs.Recent, job => job.Kind == ScanTaskNames.MosaicDetection);
+
+        var summary = service.Message;
+        Assert.StartsWith("Scan complete: ", summary, StringComparison.Ordinal);
+        Assert.Equal(TimeSpan.FromSeconds(10), Assert.Single(holds));
+
+        // One notice for the whole run: the scan's sub-jobs (guide logs, correlation, mosaic
+        // detection) are quiet unless they fail.
+        var scanNotice = Assert.Single(notices.Shown);
+        Assert.Equal((summary, NoticeKind.Success), scanNotice);
+
+        // The flyout keeps its own summary sentence; only the notice carries the counts.
+        Assert.Equal(ScanStatusService.ScanJobSummary, jobs.Recent.First(job => job.Kind == "scan").Summary);
+
+        coordinator.RaiseProgress(ScanTaskNames.Discovery, 1, 5, "Discovering files...", force: true);
+        scheduled[0]();
+        Assert.Equal("Discovering files...", service.Message);
+    }
+
+    private sealed class RecordingNotifier : INotifier
+    {
+        public List<(string Text, NoticeKind Kind)> Shown { get; } = [];
+
+        public void Show(string text, NoticeKind kind, TimeSpan? autoDismiss = null) => Shown.Add((text, kind));
     }
 
     // Fix pass review item 1. Before the fix, OnScanFinished forced IsRunning = false

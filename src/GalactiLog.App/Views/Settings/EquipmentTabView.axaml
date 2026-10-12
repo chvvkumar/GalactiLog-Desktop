@@ -72,11 +72,7 @@
       </ContentControl>
 
       <Border x:Name="CamerasCard"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Cameras"
@@ -89,11 +85,7 @@
       </Border>
 
       <Border x:Name="TelescopesCard"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Telescopes"
@@ -108,15 +100,16 @@
       <!-- Spec 12.7's PHD2 profiles panel (Phase 15A Task 6), below the two grouping editors.
            Hidden entirely while Phd2Profiles is null: Task 6a ships the panel unwired (AppHost.cs
            is Task 6b's file), so "no panel constructed yet" and "constructed but the corpus has
-           read no guide log" are two different states, and this is the first one. No CornerRadius
-           and no card chrome (coordinator ruling): a hairline under the heading, the shape
-           LibraryTabView's newer sections use, not a bordered card.
+           read no guide log" are two different states, and this is the first one. A Border.card
+           like the two editors above it (UI polish Task 8: every settings section sits in a
+           card), with the hairline under its heading kept.
 
            Every editor below carries a visible label and an AutomationProperties.Name, and every
            read-only fact carries a caption: a watermark is gone the moment the field holds a value,
            which is the state of every field a user has configured, and a bare "1.23" is a pixel
            scale only to a reader who already knows spec 12.7's column order (review P2-3). -->
       <Border x:Name="Phd2ProfilesSection"
+              Classes="card"
               IsVisible="{Binding #Root.((settings:EquipmentTabViewModel)DataContext).Phd2Profiles, Converter={x:Static ObjectConverters.IsNotNull}}"
               DataContext="{Binding Phd2Profiles}">
         <StackPanel Spacing="10" x:DataType="settings:Phd2ProfilesViewModel">

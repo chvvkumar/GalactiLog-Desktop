@@ -377,7 +377,7 @@ public sealed partial class GuidingSectionViewModel : ObservableObject, IDisposa
     /// which for the non-negative values this member accepts is
     /// <see cref="MidpointRounding.AwayFromZero"/>; it is a presentation rounding of a duration
     /// and not a stored parity figure, so rule G6's <c>RoundLikePython</c> has no site here. It is the guiding readout's own format and does not replace
-    /// <see cref="MetricText.Integration"/>, which pads to hours and minutes because it totals a
+    /// <see cref="GalactiLog.Core.Text.DurationFormat.Prose"/>, which spaces its units because it totals a
     /// whole night.
     /// </remarks>
     public static string CompactDuration(double seconds)

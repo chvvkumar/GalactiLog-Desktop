@@ -1,8 +1,12 @@
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
+using Avalonia.VisualTree;
+using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels;
 
@@ -19,6 +23,67 @@ public partial class MainWindow : Window
         // windows ignore the two buttons. Alt+Left, Alt+Right, BrowserBack and BrowserForward are
         // the window KeyBindings in the markup.
         AddHandler(PointerPressedEvent, OnPointerPressedTunnel, RoutingStrategies.Tunnel);
+
+        // Ctrl+F (ux-flow F8), beside the markup's other window shortcuts: the shell opens the
+        // dashboard's Search section, and focus moves into the box once that layout has run.
+        KeyBindings.Add(new KeyBinding
+        {
+            Gesture = new KeyGesture(Key.F, KeyModifiers.Control),
+            Command = new RelayCommand(FocusSearch),
+        });
+
+        // Ctrl+S (ux-flow F8): the save bar's Save all. A text box bound on LostFocus (latitude,
+        // longitude, the external tool paths) still holds the value just typed when the key
+        // arrives, so the focused box is committed first. The key is taken while a save is
+        // possible or while a text box has focus, since committing it can be what makes one so.
+        KeyBindings.Add(new KeyBinding
+        {
+            Gesture = new KeyGesture(Key.S, KeyModifiers.Control),
+            Command = new RelayCommand(SaveAll, () => FocusedTextBox() is not null || CanSaveAll()),
+        });
+
+        // A page switch cross-fades over 150 ms with the outgoing view still in the tree (ux-flow
+        // F3). Focus leaves it at once for the content region, so a click-free Enter or Space
+        // during the fade cannot act on the page being left.
+        this.GetControl<TransitioningContentControl>("ContentRegion").PropertyChanged += (sender, e) =>
+        {
+            if (e.Property == ContentControl.ContentProperty && sender is Control region)
+            {
+                region.Focus();
+            }
+        };
+    }
+
+    private TextBox? FocusedTextBox() => FocusManager?.GetFocusedElement() as TextBox;
+
+    private bool CanSaveAll()
+        => (DataContext as MainWindowViewModel)?.PendingEdits.SaveAllCommand.CanExecute(null) == true;
+
+    private void SaveAll()
+    {
+        if (FocusedTextBox() is { } box)
+        {
+            BindingOperations.GetBindingExpressionBase(box, TextBox.TextProperty)?.UpdateSource();
+        }
+
+        if (CanSaveAll())
+        {
+            (DataContext as MainWindowViewModel)!.PendingEdits.SaveAllCommand.Execute(null);
+        }
+    }
+
+    private void FocusSearch()
+    {
+        if (DataContext is not MainWindowViewModel shell)
+        {
+            return;
+        }
+
+        shell.ShowSearch();
+        Dispatcher.UIThread.Post(
+            () => this.GetVisualDescendants().OfType<TextBox>()
+                .FirstOrDefault(box => box.Name == "DashboardSearchBox")?.Focus(NavigationMethod.Tab),
+            DispatcherPriority.Loaded);
     }
 
     private void OnPointerPressedTunnel(object? sender, PointerPressedEventArgs e)

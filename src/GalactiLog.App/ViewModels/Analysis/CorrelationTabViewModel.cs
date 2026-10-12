@@ -78,29 +78,14 @@ public sealed class CorrelationTabViewModel : AnalysisTabViewModel<CorrelationRe
 
     /// <summary>The toggle's label while the outliers are drawn: it states the action it will
     /// perform, which is the web's own wording.</summary>
-    public const string HideOutliersLabel = "Hide Outliers";
+    public const string HideOutliersLabel = "Hide outliers";
 
     /// <inheritdoc cref="HideOutliersLabel"/>
-    public const string ShowOutliersLabel = "Show Outliers";
+    public const string ShowOutliersLabel = "Show outliers";
 
-    /// <summary>
-    /// Everything in the page's scroll viewport that is NOT this tab's chart, at the reading order
-    /// spec 12.14 lays out. The chart's height is the viewport less this, floored by the converter,
-    /// so the scatter grows with the window instead of sitting in a fixed letterbox.
-    /// </summary>
-    /// <remarks>
-    /// Measured at 1280 by 800 through the shell, not estimated. It sums what the page spends above
-    /// the chart (its heading, the shared filter card, the tab strip, this tab's heading rule, the
-    /// preset row and the picker row) and what this tab spends below it (the verdict with its point
-    /// count, the disclaimer, the two stats cards and the four gaps between them), plus the margin
-    /// that keeps the cards clear of the fold rather than exactly on it. The layout cases measure
-    /// the result; this figure is one edit to change and never a reason to edit them.
-    /// </remarks>
-    public const double ChartFixedSpend = 528d;
-
-    /// <summary>The floor the converter clamps to, which is what the chart is at the two smaller
-    /// standard window sizes. It equals <c>ChartHeightConverter.MinimumHeight</c>, the smallest of
-    /// the page's other charts.</summary>
+    /// <summary>The scatter's height floor, which is what the chart is at the two smaller standard
+    /// window sizes: the smallest of the page's other charts. <c>CorrelationTabView</c> sizes the
+    /// chart to the viewport less the page's measured spend and never below this.</summary>
     public const double ChartMinimumHeight = 280d;
 
     // Spec 12.14's sampling sentence, with both counts group separated. The condition is

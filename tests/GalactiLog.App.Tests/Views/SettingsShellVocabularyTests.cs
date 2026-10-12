@@ -63,8 +63,10 @@ public class SettingsShellVocabularyTests
     }
 
     [AvaloniaFact]
-    public void View_TheTabStripColumn_KeepsItsPanelSurfaceAndItsVerticalRule()
+    public void View_TheTabStripColumn_SitsOnThePageColour_AndKeepsItsVerticalRule()
     {
+        // UI polish Task 8 reverses the surface fill this case used to pin: the section list sits
+        // on the page colour, so the rail, the list and the content are no longer three greys.
         using var page = TabFactory.CreateSettingsPage();
         var view = new SettingsView { DataContext = page };
         Show(view);
@@ -72,11 +74,19 @@ public class SettingsShellVocabularyTests
         var column = view.GetControl<Border>("SettingsTabStripColumn");
         Assert.Equal(180, column.Width);
         Assert.Equal(new Thickness(0, 0, 1, 0), column.BorderThickness);
+        Assert.Null(column.Background);
+    }
 
-        Assert.True(Avalonia.Application.Current!.TryFindResource("ColorBgSurface", out var resource));
-        var surface = Assert.IsAssignableFrom<ISolidColorBrush>(resource);
-        var actual = Assert.IsAssignableFrom<ISolidColorBrush>(column.Background);
-        Assert.Equal(surface.Color, actual.Color);
+    [AvaloniaFact]
+    public void View_TitlesThePage_AtTheTitleTier()
+    {
+        using var page = TabFactory.CreateSettingsPage();
+        var view = new SettingsView { DataContext = page };
+        Show(view);
+
+        var title = view.GetControl<TextBlock>("SettingsTitle");
+        Assert.Equal("Settings", title.Text);
+        Assert.Contains("t-title", title.Classes);
     }
 
     [AvaloniaFact]

@@ -34,12 +34,19 @@ namespace GalactiLog.App.ViewModels.Analysis;
 /// the bin's centre, which on a wide chart put it in the empty gap between two columns.
 /// </para>
 /// <para>
+/// <b>The ticks are NOT the bin edges.</b> Sturges' width is the range over the bin count and is
+/// almost never round, so edge ticks read 1.4, 1.9, 2.4. The axis instead carries
+/// <c>CustomSeparators</c> at multiples of <see cref="NiceStep"/> in the metric's own domain,
+/// mapped into bin-edge space through the bins' one shared width, and the labeler maps a position
+/// back. The bars and the median line are untouched by this: only where the ticks stand changed.
+/// </para>
+/// <para>
 /// Edge-to-edge bars are the library's own documented pairing, <c>MaxBarWidth</c> of
 /// <c>double.MaxValue</c> with <c>Padding</c> of zero, over a NUMERIC axis rather than a category
 /// one: a column on a category axis is centred on its tick, so the lower-edge label could only
-/// ever sit at the bar's middle there. The numeric axis carries one tick per bin edge through
-/// <c>MinStep</c> 1 with <c>ForceStepToMin</c>, and <c>MinLimit</c> and <c>MaxLimit</c> pin it to
-/// exactly the bins so the first bar starts at the axis's origin and the last one ends at its end.
+/// ever sit at the bar's middle there. <c>MinLimit</c> and <c>MaxLimit</c> pin the numeric axis
+/// to exactly the bins so the first bar starts at the axis's origin and the last one ends at its
+/// end.
 /// </para>
 /// <para>
 /// Ruling P1-7: the two inks are resolved through <see cref="ChartTheme.Read(string, SKColor)"/>
@@ -81,9 +88,9 @@ public sealed partial class HistogramChartViewModel : ObservableObject, IDisposa
     /// the line still behind the bar with the section's own index at 1.</summary>
     public const int MedianLineZIndex = 1000;
 
-    // A tick the library asks for between two bin edges is named by nothing, and ForceStepToMin
-    // keeps it from asking. Floating point is why this is a tolerance and not an equality.
-    private const double EdgeTolerance = 1e-6d;
+    // Roughly how many ticks the value axis aims for. NiceStep rounds the step up, so the drawn
+    // count is this or fewer.
+    private const int TargetTicks = 8;
 
     private readonly IDisposable _themeSubscription;
 
@@ -207,17 +214,51 @@ public sealed partial class HistogramChartViewModel : ObservableObject, IDisposa
     }
 
     /// <summary>
-    /// The tick label at <paramref name="value"/>: the bin edge standing there, or nothing at all
-    /// where the library asks for a position between two edges. <paramref name="edges"/> holds one
-    /// entry per bin lower edge and one more for the last bin's upper edge, which under user
-    /// ruling U1 is the distribution's own maximum.
+    /// The smallest round step, 1, 2, 2.5 or 5 times a power of ten, that covers
+    /// <paramref name="range"/> in at most <paramref name="targetTicks"/> intervals. Zero for an
+    /// empty or non-finite range, which has no ticks to space.
     /// </summary>
-    internal static string EdgeLabel(IReadOnlyList<string> edges, double value)
+    internal static double NiceStep(double range, int targetTicks)
     {
-        var index = (int)Math.Round(value);
-        return Math.Abs(value - index) > EdgeTolerance || index < 0 || index >= edges.Count
-            ? string.Empty
-            : edges[index];
+        if (!(range > 0d) || !double.IsFinite(range) || targetTicks < 1)
+        {
+            return 0d;
+        }
+
+        var raw = range / targetTicks;
+        var magnitude = Math.Pow(10d, Math.Floor(Math.Log10(raw)));
+        var normalized = raw / magnitude;
+
+        // A small tolerance, so a raw step that is already round (2.0000000001 after the division)
+        // is not pushed up to the next one.
+        foreach (var nice in (double[])[1d, 2d, 2.5d, 5d])
+        {
+            if (normalized <= nice * (1d + 1e-9d))
+            {
+                return nice * magnitude;
+            }
+        }
+
+        return 10d * magnitude;
+    }
+
+    /// <summary>How many decimals a multiple of <paramref name="step"/> needs to print exactly:
+    /// none for 1 or 5, one for 0.5, two for 0.25.</summary>
+    internal static int DecimalsFor(double step)
+    {
+        var decimals = 0;
+        while (decimals < 6)
+        {
+            var scaled = step * Math.Pow(10d, decimals);
+            if (Math.Abs(scaled - Math.Round(scaled)) < 1e-9d * Math.Max(1d, scaled))
+            {
+                break;
+            }
+
+            decimals++;
+        }
+
+        return decimals;
     }
 
     /// <summary>
@@ -281,30 +322,7 @@ public sealed partial class HistogramChartViewModel : ObservableObject, IDisposa
             },
         ];
 
-        // Ruling P3-8: each tick is labelled with a bin edge to one decimal, which is pinned
-        // HistogramChart.tsx line 44's bin_start.toFixed(1). The tick for bin i stands at i, the
-        // LEFT edge of that bin's bar, and the one extra tick at the end names the last bin's
-        // upper edge, the only edge no bin's lower edge names.
-        var edges = new string[_bins.Count + 1];
-        for (var index = 0; index < _bins.Count; index++)
-        {
-            edges[index] = _bins[index].BinStart.ToString("F1", CultureInfo.InvariantCulture);
-        }
-
-        edges[^1] = _bins[^1].BinEnd.ToString("F1", CultureInfo.InvariantCulture);
-
-        XAxes =
-        [
-            new Axis
-            {
-                Name = label,
-                Labeler = value => EdgeLabel(edges, value),
-                MinStep = 1,
-                ForceStepToMin = true,
-                MinLimit = 0,
-                MaxLimit = _bins.Count,
-            },
-        ];
+        XAxes = [ValueAxis(_bins, label)];
 
         YAxes =
         [
@@ -339,6 +357,51 @@ public sealed partial class HistogramChartViewModel : ObservableObject, IDisposa
             : [];
 
         IsEmpty = false;
+    }
+
+    /// <summary>
+    /// The bin axis: bin-edge space for the bars and the median, ticked at round values of the
+    /// metric. Sturges' bins share one width, so value <c>v</c> stands at
+    /// <c>(v - start) / width</c> and a tick position maps back the same way.
+    /// </summary>
+    internal static Axis ValueAxis(IReadOnlyList<HistogramBin> bins, string name)
+    {
+        var start = bins[0].BinStart;
+        var end = bins[^1].BinEnd;
+        var axis = new Axis { Name = name, MinLimit = 0, MaxLimit = bins.Count };
+
+        // A metric that is constant over the filtered frames has no range: one tick under the
+        // one bar's centre, naming the value.
+        if (!(end > start))
+        {
+            var only = start.ToString("F1", CultureInfo.InvariantCulture);
+            axis.CustomSeparators = [bins.Count / 2d];
+            axis.Labeler = _ => only;
+            return axis;
+        }
+
+        var width = (end - start) / bins.Count;
+        var step = NiceStep(end - start, TargetTicks);
+        var decimals = DecimalsFor(step);
+        var format = "F" + decimals.ToString(CultureInfo.InvariantCulture);
+
+        // Multiples of the step inside the bins' own span. The index arithmetic, rather than an
+        // accumulating sum, keeps each tick an exact multiple however many there are.
+        var first = (long)Math.Ceiling((start / step) - 1e-9d);
+        var last = (long)Math.Floor((end / step) + 1e-9d);
+        var separators = new List<double>();
+        for (var k = first; k <= last; k++)
+        {
+            separators.Add(((k * step) - start) / width);
+        }
+
+        axis.CustomSeparators = separators;
+        // Rounded to the step's own decimals plus zero, so a tick at zero that the mapping lands a
+        // hair below it prints "0" and never "-0".
+        axis.Labeler = position =>
+            (Math.Round(start + (position * width), decimals) + 0d)
+                .ToString(format, CultureInfo.InvariantCulture);
+        return axis;
     }
 
     // On the UI thread, from the constructor and from ChartTheme.Changed, which is raised on it.

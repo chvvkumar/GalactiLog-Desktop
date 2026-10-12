@@ -157,16 +157,18 @@ public class FramesPartTests(ITestOutputHelper output)
 
         Assert.Contains("Grading is advisory. No frame is deleted or hidden.", VisibleTexts(part));
 
-        // P24 R23: the two marked bands only; a failure looks like a better or neutral entry back.
+        // One entry per grading band (ui-polish Task 6 adds "good" to P24 R23's two marked
+        // bands); a failure looks like a "better" or "neutral" entry, or a band missing.
         var legend = part.Named<WrapPanel>("GradingLegend");
         var labels = legend.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text).ToList();
         Assert.DoesNotContain("better", labels);
         Assert.DoesNotContain("neutral", labels);
+        Assert.Contains("good", labels);
         Assert.Contains("watch", labels);
         Assert.Contains("reject", labels);
 
-        // Two dots, one per marked band.
-        Assert.Equal(2, legend.GetVisualDescendants().OfType<Shapes.Ellipse>().Count());
+        // Three dots, one per band.
+        Assert.Equal(3, legend.GetVisualDescendants().OfType<Shapes.Ellipse>().Count());
     }
 
     [AvaloniaFact]

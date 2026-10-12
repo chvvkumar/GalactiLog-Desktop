@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -181,7 +182,7 @@ public sealed partial class SuggestionRowViewModel : ObservableObject, IDisposab
 
     public bool FramesAreZero => !CheckedSessions.Any(session => session.Frames > 0);
 
-    public string IntegrationText => ", " + MetricText.Integration(CheckedSessions.Sum(session => session.IntegrationSeconds));
+    public string IntegrationText => ", " + DurationFormat.Prose(CheckedSessions.Sum(session => session.IntegrationSeconds));
 
     /// <summary>"+k more nights": the distinct (target, night) pairs outside the campaign, or empty.</summary>
     public string MoreNightsText
@@ -366,7 +367,7 @@ public sealed partial class SuggestionSessionViewModel(SuggestionSessionRow data
 
     public string FramesText => MetricText.Count(Data.Frames);
 
-    public string IntegrationText => MetricText.Integration(Data.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(Data.IntegrationSeconds);
 
     internal void NotifyChecked() => OnPropertyChanged(nameof(IsChecked));
 }

@@ -665,6 +665,11 @@ public sealed partial class LibraryTabViewModel : GeneralSettingsTabViewModel, I
     /// <summary>Adds an exclude path, on the same terms.</summary>
     public void AddExcludePath(string path) => AddFilterPath(path, ExcludePaths, isExclude: true);
 
+    /// <summary>The error state's Retry: re-runs the tab's read of the general document, the same
+    /// read the constructor starts.</summary>
+    [RelayCommand]
+    private void Reload() => Load();
+
     [RelayCommand]
     private void AddScanRootFromBox()
     {

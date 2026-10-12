@@ -30,8 +30,10 @@ namespace GalactiLog.App.ViewModels.Diagnostics;
 /// so the Database group's row counts and Task 3's bundle describe the same instant.
 /// </para>
 /// </remarks>
-public sealed partial class DiagnosticsViewModel : ObservableObject, IDisposable
+public sealed partial class DiagnosticsViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>What a field renders when its value is genuinely absent. Never an empty string
     /// and never null: the roadmap's Verify line is "no null field where the spec names a value",
     /// and an empty cell reads as a rendering bug.</summary>

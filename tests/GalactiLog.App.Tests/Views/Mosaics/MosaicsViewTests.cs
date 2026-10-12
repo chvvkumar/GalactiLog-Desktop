@@ -89,7 +89,7 @@ public class MosaicsViewTests
         Assert.All(scrollers, scroller => Assert.True(scroller.Bounds.Right <= view.Bounds.Width + 0.5));
         Assert.Contains(
             view.GetVisualDescendants().OfType<Button>(),
-            button => button.Content as string == "Run Detection");
+            button => button.Content as string == "Run detection");
         Assert.Contains(
             view.GetVisualDescendants().OfType<TextBlock>(),
             block => block.Text == "Panel 2 has no position" && block.IsEffectivelyVisible);

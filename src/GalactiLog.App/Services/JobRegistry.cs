@@ -57,11 +57,22 @@ public sealed partial class JobRegistry : ObservableObject
     public const int RecentCap = 10;
 
     private readonly Action<Action> _post;
+    private readonly INotifier? _notifier;
+    private readonly Func<DateTimeOffset> _now;
 
     /// <param name="post">How to reach the UI thread. Defaults to <c>UiPost.Default</c>, the same
     /// seam with the same default that every other background writer in this application takes.
     /// </param>
-    public JobRegistry(Action<Action>? post = null) => _post = post ?? UiPost.Default;
+    /// <param name="notifier">Where a finished job's notice goes. The registry is the one caller
+    /// for every job, so feedback is structural rather than something each action has to remember
+    /// (design-lessons rule 2). Null shows nothing, which is what most tests want.</param>
+    /// <param name="now">The clock, local time. Defaults to <see cref="DateTimeOffset.Now"/>.</param>
+    public JobRegistry(Action<Action>? post = null, INotifier? notifier = null, Func<DateTimeOffset>? now = null)
+    {
+        _post = post ?? UiPost.Default;
+        _notifier = notifier;
+        _now = now ?? (() => DateTimeOffset.Now);
+    }
 
     /// <summary>The jobs running now, in the order they started.</summary>
     public ObservableCollection<JobViewModel> Running { get; } = [];
@@ -86,9 +97,13 @@ public sealed partial class JobRegistry : ObservableObject
     /// taken back, because a handle cannot name a job that was never begun, and its
     /// <see cref="JobHandle.Dispose"/> is the one place a forgotten
     /// <see cref="JobHandle.Finish"/> is caught.</returns>
-    public JobHandle Begin(string kind, string title, Action? cancel = null)
+    /// <param name="notify">False for a quiet job: one that is a step of a larger action the user
+    /// already hears about (the scan's sub-jobs), or background work the user did not ask for (a
+    /// survey image fetch). A quiet job raises a notice only when it fails. The rule lives here,
+    /// in the one place notices are raised, so no handler decides it for itself.</param>
+    public JobHandle Begin(string kind, string title, Action? cancel = null, bool notify = true)
     {
-        var job = new JobViewModel(kind, title, cancel);
+        var job = new JobViewModel(kind, title, cancel, _now(), _now) { Notify = notify };
         _post(() =>
         {
             Running.Add(job);
@@ -98,6 +113,17 @@ public sealed partial class JobRegistry : ObservableObject
         return new JobHandle(this, job);
     }
 
+    /// <summary>Re-reads every listed job's clock text. The flyout calls it on opening: the
+    /// application stays resident, so a job finished before midnight would otherwise keep showing
+    /// a bare "14:32" the next day (Task 3 review finding 4). UI thread only.</summary>
+    public void RefreshTimes()
+    {
+        foreach (var job in Running.Concat(Recent))
+        {
+            job.RefreshTime();
+        }
+    }
+
     internal void Report(JobViewModel job, string message, double? percent)
         => _post(() =>
         {
@@ -105,22 +131,58 @@ public sealed partial class JobRegistry : ObservableObject
             job.Percent = percent;
         });
 
-    internal void Finish(JobViewModel job, JobResult result, string summary)
-        => _post(() =>
+    internal void Finish(JobViewModel job, JobResult result, string summary, string? noticeText, bool implicitFinish)
+    {
+        // Stamped here, on the caller's thread, rather than inside the post, so the duration is
+        // the job's and not the job's plus the dispatcher queue's.
+        var finishedAt = _now();
+        var notice = NoticeFor(job.Title, result, summary, noticeText, implicitFinish, job.Notify);
+
+        _post(() =>
         {
             Running.Remove(job);
             RunningCount = Running.Count;
 
             // The last progress line is kept, so a reader who opens the flyout after the fact sees
             // both the last thing the job said and its outcome.
-            job.MarkFinished(result, summary);
+            job.MarkFinished(result, summary, finishedAt);
 
             Recent.Insert(0, job);
             while (Recent.Count > RecentCap)
             {
                 Recent.RemoveAt(Recent.Count - 1);
             }
+
+            if (notice is { } shown)
+            {
+                _notifier?.Show(shown.Text, shown.Kind);
+            }
         });
+    }
+
+    /// <summary>What a finished job says in the notice stack, or null for nothing. Succeeded is
+    /// a Success notice with the summary (the title plus " finished" when there is none), Failed
+    /// is an Error, Cancelled is Info. A job ended only by <see cref="JobHandle.Dispose"/> says
+    /// nothing: its caller may have thrown past its own Finish, so a green "finished" would claim
+    /// a success nobody reported (Task 3 review finding 7). A failure always says so.</summary>
+    internal static (string Text, NoticeKind Kind)? NoticeFor(
+        string title, JobResult result, string summary, string? noticeText, bool implicitFinish,
+        bool notify = true)
+    {
+        if ((!notify || implicitFinish) && result != JobResult.Failed)
+        {
+            return null;
+        }
+
+        string Or(string fallback) => noticeText ?? (summary.Length > 0 ? summary : fallback);
+
+        return result switch
+        {
+            JobResult.Failed => (Or(title + " failed"), NoticeKind.Error),
+            JobResult.Cancelled => (Or(title + " cancelled"), NoticeKind.Info),
+            _ => (Or(title + " finished"), NoticeKind.Success),
+        };
+    }
 }
 
 /// <summary>
@@ -155,22 +217,31 @@ public sealed class JobHandle : IDisposable
         _registry.Report(_job, message, percent);
     }
 
-    /// <summary>Publishes the outcome and moves the job to the recent list. The first call wins;
-    /// a second does nothing.</summary>
-    public void Finish(JobResult result, string summary)
+    /// <summary>Publishes the outcome, moves the job to the recent list and raises the job's
+    /// notice. The first call wins; a second does nothing.</summary>
+    /// <param name="result">The outcome.</param>
+    /// <param name="summary">The one-line summary the flyout keeps.</param>
+    /// <param name="notice">The notice text, when it should say more than the summary. Null uses
+    /// the summary. The kind still follows <paramref name="result"/>.</param>
+    public void Finish(JobResult result, string summary, string? notice = null)
+        => Finish(result, summary, notice, implicitFinish: false);
+
+    /// <summary>Finishes an unfinished job as <see cref="JobResult.Succeeded"/> with an empty
+    /// summary, so a caller that throws past its own <see cref="Finish(JobResult, string, string?)"/>
+    /// leaves no phantom running job in the flyout. Does nothing to a job that already finished.
+    /// It raises no notice, since its caller may have thrown.
+    /// </summary>
+    public void Dispose() => Finish(JobResult.Succeeded, "", null, implicitFinish: true);
+
+    private void Finish(JobResult result, string summary, string? notice, bool implicitFinish)
     {
         if (Interlocked.Exchange(ref _finished, 1) != 0)
         {
             return;
         }
 
-        _registry.Finish(_job, result, summary);
+        _registry.Finish(_job, result, summary, notice, implicitFinish);
     }
-
-    /// <summary>Finishes an unfinished job as <see cref="JobResult.Succeeded"/> with an empty
-    /// summary, so a caller that throws past its own <see cref="Finish"/> leaves no phantom running
-    /// job in the flyout. Does nothing to a job that already finished.</summary>
-    public void Dispose() => Finish(JobResult.Succeeded, "");
 }
 
 /// <summary>One row in the status bar's flyout: a running job, or a finished one kept in the
@@ -178,16 +249,70 @@ public sealed class JobHandle : IDisposable
 public sealed partial class JobViewModel : ObservableObject
 {
     private readonly Action? _cancel;
+    private readonly Func<DateTimeOffset> _now;
 
-    internal JobViewModel(string kind, string title, Action? cancel)
+    internal JobViewModel(string kind, string title, Action? cancel, DateTimeOffset startedAt, Func<DateTimeOffset> now)
     {
         Kind = kind;
         Title = title;
         _cancel = cancel;
+        _now = now;
+        StartedAt = startedAt;
         Message = "";
         Summary = "";
         CanCancel = cancel is not null;
     }
+
+    /// <summary>False for a quiet job, which raises a notice only on failure. See
+    /// <see cref="JobRegistry.Begin"/>.</summary>
+    internal bool Notify { get; init; } = true;
+
+    /// <summary>When the job began, local time.</summary>
+    public DateTimeOffset StartedAt { get; }
+
+    /// <summary>When the job finished, local time, or null while it runs.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(TimeText))]
+    [NotifyPropertyChangedFor(nameof(StatusLine))]
+    public partial DateTimeOffset? FinishedAt { get; private set; }
+
+    /// <summary>Raises <see cref="TimeText"/> again, so a clock read against a past day re-reads.</summary>
+    internal void RefreshTime() => OnPropertyChanged(nameof(TimeText));
+
+    /// <summary>The flyout's right-aligned time: the finish time once finished, "started 14:31"
+    /// while running.</summary>
+    public string TimeText => FinishedAt is { } finished
+        ? FormatClock(finished, _now())
+        : "started " + FormatClock(StartedAt, _now());
+
+    /// <summary>The recent list's one status line: "Succeeded in 1 m 12 s", "Failed after 12 s",
+    /// "Cancelled after 5 s". Empty while running.</summary>
+    public string StatusLine => (Result, FinishedAt) switch
+    {
+        (JobResult.Succeeded, { } at) => "Succeeded in " + FormatDuration(at - StartedAt),
+        (JobResult.Failed, { } at) => "Failed after " + FormatDuration(at - StartedAt),
+        (JobResult.Cancelled, { } at) => "Cancelled after " + FormatDuration(at - StartedAt),
+        _ => "",
+    };
+
+    /// <summary>Whether the recent list draws the last progress line. Not when it repeats the
+    /// summary word for word, which the mosaic detection job's "34 suggestions" did.</summary>
+    public bool ShowRecentMessage => HasMessage && !string.Equals(Message, Summary, StringComparison.Ordinal);
+
+    /// <summary>"14:32" for today, "Oct 10 14:32" for any other day. No "yesterday" form.
+    /// </summary>
+    internal static string FormatClock(DateTimeOffset at, DateTimeOffset now)
+        => at.Date == now.Date
+            ? at.ToString("HH:mm", System.Globalization.CultureInfo.InvariantCulture)
+            : at.ToString("MMM d HH:mm", System.Globalization.CultureInfo.InvariantCulture);
+
+    /// <summary>"under 1 s", then <see cref="GalactiLog.Core.Text.DurationFormat.Prose"/> over the
+    /// whole seconds elapsed: "12 s", "1 m", "1 m 12 s", "2 h 5 m". Truncated rather than rounded,
+    /// so 0.9 s stays "under 1 s".</summary>
+    internal static string FormatDuration(TimeSpan span)
+        => span < TimeSpan.FromSeconds(1)
+            ? "under 1 s"
+            : GalactiLog.Core.Text.DurationFormat.Prose(Math.Floor(span.TotalSeconds));
 
     /// <summary>The stable snake_case kind token the job registered with.</summary>
     public string Kind { get; }
@@ -201,6 +326,7 @@ public sealed partial class JobViewModel : ObservableObject
     /// the fact sees where the job got to, unreachable.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasMessage))]
+    [NotifyPropertyChangedFor(nameof(ShowRecentMessage))]
     public partial string Message { get; internal set; }
 
     /// <summary>Whether there is a progress line to draw. A computed property rather than a
@@ -230,6 +356,7 @@ public sealed partial class JobViewModel : ObservableObject
     /// <summary>The outcome, or null while the job is running.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ResultText))]
+    [NotifyPropertyChangedFor(nameof(StatusLine))]
     public partial JobResult? Result { get; private set; }
 
     /// <summary>The outcome as the one word the flyout shows. Empty while the job is running.
@@ -244,6 +371,7 @@ public sealed partial class JobViewModel : ObservableObject
 
     /// <summary>The one-line outcome summary. Empty while the job is running.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(ShowRecentMessage))]
     public partial string Summary { get; private set; }
 
     /// <summary>True once the job has reported an outcome.</summary>
@@ -268,8 +396,9 @@ public sealed partial class JobViewModel : ObservableObject
         _cancel();
     }
 
-    internal void MarkFinished(JobResult result, string summary)
+    internal void MarkFinished(JobResult result, string summary, DateTimeOffset finishedAt)
     {
+        FinishedAt = finishedAt;
         Result = result;
         Summary = summary;
         IsFinished = true;

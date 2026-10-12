@@ -1004,7 +1004,7 @@ public class MainWindowViewModelTests : IDisposable
     public void ApplyGeneral_BringsBothShellPreferencesForward()
     {
         var shell = Create();
-        Assert.Equal(14d, shell.RootFontSize);
+        Assert.Equal(16d, shell.RootFontSize);
         Assert.Equal(double.PositiveInfinity, shell.ContentMaxWidth);
 
         var changes = new List<string>();
@@ -1030,7 +1030,7 @@ public class MainWindowViewModelTests : IDisposable
 
         shell.ApplyGeneral(new GeneralSettings { TextSize = "large", ContentWidth = "normal" });
 
-        Assert.Equal(14d, shell.RootFontSize);
+        Assert.Equal(16d, shell.RootFontSize);
         Assert.Equal(double.PositiveInfinity, shell.ContentMaxWidth);
     }
 

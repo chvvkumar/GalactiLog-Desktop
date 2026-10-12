@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -56,7 +57,7 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
 
     public string PanelsText => MetricText.Count(Panels);
 
-    public string IntegrationText => MetricText.Integration(IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(IntegrationSeconds);
 
     public string FramesText => MetricText.Count(Frames);
 
@@ -155,7 +156,8 @@ public sealed partial class MosaicRowViewModel : ObservableObject, IDisposable
     [NotifyPropertyChangedFor(nameof(ExpandText))]
     public partial bool IsExpanded { get; private set; }
 
-    public string ExpandText => IsExpanded ? "Collapse" : "Expand";
+    /// <summary>"Open" shows the mosaic's panels under its row; "Close" hides them again.</summary>
+    public string ExpandText => IsExpanded ? "Close" : "Open";
 
     /// <summary>The add panel form, built on the first expand.</summary>
     [ObservableProperty]
@@ -294,7 +296,7 @@ public sealed partial class PanelLineViewModel : ObservableObject
 
     public string TargetsText => string.Join(", ", Panel.TargetNames);
 
-    public string IntegrationText => MetricText.Integration(Panel.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(Panel.IntegrationSeconds);
 
     public string FramesText => MosaicsPageViewModel.Plural(Panel.Frames, "frame");
 

@@ -30,15 +30,17 @@
        nothing. -->
   <Application.Resources>
     <ResourceDictionary>
-      <!-- Spec 14.4's typefaces, per P12 R8. Atkinson Hyperlegible Next and Atkinson Hyperlegible
-           Mono, SIL Open Font License 1.1, embedded under Assets/Fonts with their licence. The
-           assembly name is GalactiLog (csproj AssemblyName), not GalactiLog.App. The fragment
-           after the # is the family name in the font's own name table, which is what Avalonia
-           matches, and the names after the comma are the system fallbacks R8 names.
+      <!-- Spec 14.4's typefaces. FontSans is Inter by default; FontManager replaces it with the
+           stored general.font at startup and on every pick in Settings > Display. Each family
+           and Atkinson Hyperlegible Mono, SIL Open Font License 1.1, is embedded under
+           Assets/Fonts with its licence. The assembly name is GalactiLog (csproj AssemblyName),
+           not GalactiLog.App. The fragment after the # is the family name in the font's own name
+           table, which is what Avalonia matches, and the names after the comma are the system
+           fallbacks R8 names.
 
            Applying FontSans application-wide is Theme/Controls.axaml's Window style, not an
            attribute on each Window, so a sixth dialog cannot forget it. -->
-      <FontFamily x:Key="FontSans">avares://GalactiLog/Assets/Fonts#Atkinson Hyperlegible Next,Segoe UI,sans-serif</FontFamily>
+      <FontFamily x:Key="FontSans">avares://GalactiLog/Assets/Fonts/Inter#Inter,Segoe UI,sans-serif</FontFamily>
       <FontFamily x:Key="FontMono">avares://GalactiLog/Assets/Fonts#Atkinson Hyperlegible Mono,Cascadia Code,Consolas,monospace</FontFamily>
       <!-- The default theme, and the slot ThemeManager replaces. It is named here so the tokens
            exist before the first style is parsed and so the designer has a dictionary to resolve
@@ -58,6 +60,7 @@
     <!-- The table spine's styles. After Controls.axaml, so a table rule such as the sort glyph's
          accent ink wins over a type tier it shares a TextBlock with. -->
     <StyleInclude Source="/Theme/Table.axaml" />
+    <StyleInclude Source="/Theme/Feedback.axaml" />
     <!-- The colour picker's own control themes (P13 R2b, ruling Q24). Avalonia.Controls.ColorPicker
          ships outside the main Avalonia packages and FluentTheme does not carry its templates, so
          without this line the Filters tab's picker renders as an untemplated TemplatedControl. It

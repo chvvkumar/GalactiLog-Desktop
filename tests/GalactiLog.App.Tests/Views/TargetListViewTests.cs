@@ -10,6 +10,7 @@ using Avalonia.Layout;
 using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia.VisualTree;
+using GalactiLog.App.Controls;
 using GalactiLog.App.Controls.Table;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.ViewModels.Dashboard;
@@ -170,10 +171,11 @@ public class TargetListViewTests
         Assert.Contains("1 to 50 of 120", texts);
 
         // Phase 14C: the session count is the trailing button's tooltip, not a label on the row
-        // (spec 12.2, "The sessions control"). The fixture opens the row, so the button reads
-        // Collapse. View_TheSessionsControl_CarriesTheCountOnItsTooltip is the dedicated case.
+        // (spec 12.2, "The sessions control"). The button reads Nights in either state; the
+        // chevron beside it carries the state. View_TheSessionsControl_CarriesTheCountOnItsTooltip
+        // is the dedicated case.
         Assert.DoesNotContain("2 sessions", texts);
-        Assert.Contains("Collapse", texts);
+        Assert.Contains("Nights", texts);
     }
 
     // Phase 18 Task 6, spec 12.2: the mosaic link sits in the Name cell of a row whose target has
@@ -312,7 +314,7 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view, WidePageAllotment, 1900d);
 
-        Assert.Contains("Equipment", VisibleHeaderTitles(view));
+        Assert.Contains("EQUIPMENT", VisibleHeaderTitles(view));
         Assert.Contains("RC8 / ASI2600MM", VisibleCellTexts(view));
 
         var equipmentColumn = list.Columns.Single(column => column.Key == "equipment");
@@ -322,7 +324,7 @@ public class TargetListViewTests
         list.ToggleColumnCommand.Execute(equipmentColumn);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.DoesNotContain("Equipment", VisibleHeaderTitles(view));
+        Assert.DoesNotContain("EQUIPMENT", VisibleHeaderTitles(view));
         Assert.DoesNotContain("RC8 / ASI2600MM", VisibleCellTexts(view));
 
         // Review item 2: the whole header cell collapses, not just the button inside it. On the
@@ -341,7 +343,7 @@ public class TargetListViewTests
         AssertHeaderAlignsWithRows(view, list, skip: "equipment");
 
         // The name column's checkbox is the one that cannot be cleared (ruling Q5).
-        Assert.Contains("Name", VisibleHeaderTitles(view));
+        Assert.Contains("NAME", VisibleHeaderTitles(view));
     }
 
     // The six header cells: the sort buttons, whose Content is a column. Every button is a
@@ -449,14 +451,12 @@ public class TargetListViewTests
         var cell = view.GetVisualDescendants().OfType<ItemsControl>()
             .Single(c => c.Name == "SessionFiltersCell" && ReferenceEquals(c.ItemsSource, filters));
 
-        // Re-pointed for Phase 14C. The predicate used to be "the one Border carrying a brush",
-        // which no longer separates a badge from anything: under Border.tag the outline comes from
-        // the style, so every badge Border has a non-null brush and so may a template root. The
-        // class is the selector now.
+        // Re-pointed for the ui-polish final wave: a badge is the shared FilterChip, so the chip
+        // type is the selector.
         var badge = Assert.Single(Badges(cell));
 
-        // Spec 12.2: both cells draw the same Border.tag badge. Both share the one
-        // TargetFilterBadge template, so the shape is identical by construction rather than by two
+        // Spec 12.2: both cells draw the same badge. Both share the one FilterBadgeTemplate in
+        // Theme/Controls.axaml, so the shape is identical by construction rather than by two
         // copies of the same markup, and the 2 pixel tinted border is retired.
         Assert.Equal(1d, badge.BorderThickness.Left);
         Assert.NotNull(badge.BorderBrush);
@@ -574,6 +574,143 @@ public class TargetListViewTests
 
         var gear = Assert.Single(view.GetVisualDescendants().OfType<Button>(), button => button.Name == "ColumnGearButton");
         Assert.Equal("Columns", ToolTip.GetTip(gear));
+    }
+
+    // ---- Task 5 (ui-polish): one keyboard path into the list (ux-flow F8) ---------------------
+
+    [AvaloniaFact]
+    public void Tab_ReachesTheListOnce_StepsIntoTheFocusedRow_AndWalksItsControls()
+    {
+        // Fix round 1, I1. From outside, the list is one stop: Tab lands on the row, not on each
+        // row's controls. From the row, Tab steps in (OnRowKeyDown) and the row's Local tab
+        // navigation walks its controls, the mosaic link and then Nights, before leaving the list.
+        // Shift+Tab walks back through the row to the row itself. The row's full-width open
+        // button is a tab stop again (IsTabStop="False" is gone) and is reached on the way back.
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage(
+            [SampleRow with { Mosaics = [new MosaicLink(Guid.NewGuid(), "Alpha")] }, WideRow], 120, 44_640d, 148, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        var after = new Button { Content = "after" };
+        var host = new DockPanel { Width = PageAllotment, HorizontalAlignment = HorizontalAlignment.Left };
+        DockPanel.SetDock(after, Dock.Bottom);
+        host.Children.Add(after);
+        host.Children.Add(view);
+        var window = new Window { Width = 1280, Height = 800, Content = host };
+        window.Show();
+        Dispatcher.UIThread.RunJobs();
+
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        var first = (ListBoxItem)rows.ContainerFromIndex(0)!;
+        var focus = window.FocusManager!;
+        object? Focused() => focus.GetFocusedElement();
+        string? NameOf(object? element) => (element as Control)?.Name;
+        void Tab(RawInputModifiers modifiers = RawInputModifiers.None)
+        {
+            window.KeyPressQwerty(PhysicalKey.Tab, modifiers);
+            Dispatcher.UIThread.RunJobs();
+        }
+
+        Assert.All(
+            view.GetVisualDescendants().OfType<Button>().Where(b => b.Name == "RowOpen"),
+            button => Assert.True(button.IsTabStop));
+
+        // The column gear is the last stop before the rows (the toolbar and the header come first).
+        view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "ColumnGearButton").Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+
+        Tab();
+        Assert.Same(first, Focused());
+
+        Tab();
+        Assert.Equal("MosaicLink", NameOf(Focused()));
+        Assert.Same(list.Rows[0], (Focused() as Control)?.DataContext);
+
+        Tab();
+        Assert.Equal("SessionsToggle", NameOf(Focused()));
+        Assert.Same(list.Rows[0], (Focused() as Control)?.DataContext);
+
+        // Row 0 is closed, so Nights is its last stop and the next Tab leaves the list.
+        Tab();
+        Assert.Same(after, Focused());
+
+        // Back in, then back out through the row to the row itself.
+        first.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+        Tab();
+        Tab();
+        Assert.Equal("SessionsToggle", NameOf(Focused()));
+
+        var walked = new List<string?>();
+        for (var step = 0; step < 4 && !ReferenceEquals(Focused(), first); step++)
+        {
+            Tab(RawInputModifiers.Shift);
+            walked.Add(NameOf(Focused()));
+            Assert.Contains(first, ((Visual)Focused()!).GetSelfAndVisualAncestors());
+        }
+
+        Assert.Same(first, Focused());
+        Assert.Contains("RowOpen", walked);
+    }
+
+    [AvaloniaFact]
+    public void TheList_OpensWithEnter_TogglesNightsWithSpace_AndMovesWithTheArrows()
+    {
+        var list = CreatePopulatedList(bothRows: true);
+        list.Rows[0].IsExpanded = false;
+        var opened = new List<TargetOpenRequest>();
+        list.TargetOpened += (_, request) => opened.Add(request);
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view);
+
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        var first = (ListBoxItem)rows.ContainerFromIndex(0)!;
+        first.Focus(NavigationMethod.Tab);
+        Dispatcher.UIThread.RunJobs();
+
+        window.KeyPressQwerty(PhysicalKey.ArrowDown, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(list.Rows[1], rows.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.ArrowUp, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.Same(list.Rows[0], rows.SelectedItem);
+
+        window.KeyPressQwerty(PhysicalKey.Space, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(list.Rows[0].IsExpanded);
+        Assert.Empty(opened);
+
+        window.KeyPressQwerty(PhysicalKey.Enter, RawInputModifiers.None);
+        Dispatcher.UIThread.RunJobs();
+        var request = Assert.Single(opened);
+        Assert.Equal(list.Rows[0].GroupKey, request.GroupKey);
+    }
+
+    [AvaloniaFact]
+    public void ARow_CarriesAContextMenu_WhoseOpenItemOpensThatRow()
+    {
+        var list = CreatePopulatedList();
+        var opened = new List<TargetOpenRequest>();
+        list.TargetOpened += (_, request) => opened.Add(request);
+        var view = new TargetListView { DataContext = list };
+        ShowList(view);
+
+        var row = view.GetVisualDescendants().OfType<Panel>()
+            .First(panel => panel.ContextFlyout is MenuFlyout && panel.DataContext is TargetRowViewModel);
+        var items = ((MenuFlyout)row.ContextFlyout!).Items.Cast<MenuItem>().ToList();
+        Assert.Equal(["Open", "Copy name"], items.Select(item => item.Header as string));
+
+        // Opened on its row, the menu's items carry that row, so Open runs the row's own open.
+        var flyout = (MenuFlyout)row.ContextFlyout!;
+        flyout.ShowAt(row);
+        Dispatcher.UIThread.RunJobs();
+        Assert.All(items, item => Assert.Same(list.Rows[0], item.DataContext));
+
+        items[0].Command!.Execute(items[0].CommandParameter);
+        flyout.Hide();
+        var request = Assert.Single(opened);
+        Assert.Equal(list.Rows[0].GroupKey, request.GroupKey);
     }
 
     [AvaloniaFact]
@@ -714,7 +851,12 @@ public class TargetListViewTests
         var row = RowGrids(view)[0];
 
         Assert.True(view.Bounds.Width >= WidePageAllotment - 0.5d);
-        Assert.Equal(view.Bounds.Width - TargetListView.TrailingInset, RightEdge(row, view), 1);
+        // The row starts inside the table card's left edge, so it ends one card edge short of
+        // the full inset.
+        Assert.Equal(
+            view.Bounds.Width - TargetListView.TrailingInset + (TargetListView.CardEdges / 2),
+            RightEdge(row, view),
+            1);
         Assert.True(
             RightEdge(row, view) - RightEdge(toggle, view) <= 12.5d,
             $"The sessions control ends {RightEdge(row, view) - RightEdge(toggle, view)} short of the row's trailing edge.");
@@ -775,18 +917,17 @@ public class TargetListViewTests
         Assert.Equal(rule.A.Y, rule.B.Y);
         Assert.Equal(header.Bounds.Height - 0.5d, rule.A.Y, 1);
 
-        var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBorderDefault")!).Color;
-        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "TargetListRows");
-        Color? Band(int index) => (((ContentPresenter)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
+        var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBgZebra")!).Color;
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
+        Color? Band(int index) => (((ListBoxItem)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
         Assert.NotEqual(zebra, Band(0));
         Assert.Equal(zebra, Band(1));
 
-        // No rounded or filled container anywhere in a row but the badges themselves, which since
-        // the frosted-glass port carry their tint wash on an inner Border of their own.
+        // No rounded or filled container anywhere in a row but the badges themselves: the shared
+        // filter chip (Theme/Controls.axaml) carries its tint wash and edge itself.
         Assert.All(
             RowGrids(view).SelectMany(grid => grid.GetVisualDescendants().OfType<Border>())
-                .Where(border => !border.Classes.Contains("tag")
-                    && !border.GetVisualAncestors().OfType<Border>().Any(b => b.Classes.Contains("tag"))),
+                .Where(border => !border.GetVisualAncestors().OfType<FilterChip>().Any()),
             border => Assert.Equal(default, border.CornerRadius));
     }
 
@@ -805,6 +946,29 @@ public class TargetListViewTests
         view.InvalidateMeasure();
         Dispatcher.UIThread.RunJobs();
         TableAssert.Conventions(view);
+    }
+
+    [AvaloniaFact]
+    public void View_AWideList_DrawsHorseheadNebulaWhole_AtTheDefaultTextSize()
+    {
+        // "Horsehead Nebula" trimmed to "Horsehead N..." on a wide dashboard while Name had
+        // hundreds of spare pixels: the designation cap was sized for a monospace designation at
+        // the small text size, and the default is Medium (16).
+        var display = new DisplaySettings();
+        var list = new TargetListViewModel(display, () => display, value => display = value, 50);
+        list.Load(new TargetListingPage([WideRow with { CatalogId = "Horsehead Nebula" }], 1, 0d, 0, 1, 50));
+        var view = new TargetListView { DataContext = list };
+        var window = ShowList(view, WidePageAllotment, 1900d);
+        window.FontSize = 16;
+        Dispatcher.UIThread.RunJobs();
+        view.InvalidateMeasure();
+        Dispatcher.UIThread.RunJobs();
+
+        var cell = Assert.IsType<TextBlock>(Assert.Single(NamedCells(view, "DesignationCell")));
+        Assert.Equal("Horsehead Nebula", cell.Text);
+        Assert.False(
+            cell.TextLayout.TextLines[0].HasCollapsed,
+            $"The designation trimmed at {cell.Bounds.Width} under a {cell.MaxWidth} cap.");
     }
 
     [AvaloniaFact]
@@ -921,20 +1085,28 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_TheSessionsControl_ReadsExpandThenCollapse()
+    public void View_TheSessionsControl_ReadsNights_AndTurnsItsChevronWhenOpen()
     {
+        // Task 5 (ui-polish): a quiet row button reading Nights, with a chevron that turns a
+        // quarter while the row is open, rather than the word flipping between Expand and
+        // Collapse. The state is still spoken: the automation name follows it.
         var list = CreatePopulatedList();
         list.Rows[0].IsExpanded = false;
         var view = new TargetListView { DataContext = list };
         ShowList(view);
 
         var toggle = Assert.Single(view.GetVisualDescendants().OfType<Button>(), b => b.Name == "SessionsToggle");
-        Assert.Equal("Expand", toggle.Content);
+        Assert.Contains("row", toggle.Classes);
+        Assert.Contains("Nights", toggle.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+        var chevron = Assert.Single(toggle.GetVisualDescendants().OfType<ShapePath>());
+        Assert.DoesNotContain("open", chevron.Classes);
+        Assert.Equal("Show nights", Avalonia.Automation.AutomationProperties.GetName(toggle));
 
         toggle.Command!.Execute(null);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.Equal("Collapse", toggle.Content);
+        Assert.Contains("open", chevron.Classes);
+        Assert.Equal("Hide nights", Avalonia.Automation.AutomationProperties.GetName(toggle));
     }
 
     [AvaloniaFact]
@@ -958,7 +1130,7 @@ public class TargetListViewTests
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         Assert.Equal(
             ["L", "B", "Ha"],
-            Badges(cell).Select(badge => badge.GetVisualDescendants().OfType<TextBlock>().Single().Text));
+            Badges(cell).Select(badge => BadgeLabel(badge).Text));
     }
 
     [AvaloniaFact]
@@ -981,15 +1153,17 @@ public class TargetListViewTests
     }
 
     [AvaloniaFact]
-    public void View_ABadge_IsBorderTag_WithTheFilterColourAsItsOutline()
+    public void View_ABadge_IsTheSharedFilterChip_WithTheFilterColourAsItsOutline()
     {
         // A failure is the 2 pixel tinted border of the old build surviving, a solid filled pill,
         // or the filter colour being thrown away so every badge reads the same.
         //
         // Re-pointed 2026-10-05 (user request): the badge is the web app's frosted-glass style,
         // ported figure for figure from the frontend's utils/filterStyles.ts. The 1 pixel edge is
-        // the tint at 25%, the wash inside it is the tint at 18%, and the label is the tint itself,
-        // which reverses the earlier ColorBadgeText ruling in favour of matching the web app.
+        // the tint at 25%, the wash inside it is the tint at 18%, and the label is the tint itself
+        // where it reads, which reverses the earlier ColorBadgeText ruling in favour of matching
+        // the web app. Re-pointed again in the ui-polish final wave: the badge is the shared
+        // FilterChip, one Border carrying edge, wash and shadow.
         var list = CreatePopulatedList();
         var view = new TargetListView { DataContext = list };
         ShowList(view);
@@ -997,7 +1171,6 @@ public class TargetListViewTests
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         var badge = Badges(cell)[2];
 
-        Assert.Contains("tag", badge.Classes);
         Assert.Equal(1d, badge.BorderThickness.Left);
 
         // Filter order L, B, Ha (polish ruling 5), so index 2 is Ha, whose stored colour is #FF0000.
@@ -1007,12 +1180,10 @@ public class TargetListViewTests
         var edge = Assert.IsAssignableFrom<ISolidColorBrush>(badge.BorderBrush);
         Assert.Equal(Color.FromArgb(0x40, tint.R, tint.G, tint.B), edge.Color);
 
-        var wash = Assert.IsAssignableFrom<ISolidColorBrush>(
-            badge.GetVisualDescendants().OfType<Border>().Single().Background);
+        var wash = Assert.IsAssignableFrom<ISolidColorBrush>(badge.Background);
         Assert.Equal(Color.FromArgb(0x2E, tint.R, tint.G, tint.B), wash.Color);
 
-        var ink = Assert.IsAssignableFrom<ISolidColorBrush>(
-            badge.GetVisualDescendants().OfType<TextBlock>().Single().Foreground);
+        var ink = Assert.IsAssignableFrom<ISolidColorBrush>(BadgeLabel(badge).Foreground);
         Assert.Equal(tint, ink.Color);
 
         // The soft tinted drop shadow and the inset top highlight, in that order.
@@ -1029,10 +1200,10 @@ public class TargetListViewTests
 
         var cell = Assert.Single(NamedCells(view, "PaletteCell"));
         // Filter order L, B, Ha (polish ruling 5), so index 2 is Ha.
-        var text = Badges(cell)[2].GetVisualDescendants().OfType<TextBlock>().Single();
+        var chip = cell.GetVisualDescendants().OfType<FilterChip>().ElementAt(2);
 
-        Assert.Equal("Ha", text.Text);
-        Assert.Equal("Ha, 40 frames", ToolTip.GetTip(text));
+        Assert.Equal("Ha", BadgeLabel(Badges(cell)[2]).Text);
+        Assert.Equal("Ha, 40 frames", ToolTip.GetTip(chip));
     }
 
     [AvaloniaFact]
@@ -1050,10 +1221,14 @@ public class TargetListViewTests
         var nameTop = blocks[0].TranslatePoint(default, view)!.Value.Y;
         var commonTop = blocks[1].TranslatePoint(default, view)!.Value.Y;
         var designation = Assert.Single(NamedCells(view, "DesignationCell"));
-        var designationTop = designation.TranslatePoint(default, view)!.Value.Y;
+
+        // The designation is the caption tier since Task 5 (ui-polish), smaller than the name, so
+        // the two share a line by their centres rather than by their tops.
+        static double Middle(Visual block, Visual root)
+            => block.TranslatePoint(new Point(0, block.Bounds.Height / 2), root)!.Value.Y;
 
         Assert.Equal(nameTop, commonTop, 1);
-        Assert.Equal(nameTop, designationTop, 1);
+        Assert.Equal(Middle(blocks[0], view), Middle(designation, view), 0);
     }
 
     [AvaloniaFact]
@@ -1070,7 +1245,7 @@ public class TargetListViewTests
             view.GetVisualDescendants().OfType<ItemsControl>(), c => c.Name == "SessionsExpander");
 
         Assert.All(
-            expander.GetVisualDescendants().OfType<Border>().Where(border => !border.Classes.Contains("tag")),
+            expander.GetVisualDescendants().OfType<Border>().Where(border => !border.GetVisualAncestors().OfType<FilterChip>().Any()),
             border => Assert.Equal(new Thickness(0), border.BorderThickness));
 
         Assert.All(
@@ -1101,7 +1276,8 @@ public class TargetListViewTests
         var pager = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListPager");
         var header = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow");
         Assert.True(
-            Grid.GetRow(pager) < Grid.GetRow(header),
+            pager.TranslatePoint(new Point(0, pager.Bounds.Height), view)!.Value.Y
+                <= header.TranslatePoint(default, view)!.Value.Y,
             "The pager no longer sits above the header row.");
     }
 
@@ -1135,7 +1311,7 @@ public class TargetListViewTests
 
         // Equipment is not drawn, and it has taken its width with it. The tight cap is pinned here
         // so the pair with View_HidingEquipmentInTheGear_DoesNotTightenTheOtherColumns, which pins
-        // DataCap at a wide window, cannot both pass with the tight cap never applied at all.
+        // DesignationCap at a wide window, cannot both pass with the tight cap never applied at all.
         Assert.Equal(TargetListView.TightCap, view.DataCellMaxWidth);
         Assert.False(view.IsEquipmentShown);
         Assert.All(NamedCells(view, "EquipmentCell"), cell => Assert.False(cell.IsEffectivelyVisible));
@@ -1166,7 +1342,7 @@ public class TargetListViewTests
         Assert.True(view.IsEquipmentShown);
         Assert.All(NamedCells(view, "EquipmentCell"), cell => Assert.True(cell.IsEffectivelyVisible));
         Assert.True(ColumnWidth(view, "TargetListHeaderRow", 4) > 0);
-        Assert.Contains("Equipment", VisibleHeaderTitles(view));
+        Assert.Contains("EQUIPMENT", VisibleHeaderTitles(view));
     }
 
     [AvaloniaFact]
@@ -1229,10 +1405,11 @@ public class TargetListViewTests
         // on the header cell and the row cell of every column that carries one.
         var source = File.ReadAllText(FindTargetListViewAxaml());
 
-        // The width rule's budget, summed: 120 Name floor + 160 Designation + 120 Palette
-        // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 12 trailing inset.
+        // The width rule's budget, summed: 120 Name floor + 208 Designation + 120 Palette
+        // + 160 Integration + 300 Equipment + 160 Last session + 96 sessions + 14 trailing inset
+        // (the 12 pixel bar and the table card's two edges).
         // Integration and Last session are budgeted at 160, not capped there.
-        Assert.Equal(1128d, TargetListView.DefaultFitWidth);
+        Assert.Equal(1178d, TargetListView.DefaultFitWidth);
         Assert.Equal(
             TargetListView.DefaultFitWidth,
             TargetListView.FitWidthFor(CreatePopulatedList().Columns));
@@ -1286,7 +1463,7 @@ public class TargetListViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(
-            TargetListView.DefaultFitWidth - (2 * TargetListView.DataCap),
+            TargetListView.DefaultFitWidth - TargetListView.DesignationCap - TargetListView.DataCap,
             TargetListView.FitWidthFor(list.Columns));
         Assert.True(
             view.IsEquipmentShown,
@@ -1303,7 +1480,7 @@ public class TargetListViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view, WidePageAllotment, 1900d);
 
-        Assert.Equal(TargetListView.DataCap, view.DataCellMaxWidth);
+        Assert.Equal(TargetListView.DesignationCap, view.DataCellMaxWidth);
 
         list.ToggleColumnCommand.Execute(list.Columns.Single(column => column.Key == "equipment"));
         Dispatcher.UIThread.RunJobs();
@@ -1311,7 +1488,7 @@ public class TargetListViewTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.False(view.IsEquipmentShown);
-        Assert.Equal(TargetListView.DataCap, view.DataCellMaxWidth);
+        Assert.Equal(TargetListView.DesignationCap, view.DataCellMaxWidth);
 
         foreach (var cell in HeaderCells(view).Where(cell => cell.IsEffectivelyVisible))
         {
@@ -1442,8 +1619,14 @@ public class TargetListViewTests
     // A badge is a Border wearing the tag class. Selected by class rather than by "has a border
     // brush": under Border.tag the outline comes from the style, so a template root can carry one
     // too (Phase 14C re-point of the two predicates that used the brush).
+    // Each badge is the shared FilterChip (Theme/Controls.axaml); its template's one Border carries
+    // the edge, the wash and the shadow together.
     private static IReadOnlyList<Border> Badges(Visual root)
-        => [.. root.GetVisualDescendants().OfType<Border>().Where(border => border.Classes.Contains("tag"))];
+        => [.. root.GetVisualDescendants().OfType<FilterChip>()
+            .Select(chip => chip.GetVisualDescendants().OfType<Border>().First())];
+
+    private static TextBlock BadgeLabel(Border badge)
+        => badge.GetVisualDescendants().OfType<TextBlock>().Single(block => block.Name == "PART_Label");
 
     private static ContentControl HeaderCell(TargetListView view, TargetListViewModel list, string key)
     {
@@ -1455,7 +1638,7 @@ public class TargetListViewTests
     // one that carries the column's own title, whichever side of the marker it sits on.
     private static TextBlock HeaderTitle(ContentControl header)
         => header.GetVisualDescendants().OfType<TextBlock>()
-            .Single(block => block.Text == ((ColumnViewModel)header.Content!).Title);
+            .Single(block => block.Text == ((ColumnViewModel)header.Content!).HeaderTitle);
 
     private static double LeftEdge(Visual control, Visual root)
         => control.TranslatePoint(default, root)!.Value.X;

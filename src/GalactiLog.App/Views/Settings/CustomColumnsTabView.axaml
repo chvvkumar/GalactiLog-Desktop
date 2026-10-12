@@ -57,228 +57,215 @@
                  IsVisible="{Binding IsLoading}" />
 
       <!-- Add column. -->
-      <StackPanel Spacing="10">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="Add column" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.custom-columns.add" />
-          </StackPanel>
-        </Border>
-
-        <StackPanel Spacing="4">
-          <TextBlock Classes="t-caption" Text="Name" />
-          <TextBox x:Name="NewNameBox"
-                   Watermark="For example, Processed"
-                   MaxWidth="360"
-                   HorizontalAlignment="Left"
-                   Text="{Binding NewName, Mode=TwoWay}" />
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Spacing="16">
-          <StackPanel Spacing="4">
-            <TextBlock Classes="t-caption" Text="Type" />
-            <ComboBox x:Name="TypeBox"
-                      MinWidth="140"
-                      ItemsSource="{Binding TypeOptions}"
-                      SelectedItem="{Binding SelectedType, Mode=TwoWay}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate DataType="settings:CustomColumnTypeOption">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-          </StackPanel>
+      <Border Classes="card">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Add column" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.custom-columns.add" />
+            </StackPanel>
+          </Border>
 
           <StackPanel Spacing="4">
-            <TextBlock Classes="t-caption" Text="Applies to" />
-            <ComboBox x:Name="ScopeBox"
-                      MinWidth="140"
-                      ItemsSource="{Binding ScopeOptions}"
-                      SelectedItem="{Binding SelectedScope, Mode=TwoWay}">
-              <ComboBox.ItemTemplate>
-                <DataTemplate DataType="settings:CustomColumnScopeOption">
-                  <TextBlock Text="{Binding Label}" />
+            <TextBlock Classes="t-caption" Text="Name" />
+            <TextBox x:Name="NewNameBox"
+                     Watermark="For example, Processed"
+                     MaxWidth="360"
+                     HorizontalAlignment="Left"
+                     Text="{Binding NewName, Mode=TwoWay}" />
+          </StackPanel>
+
+          <StackPanel Orientation="Horizontal" Spacing="16">
+            <StackPanel Spacing="4">
+              <TextBlock Classes="t-caption" Text="Type" />
+              <ComboBox x:Name="TypeBox"
+                        MinWidth="140"
+                        ItemsSource="{Binding TypeOptions}"
+                        SelectedItem="{Binding SelectedType, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate DataType="settings:CustomColumnTypeOption">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+
+            <StackPanel Spacing="4">
+              <TextBlock Classes="t-caption" Text="Applies to" />
+              <ComboBox x:Name="ScopeBox"
+                        MinWidth="140"
+                        ItemsSource="{Binding ScopeOptions}"
+                        SelectedItem="{Binding SelectedScope, Mode=TwoWay}">
+                <ComboBox.ItemTemplate>
+                  <DataTemplate DataType="settings:CustomColumnScopeOption">
+                    <TextBlock Text="{Binding Label}" />
+                  </DataTemplate>
+                </ComboBox.ItemTemplate>
+              </ComboBox>
+            </StackPanel>
+          </StackPanel>
+
+          <!-- Revealed only while Type is Dropdown (spec 12.15 section 4.1, required case 5). -->
+          <StackPanel x:Name="NewOptionsEditor" Spacing="6" IsVisible="{Binding ShowOptionsEditor}">
+            <TextBlock Classes="t-caption" Text="Options" />
+            <ItemsControl x:Name="NewOptionChips" ItemsSource="{Binding NewOptions}">
+              <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                  <WrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+              </ItemsControl.ItemsPanel>
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="sys:String">
+                  <Border Classes="tag" Margin="0,0,4,4">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                      <TextBlock Text="{Binding}" />
+                      <Button Classes="quiet"
+                              Padding="2,0"
+                              MinHeight="0"
+                              ToolTip.Tip="Remove option"
+                              Command="{Binding #Root.((settings:CustomColumnsTabViewModel)DataContext).RemoveNewOptionCommand}"
+                              CommandParameter="{Binding}">
+                        <Path Data="{StaticResource IconRemoveOption}"
+                              Width="8"
+                              Height="8"
+                              Stretch="Uniform"
+                              Fill="{DynamicResource ColorTextTertiary}" />
+                      </Button>
+                    </StackPanel>
+                  </Border>
                 </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-          </StackPanel>
-        </StackPanel>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
 
-        <!-- Revealed only while Type is Dropdown (spec 12.15 section 4.1, required case 5). -->
-        <StackPanel x:Name="NewOptionsEditor" Spacing="6" IsVisible="{Binding ShowOptionsEditor}">
-          <TextBlock Classes="t-caption" Text="Options" />
-          <ItemsControl x:Name="NewOptionChips" ItemsSource="{Binding NewOptions}">
-            <ItemsControl.ItemsPanel>
-              <ItemsPanelTemplate>
-                <WrapPanel Orientation="Horizontal" />
-              </ItemsPanelTemplate>
-            </ItemsControl.ItemsPanel>
-            <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="sys:String">
-                <Border Classes="tag" Margin="0,0,4,4">
-                  <StackPanel Orientation="Horizontal" Spacing="4">
-                    <TextBlock Text="{Binding}" />
-                    <Button Classes="quiet"
-                            Padding="2,0"
-                            MinHeight="0"
-                            ToolTip.Tip="Remove option"
-                            Command="{Binding #Root.((settings:CustomColumnsTabViewModel)DataContext).RemoveNewOptionCommand}"
-                            CommandParameter="{Binding}">
-                      <Path Data="{StaticResource IconRemoveOption}"
-                            Width="8"
-                            Height="8"
-                            Stretch="Uniform"
-                            Fill="{DynamicResource ColorTextTertiary}" />
-                    </Button>
-                  </StackPanel>
-                </Border>
-              </DataTemplate>
-            </ItemsControl.ItemTemplate>
-          </ItemsControl>
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBox x:Name="NewOptionTextBox"
+                       Watermark="Type an option and press Enter"
+                       Width="220"
+                       Text="{Binding NewOptionText, Mode=TwoWay}">
+                <TextBox.KeyBindings>
+                  <KeyBinding Gesture="Enter" Command="{Binding AddNewOptionCommand}" />
+                </TextBox.KeyBindings>
+              </TextBox>
+              <Button x:Name="AddNewOptionButton"
+                      Classes="sm"
+                      Content="Add"
+                      Command="{Binding AddNewOptionCommand}" />
+            </StackPanel>
 
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBox x:Name="NewOptionTextBox"
-                     Watermark="Type an option and press Enter"
-                     Width="220"
-                     Text="{Binding NewOptionText, Mode=TwoWay}">
-              <TextBox.KeyBindings>
-                <KeyBinding Gesture="Enter" Command="{Binding AddNewOptionCommand}" />
-              </TextBox.KeyBindings>
-            </TextBox>
-            <Button x:Name="AddNewOptionButton"
-                    Classes="sm"
-                    Content="Add"
-                    Command="{Binding AddNewOptionCommand}" />
+            <ContentControl Classes="callout error inline"
+                            IsVisible="{Binding NewOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <TextBlock x:Name="NewOptionErrorText"
+                         Classes="t-caption"
+                         Text="{Binding NewOptionError}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
           </StackPanel>
 
-          <ContentControl Classes="callout error inline"
-                          IsVisible="{Binding NewOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <TextBlock x:Name="NewOptionErrorText"
-                       Classes="t-caption"
-                       Text="{Binding NewOptionError}"
-                       TextWrapping="Wrap" />
-          </ContentControl>
+          <!-- Disabled while the form cannot be submitted, with the reason on its tooltip (spec
+               12.15 section 4.1's table; required cases 3 and 4). -->
+          <Button x:Name="AddColumnButton"
+                  Classes="accent"
+                  Content="Add column"
+                  HorizontalAlignment="Left"
+                  Command="{Binding CreateCommand}"
+                  ToolTip.Tip="{Binding CreateDisabledReason}"
+                  ToolTip.ShowOnDisabled="True" />
         </StackPanel>
-
-        <!-- Disabled while the form cannot be submitted, with the reason on its tooltip (spec
-             12.15 section 4.1's table; required cases 3 and 4). -->
-        <Button x:Name="AddColumnButton"
-                Classes="primary"
-                Content="Add column"
-                HorizontalAlignment="Left"
-                Command="{Binding CreateCommand}"
-                ToolTip.Tip="{Binding CreateDisabledReason}"
-                ToolTip.ShowOnDisabled="True" />
-      </StackPanel>
+      </Border>
 
       <!-- The table. -->
-      <StackPanel Spacing="6" Grid.IsSharedSizeScope="True">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="Columns" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.custom-columns.table" />
-          </StackPanel>
-        </Border>
+      <Border Classes="card">
+        <StackPanel Spacing="6" Grid.IsSharedSizeScope="True">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Columns" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.custom-columns.table" />
+            </StackPanel>
+          </Border>
 
-        <TextBlock x:Name="EmptyTableText"
-                   Classes="t-caption"
-                   Text="No custom columns yet."
-                   IsVisible="{Binding ShowEmptyState}" />
+          <TextBlock x:Name="EmptyTableText"
+                     Classes="t-caption"
+                     Text="No custom columns yet."
+                     IsVisible="{Binding ShowEmptyState}" />
 
-        <t:TableRow x:Name="ColumnsHeaderRow"
-                    Kind="Header"
-                    Columns="{StaticResource CustomCols}"
-                    IsVisible="{Binding !ShowEmptyState}">
-          <TextBlock t:TableRow.Col="order" Text="Order" />
-          <TextBlock t:TableRow.Col="name" Text="Name" ToolTip.Tip="The column's name, as its heading reads" />
-          <TextBlock t:TableRow.Col="type" Text="Type" />
-          <TextBlock t:TableRow.Col="scope" Text="Applies to" />
-          <TextBlock t:TableRow.Col="options" Text="Options" />
-          <TextBlock t:TableRow.Col="values" Text="Values" />
-          <TextBlock t:TableRow.Col="actions" Text="Actions" />
-        </t:TableRow>
+          <t:TableRow x:Name="ColumnsHeaderRow"
+                      Kind="Header"
+                      Columns="{StaticResource CustomCols}"
+                      IsVisible="{Binding !ShowEmptyState}">
+            <TextBlock t:TableRow.Col="order" Text="Order" />
+            <TextBlock t:TableRow.Col="name" Text="Name" ToolTip.Tip="The column's name, as its heading reads" />
+            <TextBlock t:TableRow.Col="type" Text="Type" />
+            <TextBlock t:TableRow.Col="scope" Text="Applies to" />
+            <TextBlock t:TableRow.Col="options" Text="Options" />
+            <TextBlock t:TableRow.Col="values" Text="Values" />
+            <TextBlock t:TableRow.Col="actions" Text="Actions" />
+          </t:TableRow>
 
-        <ItemsControl x:Name="ColumnsList" Classes="table" ItemsSource="{Binding Rows}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate DataType="settings:CustomColumnRowViewModel">
-              <StackPanel>
-                <t:TableRow Columns="{StaticResource CustomCols}">
-                  <!-- Order: the two arrows, disabled at the ends (required case 11). -->
-                  <StackPanel t:TableRow.Col="order" Orientation="Horizontal" Spacing="2">
-                    <Button x:Name="MoveUpButton"
-                            Classes="quiet"
-                            ToolTip.Tip="Move up"
-                            ToolTip.ShowOnDisabled="True"
-                            Command="{Binding MoveUpCommand}">
-                      <Path Data="{StaticResource IconChevronUp}"
-                            Width="10"
-                            Height="10"
-                            Stretch="Uniform"
-                            Fill="{DynamicResource ColorTextSecondary}" />
-                    </Button>
-                    <Button x:Name="MoveDownButton"
-                            Classes="quiet"
-                            ToolTip.Tip="Move down"
-                            ToolTip.ShowOnDisabled="True"
-                            Command="{Binding MoveDownCommand}">
-                      <Path Data="{StaticResource IconChevronDown}"
-                            Width="10"
-                            Height="10"
-                            Stretch="Uniform"
-                            Fill="{DynamicResource ColorTextSecondary}" />
-                    </Button>
-                  </StackPanel>
+          <ItemsControl x:Name="ColumnsList" Classes="table" ItemsSource="{Binding Rows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:CustomColumnRowViewModel">
+                <StackPanel>
+                  <t:TableRow Columns="{StaticResource CustomCols}">
+                    <!-- Order: the two arrows, disabled at the ends (required case 11). -->
+                    <StackPanel t:TableRow.Col="order" Orientation="Horizontal" Spacing="2">
+                      <Button x:Name="MoveUpButton"
+                              Classes="quiet"
+                              ToolTip.Tip="Move up"
+                              ToolTip.ShowOnDisabled="True"
+                              Command="{Binding MoveUpCommand}">
+                        <Path Data="{StaticResource IconChevronUp}"
+                              Width="10"
+                              Height="10"
+                              Stretch="Uniform"
+                              Fill="{DynamicResource ColorTextSecondary}" />
+                      </Button>
+                      <Button x:Name="MoveDownButton"
+                              Classes="quiet"
+                              ToolTip.Tip="Move down"
+                              ToolTip.ShowOnDisabled="True"
+                              Command="{Binding MoveDownCommand}">
+                        <Path Data="{StaticResource IconChevronDown}"
+                              Width="10"
+                              Height="10"
+                              Stretch="Uniform"
+                              Fill="{DynamicResource ColorTextSecondary}" />
+                      </Button>
+                    </StackPanel>
 
-                  <!-- Name: the label, or a TextBox over it while the row is being edited. -->
-                  <TextBlock t:TableRow.Col="name"
-                             Classes="section"
-                             Text="{Binding Name}"
-                             ToolTip.Tip="{Binding Name}"
-                             IsVisible="{Binding !IsEditing}" />
-                  <!-- An editor fills its cell. -->
-                  <TextBox t:TableRow.Col="name"
-                           HorizontalAlignment="Stretch"
-                           Text="{Binding EditName, Mode=TwoWay}"
-                           IsVisible="{Binding IsEditing}" />
+                    <!-- Name: the label, or a TextBox over it while the row is being edited. -->
+                    <TextBlock t:TableRow.Col="name"
+                               Classes="section"
+                               Text="{Binding Name}"
+                               ToolTip.Tip="{Binding Name}"
+                               IsVisible="{Binding !IsEditing}" />
+                    <!-- An editor fills its cell. -->
+                    <TextBox t:TableRow.Col="name"
+                             HorizontalAlignment="Stretch"
+                             Text="{Binding EditName, Mode=TwoWay}"
+                             IsVisible="{Binding IsEditing}" />
 
-                  <!-- Type and Applies to: never editable (spec 12.15, departure 9, user
-                       choice 13). Always the same disabled control and tooltip, editing or not,
-                       so the reason is discoverable whenever a reader wonders why there is no
-                       way to change either (required case 9). -->
-                  <TextBlock t:TableRow.Col="type"
-                             Classes="t-caption"
-                             Text="{Binding TypeLabel}"
-                             IsEnabled="{Binding TypeIsEnabled}"
-                             ToolTip.Tip="{x:Static settings:CustomColumnRowViewModel.TypeScopeTooltip}"
-                             ToolTip.ShowOnDisabled="True" />
-                  <TextBlock t:TableRow.Col="scope"
-                             Classes="t-caption"
-                             Text="{Binding ScopeLabel}"
-                             IsEnabled="{Binding ScopeIsEnabled}"
-                             ToolTip.Tip="{x:Static settings:CustomColumnRowViewModel.TypeScopeTooltip}"
-                             ToolTip.ShowOnDisabled="True" />
+                    <!-- Type and Applies to: never editable (spec 12.15, departure 9, user
+                         choice 13). Always the same disabled control and tooltip, editing or not,
+                         so the reason is discoverable whenever a reader wonders why there is no
+                         way to change either (required case 9). -->
+                    <TextBlock t:TableRow.Col="type"
+                               Classes="t-caption"
+                               Text="{Binding TypeLabel}"
+                               IsEnabled="{Binding TypeIsEnabled}"
+                               ToolTip.Tip="{x:Static settings:CustomColumnRowViewModel.TypeScopeTooltip}"
+                               ToolTip.ShowOnDisabled="True" />
+                    <TextBlock t:TableRow.Col="scope"
+                               Classes="t-caption"
+                               Text="{Binding ScopeLabel}"
+                               IsEnabled="{Binding ScopeIsEnabled}"
+                               ToolTip.Tip="{x:Static settings:CustomColumnRowViewModel.TypeScopeTooltip}"
+                               ToolTip.ShowOnDisabled="True" />
 
-                  <!-- Options: the chips, or the options editor while the row is being edited.
-                       Empty for the other two types. -->
-                  <ItemsControl t:TableRow.Col="options"
-                                ItemsSource="{Binding Options}"
-                                IsVisible="{Binding !IsEditing}">
-                    <ItemsControl.ItemsPanel>
-                      <ItemsPanelTemplate>
-                        <WrapPanel Orientation="Horizontal" />
-                      </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                      <DataTemplate x:DataType="sys:String">
-                        <Border Classes="tag" Margin="0,0,4,4">
-                          <TextBlock Text="{Binding}" />
-                        </Border>
-                      </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                  </ItemsControl>
-
-                  <StackPanel t:TableRow.Col="options" Spacing="4" IsVisible="{Binding IsEditing}">
-                    <ItemsControl ItemsSource="{Binding EditOptions}" IsVisible="{Binding IsDropdown}">
+                    <!-- Options: the chips, or the options editor while the row is being edited.
+                         Empty for the other two types. -->
+                    <ItemsControl t:TableRow.Col="options"
+                                  ItemsSource="{Binding Options}"
+                                  IsVisible="{Binding !IsEditing}">
                       <ItemsControl.ItemsPanel>
                         <ItemsPanelTemplate>
                           <WrapPanel Orientation="Horizontal" />
@@ -287,98 +274,115 @@
                       <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="sys:String">
                           <Border Classes="tag" Margin="0,0,4,4">
-                            <StackPanel Orientation="Horizontal" Spacing="4">
-                              <TextBlock Text="{Binding}" />
-                              <Button Classes="quiet"
-                                      Padding="2,0"
-                                      MinHeight="0"
-                                      ToolTip.Tip="Remove option"
-                                      Command="{Binding $parent[ItemsControl].((settings:CustomColumnRowViewModel)DataContext).RemoveEditOptionCommand}"
-                                      CommandParameter="{Binding}">
-                                <Path Data="{StaticResource IconRemoveOption}"
-                                      Width="8"
-                                      Height="8"
-                                      Stretch="Uniform"
-                                      Fill="{DynamicResource ColorTextTertiary}" />
-                              </Button>
-                            </StackPanel>
+                            <TextBlock Text="{Binding}" />
                           </Border>
                         </DataTemplate>
                       </ItemsControl.ItemTemplate>
                     </ItemsControl>
 
-                    <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsDropdown}">
-                      <TextBox Watermark="Type an option and press Enter"
-                               Width="140"
-                               Text="{Binding EditOptionText, Mode=TwoWay}">
-                        <TextBox.KeyBindings>
-                          <KeyBinding Gesture="Enter" Command="{Binding AddEditOptionCommand}" />
-                        </TextBox.KeyBindings>
-                      </TextBox>
-                      <Button Classes="sm" Content="Add" Command="{Binding AddEditOptionCommand}" />
+                    <StackPanel t:TableRow.Col="options" Spacing="4" IsVisible="{Binding IsEditing}">
+                      <ItemsControl ItemsSource="{Binding EditOptions}" IsVisible="{Binding IsDropdown}">
+                        <ItemsControl.ItemsPanel>
+                          <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" />
+                          </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                          <DataTemplate x:DataType="sys:String">
+                            <Border Classes="tag" Margin="0,0,4,4">
+                              <StackPanel Orientation="Horizontal" Spacing="4">
+                                <TextBlock Text="{Binding}" />
+                                <Button Classes="quiet"
+                                        Padding="2,0"
+                                        MinHeight="0"
+                                        ToolTip.Tip="Remove option"
+                                        Command="{Binding $parent[ItemsControl].((settings:CustomColumnRowViewModel)DataContext).RemoveEditOptionCommand}"
+                                        CommandParameter="{Binding}">
+                                  <Path Data="{StaticResource IconRemoveOption}"
+                                        Width="8"
+                                        Height="8"
+                                        Stretch="Uniform"
+                                        Fill="{DynamicResource ColorTextTertiary}" />
+                                </Button>
+                              </StackPanel>
+                            </Border>
+                          </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                      </ItemsControl>
+
+                      <StackPanel Orientation="Horizontal" Spacing="4" IsVisible="{Binding IsDropdown}">
+                        <TextBox Watermark="Type an option and press Enter"
+                                 Width="140"
+                                 Text="{Binding EditOptionText, Mode=TwoWay}">
+                          <TextBox.KeyBindings>
+                            <KeyBinding Gesture="Enter" Command="{Binding AddEditOptionCommand}" />
+                          </TextBox.KeyBindings>
+                        </TextBox>
+                        <Button Classes="sm" Content="Add" Command="{Binding AddEditOptionCommand}" />
+                      </StackPanel>
+
+                      <ContentControl Classes="callout error inline"
+                                      IsVisible="{Binding EditOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Classes="t-caption"
+                                   Text="{Binding EditOptionError}"
+                                   TextWrapping="Wrap" />
+                      </ContentControl>
                     </StackPanel>
 
-                    <ContentControl Classes="callout error inline"
-                                    IsVisible="{Binding EditOptionError, Converter={x:Static ObjectConverters.IsNotNull}}">
-                      <TextBlock Classes="t-caption"
-                                 Text="{Binding EditOptionError}"
-                                 TextWrapping="Wrap" />
-                    </ContentControl>
-                  </StackPanel>
+                    <!-- Values: the stored count, so a delete states what it is about to take
+                         (required case 16). -->
+                    <TextBlock t:TableRow.Col="values" Classes="t-caption" Text="{Binding ValueCountText}" />
 
-                  <!-- Values: the stored count, so a delete states what it is about to take
-                       (required case 16). -->
-                  <TextBlock t:TableRow.Col="values" Classes="t-caption" Text="{Binding ValueCountText}" />
+                    <!-- Actions. -->
+                    <StackPanel t:TableRow.Col="actions" Orientation="Horizontal" Spacing="6">
+                      <Button x:Name="EditButton"
+                              Classes="sm"
+                              Content="Edit"
+                              IsVisible="{Binding !IsEditing}"
+                              Command="{Binding BeginEditCommand}" />
+                      <Button x:Name="SaveButton"
+                              Classes="sm accent"
+                              Content="Save"
+                              IsVisible="{Binding IsEditing}"
+                              Command="{Binding SaveCommand}" />
+                      <Button x:Name="CancelEditButton"
+                              Classes="sm quiet"
+                              Content="Cancel"
+                              IsVisible="{Binding IsEditing}"
+                              Command="{Binding CancelEditCommand}" />
+                      <Button x:Name="DeleteButton"
+                              Classes="sm"
+                              Content="Delete"
+                              IsVisible="{Binding !IsEditing}"
+                              BorderBrush="{DynamicResource ColorError}"
+                              Foreground="{DynamicResource ColorError}"
+                              Command="{Binding ArmDeleteCommand}" />
+                    </StackPanel>
+                  </t:TableRow>
 
-                  <!-- Actions. -->
-                  <StackPanel t:TableRow.Col="actions" Orientation="Horizontal" Spacing="6">
-                    <Button x:Name="EditButton"
-                            Classes="sm"
-                            Content="Edit"
-                            IsVisible="{Binding !IsEditing}"
-                            Command="{Binding BeginEditCommand}" />
-                    <Button x:Name="SaveButton"
-                            Classes="sm"
-                            Content="Save"
-                            IsVisible="{Binding IsEditing}"
-                            Command="{Binding SaveCommand}" />
-                    <Button x:Name="CancelEditButton"
-                            Classes="sm quiet"
-                            Content="Cancel"
-                            IsVisible="{Binding IsEditing}"
-                            Command="{Binding CancelEditCommand}" />
-                    <Button x:Name="DeleteButton"
-                            Classes="sm"
-                            Content="Delete"
-                            IsVisible="{Binding !IsEditing}"
-                            BorderBrush="{DynamicResource ColorError}"
-                            Foreground="{DynamicResource ColorError}"
-                            Command="{Binding ArmDeleteCommand}" />
-                  </StackPanel>
-                </t:TableRow>
-
-                <!-- The two-press confirm's second half (spec 12.15 section 4.3,
-                     MaintenanceActionViewModel's own shape). No dialog and no modal window. -->
-                <ContentControl Classes="callout warn"
-                        Margin="0,0,0,8"
-                        IsVisible="{Binding ConfirmPending}">
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding DeleteConfirmMessage}"
-                               TextWrapping="Wrap"
-                               HorizontalAlignment="Stretch" />
-                    <Button Classes="sm"
-                            Content="Confirm"
-                            BorderBrush="{DynamicResource ColorError}"
-                            Foreground="{DynamicResource ColorError}"
-                            Command="{Binding ConfirmDeleteCommand}" />
-                    <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
-                  </StackPanel>
-                </ContentControl>
-              </StackPanel>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
+                  <!-- The two-press confirm's second half (spec 12.15 section 4.3,
+                       MaintenanceActionViewModel's own shape). No dialog and no modal window. -->
+                  <ContentControl Classes="callout warn"
+                          Margin="0,0,0,8"
+                          IsVisible="{Binding ConfirmPending}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                      <TextBlock Text="{Binding DeleteConfirmMessage}"
+                                 TextWrapping="Wrap"
+                                 HorizontalAlignment="Stretch" />
+                      <Button Classes="sm"
+                              Content="Confirm"
+                              BorderBrush="{DynamicResource ColorError}"
+                              Foreground="{DynamicResource ColorError}"
+                              Command="{Binding ConfirmDeleteCommand}" />
+                      <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteConfirmCommand}" />
+                    </StackPanel>
+                  </ContentControl>
+                </StackPanel>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
 
       <ContentControl Classes="callout error inline"
                       IsVisible="{Binding HasErrorMessage}">

@@ -30,4 +30,8 @@ public enum SettingsDestination
     /// <summary>Settings, the Library tab, at the name rule editor (spec 12.2's Review action,
     /// spec 12.7's rule editor).</summary>
     LibraryNameRules,
+
+    /// <summary>Settings, the Library tab, at its top, where the library folders are added: the
+    /// Dashboard's first-run empty state (spec 12.10) asks for this.</summary>
+    Library,
 }

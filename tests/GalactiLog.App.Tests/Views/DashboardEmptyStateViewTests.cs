@@ -46,9 +46,9 @@ public class DashboardEmptyStateViewTests
     }
 
     [AvaloniaTheory]
-    [InlineData(DashboardContentState.NoFramesYet, "No frames catalogued yet", "Run Scan")]
-    [InlineData(DashboardContentState.NoMatches, "No targets match these filters", "Reset Filters")]
-    public void DashboardEmptyStateView_RendersEachState(DashboardContentState state, string message, string buttonText)
+    [InlineData(DashboardContentState.NoFramesYet, "No frames catalogued yet", "Open settings,Run scan")]
+    [InlineData(DashboardContentState.NoMatches, "No targets match these filters", "Reset filters")]
+    public void DashboardEmptyStateView_RendersEachState(DashboardContentState state, string message, string buttonTexts)
     {
         var view = new DashboardEmptyStateView { DataContext = EmptyDashboard(state) };
         Show(view);
@@ -60,9 +60,8 @@ public class DashboardEmptyStateViewTests
             .OfType<Button>()
             .Where(button => button.IsEffectivelyVisible)
             .ToList();
-        Assert.Single(buttons);
-        Assert.Equal(buttonText, buttons[0].Content);
-        Assert.True(buttons[0].IsEffectivelyEnabled);
+        Assert.Equal(buttonTexts.Split(','), buttons.Select(button => button.Content as string));
+        Assert.All(buttons, button => Assert.True(button.IsEffectivelyEnabled));
 
         // Review item 2. Scales.axaml's FontSize* keys are ratios, not point sizes; the sub-line
         // used to bind FontSizeCaption and rendered at 0.714px. FontSizeTokenTest is the
@@ -72,6 +71,24 @@ public class DashboardEmptyStateViewTests
         Assert.All(blocks, block => Assert.True(
             block.FontSize >= 8,
             $"TextBlock '{block.Text}' renders at {block.FontSize}."));
+    }
+
+    // Task 5 (ui-polish, ux-flow F13): the first-run state names Settings, so it offers the way
+    // there. The button rides the dashboard's one Settings route with the Library destination.
+    [AvaloniaFact]
+    public void NoFramesYet_OpenSettings_AsksForTheLibraryTab()
+    {
+        var dashboard = EmptyDashboard(DashboardContentState.NoFramesYet);
+        var asked = new List<SettingsDestination>();
+        dashboard.ReviewScanFiltersRequested += (_, destination) => asked.Add(destination);
+        var view = new DashboardEmptyStateView { DataContext = dashboard };
+        Show(view);
+
+        var button = view.GetVisualDescendants().OfType<Button>().Single(b => b.Name == "OpenSettingsButton");
+        Assert.Contains("accent", button.Classes);
+        button.Command!.Execute(null);
+
+        Assert.Equal([SettingsDestination.Library], asked);
     }
 
     [AvaloniaFact]

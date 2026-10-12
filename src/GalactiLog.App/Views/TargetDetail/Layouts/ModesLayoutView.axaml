@@ -14,14 +14,24 @@
   <Grid x:Name="PageRows" RowDefinitions="Auto,Auto,*" Margin="20,18,20,12">
     <parts:TargetHeaderPart x:Name="TargetHeaderPart" Grid.Row="0" />
 
-    <StackPanel x:Name="ModeSwitch" Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,10,0,0">
+    <!-- The mode strip is the page's own tab strip (ui-polish Task 6): borderless tabs with the
+         accent underline on the open mode, so it reads as navigation and not as three more pills.
+         The 4 pixel vertical padding keeps the strip at the old toggles' height, which the frame
+         rows below are measured against at the 720 pixel height floor. -->
+    <StackPanel x:Name="ModeSwitch" Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,12,0,0">
       <ToggleButton x:Name="NightReviewButton"
-                    Content="Night review"
+                    Classes="tab"
+                    Padding="12,4"
+                    Content="Session review"
                     CommandParameter="{x:Static layouts:TargetPageMode.NightReview}" />
       <ToggleButton x:Name="CompareNightsButton"
-                    Content="Compare nights"
+                    Classes="tab"
+                    Padding="12,4"
+                    Content="Compare sessions"
                     CommandParameter="{x:Static layouts:TargetPageMode.CompareNights}" />
       <ToggleButton x:Name="IntegrationButton"
+                    Classes="tab"
+                    Padding="12,4"
                     Content="Integration"
                     CommandParameter="{x:Static layouts:TargetPageMode.Integration}" />
     </StackPanel>
@@ -50,7 +60,7 @@
                         HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
               <!-- The two section headers at a line's height, not Fluent's 48: the metrics header
-                   line is charged to the lanes floor, and at 1280 x 720 the chart whole at rest and
+                   line is charged to the lanes floor, and at the 720 pixel height floor the chart whole at rest and
                    one frame row leave it 24 px. -->
               <StackPanel.Resources>
                 <x:Double x:Key="ExpanderMinHeight">24</x:Double>

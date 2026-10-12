@@ -18,11 +18,20 @@
       <TextBlock Text="Add a library folder in Settings, then run a scan."
                  HorizontalAlignment="Center"
                  Foreground="{DynamicResource ColorTextTertiary}" />
-      <Button x:Name="RunScanButton"
-              Content="Run Scan"
-              HorizontalAlignment="Center"
-              Padding="12,4"
-              Command="{Binding RunScanCommand}" />
+      <!-- The sentence names Settings, so the next step is offered beside the scan rather than
+           left for the reader to find: Open settings lands on the Library tab through the shell's
+           one Settings route. -->
+      <StackPanel Orientation="Horizontal"
+                  HorizontalAlignment="Center"
+                  Spacing="{StaticResource SpaceGap2}">
+        <Button x:Name="OpenSettingsButton"
+                Classes="accent"
+                Content="Open settings"
+                Command="{Binding OpenLibrarySettingsCommand}" />
+        <Button x:Name="RunScanButton"
+                Content="Run scan"
+                Command="{Binding RunScanCommand}" />
+      </StackPanel>
     </StackPanel>
 
     <StackPanel Spacing="10" IsVisible="{Binding ShowFirstScan}" Width="320">
@@ -48,7 +57,7 @@
                  Foreground="{DynamicResource ColorTextPrimary}" />
       <!-- The panel's own Reset command, not a second implementation of it. -->
       <Button x:Name="ResetFiltersButton"
-              Content="Reset Filters"
+              Content="Reset filters"
               HorizontalAlignment="Center"
               Padding="12,4"
               Command="{Binding Filters.ResetCommand}" />

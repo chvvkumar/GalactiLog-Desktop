@@ -84,10 +84,11 @@ public class TargetListPagerViewTests
         var pager = Pager(view);
         var header = view.GetVisualDescendants().OfType<Grid>().Single(g => g.Name == "TargetListHeaderRow");
 
-        // Task 3 may have moved the header, so the two row indices are compared to each other
-        // rather than to a literal: a literal would pin Task 3's own layout, not this ordering.
+        // Since Task 5 (ui-polish) the pager sits in a toolbar card and the header in the table
+        // card, two grids apart, so the two are compared by where they are drawn.
         Assert.True(
-            Grid.GetRow(pager) < Grid.GetRow(header),
+            pager.TranslatePoint(new Point(0, pager.Bounds.Height), view)!.Value.Y
+                <= header.TranslatePoint(default, view)!.Value.Y,
             "The pager does not sit above the header row.");
     }
 
@@ -173,7 +174,7 @@ public class TargetListPagerViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view);
 
-        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "TargetListRows");
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
 
         list.SetRefetching(true);
         Dispatcher.UIThread.RunJobs();
@@ -193,7 +194,7 @@ public class TargetListPagerViewTests
         var view = new TargetListView { DataContext = list };
         ShowList(view);
 
-        var rows = view.GetVisualDescendants().OfType<ItemsControl>().Single(c => c.Name == "TargetListRows");
+        var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
 
         Assert.False(list.IsRefetching);
         Assert.Equal(1d, rows.Opacity);

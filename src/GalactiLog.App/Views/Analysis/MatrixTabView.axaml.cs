@@ -150,7 +150,7 @@ public partial class MatrixTabView : UserControl
 
     private void OnCellKeyDown(object? sender, KeyEventArgs e)
     {
-        var columns = MatrixChartViewModel.Columns.Count;
+        var columns = Chart?.DrawnColumns.Count ?? MatrixChartViewModel.Columns.Count;
         var buttons = MatrixCellKeys.GetVisualDescendants().OfType<Button>().ToList();
         var current = buttons.FindIndex(button => button.IsFocused);
         if (current < 0 || buttons.Count == 0)

@@ -91,6 +91,7 @@
 
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
           <Button x:Name="CompositeButton"
+                  Classes="accent"
                   Content="Composite"
                   Command="{Binding CompositeCommand}"
                   ToolTip.Tip="{Binding CompositeTooltip}"
@@ -129,7 +130,7 @@
         <StackPanel Spacing="6">
           <TextBlock Text="{x:Static mos:MosaicDetailViewModel.DeleteConfirmText}" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" Spacing="8">
-            <Button Classes="sm" Content="Confirm" Command="{Binding DeleteMosaicCommand}" />
+            <Button Classes="sm" Content="Delete mosaic" Command="{Binding DeleteMosaicCommand}" />
             <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteCommand}" />
           </StackPanel>
         </StackPanel>
@@ -161,6 +162,7 @@
                  TextWrapping="Wrap"
                  MinHeight="50"
                  MaxHeight="120"
+                 Watermark="Add notes about this mosaic project..."
                  Text="{Binding Notes.Text, Mode=TwoWay}" />
         <TextBlock Classes="t-caption" Text="Saving..." IsVisible="{Binding Notes.IsSaving}" />
         <ContentControl Classes="callout warn" IsVisible="{Binding Notes.HasFailure}">
@@ -334,7 +336,7 @@
                       </Border>
                       <StackPanel Grid.Column="8" Orientation="Horizontal" Spacing="6" Margin="8,0,0,0" VerticalAlignment="Center">
                         <Button Classes="sm" Content="Include all" Command="{Binding IncludeAllCommand}" />
-                        <Button Classes="sm" Content="Delete panel" Command="{Binding DeletePanelCommand}"
+                        <Button Classes="sm row" Content="Delete panel" Command="{Binding DeletePanelCommand}"
                                 ToolTip.Tip="{Binding DeleteTooltip}" ToolTip.ShowOnDisabled="True" />
                       </StackPanel>
                     </Grid>
@@ -343,7 +345,7 @@
                       <StackPanel Spacing="6">
                         <TextBlock Text="{Binding DeleteConfirmText}" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Button Classes="sm" Content="Confirm" Command="{Binding DeletePanelCommand}" />
+                          <Button Classes="sm" Content="Delete panel" Command="{Binding DeletePanelCommand}" />
                           <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeletePanelCommand}" />
                         </StackPanel>
                       </StackPanel>
@@ -381,7 +383,7 @@
                                              TextTrimming="CharacterEllipsis" Foreground="{DynamicResource ColorTextSecondary}" />
                                   <TextBlock Grid.Column="4" Text="{Binding FramesText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
                                   <TextBlock Grid.Column="5" Text="{Binding IntegrationText}" Margin="0,0,10,0" TextAlignment="Right" VerticalAlignment="Center" />
-                                  <Button Grid.Column="6" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
+                                  <Button Grid.Column="6" Classes="sm row" Content="Remove" Command="{Binding RemoveCommand}" />
                                 </Grid>
                                 <ContentControl Classes="callout error inline"
                                                 IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">

@@ -551,7 +551,7 @@ public class DiagnosticsQueryTests
             // SQLite checkpoints and removes the write-ahead log when the LAST connection to the
             // file closes, and a read-only connection cannot perform that closing checkpoint. A
             // pooled read-only handle left open by a diagnostics read therefore outlives the last
-            // writer and strands the log, which is what the verification agent observed.
+            // writer and strands the log, which is what the verification pass observed.
             var wal = path + "-wal";
             Assert.True(
                 !File.Exists(wal) || new FileInfo(wal).Length == 0,

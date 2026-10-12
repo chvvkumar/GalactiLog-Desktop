@@ -56,10 +56,22 @@ public class TextSizeTests : IDisposable
     public void RootFontSize_UnrecognizedValue_FallsBackToTheDocumentedDefault()
     {
         // A hand-edited settings document can hold anything. The fallback is the documented
-        // default of 14, the fresh profile's small, not zero, exactly as ResolveContentMaxWidth
+        // default of 16, the fresh profile's medium, not zero, exactly as ResolveContentMaxWidth
         // falls back.
-        Assert.Equal(14d, MainWindowViewModel.ResolveRootFontSize(""));
-        Assert.Equal(14d, MainWindowViewModel.ResolveRootFontSize("enormous"));
+        Assert.Equal(16d, MainWindowViewModel.ResolveRootFontSize(""));
+        Assert.Equal(16d, MainWindowViewModel.ResolveRootFontSize("enormous"));
+    }
+
+    [Fact]
+    public void AFreshProfile_OpensAtMedium16()
+    {
+        // The default moved from small to medium with the ui-polish theme foundation: at 14 every
+        // tier sat about a fifth below the web's, so the label and caption tiers were 11 and 10
+        // pixels. Both halves of the default move together, the stored id and the size it reads as.
+        var fresh = new GeneralSettings();
+
+        Assert.Equal("medium", fresh.TextSize);
+        Assert.Equal(16d, MainWindowViewModel.ResolveRootFontSize(fresh.TextSize));
     }
 
     [AvaloniaFact]

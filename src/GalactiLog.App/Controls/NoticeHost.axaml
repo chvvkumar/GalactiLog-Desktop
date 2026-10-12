@@ -1,0 +1,52 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:svc="using:GalactiLog.App.Services"
+             x:Class="GalactiLog.App.Controls.NoticeHost"
+             x:DataType="svc:Notifier"
+             HorizontalAlignment="Center"
+             VerticalAlignment="Top"
+             MinWidth="320"
+             MaxWidth="480"
+             Margin="16">
+  <!-- The in-window notice stack: up to three notices, oldest on top, over the top centre of the
+       page. Empty, it measures to nothing, so it never takes a click meant for the page. The
+       callout colours per kind, the fades and the dismiss cross are in Theme/Feedback.axaml. -->
+  <ItemsControl x:Name="NoticeList" ItemsSource="{Binding Notices}">
+    <ItemsControl.ItemsPanel>
+      <ItemsPanelTemplate>
+        <StackPanel Spacing="8" />
+      </ItemsPanelTemplate>
+    </ItemsControl.ItemsPanel>
+    <ItemsControl.ItemTemplate>
+      <DataTemplate DataType="svc:NoticeViewModel">
+        <Border Classes="notice"
+                Classes.success="{Binding IsSuccess}"
+                Classes.warning="{Binding IsWarning}"
+                Classes.error="{Binding IsError}"
+                Classes.closing="{Binding IsClosing}">
+          <Border>
+            <Grid ColumnDefinitions="*,Auto">
+              <TextBlock Grid.Column="0"
+                         Text="{Binding Text}"
+                         TextWrapping="Wrap"
+                         VerticalAlignment="Center" />
+              <Button Grid.Column="1"
+                      Classes="chevron"
+                      Margin="8,0,0,0"
+                      VerticalAlignment="Center"
+                      Command="{Binding DismissCommand}"
+                      ToolTip.Tip="Dismiss">
+                <Path Data="{StaticResource IconDismiss}"
+                      Stroke="{DynamicResource ColorTextSecondary}"
+                      StrokeThickness="1.6"
+                      StrokeLineCap="Round"
+                      Width="16"
+                      Height="16" />
+              </Button>
+            </Grid>
+          </Border>
+        </Border>
+      </DataTemplate>
+    </ItemsControl.ItemTemplate>
+  </ItemsControl>
+</UserControl>

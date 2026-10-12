@@ -1,8 +1,10 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
 using CommunityToolkit.Mvvm.ComponentModel;
 using GalactiLog.App.Theme;
+using GalactiLog.App.ViewModels.Dashboard;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Core.Metrics;
 using GalactiLog.Data.Queries;
@@ -51,15 +53,16 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
         EquipmentComboMetrics combo,
         MetricBaseline eccentricityBaseline,
         MetricBaseline fwhmBaseline,
-        BandBrushes brushes)
+        BandBrushes brushes,
+        Func<string, string>? filterColor = null)
     {
         Name = $"{combo.Telescope} + {combo.Camera}";
         Grouped = combo.Grouped;
         FrameCount = MetricText.Count(combo.FrameCount);
         AvgSession = combo.AvgSessionSeconds is { } average
-            ? MetricText.Integration(average)
+            ? DurationFormat.Prose(average)
             : MetricText.Missing;
-        Integration = MetricText.Integration(combo.IntegrationSeconds);
+        Integration = DurationFormat.Prose(combo.IntegrationSeconds);
         MedianHfr = Metric(combo.MedianHfr);
         BestHfr = Metric(combo.BestHfr);
         MedianEccentricity = MetricGrading.Grade(combo.MedianEccentricity, eccentricityBaseline, "Ecc", brushes);
@@ -68,12 +71,25 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
             ? $"n={MetricText.Count(combo.FwhmFrameCount)}"
             : MetricText.Missing;
         Filters = MetricText.Cell(string.Join(", ", combo.FilterBreakdown.Select(filter => filter.FilterName)));
+
+        // The Filters cell's chips: the dashboard's own badge view-model, tinted through the one
+        // filter-tint parser, so a filter reads in the same colour here as on every other page.
+        FilterChips =
+        [
+            .. combo.FilterBreakdown.Select(filter =>
+            {
+                var color = filterColor?.Invoke(filter.FilterName);
+                return new PaletteBadgeViewModel(
+                    new FilterBadge(filter.FilterName, color ?? string.Empty, filter.FrameCount, filter.IntegrationSeconds),
+                    TargetRowViewModel.ParseTint(color));
+            }),
+        ];
         FilterRows =
         [
             .. combo.FilterBreakdown.Select(filter => new EquipmentFilterRow(
                 filter.FilterName,
                 MetricText.Count(filter.FrameCount),
-                MetricText.Integration(filter.IntegrationSeconds),
+                DurationFormat.Prose(filter.IntegrationSeconds),
                 Metric(filter.MedianHfr),
                 Metric(filter.BestHfr),
                 Metric(filter.MedianEccentricity),
@@ -110,6 +126,10 @@ public sealed partial class EquipmentComboRowViewModel : ObservableObject
 
     /// <summary>The canonical filters of this combination, comma separated.</summary>
     public string Filters { get; }
+
+    /// <summary>The same filters as tinted chips, in the same order, which is what the cell
+    /// draws; <see cref="Filters"/> stays as the cell's tooltip.</summary>
+    public IReadOnlyList<PaletteBadgeViewModel> FilterChips { get; }
 
     public IReadOnlyList<EquipmentFilterRow> FilterRows { get; }
 
@@ -253,14 +273,17 @@ public sealed class EquipmentPerformanceViewModel
     {
     }
 
-    internal EquipmentPerformanceViewModel(IReadOnlyList<EquipmentComboMetrics> combos, BandBrushes brushes)
+    internal EquipmentPerformanceViewModel(
+        IReadOnlyList<EquipmentComboMetrics> combos,
+        BandBrushes brushes,
+        Func<string, string>? filterColor = null)
     {
         EccentricityBaseline = MetricBaseline.Of(combos.Select(combo => combo.MedianEccentricity));
         FwhmBaseline = MetricBaseline.Of(combos.Select(combo => combo.MedianFwhm));
         Rows =
         [
             .. combos.Select(combo => new EquipmentComboRowViewModel(
-                combo, EccentricityBaseline, FwhmBaseline, brushes)),
+                combo, EccentricityBaseline, FwhmBaseline, brushes, filterColor)),
         ];
     }
 

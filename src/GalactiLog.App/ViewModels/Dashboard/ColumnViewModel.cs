@@ -47,6 +47,15 @@ public sealed partial class ColumnViewModel : ObservableObject
 
     public string Title { get; }
 
+    /// <summary>What a sort header draws: <see cref="Title"/> unless a table asks for another
+    /// form. The dashboard's header row reads in small uppercase (the web's muted column heads),
+    /// while the column gear and the Display tab's picker keep showing <see cref="Title"/> in
+    /// sentence case, so the form is chosen per table rather than written into the title.</summary>
+    [AllowNull]
+    public string HeaderTitle { get => _headerTitle ?? Title; init => _headerTitle = value; }
+
+    private readonly string? _headerTitle;
+
     /// <summary>False for <c>name</c> only (coordinator ruling Q5): hiding every column leaves a
     /// table of unidentifiable rows and spec 12.2 offers no affordance back out of it.</summary>
     public bool CanHide { get; }

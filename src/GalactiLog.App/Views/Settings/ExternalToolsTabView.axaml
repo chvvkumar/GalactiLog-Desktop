@@ -21,180 +21,188 @@
                  Foreground="{DynamicResource ColorTextTertiary}" />
 
       <!-- AstroBin filter ids (ruling B2, B11). -->
-      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="AstroBin filter ids" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.external-tools.astrobin-filters" />
-          </StackPanel>
-        </Border>
+      <Border Classes="card" IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="AstroBin filter ids" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.external-tools.astrobin-filters" />
+            </StackPanel>
+          </Border>
 
-        <ItemsControl x:Name="FilterIdList" ItemsSource="{Binding FilterIdRows}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate DataType="settings:FilterIdRowViewModel">
-              <Grid ColumnDefinitions="200,140" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
-                <TextBlock Grid.Row="0" Grid.Column="0"
-                           Text="{Binding FilterName}"
-                           VerticalAlignment="Center"
-                           TextTrimming="CharacterEllipsis" />
-                <TextBox Grid.Row="0" Grid.Column="1"
-                         Watermark="AstroBin id"
-                         KeyDown="OnCommitFieldKeyDown"
-                         Text="{Binding IdText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <ContentControl Classes="callout error inline"
-                                Grid.Row="1"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="2"
-                                IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
-                  <TextBlock Text="{Binding Error}"
-                             TextWrapping="Wrap" />
-                </ContentControl>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
-      </StackPanel>
+          <ItemsControl x:Name="FilterIdList" ItemsSource="{Binding FilterIdRows}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:FilterIdRowViewModel">
+                <Grid ColumnDefinitions="200,140" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBlock Grid.Row="0" Grid.Column="0"
+                             Text="{Binding FilterName}"
+                             VerticalAlignment="Center"
+                             TextTrimming="CharacterEllipsis" />
+                  <TextBox Grid.Row="0" Grid.Column="1"
+                           Watermark="AstroBin id"
+                           KeyDown="OnCommitFieldKeyDown"
+                           Text="{Binding IdText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="2"
+                                  IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="{Binding Error}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+      </Border>
 
       <!-- Bortle class. -->
-      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="Bortle class" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.external-tools.bortle" />
-          </StackPanel>
-        </Border>
+      <Border Classes="card" IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Bortle class" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.external-tools.bortle" />
+            </StackPanel>
+          </Border>
 
-        <StackPanel Spacing="4">
-          <TextBox x:Name="BortleBox"
-                   Watermark="1 to 9"
-                   MaxWidth="140"
-                   HorizontalAlignment="Left"
-                   KeyDown="OnCommitFieldKeyDown"
-                   Text="{Binding BortleText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-          <ContentControl Classes="callout error inline"
-                          IsVisible="{Binding BortleError, Converter={x:Static ObjectConverters.IsNotNull}}">
-            <TextBlock x:Name="BortleErrorText"
-                       Text="{Binding BortleError}"
-                       TextWrapping="Wrap" />
-          </ContentControl>
+          <StackPanel Spacing="4">
+            <TextBox x:Name="BortleBox"
+                     Watermark="1 to 9"
+                     MaxWidth="140"
+                     HorizontalAlignment="Left"
+                     KeyDown="OnCommitFieldKeyDown"
+                     Text="{Binding BortleText, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+            <ContentControl Classes="callout error inline"
+                            IsVisible="{Binding BortleError, Converter={x:Static ObjectConverters.IsNotNull}}">
+              <TextBlock x:Name="BortleErrorText"
+                         Text="{Binding BortleError}"
+                         TextWrapping="Wrap" />
+            </ContentControl>
+          </StackPanel>
         </StackPanel>
-      </StackPanel>
+      </Border>
 
       <!-- NINA instances. -->
-      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="NINA instances" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.external-tools.nina" />
-          </StackPanel>
-        </Border>
+      <Border Classes="card" IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="NINA instances" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.external-tools.nina" />
+            </StackPanel>
+          </Border>
 
-        <ItemsControl x:Name="NinaInstanceList" ItemsSource="{Binding NinaInstances}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate DataType="settings:InstanceRowViewModel">
-              <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
-                <TextBox Grid.Row="0" Grid.Column="0"
-                         Watermark="Name"
-                         Margin="0,0,6,0"
-                         KeyDown="OnCommitFieldKeyDown"
-                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <TextBox Grid.Row="0" Grid.Column="1"
-                         Watermark="http://host:1888"
-                         Margin="0,0,6,0"
-                         KeyDown="OnCommitFieldKeyDown"
-                         Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <CheckBox Grid.Row="0" Grid.Column="2"
-                          Content="On"
-                          Margin="0,0,6,0"
-                          IsChecked="{Binding Enabled, Mode=TwoWay}" />
-                <Button Grid.Row="0" Grid.Column="3"
-                        Classes="quiet"
-                        Content="Remove"
-                        ToolTip.Tip="Remove this instance"
-                        Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
-                        CommandParameter="{Binding}" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
-                           Text="Not offered on the target page until it has a name and a URL."
-                           IsVisible="{Binding ShowNotOfferedCaption}"
-                           TextWrapping="Wrap"
-                           Classes="t-caption" />
-                <ContentControl Classes="callout error inline"
-                                Grid.Row="1"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="4"
-                                IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
-                  <TextBlock Text="{Binding UrlError}"
-                             TextWrapping="Wrap" />
-                </ContentControl>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+          <ItemsControl x:Name="NinaInstanceList" ItemsSource="{Binding NinaInstances}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:InstanceRowViewModel">
+                <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBox Grid.Row="0" Grid.Column="0"
+                           Watermark="Name"
+                           Margin="0,0,6,0"
+                           KeyDown="OnCommitFieldKeyDown"
+                           Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <TextBox Grid.Row="0" Grid.Column="1"
+                           Watermark="http://host:1888"
+                           Margin="0,0,6,0"
+                           KeyDown="OnCommitFieldKeyDown"
+                           Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <CheckBox Grid.Row="0" Grid.Column="2"
+                            Content="On"
+                            Margin="0,0,6,0"
+                            IsChecked="{Binding Enabled, Mode=TwoWay}" />
+                  <Button Grid.Row="0" Grid.Column="3"
+                          Classes="quiet"
+                          Content="Remove"
+                          ToolTip.Tip="Remove this instance"
+                          Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                             Text="Not offered on the target page until it has a name and a URL."
+                             IsVisible="{Binding ShowNotOfferedCaption}"
+                             TextWrapping="Wrap"
+                             Classes="t-caption" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="4"
+                                  IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="{Binding UrlError}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-        <Button x:Name="AddNinaInstanceButton"
-                Classes="sm"
-                Content="Add instance"
-                HorizontalAlignment="Left"
-                Command="{Binding AddNinaInstanceCommand}" />
-      </StackPanel>
+          <Button x:Name="AddNinaInstanceButton"
+                  Classes="sm"
+                  Content="Add instance"
+                  HorizontalAlignment="Left"
+                  Command="{Binding AddNinaInstanceCommand}" />
+        </StackPanel>
+      </Border>
 
       <!-- Stellarium instances. -->
-      <StackPanel Spacing="10" IsVisible="{Binding IsReady}">
-        <Border Classes="rule" Padding="0,0,0,6">
-          <StackPanel Orientation="Horizontal" Spacing="6">
-            <TextBlock Classes="t-label section" Text="Stellarium instances" VerticalAlignment="Center" />
-            <controls:HelpButton Topic="settings.external-tools.stellarium" />
-          </StackPanel>
-        </Border>
+      <Border Classes="card" IsVisible="{Binding IsReady}">
+        <StackPanel Spacing="10">
+          <Border Classes="rule" Padding="0,0,0,6">
+            <StackPanel Orientation="Horizontal" Spacing="6">
+              <TextBlock Classes="t-label section" Text="Stellarium instances" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="settings.external-tools.stellarium" />
+            </StackPanel>
+          </Border>
 
-        <ItemsControl x:Name="StellariumInstanceList" ItemsSource="{Binding StellariumInstances}">
-          <ItemsControl.ItemTemplate>
-            <DataTemplate DataType="settings:InstanceRowViewModel">
-              <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
-                <TextBox Grid.Row="0" Grid.Column="0"
-                         Watermark="Name"
-                         Margin="0,0,6,0"
-                         KeyDown="OnCommitFieldKeyDown"
-                         Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <TextBox Grid.Row="0" Grid.Column="1"
-                         Watermark="http://host:8090"
-                         Margin="0,0,6,0"
-                         KeyDown="OnCommitFieldKeyDown"
-                         Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
-                <CheckBox Grid.Row="0" Grid.Column="2"
-                          Content="On"
-                          Margin="0,0,6,0"
-                          IsChecked="{Binding Enabled, Mode=TwoWay}" />
-                <Button Grid.Row="0" Grid.Column="3"
-                        Classes="quiet"
-                        Content="Remove"
-                        ToolTip.Tip="Remove this instance"
-                        Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
-                        CommandParameter="{Binding}" />
-                <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
-                           Text="Not offered on the target page until it has a name and a URL."
-                           IsVisible="{Binding ShowNotOfferedCaption}"
-                           TextWrapping="Wrap"
-                           Classes="t-caption" />
-                <ContentControl Classes="callout error inline"
-                                Grid.Row="1"
-                                Grid.Column="0"
-                                Grid.ColumnSpan="4"
-                                IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
-                  <TextBlock Text="{Binding UrlError}"
-                             TextWrapping="Wrap" />
-                </ContentControl>
-              </Grid>
-            </DataTemplate>
-          </ItemsControl.ItemTemplate>
-        </ItemsControl>
+          <ItemsControl x:Name="StellariumInstanceList" ItemsSource="{Binding StellariumInstances}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate DataType="settings:InstanceRowViewModel">
+                <Grid ColumnDefinitions="160,220,Auto,Auto" RowDefinitions="Auto,Auto" Margin="0,0,0,6">
+                  <TextBox Grid.Row="0" Grid.Column="0"
+                           Watermark="Name"
+                           Margin="0,0,6,0"
+                           KeyDown="OnCommitFieldKeyDown"
+                           Text="{Binding Name, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <TextBox Grid.Row="0" Grid.Column="1"
+                           Watermark="http://host:8090"
+                           Margin="0,0,6,0"
+                           KeyDown="OnCommitFieldKeyDown"
+                           Text="{Binding Url, Mode=TwoWay, UpdateSourceTrigger=LostFocus}" />
+                  <CheckBox Grid.Row="0" Grid.Column="2"
+                            Content="On"
+                            Margin="0,0,6,0"
+                            IsChecked="{Binding Enabled, Mode=TwoWay}" />
+                  <Button Grid.Row="0" Grid.Column="3"
+                          Classes="quiet"
+                          Content="Remove"
+                          ToolTip.Tip="Remove this instance"
+                          Command="{Binding #Root.((settings:ExternalToolsTabViewModel)DataContext).RemoveInstanceCommand}"
+                          CommandParameter="{Binding}" />
+                  <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4"
+                             Text="Not offered on the target page until it has a name and a URL."
+                             IsVisible="{Binding ShowNotOfferedCaption}"
+                             TextWrapping="Wrap"
+                             Classes="t-caption" />
+                  <ContentControl Classes="callout error inline"
+                                  Grid.Row="1"
+                                  Grid.Column="0"
+                                  Grid.ColumnSpan="4"
+                                  IsVisible="{Binding UrlError, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="{Binding UrlError}"
+                               TextWrapping="Wrap" />
+                  </ContentControl>
+                </Grid>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
 
-        <Button x:Name="AddStellariumInstanceButton"
-                Classes="sm"
-                Content="Add instance"
-                HorizontalAlignment="Left"
-                Command="{Binding AddStellariumInstanceCommand}" />
-      </StackPanel>
+          <Button x:Name="AddStellariumInstanceButton"
+                  Classes="sm"
+                  Content="Add instance"
+                  HorizontalAlignment="Left"
+                  Command="{Binding AddStellariumInstanceCommand}" />
+        </StackPanel>
+      </Border>
 
       <ContentControl Classes="callout error inline"
                       IsVisible="{Binding HasErrorMessage}">

@@ -166,11 +166,11 @@ public class SessionExpanderTests
     {
         var row = Build("g1", [new SessionSummary(new DateOnly(2025, 12, 7), 10, 3_000d)]);
 
-        Assert.Equal("Expand", row.SessionsToggleText);
+        Assert.Equal("Show nights", row.SessionsToggleText);
 
         row.IsExpanded = true;
 
-        Assert.Equal("Collapse", row.SessionsToggleText);
+        Assert.Equal("Hide nights", row.SessionsToggleText);
     }
 
     private static CustomColumnDefinition SessionColumn(string name, int order)

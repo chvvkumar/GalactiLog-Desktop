@@ -58,10 +58,18 @@
 
     <!-- A sort header's title over a ColumnViewModel (Title plus SortGlyph), for a Button cell in a
          Header row; the view keeps its own Command. TableRow puts tc-head and the column's kind
-         class on the Button. -->
+         class on the Button.
+
+         The title is the header tier, t-label: label size, weight 500, the tertiary ink and
+         0.6 pixels of tracking (spec 14.4), so the header row is a band of its own above rows set
+         at the body size in the primary ink. The custom head above takes the same tier. The sort
+         glyph keeps the accent ink, which tc-sortglyph below sets after the tier.
+
+         The text is the column's HeaderTitle, which is its Title unless the table asks for another
+         form: the dashboard's heads read in uppercase, every other table is unchanged. -->
     <DataTemplate x:Key="TableSortTitle" x:DataType="dash:ColumnViewModel">
       <Grid ColumnDefinitions="*,Auto">
-        <TextBlock Classes="t-label" Text="{Binding Title}" TextTrimming="CharacterEllipsis"
+        <TextBlock Classes="t-label" Text="{Binding HeaderTitle}" TextTrimming="CharacterEllipsis"
                    ToolTip.Tip="{Binding Tip}" />
         <TextBlock Grid.Column="1" Margin="4,0,0,0" Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
       </Grid>
@@ -72,7 +80,7 @@
     <DataTemplate x:Key="TableSortTitleNumeric" x:DataType="dash:ColumnViewModel">
       <Grid ColumnDefinitions="Auto,*">
         <TextBlock Margin="0,0,4,0" Classes="t-label tc-sortglyph" Text="{Binding SortGlyph}" />
-        <TextBlock Grid.Column="1" Classes="t-label" Text="{Binding Title}" TextAlignment="Right"
+        <TextBlock Grid.Column="1" Classes="t-label" Text="{Binding HeaderTitle}" TextAlignment="Right"
                    TextTrimming="CharacterEllipsis" ToolTip.Tip="{Binding Tip}" />
       </Grid>
     </DataTemplate>
@@ -145,6 +153,12 @@
   <Style Selector="TextBlock.tc-total">
     <Setter Property="FontWeight" Value="SemiBold" />
   </Style>
+  <!-- A secondary cell (the dashboard's Designation): the caption tier's size in the secondary
+       ink rather than its tertiary one, the web's small muted mono. Declared before the dash rule
+       below so a missing value's "-" still takes the faintest ink. -->
+  <Style Selector="TextBlock.tc-sub">
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
   <!-- Spec.md item 6: a missing value is "-" in the faintest ink. -->
   <Style Selector="TextBlock.tc-num[Text=-], TextBlock.tc-text[Text=-]">
     <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
@@ -165,6 +179,36 @@
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
+  <!-- The full-row open button under a dashboard row's cells. The ListBoxItem it sits in already
+       lights on hover, so the button takes none of the Button tier's own hover or press: no second
+       fill, no outline, on the same row (RowHoverTests). -->
+  <Style Selector="ListBox.table Button.tc-rowopen:pointerover /template/ ContentPresenter,
+                   ListBox.table Button.tc-rowopen:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
+  <!-- A row's disclosure chevron (the dashboard's Nights control): it turns a quarter while the
+       row is open, over 120 ms. -->
+  <Style Selector="Path.tc-disclosure">
+    <Setter Property="RenderTransform" Value="rotate(0deg)" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.12" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Path.tc-disclosure.open">
+    <Setter Property="RenderTransform" Value="rotate(90deg)" />
+  </Style>
+
+  <!-- The refetch dim for a ListBox table host. Controls.axaml's ItemsControl.refetching names the
+       ItemsControl type, which a type selector matches exactly, so a list that became a ListBox
+       for its keyboard path takes the same half opacity here. -->
+  <Style Selector="ListBox.table.refetching">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+
   <!-- Items hosts with Classes="table" (t:Table.Scroller adds it): zebra on the item index, which
        :nth-child reads from the ItemsControl even under virtualisation (gate T7). -->
   <Style Selector="ListBox.table > ListBoxItem">
@@ -173,10 +217,10 @@
     <Setter Property="Background" Value="Transparent" />
   </Style>
   <Style Selector="ListBox.table > ListBoxItem:nth-child(2n)">
-    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="Background" Value="{DynamicResource ColorBgZebra}" />
   </Style>
   <Style Selector="ItemsControl.table > ContentPresenter:nth-child(2n)">
-    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="Background" Value="{DynamicResource ColorBgZebra}" />
   </Style>
   <Style Selector="ListBox.table ListBoxItem:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />

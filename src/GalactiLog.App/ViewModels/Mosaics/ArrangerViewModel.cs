@@ -155,7 +155,7 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     /// <summary>The selected tile, at most one.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasSelection))]
-    [NotifyCanExecuteChangedFor(nameof(RotateSelectedCommand), nameof(FlipSelectedCommand))]
+    [NotifyCanExecuteChangedFor(nameof(RotateSelectedCommand), nameof(RotateSelectedCcwCommand), nameof(FlipSelectedCommand), nameof(FlipSelectedVerticalCommand))]
     public partial TileViewModel? Selected { get; private set; }
 
     /// <summary>Enables Rotate CW, Flip H and the Tile opacity slider.</summary>
@@ -199,6 +199,12 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(HasSelection))]
     private void FlipSelected() => Flip(Selected);
 
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private void RotateSelectedCcw() => RotateCcw(Selected);
+
+    [RelayCommand(CanExecute = nameof(HasSelection))]
+    private void FlipSelectedVertical() => FlipVertical(Selected);
+
     /// <summary>Rotate CW: adds 90 modulo 360 and schedules a save. The context menu calls it on
     /// its tile after selecting it.</summary>
     public void Rotate(TileViewModel? tile)
@@ -209,6 +215,33 @@ public sealed partial class ArrangerViewModel : ObservableObject, IDisposable
         }
 
         tile.SetTransform((tile.Rotation + 90) % 360, tile.FlipH);
+        ScheduleSave();
+    }
+
+    /// <summary>Rotate CCW: subtracts 90 modulo 360 and schedules a save.</summary>
+    public void RotateCcw(TileViewModel? tile)
+    {
+        if (tile is null)
+        {
+            return;
+        }
+
+        tile.SetTransform((tile.Rotation + 270) % 360, tile.FlipH);
+        ScheduleSave();
+    }
+
+    /// <summary>Flip V, expressed in the stored pair (rotation, horizontal flip) so the saved
+    /// layout needs no third field. The tile draws flip first, then rotation (R(r)H^f); a vertical
+    /// flip is R(180)H, so V R(r) H^f = R(180 - r) H^(1 - f): the rotation mirrors about 90
+    /// degrees and the horizontal flip toggles.</summary>
+    public void FlipVertical(TileViewModel? tile)
+    {
+        if (tile is null)
+        {
+            return;
+        }
+
+        tile.SetTransform((540 - tile.Rotation) % 360, !tile.FlipH);
         ScheduleSave();
     }
 

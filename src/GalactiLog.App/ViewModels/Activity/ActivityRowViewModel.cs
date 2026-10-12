@@ -120,21 +120,31 @@ public sealed partial class ActivityRowViewModel : ObservableObject
     /// <summary>The web's icon <c>title</c>: the raw severity string.</summary>
     public string SeverityTitle => Row.Severity;
 
-    /// <summary>The web's <c>CATEGORY_LABELS</c> abbreviation, minus <c>mosaic</c>. An
-    /// unrecognized category renders as itself rather than as a blank cell.</summary>
+    /// <summary>Drives the glyph's <c>band-watch</c> class, which inks it <c>ColorWarning</c>.
+    /// </summary>
+    public bool IsWarning => Row.Severity == "warning";
+
+    /// <summary>Drives the glyph's <c>band-reject</c> class, which inks it <c>ColorError</c>.
+    /// </summary>
+    public bool IsError => Row.Severity == "error";
+
+    /// <summary>The category as a full word. The web's <c>CATEGORY_LABELS</c> abbreviations
+    /// ("reb", "migr", "sys") read as noise in a column wide enough for the word, so this port
+    /// spells them out. An unrecognized category renders as itself rather than as a blank cell.
+    /// </summary>
     public string CategoryLabel => CategoryLabelFor(Row.Category);
 
-    /// <summary>The one abbreviation map, so the filter pills and the rows cannot disagree about
+    /// <summary>The one label map, so the filter pills and the rows cannot disagree about
     /// what a category is called (design-lessons rule 1).</summary>
     internal static string CategoryLabelFor(string category) => category switch
     {
-        "scan" => "scan",
-        "rebuild" => "reb",
-        "thumbnail" => "thumb",
-        "enrichment" => "enrich",
-        "migration" => "migr",
-        "user_action" => "user",
-        "system" => "sys",
+        "scan" => "Scan",
+        "rebuild" => "Rebuild",
+        "thumbnail" => "Thumbnails",
+        "enrichment" => "Enrichment",
+        "migration" => "Migration",
+        "user_action" => "User",
+        "system" => "System",
         var other => other,
     };
 
@@ -199,6 +209,12 @@ public sealed partial class ActivityRowViewModel : ObservableObject
     public bool HasChildAlert => ChildAlertSeverity is not null;
 
     public string ChildAlertGlyph => ChildAlertSeverity is { } severity ? GlyphFor(severity) : "";
+
+    /// <summary>The collapsed parent's alert glyph takes the same warning and error ink as the
+    /// row's own severity glyph (<see cref="IsWarning"/>, <see cref="IsError"/>).</summary>
+    public bool ChildAlertIsWarning => ChildAlertSeverity == "warning";
+
+    public bool ChildAlertIsError => ChildAlertSeverity == "error";
 
     public string ChildAlertTitle => ChildAlertSeverity switch
     {

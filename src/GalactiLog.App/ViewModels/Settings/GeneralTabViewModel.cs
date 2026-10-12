@@ -18,7 +18,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// </para>
 /// <para>
 /// Spec 12.11 behaviour 12: this tab carries all five controls and nothing else carries any of
-/// them. Five residency controls written by four agents into one settings pipeline is how a
+/// them. Five residency controls written by four separate tasks into one settings pipeline is how a
 /// project grows thirteen touch points per key (design-lessons rule 1), so the whole set lands
 /// here in one place.
 /// </para>

@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.Globalization;
@@ -566,7 +567,7 @@ public sealed partial class MosaicDetailViewModel : ObservableObject, IDisposabl
         Name = detail.Name;
         SummaryText = string.Join(", ",
             MosaicsPageViewModel.Plural(detail.Panels.Count, "panel"),
-            MetricText.Integration(detail.IntegrationSeconds) + " total",
+            DurationFormat.Prose(detail.IntegrationSeconds) + " total",
             MosaicsPageViewModel.Plural(detail.Frames, "frame"));
         Notes.Reseed(detail.Notes);
 
