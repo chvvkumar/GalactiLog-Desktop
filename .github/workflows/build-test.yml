@@ -27,9 +27,9 @@ jobs:
       run:
         shell: cmd
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The runner account cannot write C:\Program Files\dotnet; install under the tool cache.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         env:
           DOTNET_INSTALL_DIR: ${{ runner.tool_cache }}\dotnet
         with:

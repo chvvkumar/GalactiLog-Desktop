@@ -258,11 +258,19 @@ public class ShellShortcutTests : IDisposable
     [AvaloniaFact]
     public void CtrlF_OpensTheDashboardSearchAndFocusesIt()
     {
-        var (window, viewModel) = ShowShell();
+        var dashboard = DashboardViewModelTestFactory.Create();
+        var (window, viewModel) = ShowShell(dashboard: dashboard);
         viewModel.Selected = viewModel.Items.First(item => item.Key == "settings");
         Dispatcher.UIThread.RunJobs();
 
         Press(window, PhysicalKey.F, RawInputModifiers.Control);
+
+        // Returning to the dashboard starts its quiet re-query, which the factory's post seam
+        // publishes from the pool thread. Wait it out and run the layout pass it may invalidate
+        // before reading the tree, as the F5 case above does; without this the search box can be
+        // missing from the tree on a loaded runner.
+        DashboardViewModelTestFactory.Settle(dashboard);
+        Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("dashboard", viewModel.Selected.Key);
         var box = window.GetVisualDescendants().OfType<TextBox>().Single(b => b.Name == "DashboardSearchBox");
