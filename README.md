@@ -105,7 +105,7 @@ A second launch of the desktop application while one is running brings the exist
 
 ## Telemetry
 
-GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a [public statistics page](https://ninadash.challa.co/galactilog), so users see exactly what the maintainer sees.
+GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a public statistics page, so users see exactly what the maintainer sees.
 
 An installed build sends at most one report per day, as JSON over HTTPS to `https://ninadash.challa.co/v1/galactilog/report`. Development builds and builds run from source never send. Each report contains:
 
@@ -119,7 +119,7 @@ An installed build sends at most one report per day, as JSON over HTTPS to `http
 
 Never sent: file paths, folder names, target names, equipment names, instance names, URLs, coordinates, location, time zone, user name, machine name or catalogue row counts. The ingest server does not store IP addresses.
 
-Defaults: telemetry is off until the user answers. Installations updated from an earlier version show a one-time prompt with the box checked; closing the prompt with X or Escape counts as no. The same prompt appears on a later start when a new installation skipped the setup wizard. New installations show the same checkbox, checked, on the Scan options step of the setup wizard. A crash recorded before telemetry was turned on is included in the first report; the preview shows it. Change it at any time in Settings, General, on the Telemetry card. "Show exactly what is sent" there displays the exact report the application would send, built by the same code that sends it, and "View public statistics" opens the public page.
+Defaults: telemetry is off until the user answers. Installations updated from an earlier version show a one-time prompt with the box checked; closing the prompt with X or Escape counts as no.
 
 ## Building from source
 
