@@ -105,7 +105,7 @@ A second launch of the desktop application while one is running brings the exist
 
 ## Telemetry
 
-GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a [public statistics page](https://ninadash.challa.co/galactilog), so users see exactly what the maintainer sees.
+GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a public statistics page, so users see exactly what the maintainer sees.
 
 An installed build sends at most one report per day, as JSON over HTTPS to `https://ninadash.challa.co/v1/galactilog/report`. Development builds and builds run from source never send. Each report contains:
 
