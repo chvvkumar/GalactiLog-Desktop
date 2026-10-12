@@ -50,4 +50,8 @@ public class TelemetryScrubberTests
     [Fact]
     public void AUrl_BecomesTheUrlPlaceholder()
         => Assert.Equal("<url>", TelemetryScrubber.Scrub("http://nina.local:1888/v2/api"));
+
+    [Fact]
+    public void AnUpperCaseSchemeUrl_BecomesTheUrlPlaceholder()
+        => Assert.Equal("<url>", TelemetryScrubber.Scrub("HTTPS://Host/x"));
 }

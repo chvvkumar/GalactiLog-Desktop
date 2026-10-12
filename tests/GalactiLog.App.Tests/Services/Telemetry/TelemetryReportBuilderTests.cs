@@ -94,6 +94,12 @@ public sealed class TelemetryReportBuilderTests : IDisposable
         Assert.Equal("System.InvalidOperationException", crash.GetProperty("type").GetString());
         Assert.Equal("appdomain", crash.GetProperty("source").GetString());
         Assert.False(BuildParsed(includeCrash: false).TryGetProperty("crash", out _));
+
+        // The preview reads the scrubbed placeholder literally, not as \u003C escapes.
+        CrashMarker.Write(new IOException(@"Could not find file 'C:\Users\kumar\a.fits'."), "appdomain", _root, "1.2.3", "abc123", "", 5);
+        var preview = _builder.Build(includeCrash: true, indented: true);
+        Assert.Contains("Could not find file '<path>'.", preview, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"\u003C", preview, StringComparison.Ordinal);
     }
 
     [Fact]

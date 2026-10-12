@@ -11,7 +11,8 @@ public static partial class TelemetryScrubber
     // One alternation, branches in this order: file URI, scheme URL, UNC path, drive path. The
     // path branches run to the next quote, angle bracket, pipe or line end, so a folder name with a
     // space in it is consumed whole; over-scrubbing the rest of a sentence is the accepted cost.
-    [GeneratedRegex(@"file:///?[^""'<>|\r\n]*|(?<url>\b[a-z][a-z0-9+.-]*://[^\s""'<>|]*)|\\\\[^""'<>|\r\n]*|[A-Za-z]:[\\/][^""'<>|\r\n]*")]
+    // Only the scheme URL branch is case-insensitive (HTTPS://).
+    [GeneratedRegex(@"file:///?[^""'<>|\r\n]*|(?i:(?<url>\b[a-z][a-z0-9+.-]*://[^\s""'<>|]*))|\\\\[^""'<>|\r\n]*|[A-Za-z]:[\\/][^""'<>|\r\n]*")]
     private static partial Regex PathPattern();
 
     /// <summary>The text with every path replaced by <c>&lt;path&gt;</c> and every other URL by

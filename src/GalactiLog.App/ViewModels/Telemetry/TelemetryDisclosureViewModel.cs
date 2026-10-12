@@ -21,12 +21,13 @@ public sealed partial class TelemetryDisclosureViewModel : ObservableObject
     /// <summary>The checkbox label, the same on all three surfaces.</summary>
     public const string CheckBoxLabel = "Send anonymous usage statistics";
 
-    /// <summary>What is sent, and where it can be read. "Anything you typed" rather than "any
+    /// <summary>What is sent, and where it can be read. "Settings you entered" rather than "any
     /// setting": the report carries the theme, text size and font keys.</summary>
     public const string Description =
-        "Once a day GalactiLog sends its version, the Windows version, anonymous counters and the "
-        + "type and location of any crash, never a file path, a name or anything you typed. "
-        + "Everything collected is public on the statistics page.";
+        "Each report carries a random install id, the application version, Windows and .NET "
+        + "versions, anonymous counters, warning templates and, after a crash, the exception type "
+        + "and the methods on the stack. It never carries file paths, folder or target names, or "
+        + "settings you entered. Everything collected is public.";
 
     /// <summary>The expander header on the prompt and the wizard.</summary>
     public const string PreviewHeader = "Show exactly what will be sent";

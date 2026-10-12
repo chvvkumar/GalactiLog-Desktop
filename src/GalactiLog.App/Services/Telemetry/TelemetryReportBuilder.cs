@@ -65,7 +65,13 @@ public sealed class TelemetryReportBuilder
         Core.Settings.GeneralSettings general, JsonElement? crash, IReadOnlyList<ErrorTemplateCount> errors, double scale, bool indented)
     {
         using var stream = new MemoryStream();
-        using (var w = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented }))
+        using (var w = new Utf8JsonWriter(stream, new JsonWriterOptions
+        {
+            Indented = indented,
+            // Relaxed so "<path>" and apostrophes read literally in the preview; the output is
+            // posted as JSON, never embedded in HTML.
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        }))
         {
             w.WriteStartObject();
             // Only a well-formed GUID is sent; anything else in a hand-edited document becomes "".

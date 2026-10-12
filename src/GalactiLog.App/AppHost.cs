@@ -770,7 +770,7 @@ public static class AppHost
             // Phase 16 phase review P2-2, coordinator ruling 1. The general side FAILS CLOSED: a
             // save invalidates unless the document it wrote differs from the last one this handler
             // saw ONLY in keys on the inert list, which OnlyInertKeysMoved holds and which is
-            // exactly spec 5.8.1's four wbpp_ keys today. Deliberately not the other shape, a list
+            // exactly spec 5.8.1's four wbpp_ keys plus the four telemetry_ keys today. Deliberately not the other shape, a list
             // of the inputs the derived data is built from: that one fails open the day an input is
             // added, while this one can only fail open if a key is deliberately put on the inert
             // list. A key this build does not recognise rides in GeneralSettings.ExtensionData and

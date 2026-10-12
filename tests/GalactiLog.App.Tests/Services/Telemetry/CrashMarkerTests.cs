@@ -14,7 +14,8 @@ public sealed class CrashMarkerTests : IDisposable
     [Fact]
     public void Write_ThenTryRead_RoundTripsTheCrashObject()
     {
-        var ex = Thrown(new IOException(@"Could not find file 'C:\Users\kumar\Pictures\M31\light.fits'."));
+        // Not thrown here: an exception thrown from GalactiLog code never keeps its message.
+        var ex = new IOException(@"Could not find file 'C:\Users\kumar\Pictures\M31\light.fits'.");
 
         CrashMarker.Write(ex, "appdomain", _root, "1.2.3", "abc123", "targets", 42);
         var crash = CrashMarker.TryRead(_root);
@@ -140,7 +141,27 @@ public sealed class CrashMarkerTests : IDisposable
         { new KeyNotFoundException("key"), false },
         { new System.Net.Http.HttpRequestException("host"), false },
         { new ObjectDisposedException("x"), false },
+        // Base ArgumentException is not allowed: Dictionary.Add's message carries the key.
+        { Caught(() => new Dictionary<string, int> { ["M31 secret"] = 1 }.Add("M31 secret", 2)), false },
+        // Thrown from GalactiLog code (this test class): never allowed, whatever the type.
+        { Thrown(new InvalidOperationException("state")), false },
+        { Caught(() => ArgumentNullException.ThrowIfNull((object?)null, "name")), true },
+        { Caught(() => File.ReadAllText(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "x"))), true },
     };
+
+    private static Exception Caught(Action action)
+    {
+        try
+        {
+            action();
+        }
+        catch (Exception caught)
+        {
+            return caught;
+        }
+
+        throw new InvalidOperationException("did not throw");
+    }
 
     [Fact]
     public void Delete_RemovesTheMarker()

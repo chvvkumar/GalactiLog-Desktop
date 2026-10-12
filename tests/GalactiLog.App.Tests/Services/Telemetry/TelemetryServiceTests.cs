@@ -23,6 +23,10 @@ public sealed class TelemetryServiceTests
     public void NoId_DoesNotSend() => Assert.False(TelemetryService.ShouldSend(Ready with { TelemetryId = null }, true, Now));
 
     [Fact]
+    public void AMalformedId_DoesNotSend()
+        => Assert.False(TelemetryService.ShouldSend(Ready with { TelemetryId = "not-a-guid" }, true, Now));
+
+    [Fact]
     public void NotInstalled_DoesNotSend() => Assert.False(TelemetryService.ShouldSend(Ready, false, Now));
 
     [Fact]

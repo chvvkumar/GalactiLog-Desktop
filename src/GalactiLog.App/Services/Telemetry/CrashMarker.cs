@@ -60,20 +60,27 @@ public static class CrashMarker
     /// KeyNotFoundException, HttpRequestException and the like) can embed the offending input, so
     /// its message is dropped and type, hresult, inner chain and frames carry the diagnosis.
     /// </summary>
-    /// <remarks>Exact types, except ArgumentException, whose subclasses are allowed too, and the
-    /// System.IO namespace. SqliteException is matched by name so this assembly takes no Sqlite
-    /// reference for it.</remarks>
+    /// <remarks>Exact types, plus the System.IO namespace. Base ArgumentException is not allowed:
+    /// its duplicate-key message carries the key. An exception thrown from GalactiLog's own code is
+    /// never allowed, whatever its type, because this codebase builds messages from user data.
+    /// SqliteException is matched by name so this assembly takes no Sqlite reference for it.</remarks>
     public static bool IsMessageAllowed(Exception ex)
     {
+        if (ex.TargetSite?.DeclaringType?.Namespace?.StartsWith("GalactiLog", StringComparison.Ordinal) == true)
+        {
+            return false;
+        }
+
         var type = ex.GetType();
-        return ex is ArgumentException
-            || type.Namespace == "System.IO"
+        return type.Namespace == "System.IO"
             || type.FullName == "Microsoft.Data.Sqlite.SqliteException"
             || MessageAllowedTypes.Contains(type);
     }
 
     private static readonly HashSet<Type> MessageAllowedTypes =
     [
+        typeof(ArgumentNullException),
+        typeof(ArgumentOutOfRangeException),
         typeof(InvalidOperationException),
         typeof(NullReferenceException),
         typeof(IndexOutOfRangeException),

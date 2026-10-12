@@ -60,11 +60,11 @@ public sealed class TelemetryService : BackgroundService
         base.Dispose();
     }
 
-    /// <summary>The send decision: installed, enabled, has an id, and no successful send in the
+    /// <summary>The send decision: installed, enabled, has a well-formed id, and no successful send in the
     /// last 24 hours. An unparsable or future last-sent value counts as never sent.</summary>
     public static bool ShouldSend(GeneralSettings g, bool isInstalled, DateTimeOffset now)
     {
-        if (!isInstalled || !g.TelemetryEnabled || g.TelemetryId is null)
+        if (!isInstalled || !g.TelemetryEnabled || !Guid.TryParse(g.TelemetryId, out _))
         {
             return false;
         }

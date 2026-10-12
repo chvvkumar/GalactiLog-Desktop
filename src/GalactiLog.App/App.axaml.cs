@@ -144,7 +144,8 @@ public partial class App : Application
                 //
                 // The flag is read off the UI thread and before the post, never inside the posted
                 // closure: SettingsStore.GetGeneral opens a SQLite context and the first-frame
-                // path must not carry one for a single boolean (Task 9 review, minor finding 9).
+                // path must not carry one for the setup and telemetry flags (Task 9 review, minor
+                // finding 9).
                 // Inside the Services branch, so the headless test harness never reaches it.
                 if (Services is { } wizardServices)
                 {
