@@ -78,7 +78,7 @@ public static class HelpTopics
             "Everything GalactiLog knows about one target: the identity line, the log line with "
             + "the totals, the Details panel with the catalogue record and the notes, and the "
             + "nights list. The page is one layout, Question Modes, with a mode switch under "
-            + "the header: Night review, Compare nights, and Integration. The nights list is a "
+            + "the header: Session review, Compare sessions, and Integration. The nights list is a "
             + "sidebar: drag the handle on its right edge, or press Left and Right on it, to set "
             + "how much of it the night pane covers, and the chevron in its header collapses it "
             + "to the check boxes and the dates in one step. Both are kept per profile."),

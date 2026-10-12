@@ -22,12 +22,12 @@
       <ToggleButton x:Name="NightReviewButton"
                     Classes="tab"
                     Padding="12,4"
-                    Content="Night review"
+                    Content="Session review"
                     CommandParameter="{x:Static layouts:TargetPageMode.NightReview}" />
       <ToggleButton x:Name="CompareNightsButton"
                     Classes="tab"
                     Padding="12,4"
-                    Content="Compare nights"
+                    Content="Compare sessions"
                     CommandParameter="{x:Static layouts:TargetPageMode.CompareNights}" />
       <ToggleButton x:Name="IntegrationButton"
                     Classes="tab"
