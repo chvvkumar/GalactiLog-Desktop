@@ -44,7 +44,7 @@ public static class CrashMarker
             ["type"] = ex.GetType().FullName ?? ex.GetType().Name,
             ["inner"] = inner,
             ["hresult"] = ex.HResult,
-            ["message"] = TelemetryScrubber.Scrub(ex.Message),
+            ["message"] = IsMessageAllowed(ex) ? TelemetryScrubber.Scrub(ex.Message) : "",
             ["frames"] = Frames(ex),
             ["page"] = page ?? "",
             ["uptime_s"] = uptimeSeconds,
@@ -53,6 +53,37 @@ public static class CrashMarker
 
         new AppWriter(dataRoot).WriteAllBytes(PathFor(dataRoot), JsonSerializer.SerializeToUtf8Bytes(crash));
     }
+
+    /// <summary>
+    /// The single decision on whether a crash message leaves the machine. Allowlisted types carry
+    /// messages written by the runtime or by this code; every other type (FormatException,
+    /// KeyNotFoundException, HttpRequestException and the like) can embed the offending input, so
+    /// its message is dropped and type, hresult, inner chain and frames carry the diagnosis.
+    /// </summary>
+    /// <remarks>Exact types, except ArgumentException, whose subclasses are allowed too, and the
+    /// System.IO namespace. SqliteException is matched by name so this assembly takes no Sqlite
+    /// reference for it.</remarks>
+    public static bool IsMessageAllowed(Exception ex)
+    {
+        var type = ex.GetType();
+        return ex is ArgumentException
+            || type.Namespace == "System.IO"
+            || type.FullName == "Microsoft.Data.Sqlite.SqliteException"
+            || MessageAllowedTypes.Contains(type);
+    }
+
+    private static readonly HashSet<Type> MessageAllowedTypes =
+    [
+        typeof(InvalidOperationException),
+        typeof(NullReferenceException),
+        typeof(IndexOutOfRangeException),
+        typeof(NotSupportedException),
+        typeof(NotImplementedException),
+        typeof(InvalidCastException),
+        typeof(OutOfMemoryException),
+        typeof(TimeoutException),
+        typeof(JsonException),
+    ];
 
     /// <summary>The marker's crash object, or null when it is missing or unreadable.</summary>
     public static JsonElement? TryRead(string dataRoot)

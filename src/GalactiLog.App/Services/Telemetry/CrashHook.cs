@@ -10,13 +10,18 @@ namespace GalactiLog.App.Services.Telemetry;
 public static class CrashHook
 {
     // Set by the first fatal write. The dispatcher event and the AppDomain event can both fire for
-    // one exception; the second write is skipped so the marker keeps the first, closer source.
+    // one exception; the second write and its log line are skipped so the marker keeps the first,
+    // closer source.
     private static int _fatalWritten;
 
     private static Action<Exception, string>? _fatal;
 
     public static void Install(string dataRoot, string version, string sha)
     {
+        // Starts the uptime clock now rather than at the first Navigate, which a tray start may
+        // never reach.
+        _ = TelemetryContext.Uptime;
+
         AppDomain.CurrentDomain.UnhandledException += (_, e) =>
         {
             if (e.ExceptionObject is Exception ex)
@@ -55,9 +60,8 @@ public static class CrashHook
                 {
                     CrashMarker.Write(ex, source, dataRoot, version, sha,
                         TelemetryContext.CurrentPage, UptimeSeconds());
+                    Log.Fatal(ex, "Unhandled exception ({Source})", source);
                 }
-
-                Log.Fatal(ex, "Unhandled exception ({Source})", source);
             }
             catch
             {

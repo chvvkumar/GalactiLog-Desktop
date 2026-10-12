@@ -27,8 +27,27 @@ public class TelemetryScrubberTests
     [Fact]
     public void TwoPaths_AreBothReplaced()
     {
-        var scrubbed = TelemetryScrubber.Scrub(@"Cannot move C:\a\b.fits to \\nas\share\b.fits now");
+        var scrubbed = TelemetryScrubber.Scrub(@"Cannot move 'C:\a\b.fits' to '\\nas\share\b.fits'.");
 
-        Assert.Equal("Cannot move <path> to <path> now", scrubbed);
+        Assert.Equal("Cannot move '<path>' to '<path>'.", scrubbed);
     }
+
+    [Fact]
+    public void APathWithASpace_IsConsumedWhole()
+    {
+        var scrubbed = TelemetryScrubber.Scrub(@"C:\Users\John Smith\Pictures\M31\light.fits");
+
+        Assert.Equal("<path>", scrubbed);
+        Assert.DoesNotContain("Smith", scrubbed, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AQuotedPathWithSpaces_StopsAtTheQuote()
+        => Assert.Equal(
+            "Could not find file '<path>'.",
+            TelemetryScrubber.Scrub(@"Could not find file 'C:\Users\John Smith\a b.fits'."));
+
+    [Fact]
+    public void AUrl_BecomesTheUrlPlaceholder()
+        => Assert.Equal("<url>", TelemetryScrubber.Scrub("http://nina.local:1888/v2/api"));
 }

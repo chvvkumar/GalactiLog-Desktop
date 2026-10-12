@@ -9,7 +9,8 @@ public static class TelemetryContext
     /// <c>MainWindowViewModel.Navigate</c>. Never a detail key.</summary>
     public static volatile string CurrentPage = "";
 
-    /// <summary>Started when the type is first touched, which <see cref="CrashHook.Install"/>
-    /// does early in <c>Program.Main</c>.</summary>
+    /// <summary>Starts when the type is first touched. <see cref="CrashHook.Install"/> touches it
+    /// in <c>Program.Main</c> right after the host is built, so it measures from there, not from
+    /// process start.</summary>
     public static readonly Stopwatch Uptime = Stopwatch.StartNew();
 }

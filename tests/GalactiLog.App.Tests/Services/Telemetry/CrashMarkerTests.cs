@@ -93,6 +93,56 @@ public sealed class CrashMarkerTests : IDisposable
     }
 
     [Fact]
+    public void AFormatException_DropsItsMessage()
+    {
+        CrashMarker.Write(new FormatException("The input string 'M 31 secret' was not in a correct format."),
+            "appdomain", _root, "v", "s", "", 0);
+
+        var crash = CrashMarker.TryRead(_root)!.Value;
+        Assert.Equal("System.FormatException", crash.GetProperty("type").GetString());
+        Assert.Equal("", crash.GetProperty("message").GetString());
+        Assert.DoesNotContain("secret", crash.GetRawText(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AKeyNotFoundException_DropsItsMessage()
+    {
+        CrashMarker.Write(new KeyNotFoundException("The given key 'M31 secret' was not present."),
+            "appdomain", _root, "v", "s", "", 0);
+
+        Assert.Equal("", CrashMarker.TryRead(_root)!.Value.GetProperty("message").GetString());
+    }
+
+    [Fact]
+    public void AnArgumentNullException_KeepsItsMessage()
+    {
+        var ex = new ArgumentNullException("path");
+        CrashMarker.Write(ex, "appdomain", _root, "v", "s", "", 0);
+
+        Assert.Equal(ex.Message, CrashMarker.TryRead(_root)!.Value.GetProperty("message").GetString());
+    }
+
+    [Theory]
+    [MemberData(nameof(AllowlistCases))]
+    public void IsMessageAllowed_FollowsTheAllowlist(Exception ex, bool allowed)
+        => Assert.Equal(allowed, CrashMarker.IsMessageAllowed(ex));
+
+    public static TheoryData<Exception, bool> AllowlistCases() => new()
+    {
+        { new IOException("io"), true },
+        { new FileNotFoundException("missing"), true },
+        { new ArgumentNullException("name"), true },
+        { new ArgumentOutOfRangeException("index"), true },
+        { new InvalidOperationException("state"), true },
+        { new System.Text.Json.JsonException("json"), true },
+        { new Microsoft.Data.Sqlite.SqliteException("database is locked", 5), true },
+        { new FormatException("input"), false },
+        { new KeyNotFoundException("key"), false },
+        { new System.Net.Http.HttpRequestException("host"), false },
+        { new ObjectDisposedException("x"), false },
+    };
+
+    [Fact]
     public void Delete_RemovesTheMarker()
     {
         CrashMarker.Write(new InvalidOperationException(), "appdomain", _root, "v", "s", "", 0);
