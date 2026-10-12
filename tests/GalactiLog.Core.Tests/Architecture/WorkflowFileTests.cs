@@ -89,8 +89,8 @@ public class WorkflowFileTests
         AssertAscendingOrder(
             content,
             "build-test.yml step order (spec 17.5): checkout, setup-dotnet, restore, build, test",
-            "actions/checkout@v4",
-            "actions/setup-dotnet@v4",
+            "actions/checkout@v7",
+            "actions/setup-dotnet@v6",
             "dotnet restore",
             "dotnet build --no-restore -c Release",
             "dotnet test --no-build -c Release");
@@ -143,7 +143,7 @@ public class WorkflowFileTests
     public void Release_CheckoutUsesFetchDepthZero()
     {
         var content = ReadNormalized(ReleaseFile);
-        Assert.Contains("actions/checkout@v4\n with:\n fetch-depth: 0", content);
+        Assert.Contains("actions/checkout@v7\n with:\n fetch-depth: 0", content);
     }
 
     [Fact]
@@ -162,9 +162,9 @@ public class WorkflowFileTests
             "release.yml step order (spec 17.5): checkout, fetch tags, setup-dotnet, derive " +
             "version, test, publish, install vpk, download previous release, write release notes, " +
             "pack, tag, upload, generate notes, prune",
-            "actions/checkout@v4",
+            "actions/checkout@v7",
             "name: Fetch tags",
-            "actions/setup-dotnet@v4",
+            "actions/setup-dotnet@v6",
             "name: Derive version",
             "name: Test",
             "name: Publish",
@@ -270,7 +270,7 @@ public class WorkflowFileTests
         // in the Write release notes block, and the --releaseNotes flag in the Pack block.
         var raw = ReadRaw(ReleaseFile);
         var writeBlock = NormalizeContent(ExtractStepBlock(raw, "name: Write release notes"));
-        Assert.Contains("actions/github-script@v7", writeBlock);
+        Assert.Contains("actions/github-script@v9", writeBlock);
         Assert.Contains("release-notes.js", writeBlock);
         Assert.Contains("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}", writeBlock);
         Assert.Contains("NOTES_FILE: ${{ runner.temp }}/release-notes.md", writeBlock);
@@ -448,7 +448,7 @@ public class WorkflowFileTests
         // The runner's bundled node runs the script, so there is no bash, cmd or powershell step
         // and the Git Bash path step is not needed here.
         var content = ReadNormalized(PrDescriptionFile);
-        Assert.Contains("actions/github-script@v7", content);
+        Assert.Contains("actions/github-script@v9", content);
         Assert.Contains("pr-description.js", content);
         Assert.Contains("GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}", content);
         Assert.DoesNotContain("shell:", content);
