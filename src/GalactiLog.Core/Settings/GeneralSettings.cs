@@ -122,6 +122,24 @@ public sealed record GeneralSettings
     /// reported through the tray tooltip.</summary>
     [JsonPropertyName("notify_on_scan_complete")] public bool NotifyOnScanComplete { get; init; }
 
+    // Opt-in anonymous telemetry. Every key has a compile-time default, so a document written by
+    // an earlier version reads the default and needs no migration (spec 5.8). Nothing is clamped
+    // or validated.
+
+    /// <summary>Whether the anonymous usage and crash report is sent. Off until the user
+    /// answers the prompt.</summary>
+    [JsonPropertyName("telemetry_enabled")] public bool TelemetryEnabled { get; init; }
+
+    /// <summary>Whether the user has answered the telemetry prompt, either way.</summary>
+    [JsonPropertyName("telemetry_prompted")] public bool TelemetryPrompted { get; init; }
+
+    /// <summary>The random install id sent with each report. Minted when telemetry is turned on,
+    /// null while it is off.</summary>
+    [JsonPropertyName("telemetry_id")] public string? TelemetryId { get; init; }
+
+    /// <summary>The ISO 8601 UTC instant of the last successful send, or null.</summary>
+    [JsonPropertyName("telemetry_last_sent")] public string? TelemetryLastSent { get; init; }
+
     // Design-spec 5.8.1 and 7.6's three PHD2 keys (Phase 15A). Each carries a compile-time
     // default, so a document written by an earlier version reads the default and needs no
     // migration (spec 5.8). None is clamped or validated in SettingsStore: a bool has nothing

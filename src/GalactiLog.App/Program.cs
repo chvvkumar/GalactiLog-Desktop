@@ -2,6 +2,7 @@ using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using GalactiLog.App.Services;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.Cli;
 using GalactiLog.Core.Io;
 using Microsoft.Extensions.DependencyInjection;
@@ -165,6 +166,14 @@ internal static class Program
 
         App.Services = guiHost.Services;
 
+        // Crash marker hook (telemetry). Here, the first point the data root is known: AppHost.Build
+        // resolves it, including a relocation this start may perform, and a failure inside Build is
+        // already handled by the catch blocks above. The dispatcher half is subscribed from
+        // AfterSetup below, once Avalonia's platform exists.
+        var buildInfo = guiHost.Services.GetRequiredService<BuildInfo>();
+        CrashHook.Install(
+            guiHost.Services.GetRequiredService<AppWriter>().AppDataRoot, buildInfo.Version, buildInfo.GitSha);
+
         // Spec 11.3's first eviction trigger, "on application start" (ruling Q9). Here rather
         // than in AppHost.Build or in OnFrameworkInitializationCompleted: it enumerates a
         // directory that can hold thousands of files and deletes some of them, so running it on
@@ -188,7 +197,9 @@ internal static class Program
         // The stripped array, not args: a consumed GUI switch is removed before Avalonia's own
         // argument handling sees it, so nothing in the framework has to know about a token this
         // application invented (spec 4.4 step 2).
-        BuildAvaloniaApp().StartWithClassicDesktopLifetime(guiArgs);
+        BuildAvaloniaApp()
+            .AfterSetup(_ => CrashHook.InstallDispatcher())
+            .StartWithClassicDesktopLifetime(guiArgs);
         gate.Dispose();
         guiHost.Dispose();
         Log.CloseAndFlush();

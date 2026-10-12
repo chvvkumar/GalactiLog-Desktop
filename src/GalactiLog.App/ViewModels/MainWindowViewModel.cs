@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.App.ViewModels.Activity;
 using GalactiLog.App.ViewModels.Analysis;
 using GalactiLog.App.ViewModels.Dashboard;
@@ -678,6 +679,9 @@ public sealed partial class MainWindowViewModel : ObservableObject, IDisposable
     // The choke point. Applying an entry runs the same paths that call this, hence the flag.
     private void Navigate(NavigationEntry entry)
     {
+        // Ahead of the guard so Back and Forward update it too. The page key only, never DetailKey.
+        TelemetryContext.CurrentPage = entry.Destination;
+
         if (_applying || _disposed || !_history.Push(entry))
         {
             return;
