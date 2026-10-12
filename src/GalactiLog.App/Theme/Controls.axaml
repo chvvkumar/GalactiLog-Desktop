@@ -409,8 +409,6 @@
     <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
     <Setter Property="Transitions">
       <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12" />
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
         <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
       </Transitions>
     </Setter>
@@ -453,9 +451,11 @@
        is withdrawn with spec 14.4's note that recorded it: a 1 pixel outline with a 3 pixel corner
        is the old Win32 look, and the 6 now matches the stock controls through ControlCornerRadius.
 
-       Motion is a colour fade and nothing else: Background and BorderBrush over 120 ms on the
-       presenter, where Fluent's template paints them, and Opacity over 150 ms on the button, which
-       is what :disabled changes. No property that moves layout is animated. -->
+       Motion is Opacity over 150 ms on the button, which is what :disabled changes, and nothing
+       else. The presenter's Background and BorderBrush snap: Avalonia 11.3's BrushTransition
+       advances only with a redraw, so a hover fill fading on the presenter froze at its first
+       blend frame whenever the pointer came to rest (RowHoverTests). No property that moves
+       layout is animated. -->
   <Style Selector="Button">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
@@ -478,12 +478,6 @@
   <Style Selector="Button /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12" />
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
-      </Transitions>
-    </Setter>
   </Style>
   <Style Selector="Button:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
@@ -788,12 +782,6 @@
   <Style Selector="ToggleButton /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12" />
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
-      </Transitions>
-    </Setter>
   </Style>
   <Style Selector="ToggleButton:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
@@ -893,21 +881,12 @@
     <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
   </Style>
 
-  <!-- Every list item fades its fill rather than snapping it: the rail, the tab strip and the
-       table rows alike. The same 120 ms colour fade and 150 ms opacity fade the buttons take, on
-       the presenter where Fluent paints the fill, and nothing that moves layout. -->
+  <!-- Every list item takes the 150 ms opacity fade the buttons take: the rail, the tab strip and
+       the table rows alike. Its fill snaps, for the reason the Button block above gives. -->
   <Style Selector="ListBoxItem">
     <Setter Property="Transitions">
       <Transitions>
         <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
-      </Transitions>
-    </Setter>
-  </Style>
-  <Style Selector="ListBoxItem /template/ ContentPresenter">
-    <Setter Property="Transitions">
-      <Transitions>
-        <BrushTransition Property="Background" Duration="0:0:0.12" />
-        <BrushTransition Property="BorderBrush" Duration="0:0:0.12" />
       </Transitions>
     </Setter>
   </Style>

@@ -179,8 +179,17 @@
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
 
+  <!-- The full-row open button under a dashboard row's cells. The ListBoxItem it sits in already
+       lights on hover, so the button takes none of the Button tier's own hover or press: no second
+       fill, no outline, on the same row (RowHoverTests). -->
+  <Style Selector="ListBox.table Button.tc-rowopen:pointerover /template/ ContentPresenter,
+                   ListBox.table Button.tc-rowopen:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+  </Style>
+
   <!-- A row's disclosure chevron (the dashboard's Nights control): it turns a quarter while the
-       row is open, as a colour fade turns, over 120 ms. -->
+       row is open, over 120 ms. -->
   <Style Selector="Path.tc-disclosure">
     <Setter Property="RenderTransform" Value="rotate(0deg)" />
     <Setter Property="Transitions">

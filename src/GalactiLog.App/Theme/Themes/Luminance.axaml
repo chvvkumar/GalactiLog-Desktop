@@ -19,7 +19,7 @@
   <SolidColorBrush x:Key="ColorBgBase" Color="#00000000" />
   <SolidColorBrush x:Key="ColorBgSurface" Color="#FF1E1E1E" />
   <SolidColorBrush x:Key="ColorBgElevated" Color="#FF272727" />
-  <SolidColorBrush x:Key="ColorBgHover" Color="#FF2F2F2F" />
+  <SolidColorBrush x:Key="ColorBgHover" Color="#FF232323" />
   <SolidColorBrush x:Key="ColorBgInput" Color="#FF0C0C0C" />
 
   <SolidColorBrush x:Key="ColorBorderDefault" Color="#14FFFFFF" />

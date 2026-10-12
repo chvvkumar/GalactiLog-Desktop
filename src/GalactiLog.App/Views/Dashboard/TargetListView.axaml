@@ -371,6 +371,7 @@
                   </MenuFlyout>
                 </Panel.ContextFlyout>
                 <Button x:Name="RowOpen"
+                        Classes="tc-rowopen"
                         Command="{Binding #Root.((dash:TargetListViewModel)DataContext).OpenTargetCommand}"
                         CommandParameter="{Binding}"
                         HorizontalAlignment="Stretch"
