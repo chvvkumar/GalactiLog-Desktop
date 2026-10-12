@@ -544,6 +544,7 @@ public sealed class TargetResolver(
             // exception propagate rather than negative-caching a network hiccup). Treat
             // SIMBAD as having FAILED (not "found nothing") for this resolution; SESAME still
             // gets a try, and step 6 must not treat this as a checked-and-clean no-match.
+            cache.RecordFailure();
             return new SourceResult(SourceOutcome.Failed, null);
         }
 
@@ -585,6 +586,7 @@ public sealed class TargetResolver(
         }
         catch (Exception ex) when (IsTransientNetworkFailure(ex, ct))
         {
+            cache.RecordFailure();
             return new SourceResult(SourceOutcome.Failed, null);
         }
 
