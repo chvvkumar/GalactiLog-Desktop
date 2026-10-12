@@ -1,0 +1,28 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:telemetry="using:GalactiLog.App.ViewModels.Telemetry"
+             x:Class="GalactiLog.App.Views.Telemetry.TelemetryDisclosureView"
+             x:DataType="telemetry:TelemetryDisclosureViewModel">
+  <!-- The report preview and the public statistics link, shared by the telemetry prompt and the
+       setup wizard's scan options step. The first expand builds the report through the same
+       function the sender uses. Every colour is a theme token (spec 14). -->
+  <StackPanel Spacing="8">
+    <Expander x:Name="TelemetryPreviewExpander"
+              Header="{x:Static telemetry:TelemetryDisclosureViewModel.PreviewHeader}"
+              HorizontalAlignment="Stretch"
+              IsExpanded="{Binding IsPreviewExpanded, Mode=TwoWay}">
+      <TextBox x:Name="TelemetryPreviewBox"
+               Text="{Binding PreviewText}"
+               IsReadOnly="True"
+               TextWrapping="Wrap"
+               AcceptsReturn="True"
+               MaxHeight="220"
+               FontFamily="{StaticResource FontMono}"
+               ScrollViewer.VerticalScrollBarVisibility="Auto" />
+    </Expander>
+    <Button x:Name="TelemetryPublicStatsButton"
+            Classes="link"
+            Content="{x:Static telemetry:TelemetryDisclosureViewModel.PublicStatsLabel}"
+            Command="{Binding OpenPublicStatsCommand}" />
+  </StackPanel>
+</UserControl>

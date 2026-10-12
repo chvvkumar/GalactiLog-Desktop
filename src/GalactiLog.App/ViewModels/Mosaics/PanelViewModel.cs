@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -47,7 +48,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
     /// <summary>The primary names of the panel's targets, joined with ", ".</summary>
     public string TargetsText => string.Join(", ", Panel.TargetNames);
 
-    public string IntegrationText => MetricText.Integration(Panel.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(Panel.IntegrationSeconds);
 
     public string FramesText => MetricText.Count(Panel.Frames);
 
@@ -56,7 +57,7 @@ public sealed partial class PanelViewModel : ObservableObject, IDisposable
 
     /// <summary>"2h 10m behind" below the leading panel; empty on the leader and while every panel
     /// is zero (the query already makes the deficit zero there).</summary>
-    public string DeficitText => Panel.DeficitSeconds > 0 ? MetricText.Integration(Panel.DeficitSeconds) + " behind" : "";
+    public string DeficitText => Panel.DeficitSeconds > 0 ? DurationFormat.Prose(Panel.DeficitSeconds) + " behind" : "";
 
     /// <summary>True while the Available table has a row.</summary>
     public bool HasAvailable => Panel.Available.Count > 0;
@@ -227,7 +228,7 @@ public sealed partial class PanelSessionViewModel : ObservableObject
 
     public string FramesText => MetricText.Count(Night.Frames);
 
-    public string IntegrationText => MetricText.Integration(Night.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Prose(Night.IntegrationSeconds);
 
     /// <summary>A refused or failed write on this row, shown inline.</summary>
     [ObservableProperty]

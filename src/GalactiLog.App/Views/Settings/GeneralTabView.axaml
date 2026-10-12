@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+             xmlns:telemetry="using:GalactiLog.App.ViewModels.Telemetry"
              x:Class="GalactiLog.App.Views.Settings.GeneralTabView"
              x:DataType="settings:GeneralTabViewModel">
   <!-- design-spec 12.7's General tab and design-spec 12.11's five residency controls: close to
@@ -26,11 +27,7 @@
       <!-- Window behaviour (spec 12.11 behaviours 5 and 6). -->
       <Border x:Name="WindowBehaviourSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Window behaviour"
@@ -67,11 +64,7 @@
       <!-- Startup (spec 12.11 behaviours 8 and 9). -->
       <Border x:Name="StartupSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Startup"
@@ -107,11 +100,7 @@
       <!-- Notifications (spec 12.11 behaviour 10). -->
       <Border x:Name="NotificationsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Notifications"
@@ -135,11 +124,7 @@
       <!-- Survey downloads (spec 12.7): the Sky view window's network switch. -->
       <Border x:Name="SurveyDownloadsSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Survey downloads"
@@ -160,6 +145,47 @@
                      Text="{x:Static settings:GeneralTabViewModel.SurveyDownloadsHostDescription}"
                      TextWrapping="Wrap"
                      Foreground="{DynamicResource ColorTextTertiary}" />
+        </StackPanel>
+      </Border>
+
+      <!-- Opt-in anonymous usage statistics. Turning on mints a new install id, turning off
+           clears it. The preview is built by the same function the sender posts. -->
+      <Border x:Name="TelemetrySection"
+              IsVisible="{Binding IsReady}"
+              Classes="card">
+        <StackPanel Spacing="10">
+          <TextBlock Text="Telemetry"
+                     FontWeight="SemiBold"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+
+          <CheckBox x:Name="TelemetryEnabledBox"
+                    Content="{x:Static telemetry:TelemetryDisclosureViewModel.CheckBoxLabel}"
+                    IsChecked="{Binding TelemetryEnabled, Mode=TwoWay}"
+                    Foreground="{DynamicResource ColorTextPrimary}" />
+          <TextBlock x:Name="TelemetryNote"
+                     Text="{x:Static telemetry:TelemetryDisclosureViewModel.Description}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextTertiary}" />
+
+          <StackPanel Orientation="Horizontal" Spacing="12">
+            <Button x:Name="TelemetryPreviewButton"
+                    Content="Show exactly what is sent"
+                    Command="{Binding Telemetry.LoadPreviewCommand}" />
+            <Button x:Name="TelemetryPublicStatsButton"
+                    Classes="link"
+                    VerticalAlignment="Center"
+                    Content="{x:Static telemetry:TelemetryDisclosureViewModel.PublicStatsLabel}"
+                    Command="{Binding Telemetry.OpenPublicStatsCommand}" />
+          </StackPanel>
+          <TextBox x:Name="TelemetryPreviewBox"
+                   Text="{Binding Telemetry.PreviewText}"
+                   IsVisible="{Binding Telemetry.HasPreview}"
+                   IsReadOnly="True"
+                   TextWrapping="Wrap"
+                   AcceptsReturn="True"
+                   MaxHeight="260"
+                   FontFamily="{StaticResource FontMono}"
+                   ScrollViewer.VerticalScrollBarVisibility="Auto" />
         </StackPanel>
       </Border>
 

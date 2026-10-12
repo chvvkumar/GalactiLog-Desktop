@@ -258,6 +258,7 @@ public sealed class AltitudeArc : Control
         var radius = Radius * scale;
         var outline = OutlineBrush is null ? null : new Pen(OutlineBrush, Math.Max(1d, 2d * scale));
         var typeface = new Typeface(TextElement.GetFontFamily(this));
+        var label = LabelSize(scale);
         var wedges = Wedges ?? [];
 
         for (var index = 0; index < wedges.Count && index < Edges.Length - 1; index++)
@@ -280,7 +281,8 @@ public sealed class AltitudeArc : Control
                 typeface,
                 wedges[index],
                 Polar(centre, radius * LabelRadius, (Edges[index] + Edges[index + 1]) / 2d),
-                scale);
+                scale,
+                label);
         }
 
         if (LabelBrush is not { } labels)
@@ -292,14 +294,14 @@ public sealed class AltitudeArc : Control
         foreach (var degrees in Edges)
         {
             var at = Polar(centre, radius + (12d * scale), degrees);
-            Text(context, typeface, degrees.ToString("0", CultureInfo.InvariantCulture), 8.4d * scale, labels, at);
+            Text(context, typeface, degrees.ToString("0", CultureInfo.InvariantCulture), label, labels, at);
         }
 
         Text(
             context,
             typeface,
             "horizon",
-            7.6d * scale,
+            label,
             labels,
             new Point(centre.X + radius, centre.Y + (4d * scale)),
             align: 1d);
@@ -310,13 +312,14 @@ public sealed class AltitudeArc : Control
         Typeface typeface,
         AltitudeWedge wedge,
         Point at,
-        double scale)
+        double scale,
+        double label)
     {
         if (!wedge.HasData)
         {
             if (LabelBrush is { } empty)
             {
-                Text(context, typeface, wedge.ValueText, 8.4d * scale, empty, at);
+                Text(context, typeface, wedge.ValueText, label, empty, at);
             }
 
             return;
@@ -332,13 +335,30 @@ public sealed class AltitudeArc : Control
             return;
         }
 
-        var line = at.WithY(at.Y + (12d * scale));
+        // The two secondary lines step by their own size, so a caption-sized label at a small
+        // scale does not run into the line above it.
+        var step = Math.Max(10d * scale, label * 1.15d);
+        var line = at.WithY(at.Y + Math.Max(12d * scale, step));
         if (wedge.HasRatio)
         {
-            Text(context, typeface, wedge.Ratio, 8.4d * scale, secondary, line);
+            Text(context, typeface, wedge.Ratio, label, secondary, line);
         }
 
-        Text(context, typeface, wedge.CountText, 8.4d * scale, secondary, at.WithY(at.Y + (22d * scale)));
+        Text(context, typeface, wedge.CountText, label, secondary, line.WithY(line.Y + step));
+    }
+
+    /// <summary>
+    /// The size of every small label on the dome: the degree ticks, "horizon", the ratio and the
+    /// count lines. Never below the t-caption tier (the root size times Scales.axaml's
+    /// FontSizeCaption), so the wedge labels read at the page's caption size rather than at the
+    /// 8 pixels the web's unit scale gives them; above that floor they still grow with the dome.
+    /// </summary>
+    private double LabelSize(double scale)
+    {
+        var ratio = this.TryFindResource("FontSizeCaption", out var value) && value is double found
+            ? found
+            : 0.714d;
+        return Math.Max(8.4d * scale, TextElement.GetFontSize(this) * ratio);
     }
 
     // A pie slice of the dome between two altitudes, drawn counter-clockwise from the lower edge,

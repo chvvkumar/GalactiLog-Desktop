@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Media;
 using Avalonia.Media.Immutable;
+using Avalonia.Platform;
 using LiveChartsCore;
 using LiveChartsCore.SkiaSharpView;
 using LiveChartsCore.SkiaSharpView.Painting;
@@ -160,6 +161,79 @@ public static class ChartTheme
         private void OnChanged(object? sender, EventArgs e) => _rebuild?.Invoke();
     }
 
+    // The interface font's Regular weight, which FontManager hands over on every font change, and
+    // the axis label size, which follows the root font size. Both are values LiveCharts2 holds
+    // rather than looks up, so each change re-runs Apply and Changed rebuilds the live charts.
+    private static SKTypeface? _typeface;
+
+    /// <summary>The window's root font size. Axis tick labels are drawn at this times
+    /// <see cref="AxisLabelRatio"/>. Set directly only before the first <see cref="Apply"/>, as
+    /// AppHost.Build does; afterwards through <see cref="ApplyRootFontSize"/>.</summary>
+    public static double RootFontSize { get; set; } = 14d;
+
+    /// <summary>The axis tick label size relative to the root font size.</summary>
+    public const double AxisLabelRatio = 0.786;
+
+    /// <summary>A line series' point marker diameter while the series is sparse.</summary>
+    public const double SeriesMarkerSize = 6d;
+
+    /// <summary>Above this many points a line series is dense and draws no point markers.</summary>
+    public const int DenseSeriesPoints = 40;
+
+    /// <summary>
+    /// The point marker size for a line series of <paramref name="pointCount"/> points (visual-craft
+    /// F9): <see cref="SeriesMarkerSize"/> while a marker still reads as a point, zero once the
+    /// series is dense, where a dot on every sample turns a trend into beads. A night of frames is
+    /// dense and a run of nights is not. Outliers keep their own ring series, so a dense line
+    /// still marks the points that matter.
+    /// </summary>
+    public static double MarkerSize(int pointCount)
+        => pointCount > DenseSeriesPoints ? 0d : SeriesMarkerSize;
+
+    /// <summary>Loads the selected sans family's Regular TTF as the charts' global typeface and
+    /// re-applies. A missing asset, or one Skia cannot read, leaves the previous typeface in
+    /// place. One face per asset is loaded and kept, so switching fonts back and forth creates
+    /// no new typefaces and leaves none undisposed.</summary>
+    public static void ApplyTypeface(Uri regularTtf)
+    {
+        if (!Typefaces.TryGetValue(regularTtf, out var face) && AssetLoader.Exists(regularTtf))
+        {
+            // Read whole into SKData: a typeface made from a managed stream reads it lazily,
+            // after the asset stream would already be disposed.
+            using var stream = AssetLoader.Open(regularTtf);
+            using var data = SKData.Create(stream);
+            face = SKTypeface.FromData(data);
+            if (face is not null)
+            {
+                Typefaces[regularTtf] = face;
+            }
+        }
+
+        if (face is not null)
+        {
+            _typeface = face;
+        }
+
+        Apply();
+    }
+
+    // One face per bundled font, kept for the process lifetime. Five fonts ship, so the cache is
+    // bounded by the picker.
+    private static readonly Dictionary<Uri, SKTypeface> Typefaces = [];
+
+    /// <summary>Sets the axis label size from the window's root font size, re-applying only when
+    /// it changes, because every general settings save reaches here.</summary>
+    public static void ApplyRootFontSize(double rootFontSize)
+    {
+        if (rootFontSize == RootFontSize)
+        {
+            return;
+        }
+
+        RootFontSize = rootFontSize;
+        Apply();
+    }
+
     /// <summary>
     /// Installs the configuration. Safe to call again: a theme change calls it a second time and
     /// the second call replaces the first's paints. Idempotent with respect to the library's own
@@ -199,6 +273,11 @@ public static class ChartTheme
                 .WithLegendBackgroundPaint(new SolidColorPaint(palette.TooltipBackground))
                 .WithLegendTextPaint(new SolidColorPaint(palette.LegendText));
 
+            if (_typeface is not null)
+            {
+                config.HasGlobalSKTypeface(_typeface);
+            }
+
             // Spec 14.5: even the library's own fallback colour cycle comes from tokens, so a
             // series left unpainted still cannot show a colour that is not in the theme.
             config.GetTheme().Colors =
@@ -210,6 +289,7 @@ public static class ChartTheme
                 {
                     axis.LabelsPaint = new SolidColorPaint(Palette.AxisLabels);
                     axis.SeparatorsPaint = new SolidColorPaint(Palette.Separators);
+                    axis.TextSize = RootFontSize * AxisLabelRatio;
 
                     // An axis TITLE, which this rule left to the library's own axis rule until
                     // Phase 17. That rule paints every title in #FF232323 whatever theme is

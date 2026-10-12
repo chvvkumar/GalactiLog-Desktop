@@ -7,17 +7,19 @@
   <SolidColorBrush x:Key="ColorBgBase" Color="#FFF1F1EF" />
   <SolidColorBrush x:Key="ColorBgSurface" Color="#FFFAFAF9" />
   <SolidColorBrush x:Key="ColorBgElevated" Color="#FFFFFFFF" />
-  <SolidColorBrush x:Key="ColorBgHover" Color="#FFECECEA" />
   <SolidColorBrush x:Key="ColorBgInput" Color="#FFF3F3F1" />
 
   <SolidColorBrush x:Key="ColorBorderDefault" Color="#14000000" />
+  <!-- The table zebra band: fainter than the hairline border it once borrowed. -->
+  <SolidColorBrush x:Key="ColorBgZebra" Color="#0A000000" />
   <SolidColorBrush x:Key="ColorBorderEmphasis" Color="#26000000" />
 
   <SolidColorBrush x:Key="ColorTextPrimary" Color="#FF1B1B1A" />
   <SolidColorBrush x:Key="ColorTextSecondary" Color="#FF55534F" />
   <SolidColorBrush x:Key="ColorTextTertiary" Color="#FF6C6A66" />
 
-  <SolidColorBrush x:Key="ColorAccent" Color="#FF1F4E9C" />
+  <Color x:Key="ColorAccentValue">#FF1F4E9C</Color>
+  <SolidColorBrush x:Key="ColorAccent" Color="{StaticResource ColorAccentValue}" />
   <SolidColorBrush x:Key="ColorAccentHover" Color="#FF2B5FB5" />
   <SolidColorBrush x:Key="ColorAccentPressed" Color="#FF173D7C" />
 
@@ -140,6 +142,68 @@
   <StaticResource x:Key="SliderTrackFillPressed" ResourceKey="ColorBorderEmphasis" />
   <StaticResource x:Key="SliderTrackFillDisabled" ResourceKey="ColorTextTertiary" />
 
+  <!-- The accent's tints (spec 14.5's three button tiers and the selected pill). The accent is
+       declared above as a Color value and its brush derives from it, the same shape the four
+       semantic colours use, so each tint here is that colour at a fixed opacity rather than a
+       second literal. Additional resources, not counted among the 41 tokens.
+
+       Fill15 is Button.accent at rest and Fill25 under the pointer; Fill20 is the pressed rung
+       between them, so a keyboard press, which raises :pressed without :pointerover, still changes
+       the fill, and it is also the selected pill's fill. Border30 is the accent button's edge. -->
+  <SolidColorBrush x:Key="ColorAccentFill15" Color="{StaticResource ColorAccentValue}" Opacity="0.15" />
+  <!-- The row hover: the accent at a tenth, a translucent wash that reads over either zebra
+       band, where a flat grey between the two bands vanished on one of them. -->
+  <SolidColorBrush x:Key="ColorBgHover" Color="{StaticResource ColorAccentValue}" Opacity="0.10" />
+  <SolidColorBrush x:Key="ColorAccentFill20" Color="{StaticResource ColorAccentValue}" Opacity="0.2" />
+  <SolidColorBrush x:Key="ColorAccentFill25" Color="{StaticResource ColorAccentValue}" Opacity="0.25" />
+  <SolidColorBrush x:Key="ColorAccentBorder30" Color="{StaticResource ColorAccentValue}" Opacity="0.3" />
+
+  <!-- The card's shadow (spec 14.3), read by Border.card in Theme/Controls.axaml. A light theme
+       keeps its surface light and lifts the card with ShadowSm's value, repeated here because a
+       theme dictionary is loaded on its own and cannot reach Scales.axaml; Scales.axaml's ShadowSm
+       stays the definition. -->
+  <BoxShadows x:Key="CardShadow">0 1 2 #4D000000</BoxShadows>
+
+  <!-- The platform Fluent input, check box, tool tip and expander keys, aliased to this theme's
+       tokens by the same mechanism, and for the same reason, as the ScrollBar, ComboBox and Slider
+       aliases above (spec 14.5, the stock controls). Additional resources, not counted among the
+       41 tokens. Without them a text box, a combo box and a check box drew FluentTheme's own wells,
+       borders and system accent beside this application's buttons, so each screen read as two
+       kits. The names are Avalonia 11.3.21's, read from src/Avalonia.Themes.Fluent/Controls.
+
+       A field is ColorBgInput, a step below the card it sits on, with the default hairline at rest,
+       the emphasis hairline under the pointer and the accent edge while focused. A checked box is
+       the accent fill with the surface colour as its mark, the same pair Button.primary uses, and
+       its pointer-over and pressed fills walk the accent ramp so the system accent never shows
+       through. A tool tip and a drop-down are elevated surfaces with the emphasis hairline. The
+       expander header is bare at rest, which is what the Expander block in Theme/Controls.axaml
+       already asks of it, and takes the hover fill under the pointer. -->
+  <StaticResource x:Key="TextControlBackground" ResourceKey="ColorBgInput" />
+  <StaticResource x:Key="TextControlBackgroundPointerOver" ResourceKey="ColorBgInput" />
+  <StaticResource x:Key="TextControlBackgroundFocused" ResourceKey="ColorBgInput" />
+  <StaticResource x:Key="TextControlBorderBrush" ResourceKey="ColorBorderDefault" />
+  <StaticResource x:Key="TextControlBorderBrushPointerOver" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="TextControlBorderBrushFocused" ResourceKey="ColorAccent" />
+  <StaticResource x:Key="ComboBoxBackground" ResourceKey="ColorBgInput" />
+  <StaticResource x:Key="ComboBoxBackgroundPointerOver" ResourceKey="ColorBgHover" />
+  <StaticResource x:Key="ComboBoxBorderBrush" ResourceKey="ColorBorderDefault" />
+  <StaticResource x:Key="ComboBoxBorderBrushPointerOver" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="ComboBoxDropDownBackground" ResourceKey="ColorBgElevated" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundFillChecked" ResourceKey="ColorAccent" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPointerOver" ResourceKey="ColorAccentHover" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundFillCheckedPressed" ResourceKey="ColorAccentPressed" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundStrokeChecked" ResourceKey="ColorAccent" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundStrokeUnchecked" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="CheckBoxCheckBackgroundFillUnchecked" ResourceKey="ColorBgInput" />
+  <StaticResource x:Key="CheckBoxCheckGlyphForegroundChecked" ResourceKey="ColorBgSurface" />
+  <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPointerOver" ResourceKey="ColorBgSurface" />
+  <StaticResource x:Key="CheckBoxCheckGlyphForegroundCheckedPressed" ResourceKey="ColorBgSurface" />
+  <StaticResource x:Key="ToolTipBackground" ResourceKey="ColorBgElevated" />
+  <StaticResource x:Key="ToolTipBorderBrush" ResourceKey="ColorBorderEmphasis" />
+  <StaticResource x:Key="ToolTipForeground" ResourceKey="ColorTextPrimary" />
+  <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="#00000000" />
+  <StaticResource x:Key="ExpanderHeaderBackgroundPointerOver" ResourceKey="ColorBgHover" />
+
   <!-- Callout composites (spec 14.5): the semantic colour at 20 percent as fill and 50 percent as
        border, with full-strength text supplied by the semantic token itself. Additional
        resources, not counted among the 41 tokens. -->
@@ -163,10 +227,14 @@
 
        The two stops are one step apart, so this reads as a flat field rather than a gradient. The
        gradient brush stays because spec 14.2's mechanism is a gradient and a theme that wants one
-       needs somewhere to put it. -->
+       needs somewhere to put it.
 
-  <Color x:Key="ColorGradientFromValue">#FFFFFFFF</Color>
-  <Color x:Key="ColorGradientToValue">#FFFAFAF9</Color>
+       GradientTo is no longer ColorBgSurface (spec 14.2). A light theme keeps its surface, so the
+       page moves instead: GradientTo is ColorBgBase, one step below the surface, and GradientFrom
+       sits 5 per channel above it. -->
+
+  <Color x:Key="ColorGradientFromValue">#FFF6F6F4</Color>
+  <Color x:Key="ColorGradientToValue">#FFF1F1EF</Color>
 
   <LinearGradientBrush x:Key="BrushPageBackground" StartPoint="0%,0%" EndPoint="100%,100%">
     <GradientStop Color="{StaticResource ColorGradientFromValue}" Offset="0" />

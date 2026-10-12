@@ -76,26 +76,58 @@ public class AnalysisViewTests : IDisposable
     public void TheTabStrip_MarksTheCurrentTab_AndAClickMovesBothTheMarkerAndTheBody()
     {
         var (_, view, page) = ShowAnalysis();
-        var strip = Named<ItemsControl>(view, "TabStrip");
+        var strip = Named<ListBox>(view, "TabStrip");
 
-        var buttons = strip.GetVisualDescendants().OfType<Button>().ToList();
-        Assert.Equal(5, buttons.Count);
-        Assert.Contains("current", buttons[0].Classes);
-        Assert.All(buttons.Skip(1), button => Assert.DoesNotContain("current", button.Classes));
+        // The shared tab strip, not a row of buttons: ListBox.tabs from the control vocabulary.
+        Assert.Contains("tabs", strip.Classes);
+        var items = strip.GetVisualDescendants().OfType<ListBoxItem>().ToList();
+        Assert.Equal(5, items.Count);
+        Assert.True(items[0].IsSelected);
+        Assert.All(items.Skip(1), item => Assert.False(item.IsSelected));
+        Assert.Equal(
+            new[] { "Correlation", "Distributions", "Time series", "Matrix", "Compare" },
+            items.Select(item => Assert.IsAssignableFrom<AnalysisTabViewModel>(item.DataContext).Title));
 
-        // Only the shipped vocabulary: Button.sm plus page, with current on the selected one.
-        Assert.All(buttons, button => Assert.Contains("sm", button.Classes));
-        Assert.All(buttons, button => Assert.Contains("page", button.Classes));
-
-        buttons[3].Command!.Execute(buttons[3].CommandParameter);
+        strip.SelectedIndex = 3;
         AnalysisSettle.Page(page);
 
         Assert.Equal("matrix", page.SelectedTab.Key);
-        Assert.DoesNotContain("current", buttons[0].Classes);
-        Assert.Contains("current", buttons[3].Classes);
-        Assert.True(Named<StackPanel>(view, "MatrixSection").IsVisible);
-        Assert.False(Named<StackPanel>(view, "CorrelationSection").IsVisible);
+        Assert.False(items[0].IsSelected);
+        Assert.True(items[3].IsSelected);
+
+        // And the page's own selection moves the strip back, which is the other half of two-way.
+        page.SelectedTab = page.Tabs[0];
+        AnalysisSettle.Page(page);
+        Assert.Equal(0, strip.SelectedIndex);
+        strip.SelectedIndex = 3;
+        AnalysisSettle.Page(page);
+        Assert.True(Named<Border>(view, "MatrixSection").IsVisible);
+        Assert.False(Named<Border>(view, "CorrelationSection").IsVisible);
         Assert.Contains(view.GetVisualDescendants(), visual => visual is MatrixTabView);
+    }
+
+    // Task 7 review M5: the strip is AlwaysSelected, and a ListBox that selects its first item when
+    // ItemsSource arrives, before the two-way SelectedItem reads the page, would write that first
+    // tab back and persist it over the stored one. A failure is the strip on Correlation, or
+    // display.analysis.tab rewritten.
+    [AvaloniaFact]
+    public void AStoredNonFirstTab_SurvivesTheStripBinding_AndIsNotOverwritten()
+    {
+        var display = new GalactiLog.Core.Settings.DisplaySettings
+        {
+            Analysis = new GalactiLog.Core.Settings.AnalysisDisplaySettings { Tab = "matrix" },
+        };
+        var page = AnalysisViewModelTestFactory.Create(
+            display: display,
+            writeDisplay: mutate => display = mutate(display),
+            post: AnalysisShellHarness.Post);
+
+        var (_, view, shown) = ShowAnalysis(analysis: page);
+        var strip = Named<ListBox>(view, "TabStrip");
+
+        Assert.Same(shown.Tabs[3], strip.SelectedItem);
+        Assert.Equal("matrix", shown.SelectedTab.Key);
+        Assert.Equal("matrix", display.Analysis.Tab);
     }
 
     [AvaloniaFact]
@@ -170,18 +202,43 @@ public class AnalysisViewTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void TheTwoDateClearButtons_EachCarryTheirOwnAutomationName()
+    public void TheTwoDateClearButtons_EachCarryTheirOwnAutomationName_AndTheClearTooltip()
     {
         var (_, view, _) = ShowAnalysis();
 
-        var clearButtons = view.GetVisualDescendants().OfType<Button>()
-            .Where(button => Equals(button.Content, "x"))
-            .ToList();
+        var clearButtons = new[]
+        {
+            Named<Button>(view, "ClearDateFromButton"),
+            Named<Button>(view, "ClearDateToButton"),
+        };
 
-        Assert.Equal(2, clearButtons.Count);
         var names = clearButtons.Select(Avalonia.Automation.AutomationProperties.GetName).ToList();
-        Assert.Contains("Clear date from", names);
-        Assert.Contains("Clear date to", names);
+        Assert.Equal(new[] { "Clear date from", "Clear date to" }, names);
+        Assert.All(clearButtons, button => Assert.Equal("Clear", ToolTip.GetTip(button)));
+    }
+
+    // ui-polish Task 7: one field per date with a calendar dropdown, in place of the stock
+    // three-part month, day and year DatePicker. Red against the shipped DatePicker, which the
+    // typed lookup does not find.
+    [AvaloniaFact]
+    public void TheDateFilter_IsACalendarDatePicker_BoundToTheSharedFilter()
+    {
+        var (_, view, page) = ShowAnalysis();
+
+        var from = Named<CalendarDatePicker>(view, "DateFromPicker");
+        var to = Named<CalendarDatePicker>(view, "DateToPicker");
+        Assert.DoesNotContain(view.GetVisualDescendants(), visual => visual is DatePicker);
+
+        from.SelectedDate = new DateTime(2025, 6, 1);
+        to.SelectedDate = new DateTime(2025, 6, 20);
+        AnalysisSettle.Page(page);
+
+        Assert.Equal(new DateOnly(2025, 6, 1), page.SharedFilter.Current!.From);
+        Assert.Equal(new DateOnly(2025, 6, 20), page.SharedFilter.Current!.To);
+
+        page.SharedFilter.ClearDateFromCommand.Execute(null);
+        AnalysisSettle.Page(page);
+        Assert.Null(from.SelectedDate);
     }
 
     /// <summary>
@@ -267,8 +324,8 @@ public class AnalysisViewTests : IDisposable
 
         // Both date fields, on BOTH axes: this is the assertion a filter card laid out in one
         // non-wrapping row fails.
-        Assert.True(IsFullyInView(Named<DatePicker>(view, "DateFromPicker"), scroller), "Date from is outside.");
-        Assert.True(IsFullyInView(Named<DatePicker>(view, "DateToPicker"), scroller), "Date to is outside.");
+        Assert.True(IsFullyInView(Named<CalendarDatePicker>(view, "DateFromPicker"), scroller), "Date from is outside.");
+        Assert.True(IsFullyInView(Named<CalendarDatePicker>(view, "DateToPicker"), scroller), "Date to is outside.");
         Assert.True(IsFullyInView(Named<ComboBox>(view, "EquipmentPicker"), scroller), "The equipment picker is outside.");
         Assert.True(scroller.Extent.Width <= scroller.Viewport.Width);
     }
@@ -284,12 +341,16 @@ public class AnalysisViewTests : IDisposable
 
         var controls = Named<WrapPanel>(view, "FilterControls");
         var equipment = Named<ComboBox>(view, "EquipmentPicker");
-        var dateTo = Named<DatePicker>(view, "DateToPicker");
+        var dateTo = Named<CalendarDatePicker>(view, "DateToPicker");
 
-        // Wrapped, not clipped: the last control is on a later row than the first and both are
-        // inside the panel's own width. A clipped control hides an affordance the reader cannot
-        // then find.
-        Assert.True(dateTo.TranslatePoint(default, controls)!.Value.Y > equipment.TranslatePoint(default, controls)!.Value.Y);
+        // Wrapped or fitting, never clipped: the last control ends inside the panel's own width.
+        // The single CalendarDatePicker field is narrow enough that all five now fit on one row at
+        // this size, so the case asserts the fit rather than a second row. A clipped control
+        // hides an affordance the reader cannot then find.
+        Assert.True(
+            dateTo.TranslatePoint(new Point(dateTo.Bounds.Width, 0d), controls)!.Value.X
+                <= controls.Bounds.Width + 0.5d,
+            "Date to runs past the filter panel's edge.");
         Assert.True(IsFullyInView(dateTo, scroller), "Date to is outside at the minimum size.");
         Assert.True(IsFullyInView(equipment, scroller), "The equipment picker is outside at the minimum size.");
         Assert.True(scroller.Extent.Width <= scroller.Viewport.Width);
@@ -302,8 +363,8 @@ public class AnalysisViewTests : IDisposable
     {
         var (_, view, page) = ShowAnalysis(1280d, 720d);
 
-        page.SharedFilter.DateFrom = new DateTimeOffset(new DateTime(2025, 6, 10), TimeSpan.Zero);
-        page.SharedFilter.DateTo = new DateTimeOffset(new DateTime(2025, 6, 1), TimeSpan.Zero);
+        page.SharedFilter.DateFrom = new DateTime(2025, 6, 10);
+        page.SharedFilter.DateTo = new DateTime(2025, 6, 1);
         AnalysisSettle.Page(page);
 
         var error = Named<ContentControl>(view, "DateRangeError");

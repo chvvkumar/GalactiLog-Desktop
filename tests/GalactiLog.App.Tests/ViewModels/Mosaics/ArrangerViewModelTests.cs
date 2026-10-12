@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using Avalonia;
 using Avalonia.Headless.XUnit;
 using GalactiLog.App.Services;
@@ -141,12 +142,12 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal(DeficitBand.None, tiles[0].Deficit);
         Assert.Null(tiles[0].DeficitText);
         Assert.Equal(DeficitBand.Success, tiles[1].Deficit);
-        Assert.Equal("-" + MetricText.Integration(700), tiles[1].DeficitText);
+        Assert.Equal("-" + DurationFormat.Prose(700), tiles[1].DeficitText);
         Assert.Equal(DeficitBand.Warning, tiles[2].Deficit);
         Assert.Equal(DeficitBand.Error, tiles[3].Deficit);
-        Assert.Equal("-" + MetricText.Integration(2600), tiles[3].DeficitText);
+        Assert.Equal("-" + DurationFormat.Prose(2600), tiles[3].DeficitText);
         Assert.Equal(DeficitBand.None, tiles[4].Deficit);
-        Assert.Equal(MetricText.Integration(2900), tiles[1].IntegrationText);
+        Assert.Equal(DurationFormat.Prose(2900), tiles[1].IntegrationText);
     }
 
     [Fact]
@@ -162,7 +163,7 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal(DeficitBand.None, tiles[1].Deficit);
         Assert.Null(tiles[1].DeficitText);
         Assert.Equal(DeficitBand.Success, tiles[2].Deficit);
-        Assert.Equal("-" + MetricText.Integration(61), tiles[2].DeficitText);
+        Assert.Equal("-" + DurationFormat.Prose(61), tiles[2].DeficitText);
         Assert.Equal(DeficitBand.Success, tiles[3].Deficit);
         Assert.Equal(DeficitBand.Warning, tiles[4].Deficit);
     }
@@ -220,6 +221,36 @@ public sealed class ArrangerViewModelTests : IDisposable
         arranger.Flip(tile);
         Assert.False(tile.FlipH);
         Assert.Equal("90°", tile.StateBadge);
+    }
+
+    // Rotate CCW is three clockwise turns; Flip V is stored as the (rotation, flip H) pair that
+    // draws the same image, so applying it twice returns the tile to where it started.
+    [Fact]
+    public void RotateCcw_AndFlipVertical_StayInTheStoredPair()
+    {
+        var arranger = Arranger();
+        arranger.Apply(Detail(Panels(1)));
+        var tile = arranger.Tiles[0];
+        arranger.Select(tile);
+        Assert.True(arranger.RotateSelectedCcwCommand.CanExecute(null));
+        Assert.True(arranger.FlipSelectedVerticalCommand.CanExecute(null));
+
+        arranger.RotateSelectedCcwCommand.Execute(null);
+        Assert.Equal(270, tile.Rotation);
+
+        arranger.RotateCcw(tile);
+        arranger.RotateCcw(tile);
+        arranger.RotateCcw(tile);
+        Assert.Equal(0, tile.Rotation);
+
+        arranger.FlipSelectedVerticalCommand.Execute(null);
+        Assert.Equal((180, true), (tile.Rotation, tile.FlipH));
+
+        arranger.Rotate(tile);
+        arranger.FlipVertical(tile);
+        Assert.Equal((270, false), (tile.Rotation, tile.FlipH));
+        arranger.FlipVertical(tile);
+        Assert.Equal((270, true), (tile.Rotation, tile.FlipH));
     }
 
     [Fact]
@@ -593,7 +624,7 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.Equal(new[] { first, second }, arranger.Tiles);
         Assert.Equal((700d, 300d, 90), (first.X, first.Y, first.Rotation));
         Assert.Equal("P1", first.Label);
-        Assert.Equal(MetricText.Integration(1200), first.IntegrationText);
+        Assert.Equal(DurationFormat.Prose(1200), first.IntegrationText);
         Assert.Null(arranger.Selected);
         Assert.False(arranger.HasSelection);
     }
@@ -1047,7 +1078,7 @@ public sealed class ArrangerViewModelTests : IDisposable
         Assert.True(arranger.IsReadOnly);
         Assert.Equal(new[] { (0d, 0d), (254d, 0d) }, arranger.Tiles.Select(tile => (tile.X, tile.Y)));
         Assert.All(arranger.Tiles, tile => Assert.Equal(DeficitBand.None, tile.Deficit));
-        Assert.Equal(MetricText.Integration(600), arranger.Tiles[1].IntegrationText);
+        Assert.Equal(DurationFormat.Prose(600), arranger.Tiles[1].IntegrationText);
         Assert.NotNull(arranger.Tiles[0].Thumbnail);
         Assert.Null(arranger.Tiles[1].Thumbnail);
         var fitted = arranger.Zoom;

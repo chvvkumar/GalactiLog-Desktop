@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
+             xmlns:controls="using:GalactiLog.App.Controls"
              x:Class="GalactiLog.App.Views.Analysis.DistributionsTabView"
              x:DataType="analysis:DistributionsTabViewModel">
   <!-- design-spec 12.14's Distributions tab body.
@@ -14,9 +15,9 @@
 
        Ledger vocabulary: Theme/Controls.axaml classes only, theme tokens only, x:DataType on the
        root, no Border.card, no non-zero CornerRadius and no local Button, Border.tag or
-       Border.callout style, which ControlStyleScanTest fails the build on. The segment takes the
-       same shipped pair the filter bar's granularity segment takes, Button.sm page with current on
-       the chosen half, and declares no class of its own. -->
+       Border.callout style, which ControlStyleScanTest fails the build on. The chart choice takes
+       the same pill group the filter bar's granularity takes, Button.pill with selected on the
+       chosen half, and declares no class of its own. -->
   <UserControl.Resources>
     <!-- The page's one metric choice shape, declared once for both halves' pickers. -->
     <DataTemplate x:Key="MetricChoiceTemplate" x:DataType="analysis:AnalysisMetricChoice">
@@ -32,16 +33,16 @@
     <WrapPanel x:Name="Controls">
       <StackPanel Spacing="2" Margin="0,0,12,8">
         <TextBlock Text="Chart" Classes="t-caption" />
-        <StackPanel Orientation="Horizontal" Spacing="4">
+        <StackPanel Orientation="Horizontal">
           <Button x:Name="HistogramButton"
-                  Classes="sm page"
-                  Classes.current="{Binding IsHistogram}"
+                  Classes="pill"
+                  Classes.selected="{Binding IsHistogram}"
                   Content="Histogram"
                   Command="{Binding ShowHistogramCommand}" />
           <Button x:Name="BoxPlotButton"
-                  Classes="sm page"
-                  Classes.current="{Binding IsBoxPlot}"
-                  Content="Box Plot"
+                  Classes="pill"
+                  Classes.selected="{Binding IsBoxPlot}"
+                  Content="Box plot"
                   Command="{Binding ShowBoxPlotCommand}" />
         </StackPanel>
       </StackPanel>
@@ -96,7 +97,8 @@
 
       <!-- Background Transparent is spec 13's global rule: the page gradient shows through. A
            fixed Height because a chart with an unbounded height measures to zero or to infinity
-           depending on the panel. LegendPosition Hidden by P12 R9; the four tooltip and legend
+           depending on the panel, so the floor is the fixed 280 it had and Controls/FillViewport.cs grows
+           it to the viewport less the rest of the page. LegendPosition Hidden by P12 R9; the four tooltip and legend
            paints are Theme/Controls.axaml's one choke point and are never set here. -->
       <lvc:CartesianChart x:Name="HistogramChart"
                           LegendPosition="Hidden"
@@ -105,7 +107,7 @@
                           YAxes="{Binding Histogram.YAxes}"
                           Sections="{Binding Histogram.Sections}"
                           Background="Transparent"
-                          Height="280"
+                          controls:FillViewport.MinHeight="280"
                           IsVisible="{Binding IsHistogram}" />
 
       <lvc:CartesianChart x:Name="BoxPlotChart"
@@ -114,7 +116,7 @@
                           XAxes="{Binding BoxPlot.XAxes}"
                           YAxes="{Binding BoxPlot.YAxes}"
                           Background="Transparent"
-                          Height="280"
+                          controls:FillViewport.MinHeight="280"
                           IsVisible="{Binding IsBoxPlot}" />
 
       <!-- Spec 12.14's one stats card, below the histogram only. The card hides itself when the

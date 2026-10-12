@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.Data.Queries;
 
@@ -62,7 +63,7 @@ public sealed class MergeSideViewModel(MergePreviewSide side)
     /// counts.</summary>
     public string FrameCountText => MetricText.Count(Side.FrameCount);
 
-    public string IntegrationText => MetricText.Hours(Side.IntegrationSeconds);
+    public string IntegrationText => DurationFormat.Table(Side.IntegrationSeconds);
 
     /// <summary>Dated sessions (spec 12.4): a frame with no <c>session_date</c> belongs to no
     /// session.</summary>

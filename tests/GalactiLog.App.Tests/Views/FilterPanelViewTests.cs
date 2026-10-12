@@ -72,7 +72,7 @@ public class FilterPanelViewTests
         Assert.Equal(7, view.GetVisualDescendants().OfType<Expander>().Count());
         Assert.Contains(
             view.GetVisualDescendants().OfType<Button>(),
-            button => button.Content as string == "Reset Filters");
+            button => button.Content as string == "Reset filters");
         Assert.Contains(
             view.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == "OBJECT contains NGC" || text.Text == "OBJECT = NGC");
@@ -326,10 +326,11 @@ public class FilterPanelViewTests
 
         var chevron = view.GetControl<Button>("FilterStripToggle");
 
-        // A drawn Path and no text, the same convention the ledger strip's own toggle follows.
+        // Task 5 (ui-polish, ux-flow F13): a labelled toggle, the drawn chevron over the word
+        // Filters, so the collapsed strip does not read as a second navigation rail.
         Assert.Single(chevron.GetVisualDescendants().OfType<Avalonia.Controls.Shapes.Path>());
-        Assert.Empty(chevron.GetVisualDescendants().OfType<TextBlock>());
-        Assert.Equal("Show the filter panel", ToolTip.GetTip(chevron));
+        Assert.Equal(["Filters"], chevron.GetVisualDescendants().OfType<TextBlock>().Select(block => block.Text));
+        Assert.Equal("Filters", ToolTip.GetTip(chevron));
 
         Click(view, chevron);
 

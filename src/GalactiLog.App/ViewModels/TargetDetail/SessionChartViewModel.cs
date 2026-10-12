@@ -367,7 +367,8 @@ public sealed class SessionChartViewModel : MetricChartViewModel
             };
     }
 
-    // The timeline's marks as grid lines over its domain, and no labels or name of its own. The
+    // The timeline's marks as separators over its domain (drawn by no chart since ui-polish Task 6:
+    // Publish keeps the x axes' separators off), and no labels or name of its own. The
     // default unit width of 1 is the whole 0 to 1 domain, which made every point's hover area
     // the full plot width, so a press hit every series and the first one's point won.
     private static ICartesianAxis LaneXAxis(NightLaneAxis axis) => new Axis

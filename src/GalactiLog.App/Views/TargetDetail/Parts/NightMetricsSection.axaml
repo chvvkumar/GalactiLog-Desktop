@@ -6,9 +6,25 @@
           x:Name="Root"
           x:DataType="detail:SessionCardViewModel"
           HorizontalAlignment="Stretch"
-          IsExpanded="True">
+          IsExpanded="True"
+          BorderBrush="{DynamicResource ColorAccent}"
+          BorderThickness="3,0,0,0">
+  <!-- The section header (ui-polish Task 6): no bar, an uppercase label-tier title and the
+       platform chevron without its box, and a 3 pixel accent stripe down the open body's left
+       edge. The body is only drawn while the section is open, so the stripe is the open state's
+       mark. The stripe is the content border, which Fluent's open state sizes from
+       ExpanderContentDownBorderThickness, so that key is overridden here as well as the local
+       thickness. The Fluent header and chevron fills are cleared on this section alone. -->
+  <Expander.Resources>
+    <Thickness x:Key="ExpanderContentDownBorderThickness">3,0,0,0</Thickness>
+    <SolidColorBrush x:Key="ExpanderHeaderBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="ExpanderChevronBackground" Color="Transparent" />
+    <SolidColorBrush x:Key="ExpanderChevronBackgroundPointerOver" Color="Transparent" />
+    <SolidColorBrush x:Key="ExpanderChevronBorderBrush" Color="Transparent" />
+    <SolidColorBrush x:Key="ExpanderChevronBorderBrushPointerOver" Color="Transparent" />
+  </Expander.Resources>
   <Expander.Header>
-    <TextBlock Classes="t-label section" Text="Session metrics" />
+    <TextBlock x:Name="SectionTitle" Classes="t-label upper" Text="SESSION METRICS" />
   </Expander.Header>
   <!-- Spec 12.4's night tables and the thumbnail, side by side and wrapping when the region is
        narrow. The comparison sentence is capped at the row's width so it wraps inside its line

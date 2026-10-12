@@ -202,8 +202,10 @@ public class MosaicsTableViewModelTests
         await page.Table.DeleteSelectedCommand.ExecuteAsync(null);
         Assert.True(page.Table.DeleteSelectedPending);
         Assert.Equal("Delete 2 mosaics? Their panels and nights are removed; no frame is touched.", page.Table.DeleteSelectedConfirmText);
+        Assert.Equal("Delete 2 mosaics", page.Table.DeleteSelectedConfirmButtonText);
         page.Table.Mosaics[2].IsSelected = false;
         Assert.Equal("Delete 1 mosaic? Its panels and nights are removed; no frame is touched.", page.Table.DeleteSelectedConfirmText);
+        Assert.Equal("Delete 1 mosaic", page.Table.DeleteSelectedConfirmButtonText);
         page.Table.Mosaics[2].IsSelected = true;
         Assert.Empty(deleted);
 
@@ -232,8 +234,9 @@ public class MosaicsTableViewModelTests
         });
         var mosaic = Assert.Single(harness.Page.Table.Mosaics);
 
+        Assert.Equal("Open", mosaic.ExpandText);
         mosaic.ToggleExpandCommand.Execute(null);
-        Assert.Equal("Collapse", mosaic.ExpandText);
+        Assert.Equal("Close", mosaic.ExpandText);
         var line = Assert.Single(mosaic.PanelLines);
         Assert.Equal("M 31", line.TargetsText);
         Assert.Equal("Panel 2", mosaic.AddPanel!.Label);

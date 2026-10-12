@@ -267,28 +267,52 @@ public class CorrelationTabViewTests : IDisposable
     // below measures that instead. The first half, the horizontal fit at both sizes, is unedited
     // above.
 
-    // The chart is the viewport less the page's fixed spend and never below the floor, at every
-    // window size. Red against the shipped floor of 180 at the two smaller sizes.
+    // The chart is the viewport less the page's MEASURED spend and never below the floor, at
+    // every window size and every text size: above the floor the page ends exactly at the fold.
+    // The spend used to be a constant measured at one text size with no sampling line, so a
+    // larger text size or any conditional row pushed the stats cards below the fold. Red against
+    // that constant at the larger text sizes. Red against the shipped floor of 180 at the two
+    // smaller window sizes.
     [AvaloniaTheory]
-    [InlineData(1024d, 700d)]
-    [InlineData(1280d, 800d)]
-    [InlineData(1920d, 1080d)]
+    [InlineData(1024d, 700d, 14d)]
+    [InlineData(1280d, 800d, 14d)]
+    [InlineData(1920d, 1080d, 14d)]
+    [InlineData(1920d, 1080d, 16d)]
+    [InlineData(1920d, 1080d, 20d)]
     public void TheChart_IsTheViewportLessThePagesSpend_AndNeverBelowTheFloor(
-        double width, double height)
+        double width, double height, double fontSize)
     {
-        var (_, view, _) = ShowPage(width, height);
+        var (window, view, _) = ShowPage(width, height);
+        window.FontSize = fontSize;
+        Dispatcher.UIThread.RunJobs();
         var scroller = ScrollAssertions.Scroller(view);
         var tab = view.GetVisualDescendants().OfType<CorrelationTabView>().Single();
         var chart = Named<Control>(tab, "Chart");
 
-        var expected = Math.Max(
-            CorrelationTabViewModel.ChartMinimumHeight,
-            scroller.Viewport.Height - CorrelationTabViewModel.ChartFixedSpend);
-
         Assert.True(
-            Math.Abs(chart.Bounds.Height - expected) <= 0.5d,
-            $"At {width} by {height} the viewport is {scroller.Viewport.Height} tall and the chart "
-            + $"is {chart.Bounds.Height}, not the {expected} the floor and the spend give.");
+            chart.Bounds.Height >= CorrelationTabViewModel.ChartMinimumHeight - 0.5d,
+            $"At {width} by {height} the chart is {chart.Bounds.Height}, below the floor.");
+
+        // The tallest window has room above the floor at every text size, so the fold check below
+        // cannot be skipped there.
+        if (height >= 1080d)
+        {
+            Assert.True(
+                chart.Bounds.Height > CorrelationTabViewModel.ChartMinimumHeight + 0.5d,
+                $"At {width} by {height} and text size {fontSize} the chart did not grow.");
+        }
+
+        // The page's desired height, not the extent: a short page is stretched to the viewport,
+        // so the extent equals it whatever the chart does.
+        var page = scroller.Presenter!.Child!.DesiredSize.Height;
+        if (chart.Bounds.Height > CorrelationTabViewModel.ChartMinimumHeight + 0.5d)
+        {
+            Assert.True(
+                Math.Abs(page - scroller.Viewport.Height) <= 0.5d,
+                $"At {width} by {height} and text size {fontSize} the page is "
+                + $"{page} tall in a {scroller.Viewport.Height} viewport with a "
+                + $"{chart.Bounds.Height} chart, so it does not end at the fold.");
+        }
     }
 
     // ---- the chart grows with the window -----------------------------------------------------------

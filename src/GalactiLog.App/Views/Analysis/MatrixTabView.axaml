@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
+             xmlns:controls="using:GalactiLog.App.Controls"
              x:Class="GalactiLog.App.Views.Analysis.MatrixTabView"
              x:DataType="analysis:MatrixTabViewModel">
   <!-- Spec 12.14's Matrix tab body: the caption, the ten by ten heat grid and the legend.
@@ -63,9 +64,9 @@
            cosmetic: a pair with no r is omitted from the series, so the blank cell is the page
            showing through, and an opaque chart would paint a colour over it.
 
-           A fixed Height rather than a * row: a chart with an unbounded height measures to zero
-           or to infinity depending on the panel. 460 fits a hundred labelled cells and one edit
-           changes it.
+           Not a * row: a chart with an unbounded height measures to zero or to infinity depending
+           on the panel. Controls/FillViewport.cs gives it the viewport less the rest of the page,
+           floored at 460, which fits a hundred labelled cells.
 
            LegendPosition is Hidden, which is also rc5.4's own default; the legend above is the
            markup one spec 13 asks for. None of the four tooltip or legend paints is set here:
@@ -84,7 +85,7 @@
                           Sections="{Binding Chart.Sections}"
                           DataPointerDownCommand="{Binding Chart.CellPressedCommand}"
                           Background="Transparent"
-                          Height="460" />
+                          controls:FillViewport.MinHeight="460" />
 
       <!-- The keyboard's cells. A heat series is a picture with no focusable element in it, so a
            reader who never touches the pointer would have no route to the Correlation tab at all.
@@ -134,7 +135,9 @@
                     KeyDown="OnCellKeyDown">
         <ItemsControl.ItemsPanel>
           <ItemsPanelTemplate>
-            <UniformGrid Columns="10" Rows="10" />
+            <!-- The column count follows the chart's drawn columns, which drop an X metric no
+                 frame carries (MatrixChartViewModel.DrawnColumns). -->
+            <UniformGrid Columns="{Binding Chart.DrawnColumns.Count, FallbackValue=10}" Rows="10" />
           </ItemsPanelTemplate>
         </ItemsControl.ItemsPanel>
         <ItemsControl.ItemTemplate>

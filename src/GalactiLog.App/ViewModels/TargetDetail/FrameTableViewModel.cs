@@ -329,6 +329,9 @@ public sealed partial class FrameTableViewModel : ObservableObject, IDisposable
                 // in the markup: the header cell aligns over its figures instead of at the far edge.
                 isNumeric: column.IsNumeric)
             {
+                // The dashboard's header form (ui-polish): the sort header reads in small
+                // uppercase, while the column picker and the tip keep the mixed-case title.
+                HeaderTitle = title.ToUpperInvariant(),
                 Tip = HeaderTips.GetValueOrDefault(column.Key),
             };
         })];

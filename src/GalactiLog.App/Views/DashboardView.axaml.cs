@@ -11,10 +11,6 @@ public partial class DashboardView : UserControl
     /// <summary>The target list column's leading margin, declared 8,0,0,0 in the markup.</summary>
     private const double ListColumnMargin = 8d;
 
-    /// <summary>What TargetListRegion costs the list inside it: Padding 16 and BorderThickness 1,
-    /// both sides, as the markup declares them.</summary>
-    private const double ListRegionChrome = (2 * 16d) + (2 * 1d);
-
     public DashboardView()
     {
         InitializeComponent();
@@ -92,8 +88,8 @@ public partial class DashboardView : UserControl
             }
         };
 
-        // fixer-list item 6, phase-review P2. Task 5's 1024 by 700 window minimum, Task 2's 480
-        // panel maximum and Task 3's no-scroller trimming rule did not hold together: at the floor
+        // fixer-list item 6, phase-review P2. Task 5's 1024 by 700 window minimum (960 by 720
+        // since ui-polish), Task 2's 480 panel maximum and Task 3's no-scroller trimming rule did not hold together: at the floor
         // the list was handed 448 pixels with the panel at its 300 default and 268 at 480, against
         // a row that needs TargetListView.ListMinWidth, so Last session, the Expand button and the
         // pager's page-size select clipped off the trailing edge with no way to reach them.
@@ -109,7 +105,7 @@ public partial class DashboardView : UserControl
             if (args.Property == Visual.BoundsProperty && DataContext is DashboardViewModel page)
             {
                 page.MaxRenderedPanelWidth = root.Bounds.Width
-                    - splitter.Width - ListColumnMargin - ListRegionChrome - TargetListView.ListMinWidth;
+                    - splitter.Width - ListColumnMargin - TargetListView.ListMinWidth;
             }
         };
     }

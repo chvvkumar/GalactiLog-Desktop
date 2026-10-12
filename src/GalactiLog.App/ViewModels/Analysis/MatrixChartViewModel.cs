@@ -60,7 +60,8 @@ public sealed class MatrixCellViewModel
         ActivateCommand = new RelayCommand(Activate);
     }
 
-    /// <summary>The drawn column, which is the index into <c>AnalysisMetrics.X</c>.</summary>
+    /// <summary>The drawn column, which is the index into
+    /// <see cref="MatrixChartViewModel.DrawnColumns"/>.</summary>
     public int Column { get; }
 
     /// <summary>The drawn row. Index 0 is the BOTTOM of the grid, because a LiveCharts category
@@ -245,9 +246,24 @@ public sealed partial class MatrixChartViewModel : ObservableObject, IDisposable
         _themeSubscription = ChartTheme.Subscribe(OnThemeChanged);
     }
 
-    /// <summary>The grid's columns, which are <c>AnalysisMetrics.X</c> in its own order. Ten, never
-    /// fifteen: the five PHD2 metrics join the Correlation X list only.</summary>
+    /// <summary>The grid's candidate columns, which are <c>AnalysisMetrics.X</c> in its own order.
+    /// Ten, never fifteen: the five PHD2 metrics join the Correlation X list only.</summary>
     public static IReadOnlyList<AnalysisMetric> Columns => AnalysisMetrics.X;
+
+    /// <summary>
+    /// The columns actually drawn: <see cref="Columns"/> minus every X metric no filtered frame
+    /// carries at all.
+    /// </summary>
+    /// <remarks>
+    /// A library with no sky quality meter has <c>sky_quality</c> null on every frame, so all ten
+    /// of its pairs report zero paired points and the column drew as an empty band under an "SQM"
+    /// label, which read as a rendering fault rather than as missing data. A column is dropped
+    /// only when EVERY one of its pairs has zero points; a pair below the ten point minimum still
+    /// draws as spec 12.14's blank cell. When every column would be dropped the full ten are kept,
+    /// so the empty grid still shows both axes and all its labels.
+    /// </remarks>
+    [ObservableProperty]
+    public partial IReadOnlyList<AnalysisMetric> DrawnColumns { get; private set; } = AnalysisMetrics.X;
 
     /// <summary>
     /// The grid's rows in DRAWN order, which is <c>AnalysisMetrics.Y</c> reversed.
@@ -404,15 +420,20 @@ public sealed partial class MatrixChartViewModel : ObservableObject, IDisposable
             }
         }
 
-        var entries = new List<MatrixCellViewModel>(Columns.Count * Rows.Count);
+        var carried = Columns
+            .Where(x => Rows.Any(y => byPair.TryGetValue((x, y), out var c) && c.NPoints > 0))
+            .ToList();
+        DrawnColumns = carried.Count > 0 ? carried : Columns;
+
+        var entries = new List<MatrixCellViewModel>(DrawnColumns.Count * Rows.Count);
 
         // Rows descending, so the entry list reads top row first and the view's keyboard layer,
         // which fills left to right and top to bottom, sits square with the drawn grid.
         for (var row = Rows.Count - 1; row >= 0; row--)
         {
-            for (var column = 0; column < Columns.Count; column++)
+            for (var column = 0; column < DrawnColumns.Count; column++)
             {
-                var x = Columns[column];
+                var x = DrawnColumns[column];
                 var y = Rows[row];
                 byPair.TryGetValue((x, y), out var cell);
 
@@ -468,7 +489,7 @@ public sealed partial class MatrixChartViewModel : ObservableObject, IDisposable
     /// </remarks>
     private void PublishAxes()
     {
-        XAxes = [Categories([.. Columns])];
+        XAxes = [Categories([.. DrawnColumns])];
         YAxes = [Categories([.. Rows])];
     }
 
@@ -603,7 +624,9 @@ public sealed partial class MatrixChartViewModel : ObservableObject, IDisposable
 
         PointPadding = new Padding(PointPadding),
         DataLabelsPaint = new SolidColorPaint(labelInk) { SKTypeface = SKTypeface.Default },
-        DataLabelsSize = 12,
+        // At least the t-caption tier (0.714 of the root size) at every root size up to Large,
+        // 12.9 there; the former 12 fell below it at Large and Extra Large.
+        DataLabelsSize = 14,
         DataLabelsPosition = DataLabelsPosition.Middle,
         DataLabelsFormatter = point => CellLabel(point.Coordinate.TertiaryValue),
         YToolTipLabelFormatter = point => Hover(point.Coordinate),

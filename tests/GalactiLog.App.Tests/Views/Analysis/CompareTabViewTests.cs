@@ -125,7 +125,10 @@ public class CompareTabViewTests : IDisposable
         Assert.Equal(AnalysisTabState.Ready, tab.State);
         Assert.NotEqual(string.Empty, groupA);
 
-        // Away, and back.
+        // Away, and back. The shell's 150 ms page cross-fade never finishes on the headless clock,
+        // so the outgoing presenter would still hold this view and hand it straight back; the case
+        // is about state surviving a rebuilt view, so it switches without the fade.
+        window.GetControl<TransitioningContentControl>("ContentRegion").PageTransition = null;
         shell.Selected = shell.Items[0];
         Dispatcher.UIThread.RunJobs();
         shell.Selected = shell.Items[3];

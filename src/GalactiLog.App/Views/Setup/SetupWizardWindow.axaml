@@ -3,6 +3,8 @@
         xmlns:controls="using:GalactiLog.App.Controls"
         xmlns:setup="using:GalactiLog.App.ViewModels.Setup"
         xmlns:settings="using:GalactiLog.App.ViewModels.Settings"
+        xmlns:telemetry="using:GalactiLog.App.ViewModels.Telemetry"
+        xmlns:telemetryViews="using:GalactiLog.App.Views.Telemetry"
         x:Class="GalactiLog.App.Views.Setup.SetupWizardWindow"
         x:Name="Root"
         x:DataType="setup:SetupWizardViewModel"
@@ -276,6 +278,16 @@
             </ComboBox.ItemTemplate>
           </ComboBox>
         </StackPanel>
+
+        <!-- Opt-in telemetry. Written by Finish, not by Next. -->
+        <CheckBox x:Name="TelemetryCheckBox"
+                  Content="{x:Static telemetry:TelemetryDisclosureViewModel.CheckBoxLabel}"
+                  IsChecked="{Binding SendStatistics, Mode=TwoWay}" />
+        <TextBlock x:Name="TelemetryDescriptionText"
+                   Text="{x:Static telemetry:TelemetryDisclosureViewModel.Description}"
+                   TextWrapping="Wrap"
+                   Classes="t-label" />
+        <telemetryViews:TelemetryDisclosureView DataContext="{Binding Telemetry}" />
       </StackPanel>
     </DataTemplate>
 

@@ -89,14 +89,16 @@ public sealed record GeneralSettings
     /// 12.6).</summary>
     [JsonPropertyName("activity_seen_at")] public DateTimeOffset? ActivitySeenAt { get; init; }
     [JsonPropertyName("theme")] public string Theme { get; init; } = "civil-dusk";
-    [JsonPropertyName("text_size")] public string TextSize { get; init; } = "small";
+    /// <summary>The interface typeface id (FontManager.Options); an unknown id renders as Inter.</summary>
+    [JsonPropertyName("font")] public string Font { get; init; } = "inter";
+    [JsonPropertyName("text_size")] public string TextSize { get; init; } = "medium";
     [JsonPropertyName("content_width")] public string ContentWidth { get; init; } = "extra-wide";
     [JsonPropertyName("setup_complete")] public bool SetupComplete { get; init; }
     [JsonPropertyName("catalogs_loaded_version")] public int CatalogsLoadedVersion { get; init; }
 
     // Design-spec 12.11's five residency keys, added in one edit by one task (Phase 11 Task 2)
     // so the general document has one shape and one set of defaults rather than five keys
-    // appended by four agents. Every one is a bool with a compile-time default, so a document
+    // appended by four separate tasks. Every one is a bool with a compile-time default, so a document
     // written by an earlier version reads the default and needs no migration (spec 5.8).
     // close_to_tray is the only one that ships on (coordinator ruling Q2): closing the window
     // hides the application in the notification area and it keeps scanning.
@@ -119,6 +121,24 @@ public sealed record GeneralSettings
     /// <summary>Spec 12.11 behaviour 10. A scan that finishes while no window is on screen is
     /// reported through the tray tooltip.</summary>
     [JsonPropertyName("notify_on_scan_complete")] public bool NotifyOnScanComplete { get; init; }
+
+    // Opt-in anonymous telemetry. Every key has a compile-time default, so a document written by
+    // an earlier version reads the default and needs no migration (spec 5.8). Nothing is clamped
+    // or validated.
+
+    /// <summary>Whether the anonymous usage and crash report is sent. Off until the user
+    /// answers the prompt.</summary>
+    [JsonPropertyName("telemetry_enabled")] public bool TelemetryEnabled { get; init; }
+
+    /// <summary>Whether the user has answered the telemetry prompt, either way.</summary>
+    [JsonPropertyName("telemetry_prompted")] public bool TelemetryPrompted { get; init; }
+
+    /// <summary>The random install id sent with each report. Minted when telemetry is turned on,
+    /// null while it is off.</summary>
+    [JsonPropertyName("telemetry_id")] public string? TelemetryId { get; init; }
+
+    /// <summary>The ISO 8601 UTC instant of the last successful send, or null.</summary>
+    [JsonPropertyName("telemetry_last_sent")] public string? TelemetryLastSent { get; init; }
 
     // Design-spec 5.8.1 and 7.6's three PHD2 keys (Phase 15A). Each carries a compile-time
     // default, so a document written by an earlier version reads the default and needs no
@@ -160,7 +180,7 @@ public sealed record GeneralSettings
 
     // Design-spec 5.8.1's four Phase 16 keys, serving the Export for stacking page (spec 12.13),
     // added in one edit by one task so the general document has one shape rather than four keys
-    // appended by four agents. Each carries a compile-time default of null, so a document written
+    // appended by four separate tasks. Each carries a compile-time default of null, so a document written
     // by an earlier version reads as absent and needs no migration (spec 5.8).
     //
     // All four are JsonElement? rather than string, string[] or a typed record, and that is

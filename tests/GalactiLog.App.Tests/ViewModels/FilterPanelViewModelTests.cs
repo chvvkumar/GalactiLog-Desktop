@@ -740,6 +740,7 @@ public class FilterPanelViewModelTests
 
         await DrainAsync(dashboard, delay);
 
+        Assert.Equal("75.0 h", dashboard.TotalIntegrationText);
         Assert.Equal(75d, dashboard.TotalIntegrationHours, 3);
         Assert.Equal(7, dashboard.TotalGroups);
         Assert.Equal(900, dashboard.TotalFrames);

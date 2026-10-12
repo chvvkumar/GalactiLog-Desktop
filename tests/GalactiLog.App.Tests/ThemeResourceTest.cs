@@ -14,7 +14,7 @@ public class ThemeResourceTest
 {
     private static readonly string[] BrushKeys =
     {
-        "ColorBgBase", "ColorBgSurface", "ColorBgElevated", "ColorBgHover", "ColorBgInput",
+        "ColorBgBase", "ColorBgSurface", "ColorBgElevated", "ColorBgHover", "ColorBgZebra", "ColorBgInput",
         "ColorBorderDefault", "ColorBorderEmphasis",
         "ColorTextPrimary", "ColorTextSecondary", "ColorTextTertiary",
         "ColorAccent", "ColorAccentHover", "ColorAccentPressed",
@@ -48,9 +48,9 @@ public class ThemeResourceTest
     };
 
     [AvaloniaFact]
-    public void AllFortyOneBrushKeys_Resolve()
+    public void AllFortyTwoBrushKeys_Resolve()
     {
-        Assert.Equal(41, BrushKeys.Length);
+        Assert.Equal(42, BrushKeys.Length);
         foreach (var key in BrushKeys)
         {
             Assert.True(Application.Current!.TryFindResource(key, out var value), $"Missing resource '{key}'");

@@ -31,8 +31,10 @@ namespace GalactiLog.App.ViewModels.Mosaics;
 /// subscribes when it builds the page, the way it routes the Statistics page's events.
 /// </para>
 /// </remarks>
-public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
+public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>Spec 7.7's detection job kind, shared with the scan path.</summary>
     public const string DetectionJobKind = ScanStatusService.MosaicDetectionJobKind;
 
@@ -52,7 +54,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
     internal const string DetectionFailedSummary = "Mosaic detection failed. See the log for details.";
 
     /// <summary>Spec 12.17's empty suggestions sentence.</summary>
-    public const string NoSuggestionsText = "No suggestions. Run Detection looks for panels in your target names and sky positions.";
+    public const string NoSuggestionsText = "No suggestions. Run detection looks for panels in your target names and sky positions.";
 
     /// <summary>What a failed suggestions read shows in place of the list.</summary>
     public const string SuggestionsLoadFailedText = "The suggestions could not be loaded.";
@@ -378,6 +380,11 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
             ? "Dismiss 1 suggestion? It comes back only if new nights of its panels are catalogued."
             : $"Dismiss {BulkTargets.Count} suggestions? Each comes back only if new nights of its panels are catalogued.";
 
+    /// <summary>The bulk confirm button names its action and its count ("Dismiss 31
+    /// suggestions") rather than a bare "Confirm".</summary>
+    public string DismissAllConfirmButtonText
+        => BulkTargets.Count == 1 ? "Dismiss 1 suggestion" : $"Dismiss {BulkTargets.Count} suggestions";
+
     /// <summary>True while one of this page's bulk jobs runs. Every Accept, Dismiss and Delete on
     /// the page is disabled meanwhile (spec 12.17).</summary>
     [ObservableProperty]
@@ -416,6 +423,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         {
             DismissAllPending = true;
             OnPropertyChanged(nameof(DismissAllConfirmText));
+            OnPropertyChanged(nameof(DismissAllConfirmButtonText));
             return Task.CompletedTask;
         }
 
@@ -532,6 +540,7 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(AcceptAllText));
         OnPropertyChanged(nameof(DismissAllText));
         OnPropertyChanged(nameof(DismissAllConfirmText));
+        OnPropertyChanged(nameof(DismissAllConfirmButtonText));
         AcceptAllCommand.NotifyCanExecuteChanged();
         DismissAllCommand.NotifyCanExecuteChanged();
     }
@@ -558,6 +567,10 @@ public sealed partial class MosaicsPageViewModel : ObservableObject, IDisposable
 
     [RelayCommand]
     private Task RetrySuggestions() => ReloadAsync();
+
+    // The shell's F5: both lists, as a finished job re-reads them.
+    [RelayCommand]
+    private Task Refresh() => ReloadAsync();
 
     // ---- loading -------------------------------------------------------------------------
 

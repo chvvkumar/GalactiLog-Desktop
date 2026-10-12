@@ -24,7 +24,7 @@ public class FontResourceTest
         var sans = Assert.IsType<FontFamily>(sansValue);
         var mono = Assert.IsType<FontFamily>(monoValue);
 
-        Assert.Equal("Atkinson Hyperlegible Next", sans.Name);
+        Assert.Equal("Inter", sans.Name);
         Assert.Equal("Atkinson Hyperlegible Mono", mono.Name);
 
         // An embedded family carries a FontFamilyKey; a pure system family does not. This is what

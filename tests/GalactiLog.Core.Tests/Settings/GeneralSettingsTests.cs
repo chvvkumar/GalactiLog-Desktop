@@ -14,7 +14,7 @@ namespace GalactiLog.Core.Tests.Settings;
 // silently invert shipped behaviour. The checkbox on the preview modal is what turns it off.
 public class GeneralSettingsTests
 {
-    // A fresh profile opens on Civil Dusk at the small text size. A failure looks like the previous defaults, luminance (then observing-ledger) and
+    // A fresh profile opens on Civil Dusk at the medium text size. A failure looks like the previous defaults, luminance (then observing-ledger) and
     // large, surviving in the record.
     [Fact]
     public void Theme_AndTextSize_FreshProfileDefaults()
@@ -22,7 +22,7 @@ public class GeneralSettingsTests
         var settings = JsonSerializer.Deserialize<GeneralSettings>("{}")!;
 
         Assert.Equal("civil-dusk", settings.Theme);
-        Assert.Equal("small", settings.TextSize);
+        Assert.Equal("medium", settings.TextSize);
     }
 
     [Fact]
@@ -279,5 +279,40 @@ public class GeneralSettingsTests
 
         Assert.Contains("\"survey_downloads_enabled\":false", json, StringComparison.Ordinal);
         Assert.False(JsonSerializer.Deserialize<GeneralSettings>(json)!.SurveyDownloadsEnabled);
+    }
+
+    // Opt-in telemetry: four keys, all off or null until the user answers the prompt.
+    [Fact]
+    public void TelemetryKeys_DefaultOffAndNull_AndAMissingKeyReadsTheDefault()
+    {
+        var settings = JsonSerializer.Deserialize<GeneralSettings>("{}")!;
+
+        Assert.False(settings.TelemetryEnabled);
+        Assert.False(settings.TelemetryPrompted);
+        Assert.Null(settings.TelemetryId);
+        Assert.Null(settings.TelemetryLastSent);
+    }
+
+    [Fact]
+    public void TelemetryKeys_RoundTripThroughJson()
+    {
+        var json = JsonSerializer.Serialize(new GeneralSettings
+        {
+            TelemetryEnabled = true,
+            TelemetryPrompted = true,
+            TelemetryId = "3f2504e0-4f89-41d3-9a0c-0305e82c3301",
+            TelemetryLastSent = "2026-10-12T08:00:00Z",
+        });
+
+        Assert.Contains("\"telemetry_enabled\":true", json, StringComparison.Ordinal);
+        Assert.Contains("\"telemetry_prompted\":true", json, StringComparison.Ordinal);
+        Assert.Contains("\"telemetry_id\":\"3f2504e0-4f89-41d3-9a0c-0305e82c3301\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"telemetry_last_sent\":\"2026-10-12T08:00:00Z\"", json, StringComparison.Ordinal);
+
+        var read = JsonSerializer.Deserialize<GeneralSettings>(json)!;
+        Assert.True(read.TelemetryEnabled);
+        Assert.True(read.TelemetryPrompted);
+        Assert.Equal("3f2504e0-4f89-41d3-9a0c-0305e82c3301", read.TelemetryId);
+        Assert.Equal("2026-10-12T08:00:00Z", read.TelemetryLastSent);
     }
 }

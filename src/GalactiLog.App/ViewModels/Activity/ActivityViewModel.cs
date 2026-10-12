@@ -48,8 +48,10 @@ public sealed partial class ActivityFilterOptionViewModel(string? key, string la
 /// <see cref="FailureText"/> in place of spec 12.10's empty state.
 /// </para>
 /// </remarks>
-public sealed partial class ActivityViewModel : ObservableObject, IDisposable
+public sealed partial class ActivityViewModel : ObservableObject, IDisposable, IRefreshable
 {
+    System.Windows.Input.ICommand IRefreshable.RefreshCommand => RefreshCommand;
+
     /// <summary>The web's <c>limit: 50</c>.</summary>
     public const int PageSize = ActivityQuery.DefaultLimit;
 

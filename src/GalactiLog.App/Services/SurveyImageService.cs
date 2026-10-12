@@ -77,11 +77,13 @@ public sealed class SurveyImageService(
         }
 
         var cancel = CancellationTokenSource.CreateLinkedTokenSource(token);
+        // Quiet: a fetch is background work behind a page the user opened, and a notice on every
+        // cache miss is noise. A failed fetch still raises an Error notice.
         using var job = jobs.Begin(FetchJobKind, FetchJobTitle, () =>
         {
             // The monitor's cancel may arrive after the fetch ended and the source was disposed.
             try { cancel.Cancel(); } catch (ObjectDisposedException) { }
-        });
+        }, notify: false);
 
         Hips2FitsResult result;
         using (cancel)

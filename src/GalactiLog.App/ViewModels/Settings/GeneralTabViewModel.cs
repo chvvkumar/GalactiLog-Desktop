@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using GalactiLog.App.Services;
+using GalactiLog.App.ViewModels.Telemetry;
 using GalactiLog.Core.Settings;
 using Microsoft.Extensions.Logging;
 
@@ -18,7 +19,7 @@ namespace GalactiLog.App.ViewModels.Settings;
 /// </para>
 /// <para>
 /// Spec 12.11 behaviour 12: this tab carries all five controls and nothing else carries any of
-/// them. Five residency controls written by four agents into one settings pipeline is how a
+/// them. Five residency controls written by four separate tasks into one settings pipeline is how a
 /// project grows thirteen touch points per key (design-lessons rule 1), so the whole set lands
 /// here in one place.
 /// </para>
@@ -76,6 +77,8 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
     /// the control, puts <see cref="StartWithWindowsUnavailableMessage"/> beside it, and is never
     /// called: the key still saves in that case, because it carries the user's intent even where
     /// nothing can act on it yet.</param>
+    /// <param name="telemetry">The shared telemetry preview and link. Null in tests, which get one
+    /// with an empty preview.</param>
     public GeneralTabViewModel(
         Func<GeneralSettings> load,
         Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings> mutateGeneral,
@@ -83,10 +86,12 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
         Action<Action>? post = null,
         ILogger? logger = null,
         Action<EventHandler<GeneralSettings>>? subscribeGeneralChanged = null,
-        Action<EventHandler<GeneralSettings>>? unsubscribeGeneralChanged = null)
+        Action<EventHandler<GeneralSettings>>? unsubscribeGeneralChanged = null,
+        TelemetryDisclosureViewModel? telemetry = null)
         : base(load, mutateGeneral, post, logger, subscribeGeneralChanged, unsubscribeGeneralChanged)
     {
         _startupShortcut = startupShortcut;
+        Telemetry = telemetry ?? new TelemetryDisclosureViewModel(() => "", _ => { });
 
         // Read once, here: whether this build can carry a Startup shortcut is a property of the
         // build and cannot change while the application runs (spec 12.11 behaviour 8). The
@@ -134,6 +139,14 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
     [ObservableProperty]
     public partial bool SurveyDownloadsEnabled { get; set; }
 
+    /// <summary><c>general.telemetry_enabled</c>. Saves immediately, together with the install id
+    /// and the prompted flag (<see cref="TelemetryDisclosureViewModel.WithDecision"/>).</summary>
+    [ObservableProperty]
+    public partial bool TelemetryEnabled { get; set; }
+
+    /// <summary>The shared telemetry preview and link.</summary>
+    public TelemetryDisclosureViewModel Telemetry { get; }
+
     /// <summary>
     /// Whether the Start with Windows control may be used. False on a build the updater did not
     /// install, exactly as the About tab's update button is (spec 17.1). With no seam bound it is
@@ -159,6 +172,7 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
         StartMinimized = general.StartMinimized;
         NotifyOnScanComplete = general.NotifyOnScanComplete;
         SurveyDownloadsEnabled = general.SurveyDownloadsEnabled;
+        TelemetryEnabled = general.TelemetryEnabled;
     }
 
     // ---- the immediate saves ------------------------------------------------------------------
@@ -245,4 +259,11 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
             general => general with { SurveyDownloadsEnabled = value },
             value ? "Survey downloads turned on" : "Survey downloads turned off",
             () => SurveyDownloadsEnabled = !value);
+
+    // Turning on mints a fresh install id, turning off clears it, in the same write.
+    partial void OnTelemetryEnabledChanged(bool value)
+        => ImmediateSave(
+            general => TelemetryDisclosureViewModel.WithDecision(general, value),
+            value ? "Anonymous usage statistics turned on" : "Anonymous usage statistics turned off",
+            () => TelemetryEnabled = !value);
 }

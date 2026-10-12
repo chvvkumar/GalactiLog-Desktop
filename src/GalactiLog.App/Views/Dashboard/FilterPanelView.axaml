@@ -5,7 +5,7 @@
              x:Class="GalactiLog.App.Views.Dashboard.FilterPanelView"
              x:DataType="dash:FilterPanelViewModel">
   <!-- design-spec 12.2: the collapsible left filter panel. Seven collapsible sections, each with
-       an active marker, a Reset Filters button, and nothing else: this control never queries.
+       an active marker, a Reset filters button, and nothing else: this control never queries.
        Every colour is a theme token (spec 14) except a Filters pill's tint, which is the
        configured filter colour and therefore user data, not a token.
 
@@ -36,21 +36,21 @@
                     CornerRadius="{DynamicResource RadiusSm}" />
     </DataTemplate>
 
-    <!-- Spec 12.2: "each tinted with its configured colour". The tint is carried on the border so
-         the pill's own surface stays on tokens in both the checked and unchecked states. -->
+    <!-- Spec 12.2: "each tinted with its configured colour". The shared filter chip
+         (Theme/Controls.axaml) inside a borderless toggle: the tint edge and label always, and the
+         18 percent wash once selected, so a chosen filter reads as a tinted chip rather than a
+         coloured block. The toggle keeps its own hover and focus but draws no second edge. -->
     <DataTemplate x:Key="FilterPill" DataType="dash:ToggleOptionViewModel">
       <ToggleButton IsChecked="{Binding IsSelected, Mode=TwoWay}"
-                    BorderBrush="{Binding Tint}"
-                    BorderThickness="2"
                     Margin="0,0,4,4"
-                    Padding="8,3"
-                    CornerRadius="{DynamicResource RadiusSm}">
-        <StackPanel Orientation="Horizontal" Spacing="6">
-          <TextBlock Text="{Binding Label}" VerticalAlignment="Center" />
-          <TextBlock Text="{Binding FrameCount}"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorTextTertiary}" />
-        </StackPanel>
+                    Padding="0"
+                    MinHeight="0"
+                    BorderThickness="0">
+        <controls:FilterChip Tint="{Binding Tint}"
+                             Text="{Binding Label}"
+                             Detail="{Binding FrameCount}"
+                             IsWashed="{Binding IsSelected}"
+                             Padding="8,4" />
       </ToggleButton>
     </DataTemplate>
 
@@ -182,7 +182,7 @@
           <ContentControl Content="{Binding SearchSection}" ContentTemplate="{StaticResource SectionHeader}" />
         </Expander.Header>
         <StackPanel Spacing="6">
-          <TextBox Text="{Binding SearchText, Mode=TwoWay}" Watermark="Target or OBJECT name">
+          <TextBox x:Name="DashboardSearchBox" Text="{Binding SearchText, Mode=TwoWay}" Watermark="Target or OBJECT name">
             <!-- Escape dismisses the results dropdown without pinning anything (review E1). -->
             <TextBox.KeyBindings>
               <KeyBinding Gesture="Escape" Command="{Binding CloseSearchDropdownCommand}" />
@@ -373,7 +373,7 @@
         </ItemsControl.ItemTemplate>
       </ItemsControl>
 
-      <Button Content="Reset Filters"
+      <Button Content="Reset filters"
               Command="{Binding ResetCommand}"
               HorizontalAlignment="Stretch"
               HorizontalContentAlignment="Center"
@@ -398,21 +398,31 @@
     <!-- The name, like the collapse chevron's in DashboardView.axaml, is this control's only text
          (fixer-list item 21): the strip's one way back to the panel was unreachable from outside
          the process and announced as a bare "button". -->
-    <Button Grid.Row="0"
-            x:Name="FilterStripToggle"
-            Classes="chevron"
-            HorizontalAlignment="Center"
-            Margin="0,4,0,4"
-            Command="{Binding TogglePanelCommand}"
-            AutomationProperties.Name="Expand filters"
-            ToolTip.Tip="Show the filter panel">
-      <Path Data="{StaticResource IconChevronRight}"
-            Classes="icon-glyph"
-            Width="16"
-            Height="16" />
-    </Button>
+    <!-- A labelled toggle rather than a bare chevron (ux-flow F13): beside the navigation rail's
+         own collapsed column of icons, the word is what says these are the page's filters and not
+         more navigation. A hairline below it parts the toggle from the section icons. -->
+    <Border Grid.Row="0" Classes="rule" Padding="0,4,0,4">
+      <Button x:Name="FilterStripToggle"
+              Classes="chevron"
+              HorizontalAlignment="Center"
+              Padding="4"
+              Command="{Binding TogglePanelCommand}"
+              AutomationProperties.Name="Expand filters"
+              ToolTip.Tip="Filters">
+        <StackPanel Spacing="4">
+          <Path Data="{StaticResource IconChevronRight}"
+                Classes="icon-glyph"
+                HorizontalAlignment="Center"
+                Width="16"
+                Height="16" />
+          <TextBlock Text="Filters"
+                     Classes="t-caption"
+                     HorizontalAlignment="Center" />
+        </StackPanel>
+      </Button>
+    </Border>
 
-    <ItemsControl Grid.Row="1" x:Name="FilterStripSections" ItemsSource="{Binding Sections}">
+    <ItemsControl Grid.Row="1" x:Name="FilterStripSections" ItemsSource="{Binding Sections}" Margin="0,4,0,0">
       <ItemsControl.ItemTemplate>
         <DataTemplate x:DataType="dash:FilterSectionViewModel">
           <Button Classes="quiet sm strip-item"

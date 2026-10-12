@@ -365,6 +365,22 @@ public class TargetResolverTests : IDisposable
         Assert.Equal(CatalogCacheRepository.CacheHit.Miss, _cache.Get("sesame", "STILL NOT REAL").Kind);
     }
 
+    // Telemetry's resolver_failures: one failure per source that failed transiently, none for a
+    // negative answer.
+    [Fact]
+    public void Resolve_SimbadAndSesameBothFailTransiently_RecordsTwoFailures()
+    {
+        var counters = new ResolverCounters();
+        var handler = new StubHttpMessageHandler(_ => throw new HttpRequestException("simulated network failure"));
+        var resolver = new TargetResolver(_db.ConnectionString, _catalogsDirectory,
+            new CatalogCacheRepository(_db.ConnectionString, counters, wait: (_, _) => { }),
+            new SimbadClient(handler), new SesameClient(handler));
+
+        resolver.Resolve("still not real");
+
+        Assert.Equal(2, counters.Failures);
+    }
+
     // Review fix, item 3: CatalogPriority ranks Messier above NGC, so a row reachable by
     // either designation must converge on the same catalog_id_normalized and therefore the
     // same target, regardless of which form the FITS OBJECT string happened to use.

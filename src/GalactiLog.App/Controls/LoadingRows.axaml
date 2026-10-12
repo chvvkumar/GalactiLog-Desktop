@@ -1,0 +1,10 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="GalactiLog.App.Controls.LoadingRows"
+             Classes="reveal-delayed"
+             VerticalAlignment="Top">
+  <!-- Placeholder rows for a list that has not come back yet, one table row high each, so the
+       page has its shape before its data. The bars, their pulse and the 150 ms delayed reveal are
+       in Theme/Feedback.axaml; the code-behind only builds the requested number of bars. -->
+  <StackPanel x:Name="BarsPanel" />
+</UserControl>

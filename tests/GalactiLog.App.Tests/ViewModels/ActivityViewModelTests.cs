@@ -254,7 +254,7 @@ public class ActivityViewModelTests
         Assert.Equal(2, calls.Count);
         Assert.Equal("system", calls[1].Filters.Category);
         Assert.Null(calls[1].Cursor);
-        Assert.Equal("sys", system.Label);
+        Assert.Equal("System", system.Label);
     }
 
     [Fact]
@@ -598,15 +598,15 @@ public class ActivityViewModelTests
     }
 
     [Theory]
-    [InlineData("scan", "scan")]
-    [InlineData("rebuild", "reb")]
-    [InlineData("thumbnail", "thumb")]
-    [InlineData("enrichment", "enrich")]
-    [InlineData("migration", "migr")]
-    [InlineData("user_action", "user")]
-    [InlineData("system", "sys")]
+    [InlineData("scan", "Scan")]
+    [InlineData("rebuild", "Rebuild")]
+    [InlineData("thumbnail", "Thumbnails")]
+    [InlineData("enrichment", "Enrichment")]
+    [InlineData("migration", "Migration")]
+    [InlineData("user_action", "User")]
+    [InlineData("system", "System")]
     [InlineData("something_new", "something_new")]
-    public void Row_CategoryLabel_IsTheWebAbbreviation(string category, string expected)
+    public void Row_CategoryLabel_IsTheFullWord(string category, string expected)
     {
         using var page = Factory.Create(
             page: (_, _, _) => Factory.Page([Factory.Row(1, category: category)]));

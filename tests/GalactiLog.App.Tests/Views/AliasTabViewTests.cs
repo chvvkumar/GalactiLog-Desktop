@@ -109,7 +109,7 @@ public class AliasTabViewTests
         var buttons = view.GetVisualDescendants().OfType<Button>().Select(b => b.Content as string ?? "").ToList();
         Assert.Contains("Merge", buttons);
         Assert.Contains("Dismiss", buttons);
-        Assert.Contains("Add Filter", buttons);
+        Assert.Contains("Add filter", buttons);
     }
 
     [AvaloniaFact]

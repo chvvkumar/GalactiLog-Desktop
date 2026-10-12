@@ -145,14 +145,17 @@ public class TargetHeaderPartTests
         Assert.Contains("23 frames without a plate scale", disclosure.Text);
         Assert.Contains("measured by header", disclosure.Text);
 
-        // And the log line itself, as runs, with the filter dots beside it.
+        // The four stat tiles, each a figure over its caption, and the equipment under them.
         var texts = VisibleTexts(view);
         Assert.Contains("12.4 h", texts);
-        Assert.Contains("light frames,", texts);
+        Assert.Contains("Integration", texts);
+        Assert.Contains("Nights", texts);
+        Assert.Contains("Light frames", texts);
+        Assert.Contains("Date span", texts);
         Assert.Contains("on ASI2600MM, RC8.", texts);
         Assert.Equal(
-            2,
-            view.Named<ItemsControl>("LogLineFilters").GetVisualDescendants().OfType<Ellipse>().Count());
+            4,
+            view.Named<StackPanel>("StatTiles").Children.OfType<Border>().Count(border => border.Classes.Contains("panel")));
     }
 
     [AvaloniaFact]
@@ -195,10 +198,10 @@ public class TargetHeaderPartTests
         Assert.True(button.IsEffectivelyEnabled);
     }
 
-    // A failure is the filters out of the bars' order, the wrong hours text, or the figures
-    // drawn with no filter used.
+    // A failure is the filters out of the bars' order, the wrong hours text, or chips drawn with no
+    // filter used.
     [AvaloniaFact]
-    public void LogLine_ShowsThePerFilterHoursInTheBarsOrder_AndHidesWithNoBars()
+    public void FilterChips_ShowThePerFilterHoursInTheBarsOrder_AndHideWithNoBars()
     {
         using var harness = With(Factory.PopulatedTotals() with
         {
@@ -213,9 +216,21 @@ public class TargetHeaderPartTests
         var view = new TargetHeaderPart { DataContext = harness.ViewModel };
         Show(view);
 
-        var figures = view.Named<TextBlock>("IntegrationFigures");
-        Assert.True(figures.IsEffectivelyVisible);
-        Assert.Equal("SII 0.5 h  Ha 2.0 h  OIII 1.0 h", figures.Text);
+        var chips = view.Named<ItemsControl>("FilterChips");
+        Assert.True(chips.IsEffectivelyVisible);
+        var labels = chips.GetVisualDescendants().OfType<StackPanel>()
+            .Select(chip => string.Join(" ", chip.Children.OfType<TextBlock>().Select(text => text.Text)))
+            .ToList();
+        Assert.Equal(["SII 0.5 h", "Ha 2.0 h", "OIII 1.0 h"], labels);
+
+        // The shared filter chip: the tint's 18 percent wash as the chip's own fill, so the label
+        // is never faded with it.
+        var washes = chips.GetVisualDescendants().OfType<GalactiLog.App.Controls.FilterChip>()
+            .Select(chip => chip.Wash)
+            .OfType<Avalonia.Media.ISolidColorBrush>()
+            .ToList();
+        Assert.Equal(3, washes.Count);
+        Assert.All(washes, wash => Assert.Equal(0x2E, wash.Color.A));
 
         using var empty = With(Factory.PopulatedTotals() with
         {
@@ -225,7 +240,7 @@ public class TargetHeaderPartTests
         var bare = new TargetHeaderPart { DataContext = empty.ViewModel };
         Show(bare);
 
-        Assert.False(bare.Named<TextBlock>("IntegrationFigures").IsEffectivelyVisible);
+        Assert.False(bare.Named<ItemsControl>("FilterChips").IsEffectivelyVisible);
     }
 
     // Spec 12.4 places the button between Reveal folder and the overflow menu; a failure is the

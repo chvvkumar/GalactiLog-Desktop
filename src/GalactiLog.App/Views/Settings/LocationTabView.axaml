@@ -27,11 +27,7 @@
       <!-- Observer location (spec 8.3, 8.4). -->
       <Border x:Name="ObserverSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Observer location"
@@ -121,11 +117,7 @@
            here from the web's Display tab). -->
       <Border x:Name="GroupingSection"
               IsVisible="{Binding IsReady}"
-              Background="{DynamicResource ColorBgSurface}"
-              BorderBrush="{DynamicResource ColorBorderDefault}"
-              BorderThickness="1"
-              CornerRadius="{StaticResource RadiusMd}"
-              Padding="16">
+              Classes="card">
         <StackPanel Spacing="10">
           <StackPanel Orientation="Horizontal" Spacing="6">
             <TextBlock Text="Grouping and clock"

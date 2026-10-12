@@ -72,6 +72,7 @@ public class GeneralTabViewModelTests
     [InlineData(nameof(GeneralTabViewModel.StartWithWindows))]
     [InlineData(nameof(GeneralTabViewModel.StartMinimized))]
     [InlineData(nameof(GeneralTabViewModel.NotifyOnScanComplete))]
+    [InlineData(nameof(GeneralTabViewModel.TelemetryEnabled))]
     public async Task TogglingAControl_SavesThatKeyOnly(string key)
     {
         // Every key starts false, so one toggle sets exactly one of the five and the other four
@@ -92,8 +93,38 @@ public class GeneralTabViewModelTests
         Assert.Equal(key == nameof(GeneralTabViewModel.StartMinimized), document.StartMinimized);
         Assert.Equal(
             key == nameof(GeneralTabViewModel.NotifyOnScanComplete), document.NotifyOnScanComplete);
+        Assert.Equal(key == nameof(GeneralTabViewModel.TelemetryEnabled), document.TelemetryEnabled);
         Assert.NotNull(tab.StatusMessage);
         Assert.Null(tab.ErrorMessage);
+    }
+
+    [Fact]
+    public async Task Telemetry_TurningOnMintsAnId_AndTurningOffClearsIt()
+    {
+        var written = new List<GeneralSettings>();
+        using var tab = await PreferenceTabViewModelTestFactory
+            .NewGeneralTab(written: written)
+            .SettleAsync();
+
+        tab.TelemetryEnabled = true;
+        await tab.PendingWrite;
+        var on = written[^1];
+        Assert.True(on.TelemetryEnabled);
+        Assert.True(on.TelemetryPrompted);
+        Assert.True(Guid.TryParse(on.TelemetryId, out _));
+        Assert.Equal(on.TelemetryId!.ToLowerInvariant(), on.TelemetryId);
+
+        tab.TelemetryEnabled = false;
+        await tab.PendingWrite;
+        Assert.False(written[^1].TelemetryEnabled);
+        Assert.Null(written[^1].TelemetryId);
+
+        // Turned on again: a fresh id, never the old one.
+        tab.TelemetryEnabled = true;
+        await tab.PendingWrite;
+        Assert.NotNull(written[^1].TelemetryId);
+        Assert.NotEqual(on.TelemetryId, written[^1].TelemetryId);
+        Assert.Equal(3, written.Count);
     }
 
     [Fact]
@@ -479,6 +510,9 @@ public class GeneralTabViewModelTests
                 break;
             case nameof(GeneralTabViewModel.NotifyOnScanComplete):
                 tab.NotifyOnScanComplete = value;
+                break;
+            case nameof(GeneralTabViewModel.TelemetryEnabled):
+                tab.TelemetryEnabled = value;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(key), key, "Not one of the five keys.");

@@ -539,7 +539,7 @@
                 IsVisible="{Binding Review.IsCopying}"
                 Command="{Binding CancelCopyCommand}" />
         <Button x:Name="CommitButton"
-                Classes="primary"
+                Classes="accent"
                 Content="{Binding Review.CommitLabel}"
                 IsVisible="{Binding IsReviewStep}"
                 Command="{Binding CommitCommand}" />

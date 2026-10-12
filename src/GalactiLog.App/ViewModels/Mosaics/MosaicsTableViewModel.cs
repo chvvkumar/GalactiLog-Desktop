@@ -167,6 +167,10 @@ public sealed partial class MosaicsTableViewModel : ObservableObject, IDisposabl
             ? "Delete 1 mosaic? Its panels and nights are removed; no frame is touched."
             : $"Delete {SelectedMosaicCount} mosaics? Their panels and nights are removed; no frame is touched.";
 
+    /// <summary>The confirm button names its action and its count rather than a bare "Confirm".</summary>
+    public string DeleteSelectedConfirmButtonText
+        => SelectedMosaicCount == 1 ? "Delete 1 mosaic" : $"Delete {SelectedMosaicCount} mosaics";
+
     public bool AllMosaicsSelected
     {
         get => Mosaics.Count > 0 && Mosaics.All(row => row.IsSelected);
@@ -214,6 +218,7 @@ public sealed partial class MosaicsTableViewModel : ObservableObject, IDisposabl
         OnPropertyChanged(nameof(HasSelectedMosaics));
         OnPropertyChanged(nameof(DeleteSelectedText));
         OnPropertyChanged(nameof(DeleteSelectedConfirmText));
+        OnPropertyChanged(nameof(DeleteSelectedConfirmButtonText));
         OnPropertyChanged(nameof(AllMosaicsSelected));
         DeleteSelectedCommand.NotifyCanExecuteChanged();
         if (!HasSelectedMosaics)

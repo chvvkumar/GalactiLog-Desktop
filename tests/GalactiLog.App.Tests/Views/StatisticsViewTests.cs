@@ -50,9 +50,9 @@ public class StatisticsViewTests
         var (_, view, page) = Show();
 
         var labels = view.GetVisualDescendants().OfType<TextBlock>().Select(text => text.Text).ToList();
-        Assert.Contains("Total Integration", labels);
-        Assert.Contains("Catalogued Size", labels);
-        Assert.Contains("Avg per Target", labels);
+        Assert.Contains("Total integration", labels);
+        Assert.Contains("Catalogued size", labels);
+        Assert.Contains("Avg per target", labels);
         page.Dispose();
     }
 
@@ -122,7 +122,7 @@ public class StatisticsViewTests
         var empty = view.GetControl<TextBlock>("EmptyState");
         Assert.True(empty.IsVisible);
         Assert.Equal(StatisticsViewModel.EmptyStateText, empty.Text);
-        Assert.False(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        Assert.False(view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine").IsVisible);
         page.Dispose();
     }
 
@@ -132,7 +132,9 @@ public class StatisticsViewTests
         var (_, view, page) = Show(Factory.Create(
             loadStats: () => throw new InvalidOperationException("no database")));
 
-        Assert.True(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        var failure = view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine");
+        Assert.True(failure.IsVisible);
+        Assert.Same(page.RefreshCommand, failure.RetryCommand);
         Assert.False(view.GetControl<TextBlock>("EmptyState").IsVisible);
         page.Dispose();
     }
@@ -329,17 +331,42 @@ public class StatisticsViewTests
     }
 
     [AvaloniaFact]
-    public void TheView_IsInTheLedgerVocabulary()
+    public void TheView_UsesTheSharedCardAndTitleVocabulary()
     {
-        // The two-worlds rule (DESIGN.md section 4): a page taken into the Ledger vocabulary
-        // declares no card style and leaves no non-zero CornerRadius. Written as a text scan over
-        // the file, in ControlStyleScanTest's shape, so it reads as a rule rather than as a
-        // snapshot of one render.
+        // ui-polish Task 7: every section sits in the shared Border.card and the page title is the
+        // t-title tier, while the view still declares no card style of its own and sets no corner,
+        // which is the theme's. Written as a text scan over the file, in ControlStyleScanTest's
+        // shape, so it reads as a rule rather than as a snapshot of one render.
         var markup = Markup();
 
-        Assert.DoesNotContain("Border.card", markup, StringComparison.Ordinal);
-        Assert.DoesNotContain("Classes=\"card\"", markup, StringComparison.Ordinal);
+        Assert.True(
+            Regex.Matches(markup, @"Classes=""card""").Count >= 10,
+            "Each of the page's sections is in a Border.card.");
+        Assert.DoesNotContain("Selector=\"Border.card", markup, StringComparison.Ordinal);
+        Assert.DoesNotContain("t-label section", markup, StringComparison.Ordinal);
+        Assert.Contains("Classes=\"t-title\"", markup, StringComparison.Ordinal);
         Assert.Empty(Regex.Matches(markup, @"CornerRadius\s*=").Select(match => match.Value));
+    }
+
+    [AvaloniaFact]
+    public void TheFilterCell_DrawsOneTintedChipPerFilter_NotACommaList()
+    {
+        var (_, view, page) = Show();
+
+        var row = page.Performance.Rows[0];
+        var cell = view.GetControl<ItemsControl>("PerformanceRows")
+            .GetVisualDescendants()
+            .OfType<TableRow>()
+            .First()
+            .Children
+            .Single(child => TableRow.GetCol(child) == "filters");
+
+        var chips = Assert.IsAssignableFrom<ItemsControl>(cell);
+        Assert.Equal(row.FilterChips.Count, chips.ItemCount);
+        Assert.DoesNotContain(
+            cell.GetVisualDescendants().OfType<TextBlock>(),
+            text => text.Text?.Contains(',', StringComparison.Ordinal) == true);
+        page.Dispose();
     }
 
     [AvaloniaFact]

@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using GalactiLog.App.Services;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.App.Theme;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Activity;
@@ -15,6 +16,7 @@ using GalactiLog.App.ViewModels.Setup;
 using GalactiLog.App.ViewModels.Stats;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
+using GalactiLog.App.ViewModels.Telemetry;
 using GalactiLog.App.ViewModels.Tray;
 using GalactiLog.App.ViewModels.Update;
 using GalactiLog.App.Views.Mosaics;
@@ -108,6 +110,8 @@ public static class AppHost
 
         var levelSwitch = new LoggingLevelSwitch(LogEventLevel.Information);
         var ringBuffer = new LogRingBuffer();
+        // Telemetry's errors array: Warning and above counted per template, beside the ring.
+        var errorTemplateCounter = new ErrorTemplateCounter();
 
         // Task 7 (PAR-012, spec 5.8.1, 16.1, questions.md Q7; coordinator ruling on the escalation
         // this raised). general.app_log_retention_days has to be known before Log.Logger is built,
@@ -146,7 +150,8 @@ public static class AppHost
                 shared: false,
                 flushToDiskInterval: TimeSpan.FromSeconds(1),
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}")
-            .WriteTo.Sink(ringBuffer, LogEventLevel.Warning);
+            .WriteTo.Sink(ringBuffer, LogEventLevel.Warning)
+            .WriteTo.Sink(errorTemplateCounter, LogEventLevel.Warning);
 
         if (cliMode)
         {
@@ -224,6 +229,10 @@ public static class AppHost
         // filter selection. Read here for the same reason as the two above.
         var initialGraph = settingsStore.GetGraph();
         levelSwitch.MinimumLevel = ParseLevel(initialGeneral.LogLevel);
+        if (!cliMode && initialGeneral.TelemetryEnabled)
+        {
+            Log.Information("Anonymous telemetry enabled");
+        }
         appWriter.ThumbnailCacheRoot = ResolveThumbnailCacheRoot(initialGeneral.ThumbnailCacheDir);
         appWriter.CreateDirectory(appWriter.ThumbnailCacheRoot);
 
@@ -254,9 +263,9 @@ public static class AppHost
 
         // THE INSTANCE-REGISTRATION CENSUS (TRACKING section 6 item 6, coordinator ruling Q24).
         //
-        // These five, plus activityRepository and scanRunRepository further down, are the only
-        // seven registrations in this method that hand the container an object it did not
-        // construct. Every other registration is a factory. The reason is the same for all seven
+        // These six, plus activityRepository and scanRunRepository further down, are the only
+        // eight registrations in this method that hand the container an object it did not
+        // construct. Every other registration is a factory. The reason is the same for all eight
         // and it is not a preference: Build() itself uses each of them before any container
         // exists, so there is nothing to resolve them from.
         //
@@ -265,19 +274,20 @@ public static class AppHost
         //                        ThumbnailCacheBytes closure.
         //   levelSwitch          the LoggerConfiguration above and the GeneralChanged handler.
         //   ringBuffer           the LoggerConfiguration above.
+        //   errorTemplateCounter the LoggerConfiguration above (telemetry; not IDisposable).
         //   settingsRepository   new SettingsStore(settingsRepository) on the next line.
         //   settingsStore        four initial reads, the GeneralChanged subscription, CatalogSeeder.
         //   activityRepository   PruneRetention at startup.
         //   scanRunRepository    MarkInterrupted at startup.
         //
-        // The container therefore does not own these seven and never disposes them. That leaks
-        // nothing today: verified type by type, none of the seven implements IDisposable, so none
+        // The container therefore does not own these eight and never disposes them. That leaks
+        // nothing today: verified type by type, none of the eight implements IDisposable, so none
         // has a Dispose path to be dead. Item 6's original wording said otherwise and was wrong
         // about these types; the real undisposed resources it was pointing at were the two
         // HttpClientHandler instances in the resolution stack below, and those are now owned by
         // the container through factory registrations.
         //
-        // Adding a Dispose to any of these seven in future is therefore a decision, not an
+        // Adding a Dispose to any of these eight in future is therefore a decision, not an
         // omission, and it has exactly two honest resolutions: move that type's eager use out of
         // Build() so its registration can become a factory, or dispose it explicitly from
         // Program.Main beside host.Dispose(). Registering it as an instance and giving it a
@@ -287,6 +297,7 @@ public static class AppHost
         builder.Services.AddSingleton(appWriter);
         builder.Services.AddSingleton(levelSwitch);
         builder.Services.AddSingleton(ringBuffer);
+        builder.Services.AddSingleton(errorTemplateCounter);
         builder.Services.AddSingleton(settingsRepository);
         builder.Services.AddSingleton(settingsStore);
         // Phase review item 4: a factory registration, not an instance. The DI container disposes
@@ -350,7 +361,7 @@ public static class AppHost
         // FIXER LIST 5: the connection string is a registered value, not an expression a
         // second component re-derives from the AppWriter. A factory rather than the value
         // itself (Task 8): nothing in Build() reads it back through the container, so there is
-        // no reason for this to be one of the seven exceptions above.
+        // no reason for this to be one of the eight exceptions above.
         builder.Services.AddSingleton(_ => new DatabaseConnectionString(connectionString));
 
         // Dashboard queries (Phase 5 Task 2). Stateless and read-only, so one instance each;
@@ -626,7 +637,14 @@ public static class AppHost
         // AppHostTests.RegistrationBlock slices a block from its constructor call to the next
         // literal builder.Services. It owns no thread and no handle and is deliberately not
         // IDisposable, so the host's disposal order is unchanged.
-        builder.Services.AddSingleton(_ => new JobRegistry());
+        builder.Services.AddSingleton(serviceProvider => new JobRegistry(
+            notifier: serviceProvider.GetRequiredService<INotifier>()));
+
+        // The in-window notice stack. One instance behind both names: the registry, the save bar
+        // and anything else that confirms an action take the interface, and the shell's notice
+        // host binds the concrete list through the status bar.
+        builder.Services.AddSingleton(_ => new Notifier());
+        builder.Services.AddSingleton<INotifier>(serviceProvider => serviceProvider.GetRequiredService<Notifier>());
 
         // Spec 12.7's out-of-scan correlation re-run (Phase 15A Task 6, ruling F5), census member
         // eleven. A factory, never an instance, and the type is deliberately not IDisposable, so
@@ -752,7 +770,7 @@ public static class AppHost
             // Phase 16 phase review P2-2, coordinator ruling 1. The general side FAILS CLOSED: a
             // save invalidates unless the document it wrote differs from the last one this handler
             // saw ONLY in keys on the inert list, which OnlyInertKeysMoved holds and which is
-            // exactly spec 5.8.1's four wbpp_ keys today. Deliberately not the other shape, a list
+            // exactly spec 5.8.1's four wbpp_ keys plus the four telemetry_ keys today. Deliberately not the other shape, a list
             // of the inputs the derived data is built from: that one fails open the day an input is
             // added, while this one can only fail open if a key is deliberately put on the inert
             // list. A key this build does not recognise rides in GeneralSettings.ExtensionData and
@@ -894,7 +912,8 @@ public static class AppHost
         // tabs with staged edits register with it as they are built (RegisterPending below), the
         // shell's save bar binds it, and the manual scan gate reads it.
         builder.Services.AddSingleton(serviceProvider => new PendingEditsRegistry(
-            serviceProvider.GetRequiredService<ILogger<PendingEditsRegistry>>()));
+            serviceProvider.GetRequiredService<ILogger<PendingEditsRegistry>>(),
+            serviceProvider.GetRequiredService<INotifier>()));
         // The one manual-scan delegate. The status bar, the dashboard's empty state and the Library
         // tab all call this gate, so all three refuse while an edit is staged (a scan reads disk
         // and would ignore it) and none of them can disagree about what a manual scan is.
@@ -918,7 +937,8 @@ public static class AppHost
             // Spec 12's job monitor (PAR-015, ruling D1), beside the update indicator and for the
             // same reason: a trailing optional parameter, named rather than positional, so dropping
             // it fails a test instead of compiling.
-            jobs: serviceProvider.GetRequiredService<JobRegistry>()));
+            jobs: serviceProvider.GetRequiredService<JobRegistry>(),
+            notifier: serviceProvider.GetRequiredService<Notifier>()));
 
         // Spec 12.11's residency owner and notification-area icon (Phase 11 Task 2). Factories,
         // like every other Phase 11 registration; neither is resolved until
@@ -959,6 +979,13 @@ public static class AppHost
         // UI thread without opening a SQLite context in front of the first frame. The CLI path
         // builds this too and never resolves it, exactly like StartupState above.
         builder.Services.AddSingleton(_ => new Theme.StartupTheme(initialGeneral.Theme));
+
+        // The stored general.font, carried by value for FontManager.ApplyStored exactly as the
+        // theme id above is. The chart axis label size is a process-wide value with no Avalonia
+        // dependency, so it is set here from the stored text size and followed on every general
+        // save below.
+        builder.Services.AddSingleton(_ => new Theme.StartupFont(initialGeneral.Font));
+        ChartTheme.RootFontSize = MainWindowViewModel.ResolveRootFontSize(initialGeneral.TextSize);
 
         builder.Services.AddSingleton(serviceProvider => new WindowResidencyService(
             settingsStore.GetGeneral,
@@ -1107,6 +1134,10 @@ public static class AppHost
             loadTargetValues: serviceProvider.GetRequiredService<CustomColumnRepository>().TargetValues,
             loadValuesForTarget: serviceProvider.GetRequiredService<CustomColumnRepository>().ValuesForTarget,
             writeCustomValue: serviceProvider.GetRequiredService<CustomColumnRepository>().SetValue);
+
+            // A row's Copy name takes the registered clipboard path and its logger rather than an
+            // unlogged copy of its own.
+            dashboard.Targets.Shell = serviceProvider.GetRequiredService<ShellIntegration>();
 
             // Phase 9 FIXER item 5. TargetListViewModel seeds PageSize once at construction from
             // general.default_page_size and is a singleton underneath this page, so a page size
@@ -2209,6 +2240,7 @@ public static class AppHost
             settingsStore.MutateGeneral,
             serviceProvider.GetRequiredService<IStartupShortcut>(),
             logger: serviceProvider.GetRequiredService<ILogger<GeneralTabViewModel>>(),
+            telemetry: serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()(),
             subscribeGeneralChanged: handler => settingsStore.GeneralChanged += handler,
             unsubscribeGeneralChanged: handler => settingsStore.GeneralChanged -= handler));
 
@@ -2269,7 +2301,10 @@ public static class AppHost
             // from here: resolving this tab inside an AppHost handler would build it and read four
             // documents for a reader who never opened it.
             subscribeCustomColumnsChanged: handler => customColumns.Changed += handler,
-            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler));
+            unsubscribeCustomColumnsChanged: handler => customColumns.Changed -= handler,
+            // The font picker's live swap, named here as the theme's is above: replaces the
+            // FontSans resource and the charts' typeface.
+            applyFont: FontManager.Apply));
         });
 
         builder.Services.AddSingleton(serviceProvider => new StorageTabViewModel(
@@ -2698,6 +2733,42 @@ public static class AppHost
             // never offered an update builds no dialog service.
             showPrompt: () => serviceProvider.GetRequiredService<UpdatePromptService>().ShowAsync(),
             logger: serviceProvider.GetRequiredService<ILogger<UpdateService>>()));
+        // Opt-in telemetry. The builder is the one producer of the report bytes, shared by the
+        // sender and the preview. The sender is a BackgroundService, but this host is never
+        // started (Program.Main only builds it), so App starts it beside UpdateService and the
+        // container's Dispose cancels it. It is not also added with AddHostedService, which would
+        // start a second loop the day the host is started.
+        builder.Services.AddSingleton(serviceProvider => new TelemetryReportBuilder(
+            serviceProvider.GetRequiredService<BuildInfo>(),
+            settingsStore,
+            serviceProvider.GetRequiredService<ResolverCounters>(),
+            errorTemplateCounter,
+            appWriter.AppDataRoot));
+        builder.Services.AddSingleton(serviceProvider => new TelemetryService(
+            serviceProvider.GetRequiredService<BuildInfo>(),
+            settingsStore,
+            serviceProvider.GetRequiredService<TelemetryReportBuilder>(),
+            serviceProvider.GetRequiredService<IntegrationHttpClient>(),
+            serviceProvider.GetRequiredService<ResolverCounters>(),
+            errorTemplateCounter,
+            appWriter.AppDataRoot,
+            serviceProvider.GetRequiredService<ILogger<TelemetryService>>()));
+        // The telemetry preview and public statistics link, one instance per surface (the prompt,
+        // the setup wizard and the General tab). The preview calls the builder above, the same
+        // function the sender posts, so the user reads exactly what leaves the machine.
+        builder.Services.AddSingleton<Func<TelemetryDisclosureViewModel>>(serviceProvider => () =>
+            new TelemetryDisclosureViewModel(
+                () => serviceProvider.GetRequiredService<TelemetryReportBuilder>()
+                    .Build(includeCrash: true, indented: true),
+                serviceProvider.GetRequiredService<ShellIntegration>().OpenWithDefaultApplication,
+                serviceProvider.GetRequiredService<ILogger<TelemetryDisclosureViewModel>>()));
+        // The sixth user of the one modal host: the one-time telemetry question.
+        builder.Services.AddSingleton(serviceProvider => new TelemetryPromptService(
+            () => new TelemetryPromptViewModel(
+                settingsStore.MutateGeneral,
+                serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()(),
+                serviceProvider.GetRequiredService<ILogger<TelemetryPromptViewModel>>()),
+            serviceProvider.GetRequiredService<ModalHost>()));
         // The fifth user of the one modal host (TRACKING section 6 item 22). The page is built
         // from the update service's current state at show time, and is null when that state has
         // moved on, which is the case the service's own prompt request cannot rule out.
@@ -2766,7 +2837,11 @@ public static class AppHost
             // region's maximum width follow the document rather than the value read at startup.
             // Posted to the UI thread because GeneralChanged is raised on the saving thread and
             // both properties drive layout.
-            settingsStore.GeneralChanged += (_, general) => UiPost.Default(() => shell.ApplyGeneral(general));
+            settingsStore.GeneralChanged += (_, general) => UiPost.Default(() =>
+            {
+                shell.ApplyGeneral(general);
+                ChartTheme.ApplyRootFontSize(shell.RootFontSize);
+            });
 
             return shell;
         });
@@ -2848,11 +2923,12 @@ public static class AppHost
                 // Settings Storage tab takes, so the two surfaces record a move one way.
                 dataRoot: () => resolution,
                 requestDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Request,
-                cancelDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Cancel));
+                cancelDataRootMove: serviceProvider.GetRequiredService<DataRootMoveRequest>().Cancel,
+                telemetry: serviceProvider.GetRequiredService<Func<TelemetryDisclosureViewModel>>()()));
 
         // Phase 10 Task 9's four registrations, appended rather than inserted among the lists
         // above. All four are factories, so none of them hands the container an object it did not
-        // construct and the instance-registration census stays at seven (ruling Q24).
+        // construct and the instance-registration census stays at eight (ruling Q24).
         builder.Services.AddSingleton(_ => resolution);
         builder.Services.AddSingleton(_ => relocation);
         builder.Services.AddSingleton(_ => new DataRootPointer(appWriter));
@@ -2944,7 +3020,7 @@ public static class AppHost
         => string.Equals(WithoutInertKeys(before), WithoutInertKeys(after), StringComparison.Ordinal);
 
     // THE INERT LIST, and the only place it is written: spec 5.8.1's four wbpp_ keys, which are the
-    // export page's own settings. Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
+    // export page's own settings, plus the four general.telemetry_* keys (the decision and the daily sender's stamp). Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
     // reads one, and the quality panel writes the last of them once per coalesced chip edit and
     // again when the page closes.
     private static string WithoutInertKeys(Core.Settings.GeneralSettings general)
@@ -2954,6 +3030,12 @@ public static class AppHost
             WbppStagingPathDocument = null,
             WbppExclusionsDocument = null,
             WbppQualityByRigDocument = null,
+            // Written by the telemetry sender once a day; feeds no derived data.
+            TelemetryLastSent = null,
+            // The telemetry decision keys: read only by the sender and the builder.
+            TelemetryEnabled = false,
+            TelemetryPrompted = false,
+            TelemetryId = null,
         });
 
     // Spec 12.5's "thumbnail cache bytes" figure (Phase 9 Task 2, questions.md Q12). Sums the

@@ -1,3 +1,4 @@
+using GalactiLog.Core.Text;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Headless.XUnit;
@@ -55,8 +56,8 @@ public class StatisticsViewModelTests
 
         var tile = page.Overview.Tiles[4];
 
-        Assert.Equal("Avg Rig-Session Length", tile.Label);
-        Assert.Equal(MetricText.Integration(9_000d), tile.Value);
+        Assert.Equal("Avg rig-session length", tile.Label);
+        Assert.Equal(DurationFormat.Prose(9_000d), tile.Value);
         Assert.Equal("4 rig-sessions", tile.Subtitle);
     }
 
@@ -68,8 +69,8 @@ public class StatisticsViewModelTests
 
         var tile = page.Overview.Tiles[5];
 
-        Assert.Equal("Avg per Target", tile.Label);
-        Assert.Equal(MetricText.Integration(12_000d), tile.Value);
+        Assert.Equal("Avg per target", tile.Label);
+        Assert.Equal(DurationFormat.Prose(12_000d), tile.Value);
         Assert.Equal("3 resolved targets", tile.Subtitle);
     }
 
@@ -112,7 +113,7 @@ public class StatisticsViewModelTests
         // questions.md Q11 dropped fits_disk_bytes, so the web's "<x> on disk" subtitle has no
         // figure to carry and the card says what its own number is instead.
         var tile = page.Overview.Tiles[2];
-        Assert.Equal("Catalogued Size", tile.Label);
+        Assert.Equal("Catalogued size", tile.Label);
         Assert.Contains("catalogued bytes", tile.Subtitle, StringComparison.Ordinal);
         Assert.DoesNotContain("on disk", tile.Subtitle, StringComparison.Ordinal);
     }
@@ -594,19 +595,6 @@ public class StatisticsViewModelTests
     [InlineData(2_340_000_000_000d, "2.34 TB")]
     public void Storage_FormatsBytesWithTheDecimalSiRule(double bytes, string expected)
         => Assert.Equal(expected, MetricText.Bytes(bytes));
-
-    [Theory]
-    // A whole-minute total drops the seconds field.
-    [InlineData(3_600d, "01h 00m")]
-    [InlineData(3_660d, "01h 01m")]
-    // A non-whole minute keeps it, zero-padded.
-    [InlineData(3_665d, "01h 01m 05s")]
-    // Hours are not capped at 24.
-    [InlineData(1_123_500d, "312h 05m")]
-    // Negative clamps to zero.
-    [InlineData(-10d, "00h 00m")]
-    public void FormatIntegration_MatchesTheWebRule(double seconds, string expected)
-        => Assert.Equal(expected, MetricText.Integration(seconds));
 
     /// <summary>
     /// Phase 15B fixer F2. An open page re-reads when the host says the derived data behind it has

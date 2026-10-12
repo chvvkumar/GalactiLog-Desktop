@@ -1497,14 +1497,29 @@ public sealed class AppHostTests
     // The precondition seeds write through EF directly and raise nothing the dashboard hears, and the
     // constructor's own query may have read before they committed, so each test asks for the read
     // itself before the first drain. The re-query under test (return to the page) stays unasked.
+    //
+    // Drained until settled rather than for a fixed number of rounds: one round's publish can post
+    // a further quiet re-query (a facets reload, a probe landing), which a fixed third round could
+    // miss. Settled is a whole round that started no new query, with nothing in flight at its end.
     private static void DrainDashboard(DashboardViewModel dashboard)
     {
-        for (var round = 0; round < 3; round++)
+        const int MaxRounds = 20;
+        for (var round = 0; round < MaxRounds; round++)
         {
+            var before = dashboard.PendingQuery;
             Dispatcher.UIThread.RunJobs();
             dashboard.Quiesce(TimeSpan.FromSeconds(30));
             Dispatcher.UIThread.RunJobs();
+
+            var idle = new[] { dashboard.PendingQuery, dashboard.PendingSearch, dashboard.PendingRootProbe, dashboard.Filters.PendingReload }
+                .All(task => task is null || task.IsCompleted);
+            if (idle && ReferenceEquals(before, dashboard.PendingQuery))
+            {
+                return;
+            }
         }
+
+        Assert.Fail($"The dashboard was still re-querying after {MaxRounds} drain rounds.");
     }
 
     private static Guid SeedTargetWithLightFrame(AppHostFixture fixture, string name)

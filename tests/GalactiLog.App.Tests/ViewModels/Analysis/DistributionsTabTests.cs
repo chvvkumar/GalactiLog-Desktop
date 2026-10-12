@@ -358,28 +358,80 @@ public class DistributionsTabTests : IDisposable
         Assert.Null(axis.Labels);
         Assert.Equal(0d, axis.MinLimit);
         Assert.Equal(bins.Count, axis.MaxLimit);
-        Assert.Equal(1d, axis.MinStep);
-        Assert.True(axis.ForceStepToMin);
 
-        // The tick at each bar's LEFT edge names that bar's own bin's lower edge, and the one
-        // extra tick at the end names the last bin's upper edge, which under user ruling U1 is the
-        // distribution's own maximum.
+        // The ticks stand at round VALUES, not at the bin edges: 1.0 to 6.0 over ten half-unit
+        // bins is a nice step of 1, so a tick every second bin edge, each naming a whole number.
+        var separators = axis.CustomSeparators!.ToList();
+        Assert.Equal([0d, 2d, 4d, 6d, 8d, 10d], separators);
+        Assert.Equal(["1", "2", "3", "4", "5", "6"], separators.Select(axis.Labeler));
+
+        // The bars still start at the bin edges, so a tick on an edge sits at a bar's left edge.
         for (var index = 0; index < bins.Count; index++)
         {
-            var left = columns.Values!.ElementAt(index).X!.Value - 0.5d;
-            Assert.Equal(index, left, 10);
-            Assert.Equal(
-                bins[index].BinStart.ToString("F1", CultureInfo.InvariantCulture),
-                axis.Labeler(left));
+            Assert.Equal(index, columns.Values!.ElementAt(index).X!.Value - 0.5d, 10);
         }
 
-        Assert.Equal("6.0", axis.Labeler(bins.Count));
-
-        // The median of this result is inside bin 2's bar, between its two ticks.
+        // The median of this result is inside bin 2's bar, between the ticks for 2 and 3.
         var median = Assert.Single(chart.Sections).Xi!.Value;
         Assert.True(median > 2d && median < 3d, "the median line must fall inside a drawn bar");
-        Assert.Equal("2.0", axis.Labeler(Math.Floor(median)));
-        Assert.Equal("2.5", axis.Labeler(Math.Floor(median) + 1d));
+    }
+
+    // The screenshot's own shape: HFR from 0.00 to 7.25 in fifteen Sturges bins, whose edge ticks
+    // read 0.5, 1.0, 1.4, 1.9, 2.4. Every tick now lands on a multiple of the nice step.
+    [Fact]
+    public void TheValueAxis_TicksLandOnRoundValues_ForAnUnroundBinWidth()
+    {
+        const double max = 7.25d;
+        IReadOnlyList<HistogramBin> bins =
+            [.. Enumerable.Range(0, 15).Select(i => new HistogramBin(i * max / 15d, (i + 1) * max / 15d, 1))];
+
+        var axis = HistogramChartViewModel.ValueAxis(bins, "HFR (px)");
+
+        Assert.Equal(
+            ["0", "1", "2", "3", "4", "5", "6", "7"],
+            axis.CustomSeparators!.Select(axis.Labeler));
+    }
+
+    [Theory]
+    [InlineData(7.25d, 8, 1d)]
+    [InlineData(5d, 8, 1d)]
+    [InlineData(1d, 8, 0.2d)]
+    [InlineData(2d, 8, 0.25d)]
+    [InlineData(3.7d, 8, 0.5d)]
+    [InlineData(16d, 8, 2d)]
+    [InlineData(120d, 8, 20d)]
+    [InlineData(40000d, 8, 5000d)]
+    [InlineData(0.013d, 8, 0.002d)]
+    public void NiceStep_IsOneTwoTwoAndAHalfOrFiveTimesAPowerOfTen(double range, int ticks, double expected)
+        => Assert.Equal(expected, HistogramChartViewModel.NiceStep(range, ticks), 12);
+
+    [Theory]
+    [InlineData(0d)]
+    [InlineData(-1d)]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    public void NiceStep_OfNoRange_IsZero(double range)
+        => Assert.Equal(0d, HistogramChartViewModel.NiceStep(range, 8));
+
+    [Theory]
+    [InlineData(1d, 0)]
+    [InlineData(5000d, 0)]
+    [InlineData(0.5d, 1)]
+    [InlineData(0.25d, 2)]
+    [InlineData(0.002d, 3)]
+    public void DecimalsFor_PrintsEveryMultipleExactly(double step, int expected)
+        => Assert.Equal(expected, HistogramChartViewModel.DecimalsFor(step));
+
+    [Fact]
+    public void TheValueAxis_OfAConstantMetric_HasOneTickNamingTheValue()
+    {
+        IReadOnlyList<HistogramBin> constant = [new HistogramBin(-10d, -10d, 59)];
+
+        var axis = HistogramChartViewModel.ValueAxis(constant, "HFR (px)");
+
+        var tick = Assert.Single(axis.CustomSeparators!);
+        Assert.Equal(0.5d, tick);
+        Assert.Equal("-10.0", axis.Labeler(tick));
     }
 
     // ---- case 5, ruling P2-7 and seam ruling S8 -----------------------------------------------

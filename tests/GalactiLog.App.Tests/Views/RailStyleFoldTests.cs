@@ -147,7 +147,7 @@ public class RailStyleFoldTests
 
         var rail = window.GetControl<ListBox>("NavigationRail");
         var item = FirstItemOf(rail);
-        Assert.Equal(viewModel.Items[0].Title, ToolTip.GetTip(item));
+        Assert.Equal("Dashboard  Ctrl+1", ToolTip.GetTip(item));
         Assert.DoesNotContain(item.GetVisualDescendants().OfType<Control>(), c => ToolTip.GetTip(c) is not null);
 
         viewModel.IsNavRailCollapsed = false;

@@ -18,7 +18,7 @@ namespace GalactiLog.App.Tests.Views;
 public class WindowMinimumSizeTests
 {
     [AvaloniaFact]
-    public void MainWindow_RefusesToShrinkBelowTwelveEightyBySevenTwenty()
+    public void MainWindow_RefusesToShrinkBelowNineSixtyBySevenTwenty()
     {
         var window = new MainWindow();
         window.Show();
@@ -30,7 +30,8 @@ public class WindowMinimumSizeTests
 
         // The measured bounds, not MinWidth's declared value: this is what catches a Window whose
         // MinWidth is set but whose layout still shrinks past it.
-        Assert.True(window.Bounds.Width >= 1280d, $"width was {window.Bounds.Width}");
+        // 960 (owner decision, ux-flow F9): a half of a 1920 px screen, so the window snaps.
+        Assert.Equal(960d, window.Bounds.Width);
         Assert.True(window.Bounds.Height >= 720d, $"height was {window.Bounds.Height}");
     }
 

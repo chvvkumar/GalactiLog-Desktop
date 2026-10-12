@@ -63,15 +63,19 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     /// for its running-job count and flyout. Trailing and optional for the reason
     /// <paramref name="updates"/> is: a status bar built with no registry shows no job monitor at
     /// all.</param>
+    /// <param name="notifier">The in-window notice stack. Exposed here so the shell's notice host
+    /// binds it the way the status bar binds the registry; null draws no notices.</param>
     public StatusBarViewModel(
         ScanStatusService status,
         Action cancelScan,
         Func<CancellationToken, Task>? runScan = null,
         ILogger<StatusBarViewModel>? logger = null,
         UpdateService? updates = null,
-        JobRegistry? jobs = null)
+        JobRegistry? jobs = null,
+        Notifier? notifier = null)
     {
         Status = status;
+        Notifier = notifier;
         _cancelScan = cancelScan;
         _runScan = runScan;
         _logger = logger ?? (ILogger)NullLogger.Instance;
@@ -104,6 +108,24 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     /// <summary>Spec 12's job registry, bound directly by the flyout's two lists. Null when the bar
     /// was built without one, which is what hides the monitor.</summary>
     public JobRegistry? Jobs => _jobs;
+
+    /// <summary>The notice stack <c>Controls/NoticeHost</c> draws, or null.</summary>
+    public Notifier? Notifier { get; }
+
+    /// <summary>Jobs that failed since the flyout was last opened. The monitor shows the count in
+    /// error ink, so a failure in a job nobody was watching is not lost once its notice is
+    /// dismissed.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasUnseenFailures))]
+    [NotifyPropertyChangedFor(nameof(UnseenFailuresText))]
+    public partial int UnseenFailedCount { get; private set; }
+
+    public bool HasUnseenFailures => UnseenFailedCount > 0;
+
+    public string UnseenFailuresText => UnseenFailedCount > 0 ? $"{UnseenFailedCount} failed" : "";
+
+    /// <summary>The flyout opened: every failure in it has now been seen.</summary>
+    public void MarkJobsSeen() => UnseenFailedCount = 0;
 
     /// <summary>Whether the running-count text beside the monitor button is shown, which is the
     /// one thing spec 12's "shows nothing when that number is zero" still governs after the
@@ -284,6 +306,14 @@ public sealed partial class StatusBarViewModel : ObservableObject, IDisposable
     // thread. HasJobsToShow and HasRecentJobs read them; the count has its own notification above.
     private void OnJobListChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
+        // A finished job enters Recent by Insert, already marked, so its result is readable here.
+        if (ReferenceEquals(sender, _jobs?.Recent)
+            && e.Action == NotifyCollectionChangedAction.Add
+            && e.NewItems is { } added)
+        {
+            UnseenFailedCount += added.OfType<JobViewModel>().Count(job => job.Result == JobResult.Failed);
+        }
+
         OnPropertyChanged(nameof(HasJobsToShow));
         OnPropertyChanged(nameof(HasRecentJobs));
     }

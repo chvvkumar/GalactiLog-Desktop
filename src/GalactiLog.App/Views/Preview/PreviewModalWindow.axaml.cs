@@ -77,7 +77,7 @@ public partial class PreviewModalWindow : Window
     /// Measured under Avalonia 11.3.21's headless harness (Task 7 review): a key press with no
     /// focused element is still delivered to the window itself, so the harness cannot reproduce the
     /// defect this call fixes; a headless case can pin that focus lands on <c>Viewport</c>, but the
-    /// launched-app symptom this call answers is proven only by the verification agent's item 6.
+    /// launched-app symptom this call answers is proven only by the verification pass's item 6.
     /// </para>
     /// </remarks>
     protected override void OnOpened(EventArgs e)

@@ -4,32 +4,52 @@
              x:Class="GalactiLog.App.Views.Analysis.StatsCardView"
              x:DataType="analysis:StatsCardViewModel"
              IsVisible="{Binding IsVisible}">
-  <!-- Spec 12.14's one stats card, used by the Correlation tab and by Compare. Six
+  <!-- Spec 12.14's one stats card, used by the Correlation, Distributions and Compare tabs. Six
        fields in the order the web draws them: N, Min, Max, Mean, Median, StDev. Absent stats hide
        the card rather than showing zeroes, which is the view-model's own IsVisible and is bound on
        the root here so no host has to remember it.
 
-       Ledger vocabulary: no Border.card and no CornerRadius, containment is alignment and the
-       shared Border.rule hairline, and every figure takes the shared num class for its tabular
-       figures and right alignment. -->
-  <StackPanel Spacing="2">
-    <TextBlock Text="{Binding Label}"
-               Classes="t-label"
-               IsVisible="{Binding HasLabel}"
-               TextTrimming="CharacterEllipsis" />
-    <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="12">
-      <TextBlock Grid.Row="0" Grid.Column="0" Text="N" Classes="t-caption" />
-      <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding Count}" Classes="num" />
-      <TextBlock Grid.Row="1" Grid.Column="0" Text="Min" Classes="t-caption" />
-      <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding Min}" Classes="num" />
-      <TextBlock Grid.Row="2" Grid.Column="0" Text="Max" Classes="t-caption" />
-      <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Max}" Classes="num" />
-      <TextBlock Grid.Row="3" Grid.Column="0" Text="Mean" Classes="t-caption" />
-      <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding Mean}" Classes="num" />
-      <TextBlock Grid.Row="4" Grid.Column="0" Text="Median" Classes="t-caption" />
-      <TextBlock Grid.Row="4" Grid.Column="1" Text="{Binding Median}" Classes="num" />
-      <TextBlock Grid.Row="5" Grid.Column="0" Text="StDev" Classes="t-caption" />
-      <TextBlock Grid.Row="5" Grid.Column="1" Text="{Binding StdDev}" Classes="num" />
-    </Grid>
-  </StackPanel>
+       A Border.panel nested in the tab's card, the web's compact stat card. The six pairs sit two
+       across in three rows, and each pair is capped at 360 pixels so its label and its value stay
+       together: stretched over a half-page column they were 700 pixels apart and the eye lost the
+       row between them (visual-craft F8). The card's height is its three rows and nothing else,
+       so it never moves the chart above it. -->
+  <Border Classes="panel">
+    <StackPanel Spacing="4">
+      <TextBlock Text="{Binding Label}"
+                 Classes="t-label"
+                 IsVisible="{Binding HasLabel}"
+                 TextTrimming="CharacterEllipsis" />
+      <Grid RowDefinitions="Auto,Auto,Auto" ColumnSpacing="24" RowSpacing="4">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="*" MaxWidth="360" />
+          <ColumnDefinition Width="*" MaxWidth="360" />
+        </Grid.ColumnDefinitions>
+        <DockPanel Grid.Row="0" Grid.Column="0">
+          <TextBlock Text="N" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Count}" Classes="num" />
+        </DockPanel>
+        <DockPanel Grid.Row="0" Grid.Column="1">
+          <TextBlock Text="Min" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Min}" Classes="num" />
+        </DockPanel>
+        <DockPanel Grid.Row="1" Grid.Column="0">
+          <TextBlock Text="Max" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Max}" Classes="num" />
+        </DockPanel>
+        <DockPanel Grid.Row="1" Grid.Column="1">
+          <TextBlock Text="Mean" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Mean}" Classes="num" />
+        </DockPanel>
+        <DockPanel Grid.Row="2" Grid.Column="0">
+          <TextBlock Text="Median" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding Median}" Classes="num" />
+        </DockPanel>
+        <DockPanel Grid.Row="2" Grid.Column="1">
+          <TextBlock Text="StDev" Classes="t-caption" VerticalAlignment="Center" />
+          <TextBlock Text="{Binding StdDev}" Classes="num" />
+        </DockPanel>
+      </Grid>
+    </StackPanel>
+  </Border>
 </UserControl>

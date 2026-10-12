@@ -2,16 +2,10 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:analysis="using:GalactiLog.App.ViewModels.Analysis"
              xmlns:analysisviews="using:GalactiLog.App.Views.Analysis"
+             xmlns:controls="using:GalactiLog.App.Controls"
              xmlns:lvc="using:LiveChartsCore.SkiaSharpView.Avalonia"
-             xmlns:converters="using:GalactiLog.App.Converters"
              x:Class="GalactiLog.App.Views.Analysis.CorrelationTabView"
              x:DataType="analysis:CorrelationTabViewModel">
-  <UserControl.Resources>
-    <!-- One instance in this view's own resources rather than in App.axaml, which is what
-         MultiplyConverter's remark asks for: the converter is stateless and the application
-         dictionary stays the theme's. -->
-    <converters:ChartHeightConverter x:Key="ChartHeight" />
-  </UserControl.Resources>
   <!-- Spec 12.14's Correlation tab body.
 
        NO HEADING ROW AND NO HELP GLYPH LIVE HERE: all five tab heading rows and all
@@ -41,11 +35,11 @@
     </ItemsControl>
 
     <!-- The two pickers and the toggle, in spec 12.14's order. A WrapPanel and never one
-         non-wrapping row: at the 1024 by 700 minimum the content region is about 824 wide and a
+         non-wrapping row: at the 960 by 720 minimum the content region is 760 to 912 wide and a
          clipped control hides an affordance the reader cannot then find. -->
     <WrapPanel x:Name="MetricControls">
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
-        <TextBlock Text="X Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <TextBlock Text="X axis" Classes="t-caption" VerticalAlignment="Center" />
         <!-- Avalonia has no optgroup, so the "Guiding (PHD2)" group is one flat list with a header
              entry in it. The container's IsEnabled follows the entry's own IsSelectable, and the
              view-model's setter refuses the header as well, so neither half alone can let an
@@ -71,7 +65,7 @@
       </StackPanel>
 
       <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,12,8">
-        <TextBlock Text="Y Axis" Classes="t-caption" VerticalAlignment="Center" />
+        <TextBlock Text="Y axis" Classes="t-caption" VerticalAlignment="Center" />
         <ComboBox x:Name="YPicker"
                   Width="230"
                   ItemsSource="{Binding YOptions}"
@@ -124,13 +118,12 @@
            CorrelationChartViewModel.MaskTokenKey and the two must agree.
 
            The height is the page viewport less everything else on the page, floored at 280, the
-           smallest of this page's other charts. A literal froze the scatter at the smallest figure
-           that fits the smallest standard window and then never let it grow, and a scatter is the
-           one chart kind on this page whose readability is a function of plotted AREA. A star row
-           is not available: the tab body hangs off AnalysisView.axaml's one ScrollViewer over a
-           StackPanel, which measures its content with unbounded height. The subtracted figure is
-           CorrelationTabViewModel.ChartFixedSpend, whose own summary says what it sums, and the
-           layout cases measure the result at three window sizes.
+           smallest of this page's other charts, and Controls/FillViewport.cs sets it after each
+           layout pass, the one rule every Analysis tab's chart takes. A star row is not available: the tab body hangs off AnalysisView.axaml's one
+           ScrollViewer over a StackPanel, which measures its content with unbounded height. The
+           "everything else" is MEASURED, never a constant: a constant missed the sampling line,
+           the plate scale callout, the PHD2 note, a wrapped verdict and every text size above the
+           one it was measured at, and each of those pushed the stats cards below the fold.
 
            FindingStrategy is declared rather than left Automatic. Automatic resolves to
            CompareOnlyXTakeClosest only when EVERY series prefers the X strategy, and a scatter
@@ -150,9 +143,7 @@
                           XAxes="{Binding Chart.XAxes}"
                           YAxes="{Binding Chart.YAxes}"
                           Background="{DynamicResource ColorBgElevated}"
-                          Height="{Binding $parent[ScrollViewer].Viewport.Height,
-                                           Converter={StaticResource ChartHeight},
-                                           ConverterParameter={x:Static analysis:CorrelationTabViewModel.ChartFixedSpend}}" />
+                          controls:FillViewport.MinHeight="{x:Static analysis:CorrelationTabViewModel.ChartMinimumHeight}" />
 
       <!-- The verdict, then its point count in the tertiary ink, which is spec 12.14 line 7679 and
            the pinned CorrelationChart.tsx's own opacity-60 span. Two runs in one block rather than

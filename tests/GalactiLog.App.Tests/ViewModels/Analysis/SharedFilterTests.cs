@@ -34,8 +34,7 @@ public class SharedFilterTests
         return bar;
     }
 
-    private static DateTimeOffset On(int year, int month, int day)
-        => new(new DateTime(year, month, day), TimeSpan.Zero);
+    private static DateTime On(int year, int month, int day) => new(year, month, day);
 
     [Fact]
     public async Task TheEquipmentList_IsAllEquipmentPlusOneRowPerCombination_WithTheGroupedMarker()

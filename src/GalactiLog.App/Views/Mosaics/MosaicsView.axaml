@@ -21,7 +21,7 @@
        Theme/Table.axaml. MosaicsView.axaml.cs drops a column the gear hides. -->
   <UserControl.Resources>
     <!-- The mosaics table. The check column has no header cell: "Select all" sits above the
-         table. Integration keeps the "12h 05m" form (ruling R15), whose units are its own. -->
+         table. Integration reads in the prose form, "12 h 5 m" (DurationFormat.Prose). -->
     <t:TableColumns x:Key="MosaicCols" Id="Mosaic">
       <t:TableColumn Key="check" Kind="Check" />
       <t:TableColumn Key="name" Width="*" MinWidth="120" />
@@ -63,17 +63,39 @@
     </Style>
   </UserControl.Styles>
 
+  <!-- Each column is one card (spec 14.3) holding its own scroller, so the card reads as the
+       column's extent even when its list is short, and every input sits inside the card it
+       feeds rather than floating above it. -->
   <Grid RowDefinitions="Auto,*" Margin="16">
-    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,12">
-      <TextBlock Text="Mosaics" Classes="t-label section" VerticalAlignment="Center" />
+    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,16">
+      <TextBlock Text="Mosaics" Classes="t-title" VerticalAlignment="Center" />
       <controls:HelpButton Topic="mosaics.about" />
     </StackPanel>
 
     <Grid Grid.Row="1" ColumnDefinitions="*,*">
 
-      <!-- ===== Left column: detection keywords over suggestions ===== -->
-      <ScrollViewer Grid.Column="0" Margin="0,0,8,0" VerticalScrollBarVisibility="Visible" t:Table.Scroller="True">
-        <StackPanel Spacing="10">
+      <!-- ===== Left card: suggestions, with the detection keywords that produce them ===== -->
+      <Border Grid.Column="0" Classes="card" Margin="0,0,8,0">
+      <ScrollViewer VerticalScrollBarVisibility="Visible" t:Table.Scroller="True">
+        <StackPanel Spacing="12">
+
+          <Grid ColumnDefinitions="*,Auto">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+              <TextBlock Text="{Binding SuggestionsHeading}" Classes="t-heading" VerticalAlignment="Center" />
+              <controls:HelpButton Topic="mosaics.suggestions" />
+            </StackPanel>
+            <ComboBox Grid.Column="1"
+                      x:Name="CampaignGapBox"
+                      ItemsSource="{Binding GapChoices}"
+                      SelectedItem="{Binding SelectedGap}"
+                      ToolTip.Tip="Campaign gap">
+              <ComboBox.ItemTemplate>
+                <DataTemplate x:DataType="mos:CampaignGapChoice">
+                  <TextBlock Text="{Binding Label}" />
+                </DataTemplate>
+              </ComboBox.ItemTemplate>
+            </ComboBox>
+          </Grid>
 
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -82,8 +104,8 @@
             </StackPanel>
             <Button Grid.Column="1"
                     x:Name="RunDetectionButton"
-                    Classes="sm"
-                    Content="Run Detection"
+                    Classes="sm accent"
+                    Content="Run detection"
                     Command="{Binding RunDetectionCommand}"
                     ToolTip.Tip="{Binding RunDetectionTooltip}"
                     ToolTip.ShowOnDisabled="True" />
@@ -142,44 +164,26 @@
             <TextBlock Text="0 derives it from the field of view." Classes="t-caption" Foreground="{DynamicResource ColorTextSecondary}" />
           </StackPanel>
 
-          <TextBlock Text="Run Detection to apply."
+          <TextBlock Text="Run detection to apply."
                      IsVisible="{Binding ShowApplyCaption}"
                      Foreground="{DynamicResource ColorTextSecondary}" />
 
-          <!-- Suggestions -->
-          <Grid ColumnDefinitions="*,Auto" Margin="0,12,0,0">
-            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-              <TextBlock Text="{Binding SuggestionsHeading}" Classes="section" VerticalAlignment="Center" />
-              <controls:HelpButton Topic="mosaics.suggestions" />
-            </StackPanel>
-            <ComboBox Grid.Column="1"
-                      x:Name="CampaignGapBox"
-                      ItemsSource="{Binding GapChoices}"
-                      SelectedItem="{Binding SelectedGap}"
-                      ToolTip.Tip="Campaign gap">
-              <ComboBox.ItemTemplate>
-                <DataTemplate x:DataType="mos:CampaignGapChoice">
-                  <TextBlock Text="{Binding Label}" />
-                </DataTemplate>
-              </ComboBox.ItemTemplate>
-            </ComboBox>
-          </Grid>
-
           <TextBox x:Name="SuggestionFilterBox"
+                   Margin="0,4,0,0"
                    Watermark="Filter suggestions"
                    Text="{Binding FilterText}"
                    IsVisible="{Binding ShowFilter}" />
 
           <StackPanel Orientation="Horizontal" Spacing="8" IsVisible="{Binding HasVisibleSuggestions}">
             <CheckBox Content="Select all" IsChecked="{Binding AllSuggestionsSelected}" />
-            <Button Classes="sm" Content="{Binding AcceptAllText}" Command="{Binding AcceptAllCommand}" />
+            <Button Classes="sm accent" Content="{Binding AcceptAllText}" Command="{Binding AcceptAllCommand}" />
             <Button Classes="sm" Content="{Binding DismissAllText}" Command="{Binding DismissAllCommand}" />
           </StackPanel>
           <ContentControl Classes="callout warn" IsVisible="{Binding DismissAllPending}">
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="8">
               <TextBlock Text="{Binding DismissAllConfirmText}" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Classes="sm" Content="Confirm" Command="{Binding DismissAllCommand}" />
+                <Button Classes="sm" Content="{Binding DismissAllConfirmButtonText}" Command="{Binding DismissAllCommand}" />
                 <Button Classes="sm" Content="Cancel" Command="{Binding CancelDismissAllCommand}" />
               </StackPanel>
             </StackPanel>
@@ -204,7 +208,12 @@
                   <StackPanel Spacing="6">
                     <Grid ColumnDefinitions="Auto,Auto,*,Auto">
                       <CheckBox Grid.Column="0" IsChecked="{Binding IsSelected}" VerticalAlignment="Top" />
-                      <Button Grid.Column="1" Classes="chevron" VerticalAlignment="Top" Command="{Binding ToggleExpandedCommand}">
+                      <Button Grid.Column="1"
+                              Classes="chevron"
+                              VerticalAlignment="Top"
+                              Command="{Binding ToggleExpandedCommand}"
+                              ToolTip.Tip="Show or hide details"
+                              AutomationProperties.Name="Show or hide details">
                         <Panel>
                           <Path Width="16" Height="16" Classes="icon-glyph" Data="{StaticResource IconChevronRight}"
                                 IsVisible="{Binding !IsExpanded}" />
@@ -215,13 +224,15 @@
                       <StackPanel Grid.Column="2" Spacing="2" Margin="4,0">
                         <WrapPanel Orientation="Horizontal">
                           <TextBlock Text="{Binding Name}" FontWeight="SemiBold" Margin="0,0,8,0" VerticalAlignment="Center" />
-                          <Border Classes="tag" Margin="0,0,6,0" ToolTip.Tip="{Binding ConfidenceTooltip}">
+                          <!-- The tinted tag (the tag and tint classes), so the two tags read at a glance
+                               instead of as a faint grey outline. -->
+                          <Border Classes="tag tint" Margin="0,0,4,0" ToolTip.Tip="{Binding ConfidenceTooltip}">
                             <Panel>
                               <TextBlock Text="{Binding ConfidenceText}" IsVisible="{Binding IsHighConfidence}" Foreground="{DynamicResource ColorSuccess}" />
-                              <TextBlock Text="{Binding ConfidenceText}" IsVisible="{Binding !IsHighConfidence}" />
+                              <TextBlock Text="{Binding ConfidenceText}" IsVisible="{Binding !IsHighConfidence}" Foreground="{DynamicResource ColorTextSecondary}" />
                             </Panel>
                           </Border>
-                          <Border Classes="tag">
+                          <Border Classes="tag tint">
                             <TextBlock Text="{Binding SourceText}" Foreground="{DynamicResource ColorTextSecondary}" />
                           </Border>
                         </WrapPanel>
@@ -232,11 +243,14 @@
                             <TextBlock Text="{Binding FramesText}" IsVisible="{Binding FramesAreZero}" />
                           </Panel>
                           <TextBlock Text="{Binding IntegrationText}" Foreground="{DynamicResource ColorTextSecondary}" />
-                          <TextBlock Text="{Binding MoreNightsText}" IsVisible="{Binding HasMoreNights}" Margin="8,0,0,0" />
+                          <TextBlock Text="{Binding MoreNightsText}" IsVisible="{Binding HasMoreNights}" Margin="8,0,0,0"
+                                     Foreground="{DynamicResource ColorTextSecondary}" />
                         </WrapPanel>
                       </StackPanel>
-                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="6" VerticalAlignment="Top">
-                        <Button Classes="sm"
+                      <!-- Accept is the row's intended action and takes the accent tier; Dismiss
+                           stays the quiet default beside it. -->
+                      <StackPanel Grid.Column="3" Orientation="Horizontal" Spacing="8" VerticalAlignment="Top">
+                        <Button Classes="sm accent"
                                 Content="{Binding AcceptText}"
                                 Command="{Binding AcceptCommand}"
                                 ToolTip.Tip="{Binding AcceptTooltip}"
@@ -246,10 +260,10 @@
                     </Grid>
 
                     <ContentControl Classes="callout warn" IsVisible="{Binding DismissPending}">
-                      <StackPanel Spacing="6">
+                      <StackPanel Spacing="8">
                         <TextBlock Text="{x:Static mos:SuggestionRowViewModel.DismissConfirmText}" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Button Classes="sm" Content="Confirm" Command="{Binding DismissCommand}" />
+                          <Button Classes="sm" Content="Dismiss suggestion" Command="{Binding DismissCommand}" />
                           <Button Classes="sm" Content="Cancel" Command="{Binding CancelDismissCommand}" />
                         </StackPanel>
                       </StackPanel>
@@ -349,14 +363,16 @@
           </ItemsControl>
         </StackPanel>
       </ScrollViewer>
+      </Border>
 
-      <!-- ===== Right column: the mosaics table ===== -->
-      <ScrollViewer Grid.Column="1" Margin="8,0,0,0" VerticalScrollBarVisibility="Visible" t:Table.Scroller="True"
+      <!-- ===== Right card: the mosaics table ===== -->
+      <Border Grid.Column="1" Classes="card" Margin="8,0,0,0">
+      <ScrollViewer VerticalScrollBarVisibility="Visible" t:Table.Scroller="True"
                     DataContext="{Binding Table}" x:DataType="mos:MosaicsTableViewModel">
-        <StackPanel Spacing="10">
+        <StackPanel Spacing="12">
           <Grid ColumnDefinitions="*,Auto">
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-              <TextBlock Text="{Binding MosaicsHeading}" Classes="section" VerticalAlignment="Center" />
+              <TextBlock Text="{Binding MosaicsHeading}" Classes="t-heading" VerticalAlignment="Center" />
               <controls:HelpButton Topic="mosaics.table" />
             </StackPanel>
             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
@@ -364,7 +380,7 @@
                       Content="{Binding DeleteSelectedText}"
                       IsVisible="{Binding HasSelectedMosaics}"
                       Command="{Binding DeleteSelectedCommand}" />
-              <Button x:Name="CreateMosaicButton" Classes="sm" Content="{Binding CreateButtonText}" Command="{Binding ToggleCreateCommand}" />
+              <Button x:Name="CreateMosaicButton" Classes="sm accent" Content="{Binding CreateButtonText}" Command="{Binding ToggleCreateCommand}" />
               <Button x:Name="MosaicColumnGear" Padding="8,3" ToolTip.Tip="Columns">
                 <Path Width="16" Height="16" Classes="icon-glyph" Data="{StaticResource IconGear}" />
                 <Button.Flyout>
@@ -399,10 +415,10 @@
           </Grid>
 
           <ContentControl Classes="callout warn" IsVisible="{Binding DeleteSelectedPending}">
-            <StackPanel Spacing="6">
+            <StackPanel Spacing="8">
               <TextBlock Text="{Binding DeleteSelectedConfirmText}" TextWrapping="Wrap" />
               <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Classes="sm" Content="Confirm" Command="{Binding DeleteSelectedCommand}" />
+                <Button Classes="sm" Content="{Binding DeleteSelectedConfirmButtonText}" Command="{Binding DeleteSelectedCommand}" />
                 <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteSelectedCommand}" />
               </StackPanel>
             </StackPanel>
@@ -415,7 +431,7 @@
                   <KeyBinding Gesture="Enter" Command="{Binding CreateCommand}" />
                 </TextBox.KeyBindings>
               </TextBox>
-              <Button Grid.Column="1" Classes="sm" Content="Create" Margin="8,0,0,0" Command="{Binding CreateCommand}" />
+              <Button Grid.Column="1" Classes="sm accent" Content="Create" Margin="8,0,0,0" Command="{Binding CreateCommand}" />
             </Grid>
             <ContentControl Classes="callout error inline"
                             IsVisible="{Binding CreateError, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -498,18 +514,19 @@
                         <ItemsControl t:TableRow.Col="custom"
                                       ItemsSource="{Binding CustomCells}"
                                       ItemTemplate="{StaticResource TableCustomCell}" />
-                        <StackPanel t:TableRow.Col="actions" Orientation="Horizontal" Spacing="6">
-                          <Button Classes="sm" Content="Delete" Command="{Binding DeleteCommand}" />
-                          <Button Classes="sm" Content="{Binding ExpandText}" Command="{Binding ToggleExpandCommand}" />
+                        <!-- Repeated on every row, so the row tier: quiet until the pointer is over it. -->
+                        <StackPanel t:TableRow.Col="actions" Orientation="Horizontal" Spacing="4">
+                          <Button Classes="sm row" Content="Delete" Command="{Binding DeleteCommand}" />
+                          <Button Classes="sm row" Content="{Binding ExpandText}" Command="{Binding ToggleExpandCommand}" />
                         </StackPanel>
                       </t:TableRow>
                     </Panel>
 
                     <ContentControl Classes="callout warn" IsVisible="{Binding DeletePending}" Margin="0,4">
-                      <StackPanel Spacing="6">
+                      <StackPanel Spacing="8">
                         <TextBlock Text="{x:Static mos:MosaicRowViewModel.DeleteConfirmText}" TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                          <Button Classes="sm" Content="Confirm" Command="{Binding DeleteCommand}" />
+                          <Button Classes="sm" Content="Delete mosaic" Command="{Binding DeleteCommand}" />
                           <Button Classes="sm" Content="Cancel" Command="{Binding CancelDeleteCommand}" />
                         </StackPanel>
                       </StackPanel>
@@ -556,13 +573,13 @@
                                            Foreground="{DynamicResource ColorTextSecondary}" />
                                 <TextBlock t:TableRow.Col="integration" Text="{Binding IntegrationText}" />
                                 <TextBlock t:TableRow.Col="frames" Text="{Binding FramesText}" />
-                                <Button t:TableRow.Col="actions" Classes="sm" Content="Remove" Command="{Binding RemoveCommand}" />
+                                <Button t:TableRow.Col="actions" Classes="sm row" Content="Remove" Command="{Binding RemoveCommand}" />
                               </t:TableRow>
                               <ContentControl Classes="callout warn" IsVisible="{Binding RemovePending}">
-                                <StackPanel Spacing="6">
+                                <StackPanel Spacing="8">
                                   <TextBlock Text="{Binding RemoveConfirmText}" TextWrapping="Wrap" />
                                   <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Classes="sm" Content="Confirm" Command="{Binding RemoveCommand}" />
+                                    <Button Classes="sm" Content="Remove panel" Command="{Binding RemoveCommand}" />
                                     <Button Classes="sm" Content="Cancel" Command="{Binding CancelRemoveCommand}" />
                                   </StackPanel>
                                 </StackPanel>
@@ -615,6 +632,7 @@
           </StackPanel>
         </StackPanel>
       </ScrollViewer>
+      </Border>
     </Grid>
   </Grid>
 </UserControl>

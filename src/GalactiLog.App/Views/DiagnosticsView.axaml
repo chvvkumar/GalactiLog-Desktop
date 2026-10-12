@@ -45,9 +45,8 @@
       <StackPanel Grid.Column="0" Spacing="4">
         <StackPanel Orientation="Horizontal" Spacing="6">
           <TextBlock x:Name="PageTitle"
-                     Text="Diagnostics"
-                     FontWeight="SemiBold"
-                     Foreground="{DynamicResource ColorTextPrimary}" />
+                     Classes="t-title"
+                     Text="Diagnostics" />
           <controls:HelpButton Topic="page.diagnostics" />
         </StackPanel>
         <TextBlock x:Name="GeneratedAtLine"

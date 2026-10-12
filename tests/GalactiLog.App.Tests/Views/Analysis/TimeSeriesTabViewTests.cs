@@ -147,7 +147,7 @@ public class TimeSeriesTabViewTests
     }
 
     [AvaloniaFact]
-    public async Task TheSmoothingSegment_MarksTheCurrentButton_WithTheShippedClassesOnly()
+    public async Task TheSmoothingPills_MarkTheSelectedButton_WithTheShippedClassesOnly()
     {
         var (_, view, tab) = await Show(Nights(9));
 
@@ -157,21 +157,22 @@ public class TimeSeriesTabViewTests
 
         foreach (var button in new[] { raw, ma7, ma30 })
         {
-            // The same shipped pair the filter bar's granularity segment and the tab strip take.
-            // No new class and no local style; ControlStyleScanTest fails the build on one.
-            Assert.Contains("sm", button.Classes);
-            Assert.Contains("page", button.Classes);
+            // The shared pill with its selected form, the same group the filter bar's granularity
+            // segment takes. No new class and no local style; ControlStyleScanTest fails the build
+            // on one.
+            Assert.Contains("pill", button.Classes);
+            Assert.DoesNotContain("page", button.Classes);
         }
 
-        Assert.Contains("current", raw.Classes);
-        Assert.DoesNotContain("current", ma7.Classes);
+        Assert.Contains("selected", raw.Classes);
+        Assert.DoesNotContain("selected", ma7.Classes);
 
         ma30.Command!.Execute(ma30.CommandParameter);
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal(TimeSeriesSmoothing.Ma30, tab.Smoothing);
-        Assert.DoesNotContain("current", raw.Classes);
-        Assert.Contains("current", ma30.Classes);
+        Assert.DoesNotContain("selected", raw.Classes);
+        Assert.Contains("selected", ma30.Classes);
     }
 
     // ---- spine B escalation 2: a SECOND query into the realised view ---------------------------

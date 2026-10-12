@@ -56,7 +56,7 @@ public class ActivityViewTests
 
         Assert.Contains("2025-03-04", texts);
         Assert.Contains("21:05", texts);
-        Assert.Contains("scan", texts);
+        Assert.Contains("Scan", texts);
         Assert.Contains("Scan complete (12 new)", texts);
         Assert.Contains("1:31", texts);
     }
@@ -90,7 +90,7 @@ public class ActivityViewTests
 
         var texts = Texts(view);
         Assert.Contains("warn", texts);
-        Assert.Contains("enrich", texts);
+        Assert.Contains("Enrichment", texts);
         Assert.True(window.Bounds.Width > 0);
     }
 
@@ -112,7 +112,9 @@ public class ActivityViewTests
             page: (_, _, _) => throw new InvalidOperationException("no database"));
         var (_, view) = Show(page);
 
-        Assert.True(view.GetControl<TextBlock>("FailureLine").IsVisible);
+        var failure = view.GetControl<GalactiLog.App.Controls.ErrorState>("FailureLine");
+        Assert.True(failure.IsVisible);
+        Assert.Same(page.RefreshCommand, failure.RetryCommand);
         Assert.False(view.GetControl<TextBlock>("EmptyState").IsVisible);
     }
 
@@ -277,7 +279,7 @@ public class ActivityViewTests
         var (_, view) = Show(page);
 
         Assert.True(page.Rows.Single().IsUnseen);
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
         Assert.True(badge.IsVisible);
     }
 
@@ -291,8 +293,8 @@ public class ActivityViewTests
         var (_, view) = Show(page);
 
         Assert.False(page.Rows.Single().IsUnseen);
-        var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Classes.Contains("tag")).ToList();
-        Assert.All(badges, b => Assert.False(b.IsVisible));
+        var badges = view.GetVisualDescendants().OfType<Border>().Where(b => b.Name == "NewBadge").ToList();
+        Assert.False(Assert.Single(badges).IsVisible);
     }
 
     [AvaloniaFact]
@@ -302,29 +304,36 @@ public class ActivityViewTests
             page: (_, _, _) => Factory.Page([Factory.Row(1, timestamp: Factory.Noon)]));
         var (_, view) = Show(page);
 
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
+        Assert.Contains("tag", badge.Classes);
         Assert.Equal("new", (badge.Child as TextBlock)?.Text);
     }
 
     [AvaloniaFact]
-    public async Task View_TheBadge_IsInTheLeadingCell()
+    public async Task View_TheDateAndTheBadge_AreInDifferentColumns()
     {
+        // The badge used to share the fixed-width date cell and was drawn over the date. It now
+        // has a column of its own in the same row grid, so the two cannot overlap.
+        var instant = new DateTime(2025, 3, 4, 21, 5, 0, DateTimeKind.Utc);
         using var page = await Factory.CreateAsync(
-            page: (_, _, _) => Factory.Page([Factory.Row(1, timestamp: Factory.Noon)]));
+            page: (_, _, _) => Factory.Page([Factory.Row(1, timestamp: instant)]));
         var (_, view) = Show(page);
 
-        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Classes.Contains("tag"));
-        var cell = badge.GetVisualParent();
-        Assert.IsType<Panel>(cell);
-        Assert.Equal(0, Grid.GetColumn((Control)cell!));
+        var badge = view.GetVisualDescendants().OfType<Border>().Single(b => b.Name == "NewBadge");
+        var date = view.GetVisualDescendants().OfType<TextBlock>().Single(t => t.Text == "2025-03-04");
+
+        Assert.Same(date.GetVisualParent(), badge.GetVisualParent());
+        Assert.IsType<Grid>(badge.GetVisualParent());
+        Assert.Equal(0, Grid.GetColumn(date));
+        Assert.Equal(5, Grid.GetColumn(badge));
+        Assert.False(date.Bounds.Intersects(badge.Bounds));
     }
 
     [AvaloniaFact]
     public async Task View_TheRowTemplateColumnIndices_AreUnchanged()
     {
-        // Section 7.3: the badge sits inside column 0's cell rather than adding a column, so no
-        // Grid.Column index shifts. Message, duration and the chevron are still at columns 4, 5
-        // and 6.
+        // The badge has its own column after the message, so message, badge, duration and the
+        // chevron are at columns 4, 5, 6 and 7.
         //
         // Phase 14B fixer, fixer list item 53 (task7-review P3). This used to assert five rendered
         // text fragments and never read a Grid.Column at all, although the rule it exists for is
@@ -349,8 +358,8 @@ public class ActivityViewTests
             button => button.Classes.Contains("chevron"));
 
         Assert.Equal(4, Grid.GetColumn(message));
-        Assert.Equal(5, Grid.GetColumn(duration));
-        Assert.Equal(6, Grid.GetColumn(chevron));
+        Assert.Equal(6, Grid.GetColumn(duration));
+        Assert.Equal(7, Grid.GetColumn(chevron));
         Assert.Same(rowGrid, duration.GetVisualParent());
     }
 

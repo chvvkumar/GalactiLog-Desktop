@@ -279,8 +279,8 @@ public class HelpTopicsTests
         var paragraph = HelpTopics.Get("page.target").Paragraph;
 
         Assert.Contains(
-            "The page is one layout, Question Modes, with a mode switch under the header: Night review, "
-            + "Compare nights, and Integration",
+            "The page is one layout, Question Modes, with a mode switch under the header: Session review, "
+            + "Compare sessions, and Integration",
             paragraph,
             StringComparison.Ordinal);
         Assert.Contains("The nights list is a sidebar: drag the handle on its right edge", paragraph, StringComparison.Ordinal);

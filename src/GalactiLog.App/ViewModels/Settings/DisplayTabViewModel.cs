@@ -109,6 +109,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     private readonly Func<GraphSettings> _loadGraph;
     private readonly GraphSettingsWriter _graph;
     private readonly Action<string> _applyTheme;
+    private readonly Action<string> _applyFont;
     private readonly DisplayColumnWriter _columns;
     private readonly Func<IReadOnlyList<CustomColumnDefinition>>? _loadCustomColumns;
     private readonly Action<EventHandler<DisplaySettings>>? _unsubscribeDisplayChanged;
@@ -176,6 +177,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     /// subscribes nothing and costs nothing.</param>
     /// <param name="unsubscribeCustomColumnsChanged">The matching detach, run from
     /// <see cref="DisposeCore"/>.</param>
+    /// <param name="applyFont">Normally <c>FontManager.Apply</c>, the default, which swaps the
+    /// <c>FontSans</c> resource and the charts' typeface. Optional so a test can observe it.</param>
     public DisplayTabViewModel(
         Func<GeneralSettings> loadGeneral,
         Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings> mutateGeneral,
@@ -196,7 +199,8 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
         Action<EventHandler<DisplaySettings>>? unsubscribeDisplayChanged = null,
         Func<IReadOnlyList<CustomColumnDefinition>>? loadCustomColumns = null,
         Action<EventHandler>? subscribeCustomColumnsChanged = null,
-        Action<EventHandler>? unsubscribeCustomColumnsChanged = null)
+        Action<EventHandler>? unsubscribeCustomColumnsChanged = null,
+        Action<string>? applyFont = null)
         : base(loadGeneral, mutateGeneral, post, logger, subscribeGeneralChanged, unsubscribeGeneralChanged)
     {
         _loadDisplay = loadDisplay;
@@ -204,6 +208,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
         _loadGraph = loadGraph;
         _graph = graph;
         _applyTheme = applyTheme;
+        _applyFont = applyFont ?? FontManager.Apply;
         _columns = columns;
         _loadCustomColumns = loadCustomColumns;
         _unsubscribeDisplayChanged = unsubscribeDisplayChanged;
@@ -213,6 +218,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
 
         // Assigned before anything can observe them; the applying guard covers the first publish.
         SelectedTheme = Themes.FirstOrDefault();
+        SelectedFont = FontManager.Options[0];
         SelectedTextSize = TextSizes[0];
         SelectedContentWidth = ContentWidths[2];
         SelectedPageSize = null;
@@ -256,6 +262,13 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
 
     [ObservableProperty]
     public partial ThemeOption? SelectedTheme { get; set; }
+
+    /// <summary>The interface typefaces, in picker order; the dropdown renders each in itself.
+    /// </summary>
+    public IReadOnlyList<FontOption> FontChoices => FontManager.Options;
+
+    [ObservableProperty]
+    public partial FontOption SelectedFont { get; set; }
 
     [ObservableProperty]
     public partial TextSizeOption SelectedTextSize { get; set; }
@@ -368,6 +381,7 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
     protected override void ApplyDocument(GeneralSettings general)
     {
         SelectedTheme = Themes.FirstOrDefault(option => option.Id == general.Theme) ?? Themes.FirstOrDefault();
+        SelectedFont = FontManager.Resolve(general.Font);
         SelectedTextSize = TextSizes.FirstOrDefault(option => option.Id == general.TextSize) ?? TextSizes[0];
         SelectedContentWidth = ContentWidths.FirstOrDefault(option => option.Id == general.ContentWidth)
             ?? ContentWidths[2];
@@ -428,8 +442,43 @@ public sealed partial class DisplayTabViewModel : GeneralSettingsTabViewModel, I
             });
     }
 
+    // The theme picker's shape: applied before the write so the window changes with the click,
+    // and a refused write rolls the picker and the typeface back together.
+    partial void OnSelectedFontChanged(FontOption oldValue, FontOption newValue)
+    {
+        // A ComboBox clears its selection to null when its items are replaced; there is nothing
+        // to apply or save.
+        if (newValue is null)
+        {
+            return;
+        }
+
+        var id = newValue.Id;
+        if (!IsApplying && IsReadyToSave)
+        {
+            _applyFont(id);
+        }
+
+        ImmediateSave(
+            general => general with { Font = id },
+            "Font saved",
+            () =>
+            {
+                SelectedFont = oldValue;
+                if (oldValue is not null)
+                {
+                    _applyFont(oldValue.Id);
+                }
+            });
+    }
+
     partial void OnSelectedTextSizeChanged(TextSizeOption oldValue, TextSizeOption newValue)
     {
+        if (newValue is null)
+        {
+            return;
+        }
+
         var id = newValue.Id;
         ImmediateSave(
             general => general with { TextSize = id },

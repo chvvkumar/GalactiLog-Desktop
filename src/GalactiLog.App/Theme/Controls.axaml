@@ -15,8 +15,9 @@
        three more times.
 
        Phase 12 turns that habit into the rule. This file is the whole control vocabulary: the
-       flat button default, the one filled button, the quiet and small buttons, the tag, the
-       hairline rule, the four type tiers and the data-ink classes. A view that declares its own
+       card and the panel, the quiet button default, the accent, row and link tiers, the one
+       filled button, the tab strip, the tag, the hairline rule, the type tiers, the data-ink
+       classes, the motion and the focus ring. A view that declares its own
        Button or Border.badge style is what ControlStyleScanTest fails on, because a convention
        spread across N views is forgotten at view N+1 (design lesson 2). -->
   <Styles.Resources>
@@ -86,7 +87,7 @@
 
              Ruling C23 (fix pass 1): a rig line carries no header row, so a bare editor has no
              visible name. Each cell is preceded by its own column-name caption, Classes="t-label"
-             alone (the secondary ink, not muted) at the same FontSizeLabel size FrameCountText
+             alone (the label tier's own ink, not muted) at the same FontSizeLabel size FrameCountText
              already carries. -->
         <ItemsControl ItemsSource="{Binding CellList}" IsVisible="{Binding HasCells}">
           <ItemsControl.ItemsPanel>
@@ -236,6 +237,67 @@
       <Setter Property="IsEnabled" Value="{Binding IsEnabled}" />
       <Setter Property="ToolTip.Tip" Value="{Binding ToolTipText}" />
     </ControlTheme>
+
+    <!-- The filter chip (Controls/FilterChip.cs), the one shape a filter colour takes behind a
+         label: the tint's 18 percent wash inside its 25 percent edge, with the frosted badge's
+         inset highlight and tinted shadow. The name takes the tint only where it reads against
+         the surface (TintInkConverter, 3:1); otherwise the primary ink the chip hands down, which
+         is what keeps L legible on the light themes. The detail figure sits in the quiet ink. -->
+    <ControlTheme x:Key="{x:Type controls:FilterChip}" TargetType="controls:FilterChip">
+      <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+      <Setter Property="Padding" Value="4,0" />
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="HorizontalAlignment" Value="Left" />
+      <Setter Property="Template">
+        <ControlTemplate>
+          <Border Name="PART_Chip"
+                  Background="{TemplateBinding Wash}"
+                  BorderBrush="{TemplateBinding Edge}"
+                  BorderThickness="1"
+                  BoxShadow="{TemplateBinding Shadow}"
+                  CornerRadius="{StaticResource RadiusSm}"
+                  Padding="{TemplateBinding Padding}">
+            <StackPanel Orientation="Horizontal" Spacing="4">
+              <TextBlock Name="PART_Label"
+                         Text="{TemplateBinding Text}"
+                         FontWeight="SemiBold"
+                         VerticalAlignment="Center"
+                         Tag="{DynamicResource ColorBgSurface}">
+                <TextBlock.Foreground>
+                  <MultiBinding Converter="{x:Static conv:TintInkConverter.Instance}">
+                    <Binding Path="Tint" RelativeSource="{RelativeSource TemplatedParent}" />
+                    <Binding Path="Tag" RelativeSource="{RelativeSource Self}" />
+                  </MultiBinding>
+                </TextBlock.Foreground>
+              </TextBlock>
+              <TextBlock Name="PART_Detail"
+                         Text="{TemplateBinding Detail}"
+                         VerticalAlignment="Center"
+                         IsVisible="{Binding Detail, RelativeSource={RelativeSource TemplatedParent}, Converter={x:Static ObjectConverters.IsNotNull}}"
+                         Foreground="{DynamicResource ColorTextTertiary}" />
+            </StackPanel>
+          </Border>
+        </ControlTemplate>
+      </Setter>
+      <!-- The label tier, for a chip beside the target header's stat tiles, where every pixel of
+           height is a frame row taken from the table. -->
+      <Style Selector="^.label /template/ TextBlock">
+        <Setter Property="FontSize"
+                Value="{Binding $parent[Window].FontSize,
+                                Converter={StaticResource Multiply},
+                                ConverterParameter={StaticResource FontSizeLabel}}" />
+      </Style>
+    </ControlTheme>
+
+    <!-- One filter badge over vm:PaletteBadgeViewModel: the target list's Palette column and
+         session line, and the Statistics Filters cell. The frame count is on the tooltip rather
+         than inside the badge, which keeps a table cell to one line (user ruling U3 item 4). -->
+    <DataTemplate x:Key="FilterBadgeTemplate" x:DataType="vm:PaletteBadgeViewModel">
+      <controls:FilterChip Tint="{Binding Tint}"
+                           Text="{Binding CanonicalName}"
+                           Margin="0,0,8,0"
+                           ToolTip.Tip="{Binding FrameCountText}" />
+    </DataTemplate>
   </Styles.Resources>
 
   <!-- The rig label row's placement inside a table row slot, shared by the per-filter and ranges
@@ -316,26 +378,90 @@
        FluentTheme's own Dark default, pure white, a colour no GalactiLog dictionary declares. On
        red-light, the night-vision theme, the Analysis stats card figures and every other tabular
        figure in the application were the brightest thing on the screen. DynamicResource and never
-       Static: the ink follows the Settings theme picker. InheritedInkTests is the pin. -->
+       Static: the ink follows the Settings theme picker. InheritedInkTests is the pin.
+
+       Tabular figures are set here too, for the same reason: GalactiLog is a table of numbers, and
+       a column of proportional digits wobbles. FontFeatures is inherited, so every TextBlock in
+       every window takes tnum unless it says otherwise, and the per-class tnum setters below
+       (figure, num, the table cells) are left in place as statements of intent rather than
+       removed in the same change. -->
   <Style Selector="Window">
     <Setter Property="FontFamily" Value="{StaticResource FontSans}" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    <Setter Property="TextElement.FontFeatures" Value="tnum" />
   </Style>
 
-  <!-- The flat button default. This replaces Fluent's filled ButtonBackground with a 1 px outline
-       over a transparent fill, which is the direction's whole control story and the reason
-       ControlStyleScanTest can assert that no Button style carries a gradient or a tinted fill.
+  <!-- The two containers (spec 14.3 and 14.5), lifted from the web's own card and nested panel.
+       A page section sits in a card: the surface, one step lighter than the page, a default
+       hairline, the 8 pixel corner and 16 pixels of padding. CardShadow is ShadowSm on the two
+       light themes, where a lighter surface cannot lift a card off a light page, and none on the
+       four dark ones, where a shadow does not show and the surface step does the work. It is a
+       theme key rather than ShadowSm itself because this file cannot tell a light theme from a
+       dark one, and DynamicResource so a theme swap moves it.
 
-       CornerRadius 3 is a literal rather than RadiusSm (6) on purpose: the approved comp's
-       controls are 3 px, and spec 14.4's radius scale is theme-independent and must not be
-       redeclared per theme, so this is a control decision inside one style file rather than a new
-       token. Task 7 records it in spec 14.4. -->
+       A panel nests inside a card: the elevated step, the 6 pixel corner, 12 pixels of padding. -->
+  <Style Selector="Border.card">
+    <Setter Property="Background" Value="{DynamicResource ColorBgSurface}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}" />
+    <Setter Property="Padding" Value="16" />
+    <Setter Property="BoxShadow" Value="{DynamicResource CardShadow}" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
+  </Style>
+  <Style Selector="Border.panel">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    <Setter Property="Padding" Value="12" />
+  </Style>
+
+  <!-- The focus ring (spec 14.5), once for every control a keyboard reaches. A 2 pixel accent
+       outline, 2 pixels outside the control, with the 6 pixel corner. Avalonia builds a control's
+       FocusAdorner only when focus arrives from the keyboard, which is exactly what :focus-visible
+       means, so the ring follows the keyboard and a mouse click draws nothing. An adorner rather
+       than a thicker BorderBrush on :focus-visible because an adorner takes no layout: a 1 pixel
+       border growing to 2 would move every control's content by a pixel on focus. A view that
+       wants no ring at all (the analysis matrix cells) sets a local FocusAdorner, which outranks
+       this style. -->
+  <Style Selector="Button, ToggleButton, ListBoxItem, CheckBox, TextBox, ComboBox">
+    <Setter Property="FocusAdorner">
+      <FocusAdornerTemplate>
+        <Border BorderThickness="2"
+                BorderBrush="{DynamicResource ColorAccent}"
+                CornerRadius="{StaticResource RadiusSm}"
+                Margin="-4" />
+      </FocusAdornerTemplate>
+    </Setter>
+  </Style>
+
+  <!-- The quiet button, which is the default (spec 14.5's first tier). Every button in the
+       application used to wear the emphasis outline and the primary ink, so fifty Expand buttons
+       down a table were as loud as the one action the page existed for. The default now recedes:
+       a default hairline over a transparent fill and the secondary ink, brightening to the primary
+       ink over the elevated fill under the pointer. A button that is the page's action asks for
+       Button.accent below; a button repeated on every row asks for Button.row.
+
+       The corner is RadiusSm, 6, the web's own control radius. The 3 pixel literal the comp drew
+       is withdrawn with spec 14.4's note that recorded it: a 1 pixel outline with a 3 pixel corner
+       is the old Win32 look, and the 6 now matches the stock controls through ControlCornerRadius.
+
+       Motion is Opacity over 150 ms on the button, which is what :disabled changes, and nothing
+       else. The presenter's Background and BorderBrush snap: Avalonia 11.3's BrushTransition
+       advances only with a redraw, so a hover fill fading on the presenter froze at its first
+       blend frame whenever the pointer came to rest (RowHoverTests). No property that moves
+       layout is animated. -->
   <Style Selector="Button">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="3" />
-    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
     <Setter Property="Padding" Value="12,0" />
     <Setter Property="MinHeight" Value="30" />
     <!-- Fluent's Button theme sets no VerticalContentAlignment and the ContentControl default is
@@ -343,21 +469,100 @@
          11,5,11,6 Fluent padding above is replaced by 12,0. -->
     <Setter Property="VerticalContentAlignment" Value="Center" />
     <Setter Property="FontWeight" Value="Medium" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
   </Style>
   <Style Selector="Button /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
   </Style>
   <Style Selector="Button:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
   </Style>
   <Style Selector="Button:pressed /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+  </Style>
+  <!-- Disabled is half opacity on the button itself, for every tier. Opacity sits on the control
+       rather than the presenter, so no tier's presenter rule below can outrank it, and every tier
+       declared after this block dims by inheritance rather than by remembering a block of its own
+       (ControlStyleScanTest holds that no other Button block sets Opacity). The presenter block
+       still clears Fluent's own disabled fill and grey ink, which would otherwise show through. -->
+  <Style Selector="Button:disabled">
+    <Setter Property="Opacity" Value="0.5" />
   </Style>
   <Style Selector="Button:disabled /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+
+  <!-- The accent button (spec 14.5's second tier): the page's own action, Run detection, Accept,
+       Create mosaic, Export. The web's accent/15 fill, accent ink and accent/30 edge, with the fill
+       rising to 25 percent under the pointer and sitting at 20 while pressed, so a keyboard press,
+       which raises :pressed without :pointerover, still changes it. These are tints of the accent
+       through the ColorAccentFill and ColorAccentBorder theme keys, never ColorAccent at full
+       strength, which stays Button.primary's alone. The presenter carries the fill because the
+       unconditional presenter block above would otherwise win over a Button level setter. -->
+  <Style Selector="Button.accent">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccentBorder30}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="Button.accent /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccentBorder30}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="Button.accent:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill25}" />
+  </Style>
+  <Style Selector="Button.accent:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill20}" />
+  </Style>
+  <Style Selector="Button.accent:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+  </Style>
+
+  <!-- The row button (spec 14.5's third tier): an action repeated on every row of a table, the
+       Dashboard's Expand, a night's Delete. Tertiary ink and no visible edge at rest, so a column
+       of them reads as part of the row rather than as a column of boxes; under the pointer it takes
+       the secondary ink, the elevated fill and the default hairline. The edge is a transparent
+       1 pixel border rather than none, so it appears without moving the label. -->
+  <Style Selector="Button.row">
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+  <Style Selector="Button.row:pointerover /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="Button.row:disabled /template/ ContentPresenter">
+    <Setter Property="BorderBrush" Value="Transparent" />
     <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+
+  <!-- The link button: an action written as a word in running text or under a field. No edge, no
+       fill in any state and the accent ink, brightening to the hover rung under the pointer, with
+       the hand cursor a link promises. No padding and no minimum height, so it sits on the text
+       line it belongs to. -->
+  <Style Selector="Button.link">
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="MinHeight" Value="0" />
+    <Setter Property="Cursor" Value="Hand" />
+  </Style>
+  <Style Selector="Button.link:pointerover /template/ ContentPresenter, Button.link:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccentHover}" />
+  </Style>
+  <Style Selector="Button.link:disabled /template/ ContentPresenter">
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorAccent}" />
   </Style>
 
   <!-- P12 R7's single filled control: Run scan in the status bar, and nothing else. The fill is
@@ -436,12 +641,19 @@
     <Setter Property="Background" Value="{DynamicResource ColorBadgeBg}" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
     <Setter Property="Padding" Value="6,1" />
     <Setter Property="VerticalAlignment" Value="Center" />
   </Style>
   <Style Selector="Border.tag TextBlock">
     <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+  </Style>
+  <!-- The tinted tag: the tag's shape over the accent tint (the accent button's 15 percent fill
+       and 30 percent edge), so a status tag reads at a glance instead of as a faint grey outline.
+       The mosaic suggestions' confidence and source tags and the activity log's category. -->
+  <Style Selector="Border.tag.tint">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill15}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccentBorder30}" />
   </Style>
 
   <!-- The hairline rule. One bottom edge, one border token, no card. -->
@@ -450,8 +662,28 @@
     <Setter Property="BorderThickness" Value="0,0,0,1" />
   </Style>
 
-  <!-- The four type tiers (spec 14.4, P12 R5). Ratios to the owning Window's root size:
-       t-hero 1.5, t-stat 1.2, t-label 0.786, t-caption 0.714. -->
+  <!-- The type tiers (spec 14.4, P12 R5). Ratios to the owning Window's root size:
+       t-hero 1.5, t-title 1.43, t-stat 1.2, t-heading 1.07, t-label 0.786, t-caption 0.714.
+
+       t-title is a page's own name and t-heading a card's. Before them every page title was
+       t-label section, the 0.786 tier, so "Statistics" was the smallest text on its own page and
+       a section heading below it outranked it. Both are weight 600 in the primary ink. -->
+  <Style Selector="TextBlock.t-title">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter=1.43}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="TextBlock.t-heading">
+    <Setter Property="FontSize"
+            Value="{Binding $parent[Window].FontSize,
+                            Converter={StaticResource Multiply},
+                            ConverterParameter=1.07}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
   <Style Selector="TextBlock.t-hero">
     <Setter Property="FontSize"
             Value="{Binding $parent[Window].FontSize,
@@ -468,13 +700,22 @@
     <Setter Property="FontWeight" Value="Bold" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
   </Style>
+  <!-- The label tier is the header tier: table headers and field labels, in the tertiary ink
+       with 0.6 pixels of tracking, so a header row is a band of its own rather than one more row
+       at nearly the rows' own weight. t-label.upper is the variant for a label the view writes in
+       capitals; no case converter ships, so the view supplies the case and the class adds the
+       wider tracking capitals need. -->
   <Style Selector="TextBlock.t-label">
     <Setter Property="FontSize"
             Value="{Binding $parent[Window].FontSize,
                             Converter={StaticResource Multiply},
                             ConverterParameter={StaticResource FontSizeLabel}}" />
     <Setter Property="FontWeight" Value="Medium" />
-    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextTertiary}" />
+    <Setter Property="LetterSpacing" Value="0.6" />
+  </Style>
+  <Style Selector="TextBlock.t-label.upper">
+    <Setter Property="LetterSpacing" Value="1" />
   </Style>
   <Style Selector="TextBlock.t-caption">
     <Setter Property="FontSize"
@@ -506,10 +747,13 @@
     <Setter Property="Foreground" Value="{DynamicResource ColorMetricWorst}" />
   </Style>
   <!-- Section labels (Nights, Frames). Sentence case, weight 600, label tier, no tracking: the
-       inputs' type table removes letter-spacing from this page entirely. -->
+       inputs' type table removes letter-spacing from this page entirely. The explicit zero is what
+       keeps that true now that t-label itself is tracked, since a section label carries both
+       classes and this block is declared after the tier. -->
   <Style Selector="TextBlock.section">
     <Setter Property="FontWeight" Value="SemiBold" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
+    <Setter Property="LetterSpacing" Value="0" />
   </Style>
 
   <!-- P12 Task 5 appends everything below, and nothing above it changed.
@@ -524,15 +768,20 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
     <Setter Property="Padding" Value="8,3" />
     <Setter Property="MinHeight" Value="26" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
   </Style>
   <Style Selector="ToggleButton /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
   </Style>
   <Style Selector="ToggleButton:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
@@ -543,6 +792,103 @@
   </Style>
   <Style Selector="ToggleButton:checked">
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+  </Style>
+  <!-- Pressed and disabled, which the pill never declared, so Fluent's own pressed fill and grey
+       disabled wash showed through. Pressed is the elevated field, the same as the Button default;
+       disabled is the Button default's half opacity on the control. -->
+  <Style Selector="ToggleButton:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+  </Style>
+  <Style Selector="ToggleButton:disabled">
+    <Setter Property="Opacity" Value="0.5" />
+  </Style>
+  <Style Selector="ToggleButton:disabled /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <!-- The target page's chart pills (Controls/MetricChartView.axaml): checked is Button.pill's
+       selected form, the accent edge over the accent at 20 percent and 25 under the pointer,
+       so a chosen series reads as chosen the way a chosen pill does everywhere else. The pill's
+       own colour stays the dot or swatch its template draws beside the label. -->
+  <Style Selector="ToggleButton.metric:checked">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+  </Style>
+  <Style Selector="ToggleButton.metric:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill20}" />
+  </Style>
+  <Style Selector="ToggleButton.metric:checked:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill25}" />
+  </Style>
+
+  <!-- The tab strip (spec 14.5), for navigation inside a page: the Analysis tabs, the target page's
+       modes. Before it a tab was Button.sm page, the pager's class, so a strip of tabs read as a
+       pager. Here a tab is borderless secondary text that lights to the primary ink under the
+       pointer, and the selected tab is primary ink over a 2 pixel accent underline. ListBox.tabs
+       is the strip for a selection bound to a list; ToggleButton.tab is the same look for a strip
+       built from toggles.
+
+       The underline is the bottom edge of a 0,0,0,2 border that is transparent until selected, so
+       selecting a tab moves nothing. The tab's corner is 0 because a rounded corner bends the
+       underline's ends upward. Fluent paints a ListBoxItem's selected and hovered fills on its
+       presenter, so the clears sit there too. -->
+  <Style Selector="ListBox.tabs">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="ItemsPanel">
+      <ItemsPanelTemplate>
+        <StackPanel Orientation="Horizontal" Spacing="4" />
+      </ItemsPanelTemplate>
+    </Setter>
+  </Style>
+  <Style Selector="ListBox.tabs ListBoxItem">
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="ListBox.tabs ListBoxItem /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0,0,0,2" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="ListBox.tabs ListBoxItem:pointerover /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="ListBox.tabs ListBoxItem:selected /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="ToggleButton.tab">
+    <Setter Property="BorderThickness" Value="0,0,0,2" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="Foreground" Value="{DynamicResource ColorTextSecondary}" />
+  </Style>
+  <Style Selector="ToggleButton.tab /template/ ContentPresenter">
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="ToggleButton.tab:pointerover /template/ ContentPresenter, ToggleButton.tab:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="ToggleButton.tab:checked /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+    <Setter Property="TextElement.Foreground" Value="{DynamicResource ColorTextPrimary}" />
+  </Style>
+  <Style Selector="ToggleButton.tab:checked">
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
+  </Style>
+
+  <!-- Every list item takes the 150 ms opacity fade the buttons take: the rail, the tab strip and
+       the table rows alike. Its fill snaps, for the reason the Button block above gives. -->
+  <Style Selector="ListBoxItem">
+    <Setter Property="Transitions">
+      <Transitions>
+        <DoubleTransition Property="Opacity" Duration="0:0:0.15" />
+      </Transitions>
+    </Setter>
   </Style>
 
   <!-- The collapsible section (P24 R18): every Expander in the application, Diagnostics, the
@@ -568,6 +914,11 @@
   <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="Transparent" />
   </Style>
+  <!-- The pill's pressed fill, added with the tab strip, is cleared here for the same reason the
+       checked and hover fills above are: the header's one tint is the background border's. -->
+  <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pressed /template/ ContentPresenter">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
   <Style Selector="Expander /template/ ToggleButton#ExpanderHeader:pointerover /template/ Border#ToggleButtonBackground">
     <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
   </Style>
@@ -579,13 +930,15 @@
        suggestion pills). One definition, lifted here from the three views that each carried their
        own copy: ActivityView.axaml declared the shape and EquipmentTabView.axaml and
        FiltersTabView.axaml each re-declared half of it, which is the pattern design lesson 1 says
-       to end at the second occurrence rather than the fourth. The shape is the direction's flat
-       one: no filled rest state, no accent fill when selected, the same lit idiom as every other
-       selected thing in the application.
+       to end at the second occurrence rather than the fourth. The rest state is the direction's
+       flat one, no fill. The selected state is the web's: the accent edge over the accent at 20
+       percent, rising to 25 under the pointer. It was the elevated field with the emphasis edge,
+       the same lit idiom as a checked toggle, and a selected pill beside an unselected one was
+       one step of grey apart, too little to read at a glance.
 
-       The selected background sits on the presenter rather than on the Button, because Fluent's
-       template binds the presenter's Background from the Button and a :pointerover presenter rule
-       would otherwise win over a Button level setter. -->
+       The selected background and edge sit on the presenter rather than on the Button, because
+       Fluent's template binds the presenter's from the Button and the Button default's
+       :pointerover presenter rule would otherwise win over a Button level setter. -->
   <Style Selector="Button.pill">
     <Setter Property="MinHeight" Value="26" />
     <Setter Property="Padding" Value="9,2" />
@@ -595,14 +948,15 @@
     <Setter Property="FontWeight" Value="Normal" />
   </Style>
   <Style Selector="Button.pill.selected">
-    <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
   </Style>
   <Style Selector="Button.pill.selected /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill20}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource ColorAccent}" />
   </Style>
   <Style Selector="Button.pill.selected:pointerover /template/ ContentPresenter">
-    <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />
+    <Setter Property="Background" Value="{DynamicResource ColorAccentFill25}" />
   </Style>
 
   <!-- The frame table's header cell: a sort button that reads from its left edge over a text
@@ -627,7 +981,7 @@
     <Setter Property="Background" Value="{DynamicResource ColorBgElevated}" />
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderDefault}" />
     <Setter Property="BorderThickness" Value="1" />
-    <Setter Property="CornerRadius" Value="3" />
+    <Setter Property="CornerRadius" Value="{StaticResource RadiusSm}" />
     <Setter Property="Padding" Value="8,4" />
     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
     <Setter Property="Template">
@@ -853,19 +1207,19 @@
   <Style Selector="ListBox.rail.compact ListBoxItem">
     <Setter Property="Padding" Value="14,8" />
   </Style>
-  <!-- The collapsed navigation rail: the item's title rides the ListBoxItem as its tip, so the whole
+  <!-- The collapsed navigation rail: the item's title and its Ctrl+N shortcut ride the ListBoxItem as its tip, so the whole
        48 px entry answers a hover; the expanded rail shows the title and the tip goes with the class. -->
   <Style Selector="ListBox.rail.collapsed ListBoxItem" x:DataType="vm:NavigationItem">
-    <Setter Property="ToolTip.Tip" Value="{Binding Title}" />
+    <Setter Property="ToolTip.Tip" Value="{Binding Tip}" />
   </Style>
 
   <!-- Phase 14C Task 4 appends everything below, and nothing above it changed. -->
 
   <!-- The pager's current-page button (spec 12.2). Button.sm already gives every page button its
-       row height; Button.page.current is the one class the current page carries over that, the
-       same shape Button.pill.selected above already uses: the emphasis border, primary ink and an
-       elevated presenter, so the current page reads as lit rather than growing a second button
-       style (task4.md section 6, coordinator ruling 1). -->
+       row height; Button.page.current is the one class the current page carries over that: the
+       emphasis border, primary ink and an elevated presenter, which was Button.pill.selected's
+       shape until the pill took the accent, so the current page reads as lit rather than growing a
+       second button style (task4.md section 6, coordinator ruling 1). -->
   <Style Selector="Button.page.current">
     <Setter Property="BorderBrush" Value="{DynamicResource ColorBorderEmphasis}" />
     <Setter Property="Foreground" Value="{DynamicResource ColorTextPrimary}" />
@@ -878,8 +1232,8 @@
        rows already on screen stay rendered and dim, matching the web's opacity-50
        pointer-events-none treatment of the same interval (TargetFeed.tsx). On the rows
        ItemsControl's own class, never inside a Button or ToggleButton style block:
-       ControlStyleScanTest.NoButtonStyle_CarriesAGradientOrASemiTransparentAccentFill forbids any
-       Opacity setter inside one of those, and this selector is neither. The input-disable half is
+       ControlStyleScanTest allows an Opacity setter in one of those only on a :disabled block, and
+       this selector is neither. The input-disable half is
        TargetListView.axaml's own IsHitTestVisible binding (fix pass, task4-review.md P3: an
        IsEnabled subtree drops keyboard focus in Avalonia and does not restore it, which the
        refetch dim must not do), which this file has no part of. -->
