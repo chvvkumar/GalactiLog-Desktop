@@ -2,7 +2,7 @@ namespace GalactiLog.Data.Repositories;
 
 /// <summary>
 /// Spec 12.8's Resolver group: "hit and miss counters for the current process". Process
-/// lifetime, never persisted, reset by a restart and by nothing else.
+/// lifetime, never persisted, reset by a restart and by a successful telemetry send.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -27,6 +27,7 @@ public sealed class ResolverCounters
 {
     private long _hits;
     private long _misses;
+    private long _failures;
 
     /// <summary>Lookups answered from <c>catalog_cache</c> without a network call.</summary>
     public long Hits => Interlocked.Read(ref _hits);
@@ -34,7 +35,22 @@ public sealed class ResolverCounters
     /// <summary>Lookups the cache could not answer, an expired negative row included.</summary>
     public long Misses => Interlocked.Read(ref _misses);
 
+    /// <summary>SIMBAD or Sesame requests that failed transiently after every retry (network
+    /// error or timeout), as opposed to a negative answer. Recorded by <c>TargetResolver</c>.</summary>
+    public long Failures => Interlocked.Read(ref _failures);
+
     public void RecordHit() => Interlocked.Increment(ref _hits);
 
     public void RecordMiss() => Interlocked.Increment(ref _misses);
+
+    public void RecordFailure() => Interlocked.Increment(ref _failures);
+
+    /// <summary>Zeroes all three counters. Called by the telemetry sender after a report is
+    /// accepted, so the next report counts from there.</summary>
+    public void Reset()
+    {
+        Interlocked.Exchange(ref _hits, 0);
+        Interlocked.Exchange(ref _misses, 0);
+        Interlocked.Exchange(ref _failures, 0);
+    }
 }

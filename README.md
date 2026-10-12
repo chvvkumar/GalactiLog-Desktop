@@ -4,13 +4,13 @@
 
 Windows desktop session logger for astrophotography. Indexes the FITS and XISF frames N.I.N.A. writes, the PHD2 guide logs beside them, and turns a folder tree into targets, nights, quality metrics and guiding figures.
 
-[Releases](https://github.com/chvvkumar/GalactiLog-Desktop/releases) | [Installation](#installation) | [Features](#features) | [Command line](#command-line) | [Building from source](#building-from-source)
+[Releases](https://github.com/chvvkumar/GalactiLog-Desktop/releases) | [Installation](#installation) | [Features](#features) | [Command line](#command-line) | [Telemetry](#telemetry) | [Building from source](#building-from-source)
 
 ![Dashboard](docs/screenshots/dashboard.png)
 
 ## Overview
 
-GalactiLog walks the library folders you choose, reads the headers of every light and calibration frame, and keeps the result in a local SQLite catalogue. Your image files are the source of truth. The catalogue is an index built from them, and a rescan rebuilds it at any time. There is no server, no account and no cloud component. One installer and one process, with a tray icon.
+GalactiLog walks the library folders you choose, reads the headers of every light and calibration frame, and keeps the result in a local SQLite catalogue. Your image files are the source of truth. The catalogue is an index built from them, and a rescan rebuilds it at any time. There is no account and no cloud component. An optional anonymous usage report can be turned on; see [Telemetry](#telemetry). One installer and one process, with a tray icon.
 
 > [!IMPORTANT]
 > GalactiLog only reads your image files. It never deletes, moves, renames or edits anything in your library. Its own catalogue, thumbnails and logs live in a separate folder. It copies files only when you export frames for stacking, into a folder you choose outside your library.
@@ -82,7 +82,7 @@ Uninstalling removes the binaries and leaves the data folder in place. Set the `
 
 ### Network use
 
-Everything works offline except name resolution for unknown targets (SIMBAD and Sesame), the Sky view images (CDS hips2fits, switchable off under Settings, General), update checks (GitHub), and the N.I.N.A. and Stellarium instances you configure yourself. GalactiLog opens no listening ports.
+Everything works offline except name resolution for unknown targets (SIMBAD and Sesame), the Sky view images (CDS hips2fits, switchable off under Settings, General), update checks (GitHub), the daily anonymous usage report when telemetry is on (`ninadash.challa.co`), and the N.I.N.A. and Stellarium instances you configure yourself. GalactiLog opens no listening ports.
 
 ## Command line
 
@@ -102,6 +102,24 @@ The same executable serves as a command line tool when given an argument. From a
 `--json` emits one JSON object on stdout. `--quiet` suppresses progress but never the result. `inspect` and `dump-headers` do not open the database, so they work while the desktop application is running. Exit codes: 0 success, 1 nothing resolved, 2 bad arguments, 3 input error, 4 database error, 5 cancelled, 6 data location unavailable, 70 unhandled error.
 
 A second launch of the desktop application while one is running brings the existing window forward and exits. `--minimized` starts it in the notification area, which is how the Start with Windows shortcut launches it.
+
+## Telemetry
+
+GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a [public statistics page](https://ninadash.challa.co/galactilog), so users see exactly what the maintainer sees.
+
+An installed build sends at most one report per day, as JSON over HTTPS to `https://ninadash.challa.co/v1/galactilog/report`. Development builds and builds run from source never send. Each report contains:
+
+- A random install ID. It is created when telemetry is turned on, deleted when it is turned off, and replaced by a new one when it is turned on again. The report schema version number.
+- Application version, commit and update channel.
+- Windows version, processor architecture, .NET and Avalonia versions, display scaling, and the selected theme, text size and font.
+- Time since the application started.
+- Counts of target name lookups that hit the cache, missed it, or failed on a network error.
+- Up to 20 warning, error and fatal log message templates, each with the name of the class that logged it, its level and its count. The template is the fixed text in the source code, never the values filled into it.
+- After a crash: the time of the crash (UTC), the version and commit that crashed, which handler caught it, the exception type and inner exception types, the HRESULT, up to 12 method names from the stack trace, the open page and the time since start. The exception message is included only for a fixed list of exception types (file I/O, invalid operation, null reference, null or out-of-range argument, invalid cast, out of memory, timeout, SQLite and JSON errors and a few others) and never for exceptions raised by GalactiLog's own code, and file paths and URLs in it are replaced by `<path>` and `<url>`.
+
+Never sent: file paths, folder names, target names, equipment names, instance names, URLs, coordinates, location, time zone, user name, machine name or catalogue row counts. The ingest server does not store IP addresses.
+
+Defaults: telemetry is off until the user answers. Installations updated from an earlier version show a one-time prompt with the box checked; closing the prompt with X or Escape counts as no. The same prompt appears on a later start when a new installation skipped the setup wizard. New installations show the same checkbox, checked, on the Scan options step of the setup wizard. A crash recorded before telemetry was turned on is included in the first report; the preview shows it. Change it at any time in Settings, General, on the Telemetry card. "Show exactly what is sent" there displays the exact report the application would send, built by the same code that sends it, and "View public statistics" opens the public page.
 
 ## Building from source
 

@@ -6,6 +6,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using GalactiLog.App.Services;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.App.Services.Tray;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Tray;
@@ -143,14 +144,16 @@ public partial class App : Application
                 //
                 // The flag is read off the UI thread and before the post, never inside the posted
                 // closure: SettingsStore.GetGeneral opens a SQLite context and the first-frame
-                // path must not carry one for a single boolean (Task 9 review, minor finding 9).
+                // path must not carry one for the setup and telemetry flags (Task 9 review, minor
+                // finding 9).
                 // Inside the Services branch, so the headless test harness never reaches it.
                 if (Services is { } wizardServices)
                 {
                     var settings = wizardServices.GetRequiredService<GalactiLog.Data.SettingsStore>();
-                    var setupComplete = Task.Run(() => settings.GetGeneral().SetupComplete);
+                    // The same read also answers the one-time telemetry question's gate.
+                    var general = Task.Run(settings.GetGeneral);
                     Dispatcher.UIThread.Post(
-                        () => _ = ShowSetupWizardIfNeededAsync(wizardServices, setupComplete));
+                        () => _ = ShowSetupWizardIfNeededAsync(wizardServices, general));
                 }
 
                 return shell;
@@ -206,6 +209,11 @@ public partial class App : Application
                 // did not install starts no loop at all, so a dotnet run reaches no network, and
                 // a failed check logs at warning rather than disrupting startup.
                 services.GetRequiredService<UpdateService>().Start();
+
+                // Opt-in telemetry's daily sender, started here for the same reason: the CLI never
+                // reaches this line, so it never sends. Its first check is a minute away and every
+                // failure stays inside it.
+                _ = services.GetRequiredService<TelemetryService>().StartAsync(CancellationToken.None);
 
                 // Spec 12.11 behaviour 10 (Phase 11 Task 5), started here for the same reason the
                 // three above are: the CLI branch of Program.Main returns before Avalonia is
@@ -315,7 +323,9 @@ public partial class App : Application
 
     /// <summary>
     /// Spec 12.1's first-run branch: opens the setup wizard when <c>general.setup_complete</c> is
-    /// false, on the one <c>ModalHost</c>, over the main window.
+    /// false, on the one <c>ModalHost</c>, over the main window. Otherwise opens the one-time
+    /// telemetry question when <see cref="ShouldShowTelemetryPrompt"/> says so. Never both in one
+    /// launch: a first run that finishes or skips the wizard is asked on a later start.
     /// </summary>
     /// <remarks>
     /// Internal and free of Avalonia types beyond the service lookups, so App.Tests can exercise
@@ -326,15 +336,23 @@ public partial class App : Application
     /// application's startup down with it, and the flag stays false so the next start tries again.
     /// </remarks>
     /// <param name="services">The application's service provider.</param>
-    /// <param name="setupComplete"><c>general.setup_complete</c>, read off the UI thread by the
-    /// caller so the first-frame path carries no SQLite read.</param>
+    /// <param name="general">The general document, read off the UI thread by the caller so the
+    /// first-frame path carries no SQLite read.</param>
     internal static async Task ShowSetupWizardIfNeededAsync(
-        IServiceProvider services, Task<bool> setupComplete)
+        IServiceProvider services, Task<GeneralSettings> general)
     {
         try
         {
-            if (await setupComplete.ConfigureAwait(true))
+            var document = await general.ConfigureAwait(true);
+            if (document.SetupComplete)
             {
+                if (ShouldShowTelemetryPrompt(
+                        document, services.GetRequiredService<BuildInfo>().IsInstalled))
+                {
+                    await services.GetRequiredService<TelemetryPromptService>()
+                        .ShowAsync().ConfigureAwait(true);
+                }
+
                 return;
             }
 
@@ -345,6 +363,13 @@ public partial class App : Application
             Serilog.Log.Warning(ex, "The setup wizard could not be shown at startup");
         }
     }
+
+    /// <summary>
+    /// The one-time telemetry question's gate: setup is done, the question was never answered,
+    /// and this is an installed build. Dev and test builds neither show it nor record anything.
+    /// </summary>
+    internal static bool ShouldShowTelemetryPrompt(GeneralSettings general, bool isInstalled)
+        => isInstalled && general.SetupComplete && !general.TelemetryPrompted;
 
     /// <summary>
     /// Spec 10.5's shutdown drain (FIXER LIST 4). Stops the two triggers FIRST, so nothing can

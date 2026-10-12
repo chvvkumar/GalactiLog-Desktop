@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalactiLog.App.Services;
+using GalactiLog.App.ViewModels.Telemetry;
 using GalactiLog.App.ViewModels.Wizard;
 using GalactiLog.Core.Io;
 using GalactiLog.Core.Scanning;
@@ -88,6 +89,7 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
     /// step 2; null leaves its data location block hidden.</param>
     /// <param name="requestDataRootMove">The one recorder of a picked data location.</param>
     /// <param name="cancelDataRootMove">Drops a requested move.</param>
+    /// <param name="telemetry">The shared telemetry preview and link for step 4.</param>
     public SetupWizardViewModel(
         Func<GeneralSettings> load,
         Func<Func<GeneralSettings, GeneralSettings>, GeneralSettings> mutateGeneral,
@@ -104,12 +106,13 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
         ILogger? logger = null,
         Func<AppDataRootResolution>? dataRoot = null,
         Func<string, string?>? requestDataRootMove = null,
-        Action? cancelDataRootMove = null)
+        Action? cancelDataRootMove = null,
+        TelemetryDisclosureViewModel? telemetry = null)
         : base(
             CreateSteps(
                 probe, volumeSpace, defaultCacheRoot, runFirstScan, cancelScan, scanStatus,
                 systemTimezones, localTimezoneId, post, logger ?? NullLogger.Instance,
-                dataRoot, requestDataRootMove, cancelDataRootMove),
+                dataRoot, requestDataRootMove, cancelDataRootMove, telemetry),
             logger)
     {
         _mutate = mutateGeneral;
@@ -153,14 +156,15 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
         ILogger logger,
         Func<AppDataRootResolution>? dataRoot,
         Func<string, string?>? requestDataRootMove,
-        Action? cancelDataRootMove)
+        Action? cancelDataRootMove,
+        TelemetryDisclosureViewModel? telemetry)
     {
         var folders = new ScanFoldersStepViewModel(probe, post, logger);
         var cache = new ThumbnailCacheStepViewModel(
             volumeSpace, defaultCacheRoot, post, logger, dataRoot, requestDataRootMove, cancelDataRootMove);
         var observer = new ObserverLocationStepViewModel(systemTimezones, localTimezoneId, post, logger);
         var options = new ScanOptionsStepViewModel(
-            () => folders.Folders.Select(row => row.Path).ToArray(), post, logger);
+            () => folders.Folders.Select(row => row.Path).ToArray(), post, logger, telemetry);
         var firstScan = new FirstScanStepViewModel(
             () => folders.Folders.Select(row => row.Path).ToArray(),
             runFirstScan,
@@ -203,7 +207,7 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
             return Task.CompletedTask;
         }
 
-        return CompleteAsync();
+        return CompleteAsync(finished: true);
     }
 
     private bool CanFinish() => !IsBusy && !IsCommitted && IsLastStep;
@@ -221,17 +225,22 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
             return Task.CompletedTask;
         }
 
-        return CompleteAsync();
+        return CompleteAsync(finished: false);
     }
 
     private bool CanSkip() => !IsBusy && !IsCommitted;
 
-    // The one completion path, so Finish and Skip cannot drift apart.
-    private async Task CompleteAsync()
+    // The one completion path, so Finish and Skip cannot drift apart. Only Finish records the
+    // telemetry checkbox: Skip leaves the question unanswered, so the one-time prompt asks it on
+    // the next start.
+    private async Task CompleteAsync(bool finished)
     {
         // Captured before the mutation: it runs inside the store's write gate and must read
         // nothing observable.
         var seedFilters = !_setupWasComplete;
+        bool? sendStatistics = finished
+            ? Steps.OfType<ScanOptionsStepViewModel>().Single().SendStatistics
+            : null;
 
         // One mutation, not two. The web writes the filters and then the flag, which can leave an
         // install with seeded rules and setup_complete still false; one MutateGeneral makes the
@@ -240,6 +249,11 @@ public sealed partial class SetupWizardViewModel : WizardViewModel<SetupStepView
             general =>
             {
                 var next = general with { SetupComplete = true };
+                if (sendStatistics is { } enabled)
+                {
+                    next = TelemetryDisclosureViewModel.WithDecision(next, enabled);
+                }
+
                 return seedFilters
                     ? next with
                     {

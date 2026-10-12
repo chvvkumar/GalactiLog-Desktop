@@ -1,0 +1,47 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:telemetry="using:GalactiLog.App.ViewModels.Telemetry"
+        xmlns:views="using:GalactiLog.App.Views.Telemetry"
+        x:Class="GalactiLog.App.Views.Telemetry.TelemetryPromptView"
+        x:Name="Root"
+        x:DataType="telemetry:TelemetryPromptViewModel"
+        Title="{x:Static telemetry:TelemetryPromptViewModel.Title}"
+        Width="560"
+        MinHeight="240"
+        MaxHeight="800"
+        CanResize="True"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        Background="{DynamicResource BrushPageBackground}">
+  <!-- The one-time telemetry question, in the shape UpdatePromptView established. A modal Window
+       opened through ModalHost. Every colour is a theme token (spec 14). -->
+  <ScrollViewer>
+    <StackPanel Margin="20" Spacing="14">
+
+      <TextBlock x:Name="TitleText"
+                 Text="{x:Static telemetry:TelemetryPromptViewModel.Title}"
+                 FontWeight="SemiBold"
+                 Foreground="{DynamicResource ColorTextPrimary}" />
+
+      <TextBlock x:Name="DescriptionText"
+                 Text="{x:Static telemetry:TelemetryDisclosureViewModel.Description}"
+                 TextWrapping="Wrap"
+                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+      <CheckBox x:Name="SendStatisticsBox"
+                Content="{x:Static telemetry:TelemetryDisclosureViewModel.CheckBoxLabel}"
+                IsChecked="{Binding SendStatistics, Mode=TwoWay}"
+                Foreground="{DynamicResource ColorTextPrimary}" />
+
+      <views:TelemetryDisclosureView DataContext="{Binding Disclosure}" />
+
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button x:Name="ContinueButton"
+                Content="{x:Static telemetry:TelemetryPromptViewModel.ContinueLabel}"
+                Padding="14,4"
+                IsDefault="True"
+                Command="{Binding ContinueCommand}" />
+      </StackPanel>
+    </StackPanel>
+  </ScrollViewer>
+</Window>
