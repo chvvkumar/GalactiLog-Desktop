@@ -956,13 +956,20 @@ public sealed partial class GuideGraphViewModel : ObservableObject
     // one frame of each and join them across the gap.
     private IReadOnlyList<Phd2FramePoint> BuildPlotted()
     {
-        if (_sessionFrames.Count <= 1)
+        // One read of the per-session list, and the single-session case plots that list's one
+        // entry rather than _frames. Publish writes the two fields one after the other, and a
+        // post seam that runs it inline on a pool thread (the test harness) can have a draw read
+        // the old list's count against the new merged frames: every session's frames with no
+        // Break between them, which is what CI saw once.
+        var sessions = _sessionFrames;
+        if (sessions.Count <= 1)
         {
-            return Downsample(_timeOverride is { } window ? SliceByTime(_frames, window.Min, window.Max) : _frames);
+            var frames = sessions.Count == 1 ? sessions[0] : _frames;
+            return Downsample(_timeOverride is { } window ? SliceByTime(frames, window.Min, window.Max) : frames);
         }
 
         var plotted = new List<Phd2FramePoint>();
-        foreach (var frames in _sessionFrames)
+        foreach (var frames in sessions)
         {
             if (plotted.Count > 0)
             {
