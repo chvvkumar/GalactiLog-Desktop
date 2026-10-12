@@ -298,7 +298,7 @@ public class TableRowTests
         var list = new ListBox { ItemsSource = Enumerable.Range(0, 200).Select(i => $"Night {i}").ToList() };
         Table.SetScroller(list, true);
         var window = Show(list, 400, 300);
-        var zebra = Resource("ColorBorderDefault");
+        var zebra = Resource("ColorBgZebra");
 
         void AssertZebra()
         {
@@ -326,7 +326,7 @@ public class TableRowTests
         var items = new ItemsControl { ItemsSource = Enumerable.Range(0, 6).Select(i => $"Row {i}").ToList() };
         items.Classes.Add("table");
         var window = Show(items);
-        var zebra = Resource("ColorBorderDefault");
+        var zebra = Resource("ColorBgZebra");
 
         var containers = items.GetRealizedContainers().OfType<ContentPresenter>().ToList();
         Assert.Equal(6, containers.Count);

@@ -917,7 +917,7 @@ public class TargetListViewTests
         Assert.Equal(rule.A.Y, rule.B.Y);
         Assert.Equal(header.Bounds.Height - 0.5d, rule.A.Y, 1);
 
-        var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBorderDefault")!).Color;
+        var zebra = ((ISolidColorBrush)Application.Current!.FindResource("ColorBgZebra")!).Color;
         var rows = view.GetVisualDescendants().OfType<ListBox>().Single(c => c.Name == "TargetListRows");
         Color? Band(int index) => (((ListBoxItem)rows.ContainerFromIndex(index)!).Background as ISolidColorBrush)?.Color;
         Assert.NotEqual(zebra, Band(0));

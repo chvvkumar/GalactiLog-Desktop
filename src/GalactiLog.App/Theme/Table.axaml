@@ -217,10 +217,10 @@
     <Setter Property="Background" Value="Transparent" />
   </Style>
   <Style Selector="ListBox.table > ListBoxItem:nth-child(2n)">
-    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="Background" Value="{DynamicResource ColorBgZebra}" />
   </Style>
   <Style Selector="ItemsControl.table > ContentPresenter:nth-child(2n)">
-    <Setter Property="Background" Value="{DynamicResource ColorBorderDefault}" />
+    <Setter Property="Background" Value="{DynamicResource ColorBgZebra}" />
   </Style>
   <Style Selector="ListBox.table ListBoxItem:pointerover /template/ ContentPresenter">
     <Setter Property="Background" Value="{DynamicResource ColorBgHover}" />

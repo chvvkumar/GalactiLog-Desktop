@@ -23,6 +23,8 @@
   <SolidColorBrush x:Key="ColorBgInput" Color="#FF0E0202" />
 
   <SolidColorBrush x:Key="ColorBorderDefault" Color="#1FFF5A3C" />
+  <!-- The table zebra band: fainter than the hairline border it once borrowed. -->
+  <SolidColorBrush x:Key="ColorBgZebra" Color="#10FF5A3C" />
   <SolidColorBrush x:Key="ColorBorderEmphasis" Color="#38FF5A3C" />
 
   <SolidColorBrush x:Key="ColorTextPrimary" Color="#FFE0442E" />

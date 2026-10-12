@@ -2130,7 +2130,7 @@ public class FrameTableViewTests
         var view = new FrameTableView { DataContext = table };
         ShowTable(view);
         var list = view.GetControl<ListBox>("FrameRows");
-        var zebra = ThemeColor("ColorBorderDefault");
+        var zebra = ThemeColor("ColorBgZebra");
 
         void AssertZebra()
         {

@@ -121,20 +121,16 @@
       </ListBox>
      </Grid>
     </Border>
-    <!-- A page switch cross-fades over 150 ms rather than swapping in one frame (ux-flow F3).
-         Avalonia exposes no reading of the Windows "Animation effects" setting, so the fade
-         always runs. Focusable but no tab stop: the code-behind parks focus here on a switch,
-         so the outgoing page keeps none during the fade. -->
+    <!-- A page switch swaps in one frame. The 150 ms cross-fade ux-flow F3 asked for faded the
+         outgoing page's rows to grey on every navigation, which the owner read as the refetch dim
+         coming back, so no PageTransition is set. Focusable but no tab stop: the code-behind
+         parks focus here on a switch, so the outgoing page keeps none. -->
     <TransitioningContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
                                  Focusable="True"
                                  IsTabStop="False"
                                  Content="{Binding CurrentPage}"
                                  MaxWidth="{Binding ContentMaxWidth}"
-                                 HorizontalAlignment="Stretch">
-      <TransitioningContentControl.PageTransition>
-        <CrossFade Duration="0:0:0.15" />
-      </TransitioningContentControl.PageTransition>
-    </TransitioningContentControl>
+                                 HorizontalAlignment="Stretch" />
     <!-- The in-window notice stack, over the page's top centre. Declared after ContentRegion so
          it draws above it; the status bar view-model carries the notifier, as it carries the job
          registry, so the shell needs no property of its own for it. -->
