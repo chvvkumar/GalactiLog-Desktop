@@ -107,8 +107,6 @@ A second launch of the desktop application while one is running brings the exist
 
 GalactiLog can send an anonymous usage and crash report to the maintainer. Every collected statistic is published on a public statistics page, so users see exactly what the maintainer sees.
 
-An installed build sends at most one report per day, as JSON over HTTPS to `https://ninadash.challa.co/v1/galactilog/report`. Development builds and builds run from source never send. Each report contains:
-
 - A random install ID. It is created when telemetry is turned on, deleted when it is turned off, and replaced by a new one when it is turned on again. The report schema version number.
 - Application version, commit and update channel.
 - Windows version, processor architecture, .NET and Avalonia versions, display scaling, and the selected theme, text size and font.
