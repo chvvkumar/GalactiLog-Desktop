@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using GalactiLog.App.Services;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.App.Theme;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Activity;
@@ -108,6 +109,8 @@ public static class AppHost
 
         var levelSwitch = new LoggingLevelSwitch(LogEventLevel.Information);
         var ringBuffer = new LogRingBuffer();
+        // Telemetry's errors array: Warning and above counted per template, beside the ring.
+        var errorTemplateCounter = new ErrorTemplateCounter();
 
         // Task 7 (PAR-012, spec 5.8.1, 16.1, questions.md Q7; coordinator ruling on the escalation
         // this raised). general.app_log_retention_days has to be known before Log.Logger is built,
@@ -146,7 +149,8 @@ public static class AppHost
                 shared: false,
                 flushToDiskInterval: TimeSpan.FromSeconds(1),
                 outputTemplate: "{Timestamp:yyyy-MM-dd HH:mm:ss.fff zzz} [{Level:u3}] {SourceContext} {Message:lj}{NewLine}{Exception}")
-            .WriteTo.Sink(ringBuffer, LogEventLevel.Warning);
+            .WriteTo.Sink(ringBuffer, LogEventLevel.Warning)
+            .WriteTo.Sink(errorTemplateCounter, LogEventLevel.Warning);
 
         if (cliMode)
         {
@@ -224,6 +228,10 @@ public static class AppHost
         // filter selection. Read here for the same reason as the two above.
         var initialGraph = settingsStore.GetGraph();
         levelSwitch.MinimumLevel = ParseLevel(initialGeneral.LogLevel);
+        if (!cliMode && initialGeneral.TelemetryEnabled)
+        {
+            Log.Information("Anonymous telemetry enabled");
+        }
         appWriter.ThumbnailCacheRoot = ResolveThumbnailCacheRoot(initialGeneral.ThumbnailCacheDir);
         appWriter.CreateDirectory(appWriter.ThumbnailCacheRoot);
 
@@ -254,9 +262,9 @@ public static class AppHost
 
         // THE INSTANCE-REGISTRATION CENSUS (TRACKING section 6 item 6, coordinator ruling Q24).
         //
-        // These five, plus activityRepository and scanRunRepository further down, are the only
-        // seven registrations in this method that hand the container an object it did not
-        // construct. Every other registration is a factory. The reason is the same for all seven
+        // These six, plus activityRepository and scanRunRepository further down, are the only
+        // eight registrations in this method that hand the container an object it did not
+        // construct. Every other registration is a factory. The reason is the same for all eight
         // and it is not a preference: Build() itself uses each of them before any container
         // exists, so there is nothing to resolve them from.
         //
@@ -265,19 +273,20 @@ public static class AppHost
         //                        ThumbnailCacheBytes closure.
         //   levelSwitch          the LoggerConfiguration above and the GeneralChanged handler.
         //   ringBuffer           the LoggerConfiguration above.
+        //   errorTemplateCounter the LoggerConfiguration above (telemetry; not IDisposable).
         //   settingsRepository   new SettingsStore(settingsRepository) on the next line.
         //   settingsStore        four initial reads, the GeneralChanged subscription, CatalogSeeder.
         //   activityRepository   PruneRetention at startup.
         //   scanRunRepository    MarkInterrupted at startup.
         //
-        // The container therefore does not own these seven and never disposes them. That leaks
-        // nothing today: verified type by type, none of the seven implements IDisposable, so none
+        // The container therefore does not own these eight and never disposes them. That leaks
+        // nothing today: verified type by type, none of the eight implements IDisposable, so none
         // has a Dispose path to be dead. Item 6's original wording said otherwise and was wrong
         // about these types; the real undisposed resources it was pointing at were the two
         // HttpClientHandler instances in the resolution stack below, and those are now owned by
         // the container through factory registrations.
         //
-        // Adding a Dispose to any of these seven in future is therefore a decision, not an
+        // Adding a Dispose to any of these eight in future is therefore a decision, not an
         // omission, and it has exactly two honest resolutions: move that type's eager use out of
         // Build() so its registration can become a factory, or dispose it explicitly from
         // Program.Main beside host.Dispose(). Registering it as an instance and giving it a
@@ -287,6 +296,7 @@ public static class AppHost
         builder.Services.AddSingleton(appWriter);
         builder.Services.AddSingleton(levelSwitch);
         builder.Services.AddSingleton(ringBuffer);
+        builder.Services.AddSingleton(errorTemplateCounter);
         builder.Services.AddSingleton(settingsRepository);
         builder.Services.AddSingleton(settingsStore);
         // Phase review item 4: a factory registration, not an instance. The DI container disposes
@@ -350,7 +360,7 @@ public static class AppHost
         // FIXER LIST 5: the connection string is a registered value, not an expression a
         // second component re-derives from the AppWriter. A factory rather than the value
         // itself (Task 8): nothing in Build() reads it back through the container, so there is
-        // no reason for this to be one of the seven exceptions above.
+        // no reason for this to be one of the eight exceptions above.
         builder.Services.AddSingleton(_ => new DatabaseConnectionString(connectionString));
 
         // Dashboard queries (Phase 5 Task 2). Stateless and read-only, so one instance each;
@@ -2721,6 +2731,26 @@ public static class AppHost
             // never offered an update builds no dialog service.
             showPrompt: () => serviceProvider.GetRequiredService<UpdatePromptService>().ShowAsync(),
             logger: serviceProvider.GetRequiredService<ILogger<UpdateService>>()));
+        // Opt-in telemetry. The builder is the one producer of the report bytes, shared by the
+        // sender and the preview. The sender is a BackgroundService, but this host is never
+        // started (Program.Main only builds it), so App starts it beside UpdateService and the
+        // container's Dispose cancels it. It is not also added with AddHostedService, which would
+        // start a second loop the day the host is started.
+        builder.Services.AddSingleton(serviceProvider => new TelemetryReportBuilder(
+            serviceProvider.GetRequiredService<BuildInfo>(),
+            settingsStore,
+            serviceProvider.GetRequiredService<ResolverCounters>(),
+            errorTemplateCounter,
+            appWriter.AppDataRoot));
+        builder.Services.AddSingleton(serviceProvider => new TelemetryService(
+            serviceProvider.GetRequiredService<BuildInfo>(),
+            settingsStore,
+            serviceProvider.GetRequiredService<TelemetryReportBuilder>(),
+            serviceProvider.GetRequiredService<IntegrationHttpClient>(),
+            serviceProvider.GetRequiredService<ResolverCounters>(),
+            errorTemplateCounter,
+            appWriter.AppDataRoot,
+            serviceProvider.GetRequiredService<ILogger<TelemetryService>>()));
         // The fifth user of the one modal host (TRACKING section 6 item 22). The page is built
         // from the update service's current state at show time, and is null when that state has
         // moved on, which is the case the service's own prompt request cannot rule out.
@@ -2879,7 +2909,7 @@ public static class AppHost
 
         // Phase 10 Task 9's four registrations, appended rather than inserted among the lists
         // above. All four are factories, so none of them hands the container an object it did not
-        // construct and the instance-registration census stays at seven (ruling Q24).
+        // construct and the instance-registration census stays at eight (ruling Q24).
         builder.Services.AddSingleton(_ => resolution);
         builder.Services.AddSingleton(_ => relocation);
         builder.Services.AddSingleton(_ => new DataRootPointer(appWriter));
@@ -2971,7 +3001,7 @@ public static class AppHost
         => string.Equals(WithoutInertKeys(before), WithoutInertKeys(after), StringComparison.Ordinal);
 
     // THE INERT LIST, and the only place it is written: spec 5.8.1's four wbpp_ keys, which are the
-    // export page's own settings. Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
+    // export page's own settings, plus general.telemetry_last_sent, the daily sender's stamp. Nothing StatsCache, RigBaselinesCache or Phd2NightQuery builds
     // reads one, and the quality panel writes the last of them once per coalesced chip edit and
     // again when the page closes.
     private static string WithoutInertKeys(Core.Settings.GeneralSettings general)
@@ -2981,6 +3011,8 @@ public static class AppHost
             WbppStagingPathDocument = null,
             WbppExclusionsDocument = null,
             WbppQualityByRigDocument = null,
+            // Written by the telemetry sender once a day; feeds no derived data.
+            TelemetryLastSent = null,
         });
 
     // Spec 12.5's "thumbnail cache bytes" figure (Phase 9 Task 2, questions.md Q12). Sums the

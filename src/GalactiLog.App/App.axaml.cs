@@ -6,6 +6,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Threading;
 using GalactiLog.App.Services;
+using GalactiLog.App.Services.Telemetry;
 using GalactiLog.App.Services.Tray;
 using GalactiLog.App.ViewModels;
 using GalactiLog.App.ViewModels.Tray;
@@ -206,6 +207,11 @@ public partial class App : Application
                 // did not install starts no loop at all, so a dotnet run reaches no network, and
                 // a failed check logs at warning rather than disrupting startup.
                 services.GetRequiredService<UpdateService>().Start();
+
+                // Opt-in telemetry's daily sender, started here for the same reason: the CLI never
+                // reaches this line, so it never sends. Its first check is a minute away and every
+                // failure stays inside it.
+                _ = services.GetRequiredService<TelemetryService>().StartAsync(CancellationToken.None);
 
                 // Spec 12.11 behaviour 10 (Phase 11 Task 5), started here for the same reason the
                 // three above are: the CLI branch of Program.Main returns before Avalonia is

@@ -40,6 +40,10 @@ public sealed class CatalogCacheRepository
         _wait = wait ?? ((delay, ct) => ct.WaitHandle.WaitOne(delay));
     }
 
+    /// <summary>Records a transient SIMBAD or Sesame failure on the counters this repository
+    /// already carries, so <c>TargetResolver</c> needs no second reference to them.</summary>
+    public void RecordFailure() => _counters?.RecordFailure();
+
     public enum CacheHit { Miss, Positive, Negative }
 
     public readonly record struct CacheLookup(CacheHit Kind, string? Payload);

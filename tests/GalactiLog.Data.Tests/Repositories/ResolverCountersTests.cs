@@ -164,4 +164,22 @@ public class ResolverCountersTests
         Assert.Equal(CatalogCacheRepository.CacheHit.Positive, repository.Get(Source, "M13").Kind);
         Assert.Equal(CatalogCacheRepository.CacheHit.Miss, repository.Get(Source, "Absent").Kind);
     }
+
+    [Fact]
+    public void RecordFailure_Counts_AndReset_ZeroesAllThree()
+    {
+        var counters = new ResolverCounters();
+        counters.RecordHit();
+        counters.RecordMiss();
+        counters.RecordFailure();
+        counters.RecordFailure();
+
+        Assert.Equal(2, counters.Failures);
+
+        counters.Reset();
+
+        Assert.Equal(0, counters.Hits);
+        Assert.Equal(0, counters.Misses);
+        Assert.Equal(0, counters.Failures);
+    }
 }
