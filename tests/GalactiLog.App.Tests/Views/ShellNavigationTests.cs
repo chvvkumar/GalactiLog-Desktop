@@ -182,6 +182,41 @@ public class ShellNavigationTests : IDisposable
         Assert.Same(viewModel.Selected, rail.SelectedItem);
     }
 
+    // The detail page is an overlay over the rail destination, not a replacement of it: the
+    // dashboard stays in the tree, hidden, while a target is open, and comes back as the same
+    // control with the same row containers. Swapping the region's content detached the dashboard,
+    // and Avalonia rebuilds every presenter's template content and restyles the subtree on
+    // reattach (ContentPresenter resets on logical attach), about a second of layout per return on
+    // a 50 row page, during which clicks queued (perf traces, 2026-10-12).
+    [AvaloniaFact]
+    public void TheDashboardView_AndItsRows_SurviveOpeningATargetAndComingBack()
+    {
+        var (window, viewModel, dashboard) = ShowRoutedShell();
+        var contentRegion = window.GetControl<ContentControl>("ContentRegion");
+        var detailRegion = window.GetControl<ContentControl>("DetailRegion");
+        var first = contentRegion.GetVisualDescendants().OfType<DashboardView>().Single();
+        var rows = first.GetVisualDescendants().OfType<ListBoxItem>().ToList();
+        Assert.NotEmpty(rows);
+        Assert.False(detailRegion.IsVisible);
+
+        viewModel.OpenDetail(DetailRow.GroupKey);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.True(detailRegion.IsVisible);
+        Assert.False(contentRegion.IsVisible);
+        Assert.Same(first, contentRegion.GetVisualDescendants().OfType<DashboardView>().Single());
+        Assert.Same(dashboard, first.DataContext);
+
+        viewModel.CloseDetailCommand.Execute(null);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.False(detailRegion.IsVisible);
+        Assert.True(contentRegion.IsVisible);
+        Assert.True(first.IsEffectivelyVisible);
+        Assert.Same(first, contentRegion.GetVisualDescendants().OfType<DashboardView>().Single());
+        Assert.Equal(rows, first.GetVisualDescendants().OfType<ListBoxItem>().ToList());
+    }
+
     [AvaloniaFact]
     public async Task EachRailItem_Navigates_AndContentRegionShowsThatPage()
     {
@@ -520,19 +555,24 @@ public class ShellNavigationTests : IDisposable
     }
 
     [AvaloniaFact]
-    public void RowClick_PutsTheDetailPageInTheContentRegion()
+    public void RowClick_PutsTheDetailPageInTheDetailRegion()
     {
         var (window, viewModel, dashboard) = ShowRoutedShell();
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
+        var detailRegion = window.GetControl<ContentControl>("DetailRegion");
 
         dashboard.Targets.OpenTargetCommand.Execute(dashboard.Targets.Rows[0]);
         Dispatcher.UIThread.RunJobs();
 
-        Assert.IsType<TargetDetailViewModel>(contentRegion.Content);
-        Assert.Contains(contentRegion.GetVisualDescendants(), visual => visual is TargetDetailView);
+        Assert.IsType<TargetDetailViewModel>(detailRegion.Content);
+        Assert.Contains(detailRegion.GetVisualDescendants(), visual => visual is TargetDetailView);
         Assert.Contains(
-            contentRegion.GetVisualDescendants().OfType<TextBlock>(),
+            detailRegion.GetVisualDescendants().OfType<TextBlock>(),
             text => text.Text == "M 31");
+
+        // The rail destination stays underneath, hidden rather than swapped out.
+        Assert.Same(viewModel.Items[0].Page, contentRegion.Content);
+        Assert.False(contentRegion.IsVisible);
 
         viewModel.Dispose();
     }
@@ -542,11 +582,12 @@ public class ShellNavigationTests : IDisposable
     {
         var (window, viewModel, dashboard) = ShowRoutedShell();
         var contentRegion = window.GetControl<ContentControl>("ContentRegion");
+        var detailRegion = window.GetControl<ContentControl>("DetailRegion");
 
         dashboard.Targets.OpenTargetCommand.Execute(dashboard.Targets.Rows[0]);
         Dispatcher.UIThread.RunJobs();
 
-        var detailView = contentRegion.GetVisualDescendants().OfType<TargetDetailView>().Single();
+        var detailView = detailRegion.GetVisualDescendants().OfType<TargetDetailView>().Single();
         var back = detailView.Named<Button>("BackButton");
         Assert.NotNull(back.Command);
 
@@ -554,6 +595,8 @@ public class ShellNavigationTests : IDisposable
         Dispatcher.UIThread.RunJobs();
 
         Assert.Null(viewModel.Detail);
+        Assert.Null(detailRegion.Content);
+        Assert.True(contentRegion.IsVisible);
         Assert.Same(viewModel.Items[0].Page, contentRegion.Content);
         Assert.Contains(contentRegion.GetVisualDescendants(), visual => visual is DashboardView);
 
