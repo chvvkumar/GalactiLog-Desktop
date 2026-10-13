@@ -61,7 +61,7 @@
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"
                     IsVisible="{Binding IsBuilding}">
-          <ProgressBar IsIndeterminate="True" Width="120" HorizontalAlignment="Center" />
+          <ProgressBar IsIndeterminate="{Binding IsBuilding}" Width="120" HorizontalAlignment="Center" />
           <TextBlock x:Name="BuildingText"
                      Text="{x:Static mos:CompositeLightboxViewModel.BuildingText}"
                      HorizontalAlignment="Center"

@@ -316,13 +316,16 @@
         <ContentControl x:Name="LayoutHost" />
         <!-- A thin indeterminate line along the top edge while the page reads. The layout owns
              the header, so the line sits over the content's top edge rather than inside it. It
-             holds back 150 ms (reveal-delayed) so a fast load never flashes it. -->
+             holds back 150 ms (reveal-delayed) so a fast load never flashes it. IsIndeterminate
+             is bound, not constant: Fluent runs the indeterminate animation on the process-wide
+             clock for as long as the flag is set, hidden or not, and that subscription kept every
+             closed page alive (IndeterminateProgressBarScanTest). -->
         <ProgressBar x:Name="PageLoadingLine"
                      Classes="reveal-delayed"
                      VerticalAlignment="Top"
                      Height="2"
                      MinHeight="2"
-                     IsIndeterminate="True"
+                     IsIndeterminate="{Binding IsLoading}"
                      IsHitTestVisible="False"
                      IsVisible="{Binding IsLoading}"
                      Foreground="{DynamicResource ColorAccent}"

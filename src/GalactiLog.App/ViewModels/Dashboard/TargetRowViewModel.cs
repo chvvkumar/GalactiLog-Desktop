@@ -49,12 +49,42 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
         Row = row;
         Columns = columns;
         _isRefetching = isRefetching;
+        _aliases = aliases;
         var order = FilterOrder.Comparer(aliases?.Invoke());
         PaletteBadges = SortBadges(row.Palette, order);
-        // The group key is passed down at construction rather than the session row holding a
-        // parent reference (task6.md 5.3), which keeps this the one place a SessionRowViewModel
-        // is built.
-        _sessions = [.. row.Sessions.Select(session => new SessionRowViewModel(
+        _sessions = BuildSessions(row, order);
+
+        _custom = custom;
+        _cells = ReconcileTargetCells(CustomCellGroup.Empty, custom, customValues);
+    }
+
+    /// <summary>A re-read of the same target, applied to the row already on screen so the view
+    /// keeps its containers (the page swap used to dispose and rebuild every row, about a second
+    /// of layout on a 50 row page). The badge and session lists are rebuilt from the new record,
+    /// the custom cells are reseeded in place through <see cref="RebuildCustomCells"/>, and one
+    /// empty-name change tells every binding to re-read.</summary>
+    internal void Update(TargetRow row, IReadOnlyList<CustomValueRow>? customValues)
+    {
+        Row = row;
+        var order = FilterOrder.Comparer(_aliases?.Invoke());
+        PaletteBadges = SortBadges(row.Palette, order);
+
+        // A night line keeps the cells it already draws: PublishSessionCells reseeds a night's
+        // group in place and only replaces the lines when a group was rebuilt, so a fresh line
+        // with no cells would stay empty after the re-read.
+        Sessions = [.. BuildSessions(row, order).Select(session => session with
+        {
+            CustomCells = _sessionCells.GetValueOrDefault(session.SessionDate)?.Cells ?? [],
+        })];
+        RebuildCustomCells(_custom, customValues);
+        RefreshSessionCells();
+        OnPropertyChanged(string.Empty);
+    }
+
+    // The group key is passed down at construction rather than the session row holding a parent
+    // reference (task6.md 5.3), which keeps this the one place a SessionRowViewModel is built.
+    private static IReadOnlyList<SessionRowViewModel> BuildSessions(TargetRow row, IComparer<string?> order)
+        => [.. row.Sessions.Select(session => new SessionRowViewModel(
             MetricText.Date(session.SessionDate),
             session.FrameCount,
             MetricText.HourFigure(session.IntegrationSeconds),
@@ -62,9 +92,7 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
             row.GroupKey,
             SortBadges(session.Filters, order)))];
 
-        _custom = custom;
-        _cells = ReconcileTargetCells(CustomCellGroup.Empty, custom, customValues);
-    }
+    private readonly Func<AliasMap>? _aliases;
 
     /// <summary>Both badge lists read in <see cref="FilterOrder"/> (polish ruling 5, which
     /// reverses Phase 14C ruling U3's alphabetical order); the query's Palette and Filters orders
@@ -76,7 +104,7 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
 
     /// <summary>The read model behind the row. Phase 6 navigates on <see cref="TargetId"/> or
     /// <see cref="GroupKey"/> from here.</summary>
-    public TargetRow Row { get; }
+    public TargetRow Row { get; private set; }
 
     /// <summary>The owning list's columns, in the documented order, for per-cell visibility.</summary>
     public IReadOnlyList<ColumnViewModel> Columns { get; }
@@ -139,7 +167,7 @@ public sealed partial class TargetRowViewModel : ObservableObject, IDisposable
     /// has no catalogue id.</summary>
     public string Designation => MetricText.Cell(Row.CatalogId);
 
-    public IReadOnlyList<PaletteBadgeViewModel> PaletteBadges { get; }
+    public IReadOnlyList<PaletteBadgeViewModel> PaletteBadges { get; private set; }
 
     /// <summary>Hours with one decimal, no unit (the "Hours" header carries it, ruling R15), for
     /// example <c>12.4</c>.</summary>

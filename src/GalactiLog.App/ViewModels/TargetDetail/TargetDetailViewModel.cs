@@ -2310,6 +2310,11 @@ public sealed partial class TargetDetailViewModel : ObservableObject, IDisposabl
 
         _disposed = true;
 
+        // A page closed mid-read must not leave the loading line indeterminate: the bar binds
+        // IsIndeterminate to this flag, and Fluent keeps the animation on the global clock, which
+        // roots the view, for as long as it is set.
+        IsLoading = false;
+
         if (_scanStatus is not null)
         {
             _scanStatus.ScanFinished -= OnScanFinished;

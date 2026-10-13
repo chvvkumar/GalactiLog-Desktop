@@ -385,6 +385,10 @@ internal static class TargetDetailViewModelTestFactory
         // Under the inline post a page or card load still running publishes on a pool thread into what
         // this loop enumerates, so every load is joined first. A failure raised here replaces the
         // test body's own, which is accepted: a load that never finishes is the more basic fault.
+        // A load the page itself cancelled before the pool started it (a test that disposes the page
+        // first, on a saturated runner) lands Canceled, which counts as finished rather than failed.
+        private static bool Join(Task load) => Task.WhenAny(load).Wait(Budget);
+
         public void Dispose()
         {
             for (var pass = 0; ; pass++)
@@ -392,7 +396,7 @@ internal static class TargetDetailViewModelTestFactory
                 Xunit.Assert.True(pass < 20, $"loads still start after {pass} joins at disposal");
                 if (ViewModel.PendingLoad is { IsCompleted: false } page)
                 {
-                    Xunit.Assert.True(page.Wait(Budget), "a page load did not finish before the page was disposed");
+                    Xunit.Assert.True(Join(page), "a page load did not finish before the page was disposed");
                     continue;
                 }
 
@@ -401,7 +405,7 @@ internal static class TargetDetailViewModelTestFactory
                     break;
                 }
 
-                Xunit.Assert.True(load.Wait(Budget), "a card load did not finish before the page was disposed");
+                Xunit.Assert.True(Join(load), "a card load did not finish before the page was disposed");
             }
 
             ViewModel.Dispose();

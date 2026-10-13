@@ -307,6 +307,7 @@ public partial class TargetListView : UserControl
             _list.Columns.CollectionChanged -= OnColumnsChanged;
             _list.PropertyChanged -= OnListChanged;
             _list.Rows.CollectionChanged -= OnRowsChanged;
+            _list.RowsRefreshed -= OnRowsRefreshed;
         }
 
         _list = DataContext as TargetListViewModel;
@@ -316,6 +317,7 @@ public partial class TargetListView : UserControl
             _list.Columns.CollectionChanged += OnColumnsChanged;
             _list.PropertyChanged += OnListChanged;
             _list.Rows.CollectionChanged += OnRowsChanged;
+            _list.RowsRefreshed += OnRowsRefreshed;
         }
 
         FollowColumns();
@@ -344,7 +346,8 @@ public partial class TargetListView : UserControl
     private void OnColumnsChanged(object? sender, NotifyCollectionChangedEventArgs e) => FollowColumns();
 
     // A new page clears the rows before it adds the next set, so the columns are measured afresh
-    // rather than keeping the previous page's widest cells.
+    // rather than keeping the previous page's widest cells. A page that landed on the same rows
+    // in place says so through RowsRefreshed and takes the same reset.
     private void OnRowsChanged(object? sender, NotifyCollectionChangedEventArgs e)
     {
         if (e.Action == NotifyCollectionChangedAction.Reset)
@@ -352,6 +355,8 @@ public partial class TargetListView : UserControl
             ResetColumns();
         }
     }
+
+    private void OnRowsRefreshed(object? sender, EventArgs e) => ResetColumns();
 
     private void ResetColumns()
     {

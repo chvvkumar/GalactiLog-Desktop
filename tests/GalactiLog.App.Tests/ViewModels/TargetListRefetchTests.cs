@@ -354,6 +354,40 @@ public class TargetListRefetchTests
         Assert.Equal("NGC 6960", dashboard.Targets.Rows[1].Name);
     }
 
+    // A re-read that answers with the same targets in the same order updates the rows on screen
+    // in place rather than disposing and rebuilding them: the view keeps its containers, so a
+    // quiet refresh (returning to the page, a scan landing) costs bindings, not a layout pass over
+    // every row, and a click arriving while it lands still hits a live row.
+    [Fact]
+    public async Task TheRowInstances_AreReused_WhenThePageKeysAreUnchanged()
+    {
+        var query = new GatedQuery
+        {
+            Page = new TargetListingPage([Row("M 31"), Row("M 42")], 2, 0d, 0, 1, 50),
+        };
+        var delay = new FakeDelay();
+        var dashboard = CreateDashboard(query.List, delay);
+        await DrainAsync(dashboard, delay);
+        var before = dashboard.Targets.Rows.ToList();
+        var frames = new List<int?>();
+        before[1].PropertyChanged += (_, e) =>
+        {
+            if (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(TargetRowViewModel.FrameCount))
+            {
+                frames.Add(before[1].FrameCount);
+            }
+        };
+
+        query.Page = new TargetListingPage([Row("M 31"), Row("M 42") with { FrameCount = 25 }], 2, 0d, 0, 1, 50);
+        dashboard.RequestQuery(quiet: true);
+        await DrainAsync(dashboard, delay);
+
+        Assert.Same(before[0], dashboard.Targets.Rows[0]);
+        Assert.Same(before[1], dashboard.Targets.Rows[1]);
+        Assert.Equal(25, dashboard.Targets.Rows[1].FrameCount);
+        Assert.Contains(25, frames);
+    }
+
     [Fact]
     public async Task SetRefetching_WritesOnTheCapturedContext()
     {

@@ -42,14 +42,24 @@ public partial class MainWindow : Window
             Command = new RelayCommand(SaveAll, () => FocusedTextBox() is not null || CanSaveAll()),
         });
 
-        // A page switch cross-fades over 150 ms with the outgoing view still in the tree (ux-flow
-        // F3). Focus leaves it at once for the content region, so a click-free Enter or Space
-        // during the fade cannot act on the page being left.
-        this.GetControl<TransitioningContentControl>("ContentRegion").PropertyChanged += (sender, e) =>
+        // A page switch swaps in one frame (no PageTransition; see MainWindow.axaml). Focus leaves
+        // the outgoing view at once for the region that now shows, so a click-free Enter or Space
+        // on the same frame cannot act on the page being left. The detail region closing hands
+        // focus to the destination region it uncovers.
+        var contentRegion = this.GetControl<TransitioningContentControl>("ContentRegion");
+        var detailRegion = this.GetControl<TransitioningContentControl>("DetailRegion");
+        contentRegion.PropertyChanged += (_, e) =>
         {
-            if (e.Property == ContentControl.ContentProperty && sender is Control region)
+            if (e.Property == ContentControl.ContentProperty)
             {
-                region.Focus();
+                contentRegion.Focus();
+            }
+        };
+        detailRegion.PropertyChanged += (_, e) =>
+        {
+            if (e.Property == ContentControl.ContentProperty)
+            {
+                (e.NewValue is null ? contentRegion : detailRegion).Focus();
             }
         };
     }
