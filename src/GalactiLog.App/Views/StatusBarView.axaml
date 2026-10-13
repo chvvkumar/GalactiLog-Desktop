@@ -8,13 +8,16 @@
        update indicator (Phase 10 Task 4, at the end of this file). -->
   <Panel>
   <!-- A 2 px accent line across the top of the bar while any job runs, so background work is
-       visible from every page. Indeterminate: there is no aggregate percent across jobs. -->
+       visible from every page. Indeterminate: there is no aggregate percent across jobs. The flag
+       is bound to the same state as IsVisible, because Fluent runs the indeterminate animation on
+       the process-wide clock while the flag is set even on a hidden bar, and this bar lives in the
+       shell for the whole session (IndeterminateProgressBarScanTest). -->
   <ProgressBar x:Name="JobsRunningLine"
                IsHitTestVisible="False"
                VerticalAlignment="Top"
                Height="2"
                MinHeight="2"
-               IsIndeterminate="True"
+               IsIndeterminate="{Binding HasRunningJobs}"
                IsVisible="{Binding HasRunningJobs}"
                Foreground="{DynamicResource ColorAccent}"
                Background="Transparent" />

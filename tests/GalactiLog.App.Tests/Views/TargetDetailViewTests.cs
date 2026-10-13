@@ -697,4 +697,18 @@ public class TargetDetailViewTests
         Assert.Null(path.Fill);
         Assert.Equal(1.6d, path.StrokeThickness, 3);
     }
+
+    // The loading line's IsIndeterminate follows IsLoading rather than staying true: Fluent's
+    // indeterminate animation runs on the process-wide clock for as long as the flag is set, visible
+    // or not, and keeps the whole page alive after it closes (IndeterminateProgressBarScanTest).
+    [AvaloniaFact]
+    public void PageLoadingLine_IsNotIndeterminate_OnceThePageHasLoaded()
+    {
+        using var harness = Factory.Create().Settle();
+        var view = new TargetDetailView { DataContext = harness.ViewModel };
+        ShowWithDetails(view);
+
+        Assert.False(harness.ViewModel.IsLoading);
+        Assert.False(view.Named<ProgressBar>("PageLoadingLine").IsIndeterminate);
+    }
 }

@@ -175,7 +175,7 @@
                       VerticalAlignment="Bottom"
                       Margin="0,0,0,24"
                       IsVisible="{Binding IsRendering}">
-            <ProgressBar IsIndeterminate="True" Width="120" HorizontalAlignment="Center" />
+            <ProgressBar IsIndeterminate="{Binding IsRendering}" Width="120" HorizontalAlignment="Center" />
             <TextBlock Text="Rendering preview..."
                        HorizontalAlignment="Center"
                        Foreground="{DynamicResource ColorTextSecondary}" />
