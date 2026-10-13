@@ -121,14 +121,34 @@
       </ListBox>
      </Grid>
     </Border>
-    <!-- A page switch swaps in one frame. The 150 ms cross-fade ux-flow F3 asked for faded the
+    <!-- The rail destination, and over it the pushed detail page (ruling Q9) in a region of its
+         own. Two regions rather than one bound to CurrentPage, because swapping a region's content
+         detaches the outgoing view, and Avalonia rebuilds every presenter's template content and
+         restyles the subtree when it is attached again: on the dashboard that was about a second
+         of layout per return from a target, during which clicks queued (perf traces, 2026-10-12).
+         Hidden, the destination keeps its tree and its rows and costs no measure
+         (ShellNavigationTests.TheDashboardView_AndItsRows_SurviveOpeningATargetAndComingBack).
+
+         A page switch swaps in one frame. The 150 ms cross-fade ux-flow F3 asked for faded the
          outgoing page's rows to grey on every navigation, which the owner read as the refetch dim
-         coming back, so no PageTransition is set. Focusable but no tab stop: the code-behind
-         parks focus here on a switch, so the outgoing page keeps none. -->
+         coming back. PageTransition is null by name, not by omission: the control's own default
+         is a 125 ms CrossFade, so leaving the property out keeps a fade
+         (MainWindowSmokeTest.ContentRegion_HasNoPageTransition). Focusable but no tab stop: the
+         code-behind parks focus on the region that just changed, so the outgoing page keeps none. -->
     <TransitioningContentControl Grid.Row="0" Grid.Column="1" x:Name="ContentRegion"
                                  Focusable="True"
                                  IsTabStop="False"
-                                 Content="{Binding CurrentPage}"
+                                 PageTransition="{x:Null}"
+                                 Content="{Binding Selected.Page}"
+                                 IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNull}}"
+                                 MaxWidth="{Binding ContentMaxWidth}"
+                                 HorizontalAlignment="Stretch" />
+    <TransitioningContentControl Grid.Row="0" Grid.Column="1" x:Name="DetailRegion"
+                                 Focusable="True"
+                                 IsTabStop="False"
+                                 PageTransition="{x:Null}"
+                                 Content="{Binding Detail}"
+                                 IsVisible="{Binding Detail, Converter={x:Static ObjectConverters.IsNotNull}}"
                                  MaxWidth="{Binding ContentMaxWidth}"
                                  HorizontalAlignment="Stretch" />
     <!-- The in-window notice stack, over the page's top centre. Declared after ContentRegion so

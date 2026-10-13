@@ -311,15 +311,13 @@ public class ShellShortcutTests : IDisposable
         window.Close();
     }
 
-    // ux-flow F3 with final review minor 3: the outgoing page stays in the tree for the 150 ms
-    // fade, so focus moves to the content region on the switch and an Enter during the fade has
-    // nothing on the old page to act on.
+    // ux-flow F3 with final review minor 3: focus moves to the content region on the switch, so
+    // an Enter typed on the same frame has nothing on the old page to act on.
     [AvaloniaFact]
     public void APageSwitch_MovesFocusOffTheOutgoingPage_ToTheContentRegion()
     {
         var (window, viewModel) = ShowShell();
         var region = window.GetControl<TransitioningContentControl>("ContentRegion");
-        region.PageTransition = null;
         var inside = region.GetVisualDescendants().OfType<Button>()
             .First(button => button.IsEffectivelyVisible && button.IsEffectivelyEnabled);
         Assert.True(inside.Focus());

@@ -1737,4 +1737,17 @@ public class TargetDetailViewModelTests
 
         Assert.Equal(before + 1, harness.Loads);
     }
+
+    // A page closed while its first read is still out drops IsLoading on Dispose, so the loading
+    // line bound to it stops its indeterminate animation and releases the view
+    // (IndeterminateProgressBarScanTest explains the clock).
+    [Fact]
+    public void Dispose_ClearsIsLoading()
+    {
+        using var harness = Factory.Create();
+        var page = harness.ViewModel;
+        page.Dispose();
+
+        Assert.False(page.IsLoading);
+    }
 }

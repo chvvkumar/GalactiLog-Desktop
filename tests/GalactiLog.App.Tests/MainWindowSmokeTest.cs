@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using GalactiLog.App.Views;
 using Xunit;
@@ -19,5 +20,19 @@ public class MainWindowSmokeTest
 
         Assert.True(window.Bounds.Width > 0);
         Assert.True(window.Bounds.Height > 0);
+    }
+
+    // The content region swaps pages in one frame. Avalonia's TransitioningContentControl defaults
+    // PageTransition to a 125 ms CrossFade when none is declared, which fades the outgoing page's
+    // rows to grey on every navigation and reads as the refetch dim, so the region has to name
+    // null explicitly rather than merely omit the property.
+    [AvaloniaFact]
+    public void ContentRegion_HasNoPageTransition()
+    {
+        var window = new MainWindow();
+        window.Show();
+
+        Assert.Null(window.GetControl<TransitioningContentControl>("ContentRegion").PageTransition);
+        Assert.Null(window.GetControl<TransitioningContentControl>("DetailRegion").PageTransition);
     }
 }

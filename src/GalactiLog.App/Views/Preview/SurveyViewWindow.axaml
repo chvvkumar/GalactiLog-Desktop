@@ -88,7 +88,7 @@
                    Foreground="{DynamicResource ColorTextSecondary}" />
 
         <ProgressBar x:Name="LoadingBar"
-                     IsIndeterminate="True"
+                     IsIndeterminate="{Binding IsLoading}"
                      IsVisible="{Binding IsLoading}"
                      Width="120"
                      HorizontalAlignment="Center"

@@ -482,6 +482,11 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
     /// images table.</summary>
     public event EventHandler? Changed;
 
+    /// <summary>Raised when a page landed on the rows already on screen (same targets, same
+    /// order) instead of replacing them. The view resets its shared column widths on a Rows
+    /// Reset; this is the same cue for the path that raises none.</summary>
+    public event EventHandler? RowsRefreshed;
+
     /// <summary>A row was activated, or a session line's Deep dive action was (Phase 14B Task 6).
     /// Phase 6 navigates to Target detail; Phase 5 has no destination (coordinator ruling Q17) and
     /// only raises this. One event with a widened payload rather than a second near-identical one
@@ -553,6 +558,23 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
             ApplyCustomColumns(custom);
         }
 
+        // The same targets in the same order, which is what a quiet re-read (returning to the
+        // page, a scan that added no target) answers with: update the rows in place and keep the
+        // view's containers. Rebuilding them was about a second of layout per page swap.
+        if (Rows.Count == page.Rows.Count
+            && Rows.Select(row => row.GroupKey).SequenceEqual(page.Rows.Select(row => row.GroupKey), StringComparer.Ordinal))
+        {
+            for (var i = 0; i < Rows.Count; i++)
+            {
+                Rows[i].Update(page.Rows[i], ValuesFor(page.Rows[i].TargetId));
+            }
+
+            TotalGroups = page.TotalGroups;
+            RowsRefreshed?.Invoke(this, EventArgs.Empty);
+            ClampPage();
+            return;
+        }
+
         // A re-query keeps the rows the reader opened; a key that is gone is dropped.
         var expanded = Rows.Where(row => row.IsExpanded).Select(row => row.GroupKey).ToHashSet(StringComparer.Ordinal);
 
@@ -582,10 +604,14 @@ public sealed partial class TargetListViewModel : ObservableObject, IDisposable
         }
 
         TotalGroups = page.TotalGroups;
+        ClampPage();
+    }
 
-        // Review item 3: a scan or a filter can shrink the set under the page the user is standing
-        // on. Clamping raises Changed, so the dashboard re-queries once for the page that now
-        // exists rather than leaving an empty list and "Page 5 of 2" under it.
+    // Review item 3: a scan or a filter can shrink the set under the page the user is standing
+    // on. Clamping raises Changed, so the dashboard re-queries once for the page that now exists
+    // rather than leaving an empty list and "Page 5 of 2" under it. Both Load paths end here.
+    private void ClampPage()
+    {
         if (Page > PageCount)
         {
             Page = PageCount;
