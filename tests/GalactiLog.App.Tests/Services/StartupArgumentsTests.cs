@@ -119,6 +119,28 @@ public class StartupArgumentsTests
         Assert.NotEmpty(startup.Remaining);
     }
 
+    // VelopackLaunch is not a command-line fact. Velopack signals the first run after an install
+    // and the restart after an update through environment variables only its hooks read, so the
+    // parser never sets it and Program.Main folds it in afterwards with a with expression.
+    [Fact]
+    public void Parse_NeverReportsAVelopackLaunch()
+    {
+        Assert.False(StartupArguments.Parse([]).VelopackLaunch);
+        Assert.False(StartupArguments.Parse([StartupArguments.MinimizedSwitch]).VelopackLaunch);
+    }
+
+    [Fact]
+    public void VelopackLaunch_IsSetWithTheRecordsWithExpression()
+    {
+        var parsed = StartupArguments.Parse([StartupArguments.MinimizedSwitch, "scan", @"C:\x"]);
+
+        var startup = parsed with { VelopackLaunch = true };
+
+        Assert.True(startup.VelopackLaunch);
+        Assert.True(startup.Minimized);
+        Assert.Equal(["scan", @"C:\x"], startup.Remaining);
+    }
+
     [Fact]
     public void MinimizedSwitch_IsTheLiteralTheStartupShortcutWrites()
     {

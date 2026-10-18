@@ -26,6 +26,20 @@ namespace GalactiLog.App.Services;
 public sealed record StartupArguments(bool Minimized, string[] Remaining)
 {
     /// <summary>
+    /// True when Velopack launched this process: the first run after an install
+    /// (<c>VELOPACK_FIRSTRUN</c>) or the restart after an update (<c>VELOPACK_RESTART</c>).
+    /// </summary>
+    /// <remarks>
+    /// Not a command-line fact, so <see cref="Parse"/> never sets it: Velopack signals those two
+    /// launches through environment variables that only its <c>OnFirstRun</c> and
+    /// <c>OnRestarted</c> hooks read, and <c>Program.Main</c> sets this from them with a
+    /// <c>with</c> expression. Read by <c>App.ShouldShowWindowAtStartup</c> through
+    /// <c>AppHost.Build</c>, where it overrides <c>general.start_minimized</c> but not
+    /// <see cref="Minimized"/>.
+    /// </remarks>
+    public bool VelopackLaunch { get; init; }
+
+    /// <summary>
     /// Spec 12.11 behaviour 9's one switch. The literal is declared on
     /// <see cref="VelopackStartupShortcut"/>, which is what writes it into the Startup shortcut,
     /// and referenced here so the shortcut that writes one spelling and the parser that reads it
@@ -75,9 +89,10 @@ public sealed record StartupArguments(bool Minimized, string[] Remaining)
 /// </summary>
 /// <remarks>
 /// <para>
-/// Composed once, in <c>AppHost.Build</c>, which is the one place that holds both halves of the
-/// rule: the switch <c>Program.Main</c> parsed into <c>App.StartupArguments</c> before the host
-/// was built, and the <c>general</c> document <c>Build</c> already read for itself. The rule is
+/// Composed once, in <c>AppHost.Build</c>, which is the one place that holds every input of the
+/// rule: the switch and the <see cref="StartupArguments.VelopackLaunch"/> flag <c>Program.Main</c>
+/// put into <c>App.StartupArguments</c> before the host was built, and the <c>general</c>
+/// document <c>Build</c> already read for itself. The rule is
 /// <c>App.ShouldShowWindowAtStartup</c> and lives there alone; this record carries its answer to
 /// the two readers that need it, <c>App.OnFrameworkInitializationCompleted</c> and spec 12.8's
 /// "Started minimized" field, so a page and a window cannot disagree about what happened.

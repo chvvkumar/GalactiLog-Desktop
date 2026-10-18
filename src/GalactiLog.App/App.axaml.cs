@@ -296,10 +296,16 @@ public partial class App : Application
     /// <remarks>
     /// <para>
     /// Either the switch or the stored setting starts into the tray, and the switch wins when they
-    /// disagree, because the switch is this launch and the setting is every launch. That is an
-    /// "or" and not a precedence table: the switch can only ask for the tray, so a launch that
-    /// carries it starts into the tray whatever the setting says, and a launch that does not
-    /// carries no opinion for the setting to be overridden by.
+    /// disagree, because the switch is this launch and the setting is every launch. The switch can
+    /// only ask for the tray, so a launch that carries it starts into the tray whatever else is
+    /// true: a boot launch must never yank a window up, even when Velopack applied a pending
+    /// update and restarted it.
+    /// </para>
+    /// <para>
+    /// A launch Velopack itself made overrides only the stored setting. The first run after an
+    /// install needs a window for the setup wizard, and the restart after an update was confirmed
+    /// from a visible window by a user who clicked "Install and restart"; a window that vanished
+    /// into the tray at that moment would read as the update having failed.
     /// </para>
     /// <para>
     /// Internal, static and free of Avalonia types, so App.Tests can exercise the decision without
@@ -317,9 +323,12 @@ public partial class App : Application
     /// </para>
     /// </remarks>
     /// <param name="minimizedSwitch">Whether this launch carried <c>--minimized</c>.</param>
+    /// <param name="velopackLaunch">Whether Velopack launched this process: the first run after an
+    /// install or the restart after an update (<see cref="StartupArguments.VelopackLaunch"/>).</param>
     /// <param name="general">The <c>general</c> document, as <c>AppHost.Build</c> read it.</param>
-    internal static bool ShouldShowWindowAtStartup(bool minimizedSwitch, GeneralSettings general)
-        => !minimizedSwitch && !general.StartMinimized;
+    internal static bool ShouldShowWindowAtStartup(
+        bool minimizedSwitch, bool velopackLaunch, GeneralSettings general)
+        => !minimizedSwitch && (velopackLaunch || !general.StartMinimized);
 
     /// <summary>
     /// Spec 12.1's first-run branch: opens the setup wizard when <c>general.setup_complete</c> is

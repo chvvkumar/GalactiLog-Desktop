@@ -208,7 +208,11 @@ public sealed partial class ReviewStep(WbppExportViewModel page, MethodStep meth
 
         if (Page.Totals is not { FrameCount: > 0 })
         {
-            blocks.Add("The chosen folders hold no frames after the quality filter, so there is nothing to copy.");
+            // The page's own sentence decides which control emptied the export: a skip-emptied
+            // export blamed on the filter would send the user to the wrong step.
+            blocks.Add(Page.EmptyExportText == WbppExportViewModel.SkipsEmptyWarning
+                ? WbppExportViewModel.SkipsEmptyWarning
+                : "The chosen folders hold no frames after the quality filter, so there is nothing to copy.");
         }
 
         Blocks = blocks;

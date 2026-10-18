@@ -489,4 +489,22 @@ public sealed class StagingCopierTests : IDisposable
         Assert.Contains("A folder already exists", Assert.Single(result.Failed).Message);
         Assert.Equal(5, result.Copied);
     }
+
+    [Fact]
+    public async Task RunAsync_SkipsAnExcludedDirectoryAndEverythingBeneathIt()
+    {
+        var kept = Source(@"Ha\a.fits", 10);
+        Source(@"OIII\b.fits", 10);
+        Source(@"OIII\deeper\c.fits", 10);
+        var request = new StagingCopyRequest(
+            [new CopyOperation(new DateOnly(2026, 1, 1), _source, Entry, [], ["oiii"])], _staging, []);
+
+        var result = await new StagingCopier(StagingIo.For(Writer())).RunAsync(request, null, CancellationToken.None);
+
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Equal(1, result.Copied);
+        Assert.Equal(kept, File.ReadAllBytes(Destination(@"Ha\a.fits")));
+        Assert.False(Directory.Exists(Destination("OIII")));
+        Assert.Empty(result.Skipped);
+    }
 }

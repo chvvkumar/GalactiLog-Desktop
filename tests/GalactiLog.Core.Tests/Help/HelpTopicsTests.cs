@@ -790,15 +790,18 @@ public class HelpTopicsTests
     private static readonly Dictionary<string, string> Expected = new(StringComparer.Ordinal)
     {
         ["export.folders"] =
-            "Each night lists its frames' folders, from the top of your library down to the "
-            + "folder the frames sit in; Change folder opens the list, and the chosen folder is "
-            + "copied whole. The default pick is the deepest folder that holds every one of that "
-            + "night's frames and drags nothing else along. A badge reading \"+2 other nights\" "
-            + "or \"+1 other target\" means that folder also holds other frames, copied too; it "
-            + "is advisory, and choosing such a folder is how you deliberately copy a date folder "
-            + "two targets share. Frames counts this target's light frames; the size counts every "
-            + "catalogued file in the chosen folders, whatever target or frame type, and reads "
-            + "unknown rather than a partial total when any file's size was never recorded. "
+            "Each night's tree opens on this step, rooted at your library folder. The round buttons "
+            + "mark the folders that hold that night's frames, and the checked one is copied; the "
+            + "default is the deepest folder that holds every one of the night's frames and drags "
+            + "nothing else along. Other folders that hold the night's frames are dimmed and are not copied, "
+            + "and folders outside the checked one are not shown. "
+            + "Everything under it is copied unless you untick it, and unticking a folder leaves out "
+            + "everything beneath it; ticks are not remembered between exports. A badge reading "
+            + "\"+2 other nights\" or \"+1 other target\" means that folder also holds other frames, "
+            + "copied too; it is advisory, and choosing such a folder is how you deliberately copy a "
+            + "date folder two targets share. Frames counts this target's light frames; the size "
+            + "counts every catalogued file in the chosen folders, whatever target or frame type, and "
+            + "reads unknown rather than a partial total when any file's size was never recorded. "
             + "Sidecars and files GalactiLog never read are copied too and are not counted, and a "
             + "night with no folder to copy contributes nothing.",
         ["target.frames"] =

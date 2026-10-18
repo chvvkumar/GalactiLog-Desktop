@@ -193,6 +193,10 @@ public sealed class ContaminationIndex
         internal int LongestRelative { get; set; }
     }
 
+    /// <summary>True when the index holds facts for the folder: some catalogue row under a scan
+    /// root lies beneath it.</summary>
+    public bool IsCatalogued(string folder) => folders.ContainsKey(folder);
+
     // Null when no catalogue row sits under the folder at all.
     internal FolderFacts? Facts(string folder) => folders.GetValueOrDefault(folder);
 
@@ -351,7 +355,7 @@ public static class FolderLevels
         var levels = union.Values
             .OrderBy(folder => folder.Depth)
             .ThenBy(folder => folder.Path, StringComparer.OrdinalIgnoreCase)
-            .Select(folder => Describe(folder.Path, folder.Depth, night, targetKey, resolved, index))
+            .Select(folder => Describe(folder.Path, folder.Depth, night, targetKey, resolved.Select(r => r.Frame).ToList(), index))
             .ToList();
 
         return new SessionLevels(
@@ -476,13 +480,29 @@ public static class FolderLevels
     }
 
     /// <summary>
+    /// Describes each folder as a skippable subfolder at <paramref name="depth"/>, one entry per
+    /// folder in the order given, with the figures <see cref="ForSession"/> reports for a level
+    /// and whether the catalogue knows the folder at all.
+    /// </summary>
+    public static IReadOnlyList<SubfolderLevel> Subfolders(
+        DateOnly night,
+        string targetKey,
+        IReadOnlyList<string> folders,
+        int depth,
+        IReadOnlyList<WbppFramePath> frames,
+        ContaminationIndex index)
+        => [.. folders.Select(folder => new SubfolderLevel(
+            Describe(folder, depth, night, targetKey, frames, index), index.IsCatalogued(folder)))];
+
+    /// <summary>
     /// The excluded frames that actually lie under their own night's chosen level. Port of
     /// <c>excludedUnderSelectedLevels</c>: a night's excluded frames are tested only against that
     /// night's level, so a frame the filter dropped in <c>OIII</c> is not deducted from an
     /// <c>Ha</c> copy that never touches it. A night with no chosen level contributes nothing.
     /// <paramref name="chosen"/> carries at most one level per night, which is what the page picks;
     /// two levels sharing a night would return that night's excluded frames twice and
-    /// <see cref="Totals"/> would deduct them twice.
+    /// <see cref="Totals"/> would deduct them twice. A frame under a skipped folder of its night is
+    /// dropped too: the skipped folder is deducted whole, so the frame must not be deducted again.
     /// </summary>
     public static IReadOnlyList<WbppFramePath> ExcludedUnderLevels(
         IReadOnlyList<ChosenLevel> chosen,
@@ -497,7 +517,9 @@ public static class FolderLevels
             }
 
             under.AddRange(
-                excluded.Where(frame => PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)));
+                excluded.Where(frame =>
+                    PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)
+                    && !(level.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath))));
         }
 
         return under;
@@ -508,6 +530,7 @@ public static class FolderLevels
     /// per-file excludes. Port of <c>map_excluded_to_ops</c> plus
     /// <c>disambiguate_staging_names</c>: each excluded frame is assigned to the chosen level whose
     /// path is its longest containing prefix, and a frame matching no chosen level is dropped.
+    /// Each chosen level's skipped folders become relative directory excludes.
     /// This is the single input the script generator renders from.
     /// </summary>
     public static IReadOnlyList<CopyOperation> CopyOperations(
@@ -539,24 +562,31 @@ public static class FolderLevels
             perLevel[best].Add(Path.GetRelativePath(chosen[best].Level.Path, frame.FilePath));
         }
 
-        return [.. chosen.Select((level, i) => new CopyOperation(level.Night, level.Level.Path, names[i], perLevel[i]))];
+        return [.. chosen.Select((level, i) => new CopyOperation(level.Night, level.Level.Path, names[i], perLevel[i],
+            [.. (level.SkippedFolders ?? []).Select(folder => Path.GetRelativePath(level.Level.Path, folder.Path))]))];
     }
 
     /// <summary>
     /// The export's summary counts. Port of the web modal's <c>frameCount</c> and <c>sizeBytes</c>
     /// memos. <see cref="ExportTotals.SizeBytes"/> is null the moment one chosen level's own total
-    /// or one excluded frame's size is unknown.
+    /// or one excluded frame's size is unknown. Each skipped folder's frames and bytes are deducted
+    /// once, and a null skipped size makes the total null.
     /// </summary>
     public static ExportTotals Totals(
         IReadOnlyList<ChosenLevel> chosen,
         IReadOnlyList<WbppFramePath> excludedUnderLevels)
     {
-        var frameCount = chosen.Sum(level => level.Level.FrameCount) - excludedUnderLevels.Count;
+        var frameCount = chosen.Sum(level => level.Level.FrameCount
+            - (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount)) - excludedUnderLevels.Count;
 
         long? size = 0;
         foreach (var level in chosen)
         {
             size = level.Level.SubtreeBytes is long bytes && size is long running ? running + bytes : null;
+            foreach (var skipped in level.SkippedFolders ?? [])
+            {
+                size = skipped.SubtreeBytes is long skippedBytes && size is long left ? left - skippedBytes : null;
+            }
         }
 
         foreach (var frame in excludedUnderLevels)
@@ -573,10 +603,10 @@ public static class FolderLevels
         int depth,
         DateOnly night,
         string targetKey,
-        List<(WbppFramePath Frame, string Root)> resolved,
+        IReadOnlyList<WbppFramePath> frames,
         ContaminationIndex index)
     {
-        var count = resolved.Count(entry => PathConfinement.IsUnderOrEqual(path, entry.Frame.FilePath));
+        var count = frames.Count(frame => PathConfinement.IsUnderOrEqual(path, frame.FilePath));
         var facts = index.Facts(path);
 
         // Excluded by group key and then printed as a display name, which is ruled departure 4: the

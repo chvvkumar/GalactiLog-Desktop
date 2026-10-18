@@ -188,7 +188,8 @@ internal sealed class ExportHarness : IDisposable
         bool installPickers = true,
         Func<IReadOnlyList<WbppFrame>, IReadOnlyDictionary<Guid, FrameGrading>, string,
             Action<IReadOnlyCollection<Guid>>, object>? createPanel = null,
-        bool parked = false)
+        bool parked = false,
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -232,7 +233,8 @@ internal sealed class ExportHarness : IDisposable
                 return Task.CompletedTask;
             },
             createPanel,
-            post: action => action());
+            post: action => action(),
+            listSubfolders: listSubfolders);
 
         if (installPickers)
         {
@@ -675,9 +677,7 @@ public class WbppExportViewModelTests
         Assert.Equal(names, second.Page.Sessions[0].Rows.Select(row => row.FolderName));
 
         // And the indent follows the level's own depth, not its position in the list.
-        Assert.Equal(1 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[0].Indent.Left);
-        Assert.Equal(2 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[1].Indent.Left);
-        Assert.Equal(2 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[2].Indent.Left);
+        Assert.Equal([1, 2, 2], first.Page.Sessions[0].Rows.Select(r => r.Level.DepthFromRoot));
     }
 
     [Fact]
