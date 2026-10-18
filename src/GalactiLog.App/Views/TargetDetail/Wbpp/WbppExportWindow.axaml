@@ -33,6 +33,7 @@
           <CheckBox x:Name="SubfolderIncluded"
                     Grid.Column="1"
                     IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                    AutomationProperties.Name="{Binding FolderName}"
                     VerticalAlignment="Center" />
 
           <TextBlock Grid.Column="2"

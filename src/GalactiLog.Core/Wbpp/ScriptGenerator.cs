@@ -507,7 +507,7 @@ public static partial class ScriptGenerator
                 var quotedDirs = string.Join(
                     ", ",
                     (operation.ExcludedRelativeDirectories ?? []).Select(d =>
-                        PowerShellQuote(d.Replace("/", "\\").TrimEnd('\\') +"\\", "excluded folder")));
+                        PowerShellQuote(d.Replace("/", "\\").TrimEnd('\\') + "\\", "excluded folder")));
                 job += $"; ExcludeDirs = @({quotedDirs})";
             }
 
@@ -858,15 +858,16 @@ public static partial class ScriptGenerator
         => HasExcludedFiles(input) || HasExcludedDirectories(input);
 
     // rsync reads *, ? and [ in an exclude pattern as wildcards, so a pattern built from a real
-    // path prefixes each of them, and the closing bracket, with a backslash to match that
-    // character literally. The folder patterns the user wrote are deliberately not passed
-    // through here: their stars are meant.
+    // path prefixes exactly those three with a backslash to match them literally. rsync reads a
+    // backslash as an escape only when the pattern holds a wildcard character, so escaping
+    // anything else (such as a lone closing bracket) would make a literal pattern miss. The
+    // folder patterns the user wrote are deliberately not passed through here: their stars are meant.
     private static string RsyncEscape(string pattern)
     {
         var builder = new StringBuilder(pattern.Length);
         foreach (var c in pattern)
         {
-            if (c is '*' or '?' or '[' or ']')
+            if (c is '*' or '?' or '[')
             {
                 builder.Append('\\');
             }

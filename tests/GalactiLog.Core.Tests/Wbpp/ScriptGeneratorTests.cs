@@ -1446,6 +1446,30 @@ public class ScriptGeneratorTests
     }
 
     [Fact]
+    public void PowerShell_CombinesFileAndDirectoryExcludesInOnePredicate()
+    {
+        var input = new WbppScriptInput(
+            [new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\M31\2026-07-01", "2026-07-01", [@"Ha\a.fits"], ["OIII"])],
+            @"D:\Staging\M 31", "M 31", Nine, "wbpp_M_31.ps1");
+
+        var text = ScriptGenerator.Generate(WbppScriptType.PowerShell, input);
+
+        Assert.Contains(@"-and (-not ($Job.ExcludeFiles -contains $RelPath)) -and (-not ($Job.ExcludeDirs | Where-Object { $RelPath.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) }))", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Bash_DoesNotEscapeALoneClosingBracket()
+    {
+        var input = new WbppScriptInput(
+            [new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\M31\2026-07-01", "2026-07-01", [], ["Target]"])],
+            @"D:\Staging\M 31", "M 31", Nine, "wbpp_M_31.sh");
+
+        var text = ScriptGenerator.Generate(WbppScriptType.Bash, input);
+
+        Assert.Contains("--exclude='/Target]/'", text, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public void Bash_EmitsAnAnchoredDirectoryExclude_WithRsyncWildcardsEscaped()
     {
         var input = new WbppScriptInput(
@@ -1456,7 +1480,7 @@ public class ScriptGeneratorTests
 
         Assert.Contains("--exclude='/OIII/'", text, StringComparison.Ordinal);
         Assert.Contains(@"--exclude='/Ha/what\?/'", text, StringComparison.Ordinal);
-        Assert.Contains(@"--exclude='/Ha/M31 \[x\]\*.fits'", text, StringComparison.Ordinal);
+        Assert.Contains(@"--exclude='/Ha/M31 \[x]\*.fits'", text, StringComparison.Ordinal);
         Assert.Contains("\"${@:4}\"", text, StringComparison.Ordinal);
     }
 
