@@ -55,7 +55,7 @@ public class FolderTreeTests
         => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
 
     [Fact]
-    public void OnLoad_EveryChainRowIsExpanded_AndEachChainDirectoryIsListedOnce()
+    public void OnLoad_EveryChainRowIsExpanded_AndOnlyTheCopiedChainDirectoriesAreListed_EachOnce()
     {
         var calls = new List<string>();
         using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
@@ -72,14 +72,34 @@ public class FolderTreeTests
 
         Assert.True(session.IsExpanded);
         Assert.All(session.Rows, r => Assert.True(r.IsExpanded));
+
+        // The default pick is the leaf, Ha: the rows above it are open, but their disk children
+        // are hidden, so they are not read.
         lock (calls)
         {
-            Assert.Equal([M31, Date, HaFolder], calls.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.Equal([HaFolder], calls);
         }
 
         Assert.Equal("M31", session.Roots.Single().FolderName);
         Assert.Same(session.Rows[0], session.Rows[1].Parent);
         Assert.Same(session.Rows[1], session.Rows[2].Parent);
+
+        // Choosing the root brings every ancestor into the chosen or copied zone: each lists once.
+        session.ChosenIndex = session.Rows[0].Index;
+        Settle(session);
+        lock (calls)
+        {
+            Assert.Equal([M31, Date, HaFolder], calls.Order(StringComparer.OrdinalIgnoreCase));
+        }
+
+        // Leaving the zone and entering it again reads nothing twice.
+        session.ChosenIndex = session.Rows[2].Index;
+        session.ChosenIndex = session.Rows[0].Index;
+        Settle(session);
+        lock (calls)
+        {
+            Assert.Equal([M31, Date, HaFolder], calls.Order(StringComparer.OrdinalIgnoreCase));
+        }
     }
 
     [Fact]
@@ -89,8 +109,9 @@ public class FolderTreeTests
             Is(folder, Date) ? [Flat, HaFolder, Oiii] : []))
         {
             var session = h.Page.Sessions[0];
-            Settle(session);
             var date = Row(session, Date);
+            session.ChosenIndex = date.Index;
+            Settle(session);
 
             Assert.Equal(["FLAT", "Ha", "OIII"], date.Children.Select(c => c.FolderName));
             Assert.Same(session.Rows[2], date.Children.Single(c => c.FolderName == "Ha"));
@@ -101,8 +122,9 @@ public class FolderTreeTests
             Is(folder, Date) ? [Flat] : []))
         {
             var session = h.Page.Sessions[0];
-            Settle(session);
             var date = Row(session, Date);
+            session.ChosenIndex = date.Index;
+            Settle(session);
 
             Assert.Equal(["FLAT", "Ha"], date.Children.Select(c => c.FolderName));
             Assert.True(Child(date, "Ha").IsChain);
@@ -135,13 +157,13 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
             Is(folder, Date) ? [Flat, HaFolder] : []);
         var session = h.Page.Sessions[0];
-        Settle(session);
         var m31 = Row(session, M31);
         var date = Row(session, Date);
         var ha = Row(session, HaFolder);
-        var flat = Child(date, "FLAT");
 
         session.ChosenIndex = date.Index;
+        Settle(session);
+        var flat = Child(date, "FLAT");
         Assert.Equal(FolderZone.NotCopied, m31.Zone);
         Assert.Equal(FolderZone.Chosen, date.Zone);
         Assert.Equal(FolderZone.Copied, ha.Zone);
@@ -178,8 +200,9 @@ public class FolderTreeTests
         var session = h.Page.Sessions[0];
         Settle(session);
         var date = Row(session, Date);
-        var flat = Child(date, "FLAT");
         session.ChosenIndex = date.Index;
+        Settle(session);
+        var flat = Child(date, "FLAT");
 
         flat.IsIncluded = false;
         Assert.Equal("1 folder skipped", session.SkippedText);
@@ -208,6 +231,7 @@ public class FolderTreeTests
         Settle(session);
         var date = Row(session, Date);
         session.ChosenIndex = date.Index;
+        Settle(session);
         var flat = Child(date, "FLAT");
 
         flat.IsExpanded = true;
@@ -236,8 +260,8 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
             Is(folder, Date) ? [HaFolder, Oiii] : []);
         var session = h.Page.Sessions[0];
-        Settle(session);
         session.ChosenIndex = Row(session, Date).Index;
+        Settle(session);
         h.Page.StagingPath = h.TempFolder("staging");
         h.Page.CommitStagingCommand.Execute(null);
         h.Page.SavedConfirmationDuration = TimeSpan.Zero;
@@ -264,9 +288,10 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
             Is(folder, Date) ? null : []);
         var session = h.Page.Sessions[0];
-        Settle(session);
         var date = Row(session, Date);
         var ha = Row(session, HaFolder);
+        session.ChosenIndex = date.Index;
+        Settle(session);
 
         Assert.Equal(FolderNodeViewModel.UnreadableText, date.ChildrenText);
         Assert.True(date.HasChildrenText);
@@ -286,6 +311,51 @@ public class FolderTreeTests
         Assert.All(session.Rows, r => Assert.False(r.IsListing));
         Assert.Equal("", session.SkippedText);
         Assert.Null(session.Chosen!.SkippedFolders);
+    }
+
+    [Fact]
+    public void AnUnavailableNight_HasNoOpenTree_AndNoRows()
+    {
+        using (var h = ExportHarness.Create(new Library().EmptyNight(N1), [N1]))
+        {
+            var session = h.Page.Sessions[0];
+            Assert.False(session.HasLevels);
+            Assert.False(session.IsExpanded);
+            Assert.Empty(session.Roots);
+        }
+
+        var library = new Library().Frame(N1, Ha(N1, "a.fits"));
+        library.ScanRoots.Add(Library.SecondRoot);
+        library.Frame(N1, Path.Combine(Library.SecondRoot, "M31", "Ha", "b.fits"));
+        using (var h = ExportHarness.Create(library, [N1]))
+        {
+            var session = h.Page.Sessions[0];
+            Assert.False(session.HasLevels);
+            Assert.False(session.IsExpanded);
+            Assert.Empty(session.Roots);
+        }
+    }
+
+    [Fact]
+    public void UntickingAChainRowUnderTheChosenOne_ThenChoosingIt_SkipsNothing()
+    {
+        var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N1, Ha(N1, "b.fits"));
+        using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
+            Is(folder, Date) ? [HaFolder] : []);
+        var session = h.Page.Sessions[0];
+        var ha = Row(session, HaFolder);
+        session.ChosenIndex = Row(session, Date).Index;
+        Settle(session);
+
+        ha.IsIncluded = false;
+        Assert.Equal([HaFolder], SkippedPaths(session));
+
+        session.ChosenIndex = ha.Index;
+
+        Assert.Null(session.Chosen!.SkippedFolders);
+        Assert.False(ha.ShowsTick);
+        Assert.False(ha.IsSkipped);
+        Assert.Equal("2 light frames", h.Page.FrameCountText);
     }
 
     [Fact]
@@ -319,8 +389,8 @@ public class FolderTreeTests
             runScript: _ => { },
             post: action => action());
         var session = h.Page.Sessions[0];
-        Settle(session);
         session.ChosenIndex = Row(session, Date).Index;
+        Settle(session);
 
         Row(session, HaFolder).IsIncluded = false;
 

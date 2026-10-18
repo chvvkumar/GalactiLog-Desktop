@@ -98,6 +98,10 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         _chosenChanged = chosenChanged;
         GroupName = "WbppLevels_" + levels.Night.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
+        // Open on load, unless the night has no tree to open: its toggle is hidden, so an open
+        // panel there could not be closed.
+        _isExpanded = HasLevels;
+
         Action<FolderNodeViewModel> list = listSubfolders is { } lister
             ? row => lister(this, row)
             : row => row.SetChildren([]);
@@ -225,10 +229,11 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// is in the root is an unavailable row instead and states nothing here.</summary>
     public bool HasRootFramesText => HasLevels && Levels.FramesInRootItself > 0;
 
-    /// <summary>Whether the night's tree is open. Open when the page loads.</summary>
+    /// <summary>Whether the night's tree is open. Open when the page loads, on a night that offers
+    /// one.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleLabel))]
-    private bool _isExpanded = true;
+    private bool _isExpanded;
 
     /// <summary>The tree toggle's label, which states what pressing it does, as every other
     /// disclosure on this page and in the session pane does.</summary>

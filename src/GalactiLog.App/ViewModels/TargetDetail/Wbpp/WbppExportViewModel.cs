@@ -706,7 +706,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         }
 
         var chosen = ChosenLevels();
-        var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight());
+        var excludedByNight = ExcludedByNight();
+        var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, excludedByNight);
         var totals = FolderLevels.Totals(chosen, excludedUnder);
         Totals = totals;
 
@@ -719,7 +720,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         // Each night's own line under its tree, from the same seam over that night alone, so the
         // line and the footer cannot disagree.
-        var excludedByNight = ExcludedByNight();
         foreach (var session in Sessions)
         {
             if (session.Chosen is { } night)

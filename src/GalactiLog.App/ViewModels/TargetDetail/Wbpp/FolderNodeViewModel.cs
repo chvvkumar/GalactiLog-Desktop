@@ -8,6 +8,10 @@ namespace GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 /// <summary>Where a row of a night's folder tree stands against the night's chosen row.</summary>
 public enum FolderZone
 {
+    /// <summary>A disk folder that is not under the chosen row: not drawn. The default, so a row
+    /// bound before it is zoned is never drawn in another row's zone.</summary>
+    Hidden,
+
     /// <summary>The chosen row itself: the folder the night copies from.</summary>
     Chosen,
 
@@ -16,9 +20,6 @@ public enum FolderZone
 
     /// <summary>A level that is not under the chosen row: offered, not copied.</summary>
     NotCopied,
-
-    /// <summary>A disk folder that is not under the chosen row: not drawn.</summary>
-    Hidden,
 }
 
 /// <summary>
@@ -34,7 +35,8 @@ public enum FolderZone
 /// does not have.
 /// </para>
 /// <para>
-/// The tree is lazy. A row lists its directory the first time it is expanded and never again, so
+/// The tree is lazy. A row lists its directory the first time it is both expanded and in the
+/// <see cref="FolderZone.Chosen"/> or <see cref="FolderZone.Copied"/> zone, and never again, so
 /// collapsing, re-expanding, unticking or re-ticking reads nothing and loses no nested tick. The
 /// read is the page's, reached through the <c>list</c> callback, because this file may not touch
 /// the disk and the answer has to come back on the UI thread. A chain row's chain children are
@@ -93,8 +95,9 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <param name="ownTargetName">The page's own target's display name, which decides whether an
     /// other-target entry needs <see cref="SameNameSuffix"/>.</param>
     /// <param name="parent">The row this one sits inside, or null for a root.</param>
-    /// <param name="list">Called once, the first time this row is expanded, so the page reads the
-    /// folders inside and answers through <see cref="SetChildren"/>.</param>
+    /// <param name="list">Called once, the first time this row is expanded in the chosen or copied
+    /// zone, so the page reads the folders inside and answers through <see cref="SetChildren"/>.
+    /// </param>
     /// <param name="changed">Called when this row's radio is picked or its tick moves.</param>
     public FolderNodeViewModel(
         SubfolderLevel folder,
@@ -296,10 +299,8 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         }
 
         rows.AddRange(_chainChildren.Where(child => !rows.Contains(child)));
-        Children = rows;
-        ChildrenText = rows.Count == 0 ? NoFoldersText : "";
-        IsListing = false;
 
+        // Zoned before they are bound, so no row is ever drawn in a zone it does not hold.
         if (_zonedAgainst is { } chosen)
         {
             foreach (var row in rows)
@@ -307,10 +308,17 @@ public sealed partial class FolderNodeViewModel : ObservableObject
                 row.ApplyZone(chosen);
             }
         }
+
+        Children = rows;
+        ChildrenText = rows.Count == 0 ? NoFoldersText : "";
+        IsListing = false;
     }
 
     /// <summary>Places this row and every row under it against the night's chosen row.</summary>
     /// <param name="chosen">The night's chosen row.</param>
+    /// <remarks>An open row lists its directory on entering the chosen or copied zone, never
+    /// before: the disk children of a row above the chosen one are hidden, so listing them would
+    /// only build rows that are never drawn.</remarks>
     public void ApplyZone(FolderNodeViewModel chosen)
     {
         ArgumentNullException.ThrowIfNull(chosen);
@@ -324,6 +332,11 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         foreach (var child in Children)
         {
             child.ApplyZone(chosen);
+        }
+
+        if (IsExpanded)
+        {
+            RequestList();
         }
     }
 
@@ -381,7 +394,16 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
     partial void OnIsExpandedChanged(bool value)
     {
-        if (!value || _listRequested)
+        if (value)
+        {
+            RequestList();
+        }
+    }
+
+    // The one latch: lists once, and only from a zone whose disk children are drawn.
+    private void RequestList()
+    {
+        if (_listRequested || Zone is not (FolderZone.Chosen or FolderZone.Copied))
         {
             return;
         }

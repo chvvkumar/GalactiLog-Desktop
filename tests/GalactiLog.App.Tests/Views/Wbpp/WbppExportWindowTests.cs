@@ -130,6 +130,7 @@ public class WbppExportWindowTests
         Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
 
         session.Rows[1].IsChosen = true;   // the date row
+        Assert.True(SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10)));
         Dispatcher.UIThread.RunJobs();
         var ticks = window.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Name == "TickBox" && c.IsEffectivelyVisible).ToList();
         Assert.Equal(2, ticks.Count);    // FLAT and Ha, both under the chosen date row
