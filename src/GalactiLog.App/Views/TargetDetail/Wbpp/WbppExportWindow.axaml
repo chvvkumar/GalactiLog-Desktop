@@ -19,73 +19,105 @@
 
   <Window.DataTemplates>
 
-    <!-- One folder of a night's tree: its radio or tick, name and counts, and its own children
-         below it, indented one step, once opened. Nested rows resolve through this same template. -->
+    <!-- One folder in a night's tree, chain or tick: the chosen highlight behind the row, the radio on
+         chain rows, the tick on rows under the chosen one, the name and counts, and its own children
+         below it in a left-bordered panel. Nested rows resolve through this same template. -->
     <DataTemplate DataType="wbpp:FolderNodeViewModel" x:DataType="wbpp:FolderNodeViewModel">
-      <StackPanel Spacing="2" IsVisible="{Binding IsVisible}" Opacity="{Binding RowOpacity}">
-        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
-          <Button Grid.Column="0"
-                  Classes="quiet sm"
-                  Content="{Binding ExpandLabel}"
-                  Command="{Binding ToggleExpandCommand}"
-                  AutomationProperties.Name="{Binding FolderName}" />
+      <StackPanel Spacing="2" IsVisible="{Binding IsVisible}">
+        <Grid>
+          <Border CornerRadius="4"
+                  Background="{DynamicResource ColorBgSurface}"
+                  IsVisible="{Binding IsChosenZone}" />
 
-          <StackPanel Grid.Column="1" Orientation="Horizontal">
-            <RadioButton GroupName="{Binding GroupName}"
+          <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
+                MinHeight="28"
+                Opacity="{Binding RowOpacity}">
+            <Button Grid.Column="0"
+                    Classes="quiet sm"
+                    Content="{Binding ExpandLabel}"
+                    Command="{Binding ToggleExpandCommand}"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="{Binding FolderName}" />
+
+            <RadioButton x:Name="ChainRadio"
+                         Grid.Column="1"
                          IsVisible="{Binding ShowsRadio}"
-                         AutomationProperties.Name="{Binding FolderName}"
+                         GroupName="{Binding GroupName}"
                          IsChecked="{Binding IsChosen, Mode=TwoWay}"
+                         AutomationProperties.Name="{Binding FolderName}"
                          VerticalAlignment="Center" />
-            <CheckBox x:Name="SubfolderIncluded"
-                    IsVisible="{Binding ShowsTick}"
-                    IsChecked="{Binding IsIncluded, Mode=TwoWay}"
-                    AutomationProperties.Name="{Binding FolderName}"
-                    VerticalAlignment="Center" />
-          </StackPanel>
 
-          <TextBlock Grid.Column="2"
-                     Margin="4,0,8,0"
-                     Text="{Binding FolderName}"
-                     VerticalAlignment="Center"
-                     TextTrimming="CharacterEllipsis"
-                     ToolTip.Tip="{Binding Level.Path}"
-                     Foreground="{DynamicResource ColorTextPrimary}" />
+            <CheckBox x:Name="TickBox"
+                      Grid.Column="2"
+                      IsVisible="{Binding ShowsTick}"
+                      IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                      AutomationProperties.Name="{Binding FolderName}"
+                      VerticalAlignment="Center" />
 
-          <TextBlock Grid.Column="3"
-                     Margin="0,0,10,0"
-                     Text="{Binding FrameCountText}"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
+            <StackPanel Grid.Column="3"
+                        Margin="4,0,8,0"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+              <TextBlock Text="{Binding FolderName}"
+                         TextTrimming="CharacterEllipsis"
+                         ToolTip.Tip="{Binding Level.Path}"
+                         Foreground="{DynamicResource ColorTextPrimary}" />
+              <TextBlock x:Name="ChosenPill"
+                         Text="{x:Static wbpp:FolderNodeViewModel.CopiesFromHereText}"
+                         IsVisible="{Binding IsChosenZone}"
+                         Classes="t-caption"
+                         Foreground="{DynamicResource ColorAccent}" />
+              <TextBlock Text="{x:Static wbpp:FolderNodeViewModel.SkippedText}"
+                         IsVisible="{Binding IsSkipped}"
+                         Foreground="{DynamicResource ColorWarning}" />
+            </StackPanel>
 
-          <TextBlock Grid.Column="4"
-                     Margin="0,0,10,0"
-                     Text="{Binding OtherNightsBadge}"
-                     IsVisible="{Binding HasOtherNights}"
-                     VerticalAlignment="Center"
-                     ToolTip.Tip="{Binding OtherNightsTooltip}" />
+            <TextBlock Grid.Column="4"
+                       Margin="0,0,10,0"
+                       Text="{Binding FrameCountText}"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
 
-          <TextBlock Grid.Column="5"
-                     Margin="0,0,10,0"
-                     Text="{Binding OtherTargetsBadge}"
-                     IsVisible="{Binding HasOtherTargets}"
-                     VerticalAlignment="Center"
-                     ToolTip.Tip="{Binding OtherTargetsTooltip}" />
+            <!-- Spec 12.13's cost badges, with the names themselves on the tooltip. A contaminated
+                 level is selectable: the cost is advisory, and choosing one is how a user
+                 deliberately copies a whole night folder that two targets share. -->
+            <TextBlock Grid.Column="5"
+                       Margin="0,0,10,0"
+                       Text="{Binding OtherNightsBadge}"
+                       IsVisible="{Binding HasOtherNights}"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="{Binding OtherNightsTooltip}" />
 
-          <TextBlock Grid.Column="6"
-                     Text="{Binding BytesText}"
-                     VerticalAlignment="Center"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Grid.Column="6"
+                       Margin="0,0,10,0"
+                       Text="{Binding OtherTargetsBadge}"
+                       IsVisible="{Binding HasOtherTargets}"
+                       VerticalAlignment="Center"
+                       ToolTip.Tip="{Binding OtherTargetsTooltip}" />
+
+            <TextBlock Grid.Column="7"
+                       Text="{Binding BytesText}"
+                       VerticalAlignment="Center"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+          </Grid>
         </Grid>
 
-        <StackPanel Margin="14,0,0,0" Spacing="2" IsVisible="{Binding ShowsChildren}">
-          <TextBlock Text="Reading folders"
-                     IsVisible="{Binding IsListing}"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
-          <TextBlock Text="{Binding ChildrenText}"
-                     IsVisible="{Binding HasChildrenText}"
-                     Foreground="{DynamicResource ColorTextSecondary}" />
-          <ItemsControl ItemsSource="{Binding Children}" />
-        </StackPanel>
+        <Border Margin="8,0,0,0"
+                Padding="10,0,0,0"
+                BorderThickness="1,0,0,0"
+                BorderBrush="{DynamicResource ColorBorderDefault}"
+                IsVisible="{Binding ShowsChildren}">
+          <StackPanel Spacing="2">
+            <TextBlock Text="Reading folders"
+                       IsVisible="{Binding IsListing}"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <TextBlock Text="{Binding ChildrenText}"
+                       IsVisible="{Binding HasChildrenText}"
+                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <ItemsControl ItemsSource="{Binding Children}" />
+          </StackPanel>
+        </Border>
       </StackPanel>
     </DataTemplate>
 
@@ -140,7 +172,7 @@
                              it. The starred column bounds the measure, so the trimming works. -->
                         <Grid Grid.Column="2"
                               Margin="16,0,8,0"
-                              ColumnDefinitions="*,Auto"
+                              ColumnDefinitions="*,Auto,Auto"
                               VerticalAlignment="Center"
                               IsVisible="{Binding HasLevels}">
                           <TextBlock x:Name="ChosenLeadingPathText"
@@ -153,11 +185,18 @@
                                      Grid.Column="1"
                                      Text="{Binding ChosenOwnName}"
                                      Foreground="{DynamicResource ColorTextPrimary}" />
+                          <!-- The count of folders left out of the copy, on the rows that skip any. -->
+                          <TextBlock x:Name="SkippedChip"
+                                     Grid.Column="2"
+                                     Margin="8,0,0,0"
+                                     Text="{Binding SkippedText}"
+                                     IsVisible="{Binding HasSkippedText}"
+                                     Foreground="{DynamicResource ColorTextSecondary}" />
                         </Grid>
     
                         <!-- Spec 12.13's Every level contaminated row: the chosen level's own cost
-                             badge is shown here as well as in the tree, because the tree is closed
-                             when the page opens and a cost nobody sees is no cost at all. The strings
+                             badge is shown here as well as in the tree, because the tree can be
+                             collapsed and a cost nobody sees is no cost at all. The strings
                              are the chosen row's and are never recomputed. -->
                         <TextBlock x:Name="ChosenOtherNightsBadge"
                                    Grid.Column="3"
@@ -175,7 +214,8 @@
                                    VerticalAlignment="Center"
                                    ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}" />
     
-                        <Button x:Name="ChangeFolderButton"
+                        <!-- The one tree action: opens and closes the night's tree, open on load. -->
+                        <Button x:Name="TreeToggleButton"
                                 Grid.Column="5"
                                 Classes="quiet sm"
                                 Content="{Binding ToggleLabel}"
@@ -190,11 +230,6 @@
                                  ToolTip.Tip="{Binding StagingNameTooltip}"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
     
-                      <!-- The count of folders left out of the copy, on the rows that skip any. -->
-                      <TextBlock Text="{Binding SkippedText}"
-                                 IsVisible="{Binding HasSkippedText}"
-                                 Foreground="{DynamicResource ColorTextSecondary}" />
-
                       <!-- Seam review ruling 3's partial case: the night keeps its levels and states
                            the count its levels leave behind, read from SessionLevels and never
                            subtracted from two figures. -->
@@ -219,14 +254,31 @@
                                  TextWrapping="Wrap"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
     
-                      <StackPanel Spacing="2" IsVisible="{Binding IsExpanded}">
-                        <!-- The scan root anchors the top of the tree as a non-selectable line, which
-                             is what makes the rows below read as steps into it. -->
-                        <TextBlock Text="{Binding ScanRoot}"
+                      <!-- The night's tree: the legend, the scan root as a non-selectable line that
+                           makes the rows below read as steps into it, the chain roots drawn by the
+                           FolderNodeViewModel template, and the night's own copy figures. -->
+                      <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
+                        <TextBlock Text="Radio: copy from this folder.  Tick: inside it, copied unless unticked.  +: list the folders inside."
+                                   TextWrapping="Wrap"
                                    Foreground="{DynamicResource ColorTextTertiary}" />
-    
-                        <ItemsControl ItemsSource="{Binding Roots}" />
-                        <TextBlock Text="{Binding SummaryText}"
+
+                        <Border BorderThickness="1"
+                                BorderBrush="{DynamicResource ColorBorderDefault}"
+                                Background="{DynamicResource ColorBgElevated}"
+                                CornerRadius="4"
+                                Padding="8,6">
+                          <StackPanel Spacing="2">
+                            <TextBlock x:Name="ScanRootLine"
+                                       Classes="mono"
+                                       Text="{Binding ScanRoot}"
+                                       Foreground="{DynamicResource ColorTextTertiary}" />
+                            <ItemsControl ItemsSource="{Binding Roots}" />
+                          </StackPanel>
+                        </Border>
+
+                        <TextBlock x:Name="NightSummary"
+                                   Text="{Binding SummaryText}"
+                                   TextWrapping="Wrap"
                                    Foreground="{DynamicResource ColorTextSecondary}" />
                       </StackPanel>
                     </StackPanel>
