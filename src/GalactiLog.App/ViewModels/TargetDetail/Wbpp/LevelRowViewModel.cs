@@ -128,7 +128,9 @@ public sealed partial class LevelRowViewModel : ObservableObject
         }
     }
 
-    private static string Badge(int count, string singular, string plural) => count switch
+    /// <summary>A cost badge, singular and plural, or empty for none. Shared with the skip
+    /// panel's rows so the two trees cannot word one cost two ways.</summary>
+    internal static string Badge(int count, string singular, string plural) => count switch
     {
         <= 0 => "",
         1 => "+1 other " + singular,

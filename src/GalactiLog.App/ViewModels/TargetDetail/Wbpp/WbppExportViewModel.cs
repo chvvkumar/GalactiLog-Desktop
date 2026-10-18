@@ -65,6 +65,13 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     public const string NoFramesAtAllWarning =
         "The selected folders hold no frames, so this export would copy nothing.";
 
+    /// <summary>The empty-export sentence for a selection whose levels hold frames but whose
+    /// skipped folders take every one of them. Neither the filter nor the levels emptied it, so
+    /// neither is blamed.</summary>
+    public const string SkipsEmptyWarning =
+        "The skipped folders leave no frames in the chosen folders, so this export would copy "
+        + "nothing. Tick a folder again to copy it.";
+
     /// <summary>Spec 12.13's refusal for an exclusion pattern carrying a character a quoted
     /// literal cannot carry safely.</summary>
     public const string PatternRefusal =
@@ -112,6 +119,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         Action<IReadOnlyCollection<Guid>>, object>? _createQualityPanel;
     private readonly Action<Action> _post;
     private readonly ILogger _logger;
+    private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
 
     // The night's frames as the query returned them, which is what an excluded image id is
     // resolved against. The catalogue itself is never held: the query returns the built index
@@ -161,6 +169,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// <param name="post">How to reach the UI thread. Defaults to <c>UiPost.Default</c>.</param>
     /// <param name="logger">Optional. A night that failed to load is logged and counted, never
     /// rethrown on the UI thread.</param>
+    /// <param name="listSubfolders">Normally <c>SourceSubfolders.OnDisk</c>: a folder's direct
+    /// child directories as absolute paths, or null when it cannot be read. Called off the UI
+    /// thread, once per skip panel row the user expands. Null hides the skip panel.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
@@ -174,7 +185,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         Func<IReadOnlyList<WbppFrame>, IReadOnlyDictionary<Guid, FrameGrading>, string,
             Action<IReadOnlyCollection<Guid>>, object>? createQualityPanel = null,
         Action<Action>? post = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
     {
         ArgumentNullException.ThrowIfNull(nights);
         ArgumentNullException.ThrowIfNull(readPaths);
@@ -196,6 +208,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         _createQualityPanel = createQualityPanel;
         _post = post ?? UiPost.Default;
         _logger = logger ?? NullLogger.Instance;
+        _listSubfolders = listSubfolders;
 
         var general = _getGeneral();
 
@@ -442,7 +455,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         RigKey = frames.Count > 0 ? frames[0].Rig : WbppQualityByRig.DefaultRigKey;
 
         Sessions =
-            [.. sessions.Select(levels => new SessionLevelViewModel(levels, _targetName, OnLevelChanged))];
+            [.. sessions.Select(levels => new SessionLevelViewModel(
+                levels,
+                _targetName,
+                OnLevelChanged,
+                _listSubfolders is null ? null : ListSubfolders))];
         TotalFrameCount = sessions.Sum(levels => levels.TotalFrameCount);
         IsLoading = false;
 
@@ -516,6 +533,59 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         RecheckStaging(StagingPath);
         WithdrawScript();
         RefreshFooter();
+    }
+
+    /// <summary>
+    /// Reads the folders inside one skip panel row and hands them back to it as described
+    /// subfolders.
+    /// </summary>
+    /// <remarks>
+    /// The disk read and the description both run on <c>Task.Run</c>, and the answer is applied
+    /// through <see cref="_post"/>, because every observable write on this page happens on the UI
+    /// thread (the Phase 14B crash this page's remarks explain). The night's frames and the
+    /// catalogue are captured before the hop, so the worker reads nothing the UI thread may swap.
+    /// Any failure, of the lister or of the description, reads as an unreadable folder and is
+    /// logged, never rethrown; a page disposed in the meantime is left alone.
+    /// </remarks>
+    private void ListSubfolders(SessionLevelViewModel session, SubfolderRowViewModel row)
+    {
+        var list = _listSubfolders;
+        var catalogue = _catalogue;
+        if (list is null || catalogue is null)
+        {
+            row.SetChildren(null);
+            return;
+        }
+
+        var frames = _framesByNight.TryGetValue(session.Night, out var nightFrames) ? nightFrames : [];
+        var night = session.Night;
+        var groupKey = _groupKey;
+        var folder = row.Level.Path;
+        var depth = row.Level.DepthFromRoot + 1;
+
+        _ = Task.Run(() =>
+        {
+            IReadOnlyList<SubfolderLevel>? result;
+            try
+            {
+                result = list(folder) is { } children
+                    ? FolderLevels.Subfolders(night, groupKey, children, depth, frames, catalogue)
+                    : null;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Listing the folders inside {Folder} failed", folder);
+                result = null;
+            }
+
+            _post(() =>
+            {
+                if (!_disposed)
+                {
+                    row.SetChildren(result);
+                }
+            });
+        });
     }
 
     private IReadOnlyList<ChosenLevel> ChosenLevels() =>
@@ -649,10 +719,14 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         // Spec 12.13: the filter is blamed only when the filter is what emptied the export. A
         // selection whose levels hold no frames at all says so instead, because telling a user to
         // loosen a filter that excluded nothing sends them to the wrong control.
+        // The skips are blamed on the same rule: only when the levels held frames and the skips
+        // alone took every one of them.
         var held = chosen.Sum(level => level.Level.FrameCount);
-        EmptyExportText = held <= 0
-            ? NoFramesAtAllWarning
-            : totals.FrameCount <= 0 ? EmptyExportWarning : "";
+        var afterSkips = held - chosen.Sum(level => (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount));
+        EmptyExportText = held <= 0 ? NoFramesAtAllWarning
+            : afterSkips <= 0 ? SkipsEmptyWarning
+            : totals.FrameCount <= 0 ? EmptyExportWarning
+            : "";
 
         RefreshLongPath(chosen);
         GenerateCommand.NotifyCanExecuteChanged();
@@ -1434,6 +1508,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         {
             "exclusion pattern" => "one of the excluded folder patterns",
             "excluded file" => "one of the frames the filter excluded",
+            "excluded folder" => "one of the skipped folders",
             "SourcePath" => "one of the folders this export copies from",
             "EntryName" => "one of the staging folder names",
             "StagingRoot" => "the staging folder",

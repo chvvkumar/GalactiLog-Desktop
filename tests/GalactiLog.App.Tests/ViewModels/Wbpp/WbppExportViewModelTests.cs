@@ -188,7 +188,8 @@ internal sealed class ExportHarness : IDisposable
         bool installPickers = true,
         Func<IReadOnlyList<WbppFrame>, IReadOnlyDictionary<Guid, FrameGrading>, string,
             Action<IReadOnlyCollection<Guid>>, object>? createPanel = null,
-        bool parked = false)
+        bool parked = false,
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -232,7 +233,8 @@ internal sealed class ExportHarness : IDisposable
                 return Task.CompletedTask;
             },
             createPanel,
-            post: action => action());
+            post: action => action(),
+            listSubfolders: listSubfolders);
 
         if (installPickers)
         {

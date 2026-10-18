@@ -74,23 +74,32 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         "This night's frames are spread across more than one library folder, so no single folder holds them all";
 
     private readonly Action<SessionLevelViewModel> _chosenChanged;
+    private readonly Action<SessionLevelViewModel, SubfolderRowViewModel>? _listSubfolders;
+    private readonly string _ownTargetName;
 
     /// <param name="levels">The night's levels, as <c>FolderLevels.ForSession</c> produced
     /// them.</param>
     /// <param name="ownTargetName">The page's own target's display name, passed through to the
     /// level rows for the same-name note on a contamination entry.</param>
     /// <param name="chosenChanged">Called when this night's pick moves, so the page can recompute
-    /// its totals, re-run the staging check and withdraw a generated script.</param>
+    /// its totals, re-run the staging check and withdraw a generated script. A skip change calls
+    /// it too, because a skip moves the same figures and the same script.</param>
+    /// <param name="listSubfolders">The page's lister: reads the folders inside a skip panel row,
+    /// off the UI thread, and answers through <see cref="SubfolderRowViewModel.SetChildren"/>.
+    /// Null means the skip panel is not offered.</param>
     public SessionLevelViewModel(
         SessionLevels levels,
         string ownTargetName,
-        Action<SessionLevelViewModel> chosenChanged)
+        Action<SessionLevelViewModel> chosenChanged,
+        Action<SessionLevelViewModel, SubfolderRowViewModel>? listSubfolders = null)
     {
         ArgumentNullException.ThrowIfNull(levels);
         ArgumentNullException.ThrowIfNull(chosenChanged);
 
         Levels = levels;
         _chosenChanged = chosenChanged;
+        _listSubfolders = listSubfolders;
+        _ownTargetName = ownTargetName;
         GroupName = "WbppLevels_" + levels.Night.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
         Rows = HasLevels
@@ -105,6 +114,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         {
             Rows[_chosenIndex].IsChosen = true;
         }
+
+        _skipRoot = BuildSkipRoot();
     }
 
     /// <summary>The night's levels as the Core side computed them.</summary>
@@ -215,10 +226,94 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(HasChosenOtherTargetsBadge))]
     [NotifyPropertyChangedFor(nameof(ChosenOtherNightsTooltip))]
     [NotifyPropertyChangedFor(nameof(ChosenOtherTargetsTooltip))]
+    [NotifyPropertyChangedFor(nameof(SkipHeadingText))]
     private int _chosenIndex;
 
-    /// <summary>This night's pick, or null when it offers none and contributes nothing.</summary>
-    public ChosenLevel? Chosen => HasLevels ? new ChosenLevel(Night, Levels.Levels[ChosenIndex]) : null;
+    /// <summary>This night's pick with its skipped folders, or null when it offers none and
+    /// contributes nothing. <see cref="ChosenLevel.SkippedFolders"/> is null when nothing is
+    /// skipped.</summary>
+    public ChosenLevel? Chosen
+    {
+        get
+        {
+            if (!HasLevels)
+            {
+                return null;
+            }
+
+            List<FolderLevel> skipped = SkipRoot is { } root ? [.. root.TopMostSkipped()] : [];
+            return new ChosenLevel(Night, Levels.Levels[ChosenIndex], skipped.Count > 0 ? skipped : null);
+        }
+    }
+
+    // ------------------------------------------------------------------ the skip panel
+
+    /// <summary>Whether this night offers the skip panel: it has levels and the page was given a
+    /// lister.</summary>
+    public bool CanSkip => SkipRoot is not null;
+
+    /// <summary>
+    /// The chosen folder as a skip panel row, never drawn itself: its children are the panel's top
+    /// rows and its listing state is the panel's. Null when the night has no levels or the page
+    /// has no lister.
+    /// </summary>
+    /// <remarks>Rebuilt whenever the pick moves, so a level change discards every skip and every
+    /// listing of the old level: a folder skipped under one level is not silently carried to a
+    /// level it may not even lie under.</remarks>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CanSkip))]
+    private SubfolderRowViewModel? _skipRoot;
+
+    /// <summary>Whether the skip panel is open.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(SkipToggleLabel))]
+    private bool _isSkipOpen;
+
+    /// <summary>The skip toggle's label, which states what pressing it does.</summary>
+    public string SkipToggleLabel => IsSkipOpen ? "Done" : "Skip folders";
+
+    /// <summary>The panel's heading line.</summary>
+    public string SkipHeadingText => "Folders inside " + ChosenOwnName + ". Untick a folder to leave it out.";
+
+    /// <summary>How many folders this night skips, beside the chosen path, or empty for none.
+    /// </summary>
+    public string SkippedText => (SkipRoot?.TopMostSkipped().Count() ?? 0) switch
+    {
+        <= 0 => "",
+        1 => "Skips 1 folder",
+        var count => string.Create(CultureInfo.InvariantCulture, $"Skips {count:N0} folders"),
+    };
+
+    /// <summary>Whether this night states a skip.</summary>
+    public bool HasSkippedText => SkippedText.Length > 0;
+
+    /// <summary>Opens and closes the skip panel. The first opening lists the chosen folder's
+    /// children; opening is not a change and withdraws no generated script.</summary>
+    [RelayCommand]
+    private void ToggleSkip()
+    {
+        IsSkipOpen = !IsSkipOpen;
+        if (IsSkipOpen && SkipRoot is { IsExpanded: false } root)
+        {
+            root.IsExpanded = true;
+        }
+    }
+
+    private SubfolderRowViewModel? BuildSkipRoot()
+        => HasLevels && _listSubfolders is { } list
+            ? new SubfolderRowViewModel(
+                new SubfolderLevel(Levels.Levels[ChosenIndex], true),
+                _ownTargetName,
+                row => list(this, row),
+                OnSkipChanged)
+            : null;
+
+    private void OnSkipChanged()
+    {
+        OnPropertyChanged(nameof(SkippedText));
+        OnPropertyChanged(nameof(HasSkippedText));
+        _chosenChanged(this);
+    }
 
     /// <summary>
     /// Whether every level this night offers drags another night's or another target's frames
@@ -304,6 +399,10 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             row.IsChosen = row.Index == value;
         }
 
+        SkipRoot = BuildSkipRoot();
+        IsSkipOpen = false;
+        OnPropertyChanged(nameof(SkippedText));
+        OnPropertyChanged(nameof(HasSkippedText));
         _chosenChanged(this);
     }
 }
