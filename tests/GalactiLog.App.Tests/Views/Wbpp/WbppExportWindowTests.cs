@@ -108,38 +108,6 @@ public class WbppExportWindowTests
 
     // A failure here is a window whose allotment moved, which every layout pin below depends on.
     [AvaloniaFact]
-    public void SkipFolders_OpensATreeUnderTheSessionRow_AndUntickingHidesChildren()
-    {
-        var night = Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        var harness = Harness(listSubfolders: folder =>
-            string.Equals(folder, night, StringComparison.OrdinalIgnoreCase) ? [Path.Combine(night, "Ha"), Path.Combine(night, "OIII")]
-            : string.Equals(folder, Path.Combine(night, "OIII"), StringComparison.OrdinalIgnoreCase) ? [Path.Combine(night, "OIII", "deeper")]
-            : []);
-        var wizard = Wizard(harness);
-        var window = Show(wizard);
-        var session = harness.Page.Sessions[0];
-        session.ChosenIndex = session.Rows.Single(r => r.Level.Path == night).Index;
-
-        InStep<Button>(window, "SkipFoldersButton").Command!.Execute(null);
-        SpinWait.SpinUntil(() => !session.SkipRoot!.IsListing, TimeSpan.FromSeconds(10));
-        Dispatcher.UIThread.RunJobs();
-
-        var boxes = window.GetVisualDescendants().OfType<CheckBox>().Where(b => b.Name == "SubfolderIncluded").ToList();
-        Assert.Equal(2, boxes.Count);
-
-        session.SkipRoot!.Children[1].IsExpanded = true;
-        SpinWait.SpinUntil(() => !session.SkipRoot.Children[1].IsListing, TimeSpan.FromSeconds(10));
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(3, window.GetVisualDescendants().OfType<CheckBox>().Count(b => b.Name == "SubfolderIncluded" && b.IsVisible));
-
-        session.SkipRoot.Children[1].IsIncluded = false;
-        Dispatcher.UIThread.RunJobs();
-        Assert.Equal(2, window.GetVisualDescendants().OfType<CheckBox>().Count(b => b.Name == "SubfolderIncluded" && b.IsEffectivelyVisible));
-        Assert.Equal("Skips 1 folder", session.SkippedText);
-        window.Close();
-    }
-
-    [AvaloniaFact]
     public void Window_ProducesANonZeroLayoutAtItsOwnAllotment()
     {
         using var harness = Harness();

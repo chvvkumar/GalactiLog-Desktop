@@ -19,10 +19,10 @@
 
   <Window.DataTemplates>
 
-    <!-- One folder in the skip tree: its tick, name and counts, and its own children below it,
-         indented one step, once opened. Nested rows resolve through this same template. -->
-    <DataTemplate DataType="wbpp:SubfolderRowViewModel" x:DataType="wbpp:SubfolderRowViewModel">
-      <StackPanel Spacing="2">
+    <!-- One folder of a night's tree: its radio or tick, name and counts, and its own children
+         below it, indented one step, once opened. Nested rows resolve through this same template. -->
+    <DataTemplate DataType="wbpp:FolderNodeViewModel" x:DataType="wbpp:FolderNodeViewModel">
+      <StackPanel Spacing="2" IsVisible="{Binding IsVisible}" Opacity="{Binding RowOpacity}">
         <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
           <Button Grid.Column="0"
                   Classes="quiet sm"
@@ -30,11 +30,18 @@
                   Command="{Binding ToggleExpandCommand}"
                   AutomationProperties.Name="{Binding FolderName}" />
 
-          <CheckBox x:Name="SubfolderIncluded"
-                    Grid.Column="1"
+          <StackPanel Grid.Column="1" Orientation="Horizontal">
+            <RadioButton GroupName="{Binding GroupName}"
+                         IsVisible="{Binding ShowsRadio}"
+                         AutomationProperties.Name="{Binding FolderName}"
+                         IsChecked="{Binding IsChosen, Mode=TwoWay}"
+                         VerticalAlignment="Center" />
+            <CheckBox x:Name="SubfolderIncluded"
+                    IsVisible="{Binding ShowsTick}"
                     IsChecked="{Binding IsIncluded, Mode=TwoWay}"
                     AutomationProperties.Name="{Binding FolderName}"
                     VerticalAlignment="Center" />
+          </StackPanel>
 
           <TextBlock Grid.Column="2"
                      Margin="4,0,8,0"
@@ -168,20 +175,12 @@
                                    VerticalAlignment="Center"
                                    ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}" />
     
-                        <!-- The two folder actions share one cell. Skip folders opens the skip tree
-                             under the chosen folder and shows only when its subfolders can be read. -->
-                        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4">
-                          <Button x:Name="ChangeFolderButton"
-                                  Classes="quiet sm"
-                                  Content="{Binding ToggleLabel}"
-                                  IsVisible="{Binding HasLevels}"
-                                  Command="{Binding ToggleCommand}" />
-                          <Button x:Name="SkipFoldersButton"
-                                  Classes="quiet sm"
-                                  Content="{Binding SkipToggleLabel}"
-                                  IsVisible="{Binding CanSkip}"
-                                  Command="{Binding ToggleSkipCommand}" />
-                        </StackPanel>
+                        <Button x:Name="ChangeFolderButton"
+                                Grid.Column="5"
+                                Classes="quiet sm"
+                                Content="{Binding ToggleLabel}"
+                                IsVisible="{Binding HasLevels}"
+                                Command="{Binding ToggleCommand}" />
                       </Grid>
     
                       <!-- Spec 12.13's rename note, on the rows it happens to and on no others. The
@@ -195,20 +194,6 @@
                       <TextBlock Text="{Binding SkippedText}"
                                  IsVisible="{Binding HasSkippedText}"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
-
-                      <!-- The skip tree: the chosen folder's children, each opened on demand. The
-                           rows come from the SubfolderRowViewModel template declared below. -->
-                      <StackPanel Spacing="2" IsVisible="{Binding IsSkipOpen}">
-                        <TextBlock Text="{Binding SkipHeadingText}"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <TextBlock Text="Reading folders"
-                                   IsVisible="{Binding SkipRoot.IsListing}"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <TextBlock Text="{Binding SkipRoot.ChildrenText}"
-                                   IsVisible="{Binding SkipRoot.HasChildrenText}"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
-                        <ItemsControl ItemsSource="{Binding SkipRoot.Children}" />
-                      </StackPanel>
 
                       <!-- Seam review ruling 3's partial case: the night keeps its levels and states
                            the count its levels leave behind, read from SessionLevels and never
@@ -240,60 +225,9 @@
                         <TextBlock Text="{Binding ScanRoot}"
                                    Foreground="{DynamicResource ColorTextTertiary}" />
     
-                        <ItemsControl ItemsSource="{Binding Rows}">
-                          <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="wbpp:LevelRowViewModel">
-                              <Grid Margin="{Binding Indent}"
-                                    ColumnDefinitions="Auto,*,Auto,Auto,Auto,Auto">
-                                <!-- The folder name is the radio's own automation name: the one
-                                     control that picks a folder would otherwise announce nothing, and
-                                     the name beside it is an inert TextBlock. -->
-                                <RadioButton Grid.Column="0"
-                                             GroupName="{Binding GroupName}"
-                                             AutomationProperties.Name="{Binding FolderName}"
-                                             IsChecked="{Binding IsChosen, Mode=TwoWay}"
-                                             VerticalAlignment="Center" />
-    
-                                <TextBlock Grid.Column="1"
-                                           Margin="4,0,8,0"
-                                           Text="{Binding FolderName}"
-                                           VerticalAlignment="Center"
-                                           TextTrimming="CharacterEllipsis"
-                                           ToolTip.Tip="{Binding Level.Path}"
-                                           Foreground="{DynamicResource ColorTextPrimary}" />
-    
-                                <TextBlock Grid.Column="2"
-                                           Margin="0,0,10,0"
-                                           Text="{Binding FrameCountText}"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource ColorTextSecondary}" />
-    
-                                <!-- Spec 12.13's cost badges, in the warning ink, with the names
-                                     themselves on the tooltip. A contaminated level is selectable:
-                                     the cost is advisory, and choosing one is how a user deliberately
-                                     copies a whole night folder that two targets share. -->
-                                <TextBlock Grid.Column="3"
-                                           Margin="0,0,10,0"
-                                           Text="{Binding OtherNightsBadge}"
-                                           IsVisible="{Binding HasOtherNights}"
-                                           VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding OtherNightsTooltip}" />
-    
-                                <TextBlock Grid.Column="4"
-                                           Margin="0,0,10,0"
-                                           Text="{Binding OtherTargetsBadge}"
-                                           IsVisible="{Binding HasOtherTargets}"
-                                           VerticalAlignment="Center"
-                                           ToolTip.Tip="{Binding OtherTargetsTooltip}" />
-    
-                                <TextBlock Grid.Column="5"
-                                           Text="{Binding BytesText}"
-                                           VerticalAlignment="Center"
-                                           Foreground="{DynamicResource ColorTextSecondary}" />
-                              </Grid>
-                            </DataTemplate>
-                          </ItemsControl.ItemTemplate>
-                        </ItemsControl>
+                        <ItemsControl ItemsSource="{Binding Roots}" />
+                        <TextBlock Text="{Binding SummaryText}"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
                       </StackPanel>
                     </StackPanel>
                   </Border>

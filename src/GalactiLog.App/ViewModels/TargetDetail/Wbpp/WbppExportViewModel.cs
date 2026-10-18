@@ -171,7 +171,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// rethrown on the UI thread.</param>
     /// <param name="listSubfolders">Normally <c>SourceSubfolders.OnDisk</c>: a folder's direct
     /// child directories as absolute paths, or null when it cannot be read. Called off the UI
-    /// thread, once per skip panel row the user expands. Null hides the skip panel.</param>
+    /// thread, once per folder tree row the first time it is expanded, which for the night's
+    /// levels is on load. Null lists nothing: each tree shows its levels alone.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
@@ -536,8 +537,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Reads the folders inside one skip panel row and hands them back to it as described
-    /// subfolders.
+    /// Reads the folders inside one row of a night's folder tree and hands them back to it as
+    /// described subfolders.
     /// </summary>
     /// <remarks>
     /// The disk read and the description both run on <c>Task.Run</c>, and the answer is applied
@@ -547,7 +548,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// Any failure, of the lister or of the description, reads as an unreadable folder and is
     /// logged, never rethrown; a page disposed in the meantime is left alone.
     /// </remarks>
-    private void ListSubfolders(SessionLevelViewModel session, SubfolderRowViewModel row)
+    private void ListSubfolders(SessionLevelViewModel session, FolderNodeViewModel row)
     {
         var list = _listSubfolders;
         var catalogue = _catalogue;
@@ -715,6 +716,19 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
         SizeText = WbppPathText.Bytes(totals.SizeBytes);
         StagingFolderText = _committedStaging ?? "";
+
+        // Each night's own line under its tree, from the same seam over that night alone, so the
+        // line and the footer cannot disagree.
+        var excludedByNight = ExcludedByNight();
+        foreach (var session in Sessions)
+        {
+            if (session.Chosen is { } night)
+            {
+                session.SetSummary(
+                    FolderLevels.Totals([night], FolderLevels.ExcludedUnderLevels([night], excludedByNight)),
+                    night.SkippedFolders?.Count ?? 0);
+            }
+        }
 
         // Spec 12.13: the filter is blamed only when the filter is what emptied the export. A
         // selection whose levels hold no frames at all says so instead, because telling a user to

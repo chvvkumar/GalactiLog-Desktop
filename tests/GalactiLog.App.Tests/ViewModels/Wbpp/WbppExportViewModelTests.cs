@@ -677,9 +677,7 @@ public class WbppExportViewModelTests
         Assert.Equal(names, second.Page.Sessions[0].Rows.Select(row => row.FolderName));
 
         // And the indent follows the level's own depth, not its position in the list.
-        Assert.Equal(1 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[0].Indent.Left);
-        Assert.Equal(2 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[1].Indent.Left);
-        Assert.Equal(2 * (int)LevelRowViewModel.IndentStep, (int)first.Page.Sessions[0].Rows[2].Indent.Left);
+        Assert.Equal([1, 2, 2], first.Page.Sessions[0].Rows.Select(r => r.Level.DepthFromRoot));
     }
 
     [Fact]
