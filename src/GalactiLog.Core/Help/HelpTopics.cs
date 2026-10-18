@@ -824,7 +824,10 @@ public static class HelpTopics
             + "catalogued file in the chosen folders, whatever target or frame type, and reads "
             + "unknown rather than a partial total when any file's size was never recorded. "
             + "Sidecars and files GalactiLog never read are copied too and are not counted, and a "
-            + "night with no folder to copy contributes nothing."),
+            + "night with no folder to copy contributes nothing. Skip folders lists the folders inside "
+            + "the chosen one as you open them; untick a folder to leave it and everything beneath "
+            + "it out of the copy and the scripts. Skips are not remembered, and changing the chosen "
+            + "folder clears them."),
 
         new("export.quality", "Quality filter",
             "Enable filters turns the chips on; each chip is an absolute limit you type, judged "

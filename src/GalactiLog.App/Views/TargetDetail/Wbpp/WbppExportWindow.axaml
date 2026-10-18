@@ -19,6 +19,68 @@
 
   <Window.DataTemplates>
 
+    <!-- One folder in the skip tree: its tick, name and counts, and its own children below it,
+         indented one step, once opened. Nested rows resolve through this same template. -->
+    <DataTemplate DataType="wbpp:SubfolderRowViewModel" x:DataType="wbpp:SubfolderRowViewModel">
+      <StackPanel Spacing="2">
+        <Grid ColumnDefinitions="Auto,Auto,*,Auto,Auto,Auto,Auto">
+          <Button Grid.Column="0"
+                  Classes="quiet sm"
+                  Content="{Binding ExpandLabel}"
+                  Command="{Binding ToggleExpandCommand}"
+                  AutomationProperties.Name="{Binding FolderName}" />
+
+          <CheckBox x:Name="SubfolderIncluded"
+                    Grid.Column="1"
+                    IsChecked="{Binding IsIncluded, Mode=TwoWay}"
+                    VerticalAlignment="Center" />
+
+          <TextBlock Grid.Column="2"
+                     Margin="4,0,8,0"
+                     Text="{Binding FolderName}"
+                     VerticalAlignment="Center"
+                     TextTrimming="CharacterEllipsis"
+                     ToolTip.Tip="{Binding Level.Path}"
+                     Foreground="{DynamicResource ColorTextPrimary}" />
+
+          <TextBlock Grid.Column="3"
+                     Margin="0,0,10,0"
+                     Text="{Binding FrameCountText}"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+
+          <TextBlock Grid.Column="4"
+                     Margin="0,0,10,0"
+                     Text="{Binding OtherNightsBadge}"
+                     IsVisible="{Binding HasOtherNights}"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding OtherNightsTooltip}" />
+
+          <TextBlock Grid.Column="5"
+                     Margin="0,0,10,0"
+                     Text="{Binding OtherTargetsBadge}"
+                     IsVisible="{Binding HasOtherTargets}"
+                     VerticalAlignment="Center"
+                     ToolTip.Tip="{Binding OtherTargetsTooltip}" />
+
+          <TextBlock Grid.Column="6"
+                     Text="{Binding BytesText}"
+                     VerticalAlignment="Center"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+        </Grid>
+
+        <StackPanel Margin="14,0,0,0" Spacing="2" IsVisible="{Binding ShowsChildren}">
+          <TextBlock Text="Reading folders"
+                     IsVisible="{Binding IsListing}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <TextBlock Text="{Binding ChildrenText}"
+                     IsVisible="{Binding HasChildrenText}"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
+          <ItemsControl ItemsSource="{Binding Children}" />
+        </StackPanel>
+      </StackPanel>
+    </DataTemplate>
+
     <!-- Step 1: the session rows and their level trees. -->
     <DataTemplate DataType="wbpp:FoldersStep">
       <StackPanel Spacing="14">
@@ -105,12 +167,20 @@
                                    VerticalAlignment="Center"
                                    ToolTip.Tip="{Binding ChosenOtherTargetsTooltip}" />
     
-                        <Button x:Name="ChangeFolderButton"
-                                Grid.Column="5"
-                                Classes="quiet sm"
-                                Content="{Binding ToggleLabel}"
-                                IsVisible="{Binding HasLevels}"
-                                Command="{Binding ToggleCommand}" />
+                        <!-- The two folder actions share one cell. Skip folders opens the skip tree
+                             under the chosen folder and shows only when its subfolders can be read. -->
+                        <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4">
+                          <Button x:Name="ChangeFolderButton"
+                                  Classes="quiet sm"
+                                  Content="{Binding ToggleLabel}"
+                                  IsVisible="{Binding HasLevels}"
+                                  Command="{Binding ToggleCommand}" />
+                          <Button x:Name="SkipFoldersButton"
+                                  Classes="quiet sm"
+                                  Content="{Binding SkipToggleLabel}"
+                                  IsVisible="{Binding CanSkip}"
+                                  Command="{Binding ToggleSkipCommand}" />
+                        </StackPanel>
                       </Grid>
     
                       <!-- Spec 12.13's rename note, on the rows it happens to and on no others. The
@@ -120,6 +190,25 @@
                                  ToolTip.Tip="{Binding StagingNameTooltip}"
                                  Foreground="{DynamicResource ColorTextSecondary}" />
     
+                      <!-- The count of folders left out of the copy, on the rows that skip any. -->
+                      <TextBlock Text="{Binding SkippedText}"
+                                 IsVisible="{Binding HasSkippedText}"
+                                 Foreground="{DynamicResource ColorTextSecondary}" />
+
+                      <!-- The skip tree: the chosen folder's children, each opened on demand. The
+                           rows come from the SubfolderRowViewModel template declared below. -->
+                      <StackPanel Spacing="2" IsVisible="{Binding IsSkipOpen}">
+                        <TextBlock Text="{Binding SkipHeadingText}"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <TextBlock Text="Reading folders"
+                                   IsVisible="{Binding SkipRoot.IsListing}"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <TextBlock Text="{Binding SkipRoot.ChildrenText}"
+                                   IsVisible="{Binding SkipRoot.HasChildrenText}"
+                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <ItemsControl ItemsSource="{Binding SkipRoot.Children}" />
+                      </StackPanel>
+
                       <!-- Seam review ruling 3's partial case: the night keeps its levels and states
                            the count its levels leave behind, read from SessionLevels and never
                            subtracted from two figures. -->

@@ -28,6 +28,7 @@ using GalactiLog.Core.Integrations;
 using GalactiLog.Core.Io;
 using GalactiLog.Core.Survey;
 using GalactiLog.Core.Targets;
+using GalactiLog.Core.Wbpp;
 using GalactiLog.Data;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Maintenance;
@@ -1687,6 +1688,8 @@ public static class AppHost
                     settingsStore.MutateGeneral,
                     serviceProvider.GetRequiredService<AppWriter>(),
                     serviceProvider.GetRequiredService<ShellIntegration>().CopyTextAsync,
+                    // The page's only source-side disk read; the view-models see it as a delegate.
+                    listSubfolders: SourceSubfolders.OnDisk,
                     // Spec 12.13's quality filter panel (Phase 16 Task 3b), built into the page's
                     // own slot. The page resolves the rig and holds the frames and their gradings;
                     // this lambda is the one place the two shapes meet, and it is here rather than
