@@ -88,20 +88,24 @@ public class StartMinimizedTests
     [Fact]
     public void ANormalStart_ShowsTheWindow()
     {
-        Assert.True(App.ShouldShowWindowAtStartup(minimizedSwitch: false, new GeneralSettings()));
+        Assert.True(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: false, velopackLaunch: false, new GeneralSettings()));
     }
 
     [Fact]
     public void StartMinimized_ByArgument_ShowsNoWindow()
     {
-        Assert.False(App.ShouldShowWindowAtStartup(minimizedSwitch: true, new GeneralSettings()));
+        Assert.False(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: true, velopackLaunch: false, new GeneralSettings()));
     }
 
     [Fact]
     public void StartMinimized_BySetting_ShowsNoWindow()
     {
         Assert.False(App.ShouldShowWindowAtStartup(
-            minimizedSwitch: false, new GeneralSettings { StartMinimized = true }));
+            minimizedSwitch: false,
+            velopackLaunch: false,
+            new GeneralSettings { StartMinimized = true }));
     }
 
     // Spec 12.11 behaviour 9: the argument applies to one launch, the setting to every launch, and
@@ -111,9 +115,51 @@ public class StartMinimizedTests
     public void TheArgument_WinsOverTheStoredSetting()
     {
         Assert.False(App.ShouldShowWindowAtStartup(
-            minimizedSwitch: true, new GeneralSettings { StartMinimized = false }));
+            minimizedSwitch: true,
+            velopackLaunch: false,
+            new GeneralSettings { StartMinimized = false }));
         Assert.False(App.ShouldShowWindowAtStartup(
-            minimizedSwitch: true, new GeneralSettings { StartMinimized = true }));
+            minimizedSwitch: true,
+            velopackLaunch: false,
+            new GeneralSettings { StartMinimized = true }));
+    }
+
+    // Spec 12.11 behaviour 9: a launch Velopack itself made, the first run after an install or the
+    // restart after an update, overrides the stored setting. The first run needs a window for the
+    // setup wizard; the restart was confirmed from a visible window, and a window that vanished
+    // into the tray at that moment would read as the update having failed.
+    [Fact]
+    public void AVelopackLaunch_ShowsTheWindowDespiteTheStoredSetting()
+    {
+        Assert.True(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: false,
+            velopackLaunch: true,
+            new GeneralSettings { StartMinimized = true }));
+    }
+
+    [Fact]
+    public void AVelopackLaunch_WithTheSettingOff_ShowsTheWindow()
+    {
+        Assert.True(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: false,
+            velopackLaunch: true,
+            new GeneralSettings { StartMinimized = false }));
+    }
+
+    // The argument wins over everything: a boot launch must never yank a window up, even when
+    // Velopack applied a pending update and restarted the process with the switch still on its
+    // command line.
+    [Fact]
+    public void TheArgument_WinsOverAVelopackLaunch()
+    {
+        Assert.False(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: true,
+            velopackLaunch: true,
+            new GeneralSettings { StartMinimized = false }));
+        Assert.False(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: true,
+            velopackLaunch: true,
+            new GeneralSettings { StartMinimized = true }));
     }
 
     // Spec 12.11 behaviour 9's last sentence and ruling Q20. The wizard is not shown on a start
@@ -124,7 +170,8 @@ public class StartMinimizedTests
     {
         var firstRun = new GeneralSettings { SetupComplete = false, StartMinimized = true };
 
-        Assert.False(App.ShouldShowWindowAtStartup(minimizedSwitch: false, firstRun));
+        Assert.False(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: false, velopackLaunch: false, firstRun));
 
         // The one wizard post lives inside the one shell factory, so a start that builds no window
         // performs neither the settings read nor the post.
@@ -167,7 +214,8 @@ public class StartMinimizedTests
     {
         var firstRun = new GeneralSettings { SetupComplete = false, StartMinimized = false };
 
-        Assert.True(App.ShouldShowWindowAtStartup(minimizedSwitch: false, firstRun));
+        Assert.True(App.ShouldShowWindowAtStartup(
+            minimizedSwitch: false, velopackLaunch: false, firstRun));
     }
 
     // ---- the window on first activation --------------------------------------------------------
@@ -288,7 +336,9 @@ public class StartMinimizedTests
     public async Task StartMinimized_StartsTheWatcherAndTheScheduler()
     {
         Assert.False(App.ShouldShowWindowAtStartup(
-            minimizedSwitch: true, new GeneralSettings { StartMinimized = true }));
+            minimizedSwitch: true,
+            velopackLaunch: false,
+            new GeneralSettings { StartMinimized = true }));
 
         using var settings = new SettingsFixture();
         settings.Save(general => general with
@@ -367,21 +417,31 @@ public class StartMinimizedTests
     /// <summary>
     /// Spec 4.4 step 2 and ruling Q8 (a): the GUI switches are consumed before the CLI branch, so
     /// <c>GalactiLog.exe --minimized</c> starts the GUI instead of printing the usage text and
-    /// exiting 2. Nothing precedes <c>VelopackApp.Build().Run()</c> (spec 17.1).
+    /// exiting 2. Nothing precedes <c>VelopackApp.Build()</c> (spec 17.1), and that builder
+    /// registers the two in-process hooks, <c>OnFirstRun</c> and <c>OnRestarted</c>, before
+    /// <c>Run()</c>: they are what lets a launch Velopack itself made show the window despite
+    /// <c>general.start_minimized</c> (spec 12.11 behaviour 9).
     /// </summary>
     [Fact]
     public void Program_ParsesTheStartupSwitchAfterVelopackAndBeforeTheCliBranch()
     {
         var program = ProgramSource();
 
-        var velopack = program.IndexOf("VelopackApp.Build().Run()", StringComparison.Ordinal);
+        var velopack = program.IndexOf("VelopackApp.Build()", StringComparison.Ordinal);
         var parse = program.IndexOf("StartupArguments.Parse(args)", StringComparison.Ordinal);
         var cli = program.IndexOf("CliDispatcher.TryRun", StringComparison.Ordinal);
 
+        var firstRun = program.IndexOf(".OnFirstRun(", StringComparison.Ordinal);
+        var restarted = program.IndexOf(".OnRestarted(", StringComparison.Ordinal);
+        var run = program.IndexOf(".Run()", StringComparison.Ordinal);
+
         Assert.True(velopack >= 0, "Program.cs no longer runs Velopack's hooks first.");
+        Assert.True(velopack < firstRun && firstRun < run, "OnFirstRun must be registered on the builder before Run().");
+        Assert.True(velopack < restarted && restarted < run, "OnRestarted must be registered on the builder before Run().");
+        Assert.True(run < parse, "Velopack's Run() must complete before the startup arguments are parsed.");
         Assert.True(parse >= 0, "Program.cs does not parse the startup arguments.");
         Assert.True(cli >= 0, "Program.cs no longer dispatches the CLI the expected way.");
-        Assert.True(velopack < parse, "Nothing may precede VelopackApp.Build().Run() (spec 17.1).");
+        Assert.True(velopack < parse, "Nothing may precede VelopackApp.Build() (spec 17.1).");
         Assert.True(parse < cli, "The GUI switches must be consumed before the CLI branch.");
     }
 

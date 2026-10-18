@@ -686,8 +686,9 @@ public static class HelpTopics
         new("settings.general.startup", "Startup",
             "Start GalactiLog when I sign in places a shortcut in your Startup folder, and "
             + "Start in the notification area makes that launch open with no window while "
-            + "scanning runs on its normal schedule. Starting with Windows is offered only on a "
-            + "build the updater installed."),
+            + "scanning runs on its normal schedule. The first run after an install and the "
+            + "restart after an update open the window regardless. Starting with Windows is "
+            + "offered only on a build the updater installed."),
 
         new("settings.general.notifications", "Notifications",
             "Report a finished scan while the window is hidden puts the finished scan's outcome "
