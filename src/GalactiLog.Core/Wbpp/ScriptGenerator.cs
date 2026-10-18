@@ -450,7 +450,8 @@ public static partial class ScriptGenerator
     private static string GeneratePowerShell(WbppScriptInput input, string sessionDates)
     {
         var patterns = EscapedExclusionGroup(input.Exclusions);
-        var hasPerFileExcludes = HasPerFileExcludes(input);
+        var hasExcludedFiles = HasExcludedFiles(input);
+        var hasExcludedDirectories = HasExcludedDirectories(input);
 
         // The run instruction is the one line of this file that is meant to be pasted into a shell,
         // so it interpolates nothing but the allowlisted file name. Ruled departure: the Python
@@ -485,7 +486,7 @@ public static partial class ScriptGenerator
         {
             var job = "    @{ Src = " + PowerShellQuote(operation.SourcePath, nameof(operation.SourcePath))
                 + "; Dst = (Join-Path $StagingRoot " + PowerShellQuote(operation.EntryName, nameof(operation.EntryName)) + ")";
-            if (hasPerFileExcludes)
+            if (hasExcludedFiles)
             {
                 // The port's relative paths already carry backslashes, so the Python's separator
                 // replacement is a no-op here; it is kept because it is the Python's rule and it
@@ -495,6 +496,19 @@ public static partial class ScriptGenerator
                     operation.ExcludedRelativePaths.Select(e =>
                         PowerShellQuote(e.Replace("/", "\\"), "excluded file")));
                 job += $"; ExcludeFiles = @({quoted})";
+            }
+
+            if (hasExcludedDirectories)
+            {
+                // Every job of a script that skips any folder carries the member (an empty array
+                // for a job that skips none), so the predicate can read $Job.ExcludeDirs without a
+                // null case. Each entry ends in one backslash: the predicate is a prefix test, and
+                // without the separator "OIII" would also match a sibling folder named "OIII2".
+                var quotedDirs = string.Join(
+                    ", ",
+                    (operation.ExcludedRelativeDirectories ?? []).Select(d =>
+                        PowerShellQuote(d.Replace("/", "\\").TrimEnd('\\') +"\\", "excluded folder")));
+                job += $"; ExcludeDirs = @({quotedDirs})";
             }
 
             lines.Add(job + " }");
@@ -556,10 +570,24 @@ public static partial class ScriptGenerator
             ? $@"-not ($_.FullName.Substring($Job.Src.Length).TrimStart('\', '/').Split([char[]]@('\', '/')) | Where-Object {{ $_ -match ""^({patterns})$"" }})"
             : "$true";
 
-        if (hasPerFileExcludes)
+        if (hasExcludedFiles || hasExcludedDirectories)
         {
             lines.Add(@"        $RelPath = $_.FullName.Substring($Job.Src.Length).TrimStart('\', '/').Replace('/', '\')");
-            lines.Add($"        ({basePred}) -and (-not ($Job.ExcludeFiles -contains $RelPath))");
+            var predicate = $"        ({basePred})";
+            if (hasExcludedFiles)
+            {
+                predicate += " -and (-not ($Job.ExcludeFiles -contains $RelPath))";
+            }
+
+            if (hasExcludedDirectories)
+            {
+                // OrdinalIgnoreCase because Windows paths are case insensitive and the relative
+                // path was cut from the enumerated path, whose casing the file system chooses;
+                // the trailing backslash on each entry makes the prefix test whole-component.
+                predicate += " -and (-not ($Job.ExcludeDirs | Where-Object { $RelPath.StartsWith($_, [System.StringComparison]::OrdinalIgnoreCase) }))";
+            }
+
+            lines.Add(predicate);
         }
         else
         {
@@ -693,7 +721,7 @@ public static partial class ScriptGenerator
 
     private static string GenerateBash(WbppScriptInput input, string sessionDates)
     {
-        var hasPerFileExcludes = HasPerFileExcludes(input);
+        var hasPerPathExcludes = HasPerPathExcludes(input);
         var exclusionArgs = input.Exclusions.Select(e => $"--exclude=\"{e}\"").ToList();
 
         // R3: every path this flavour emits goes through ToPosixPath, so a source and the staging
@@ -707,7 +735,7 @@ public static partial class ScriptGenerator
         var rsyncParts = new List<string> { "rsync", "-a", "--copy-links", "--info=progress2" };
         rsyncParts.AddRange(exclusionArgs);
         string helperComment;
-        if (hasPerFileExcludes)
+        if (hasPerPathExcludes)
         {
             helperComment = "    # $1 = index, $2 = entry name, $3 = source dir (with trailing slash), $4+ = extra rsync args";
             rsyncParts.Add("\"${@:4}\"");
@@ -774,15 +802,25 @@ public static partial class ScriptGenerator
             var call = "copy_folder " + index.ToString(CultureInfo.InvariantCulture)
                 + " " + BashQuote(operation.EntryName, nameof(operation.EntryName))
                 + " " + BashQuote(ToPosixPath(operation.SourcePath) + "/", nameof(operation.SourcePath));
-            if (hasPerFileExcludes)
+            if (hasPerPathExcludes)
             {
                 foreach (var excluded in operation.ExcludedRelativePaths)
                 {
                     // The Bash side is a POSIX tool reading a POSIX pattern, so the port's native
                     // separators become slashes first; the leading slash anchors the pattern to
-                    // this operation's own transfer root.
-                    var pattern = "/" + ToPosixPath(excluded).TrimStart('/');
+                    // this operation's own transfer root, and the name is escaped because rsync
+                    // would otherwise read a literal bracket or star in it as a wildcard.
+                    var pattern = "/" + RsyncEscape(ToPosixPath(excluded).TrimStart('/'));
                     call += " --exclude=" + BashQuote(pattern, "excluded file");
+                }
+
+                foreach (var directory in operation.ExcludedRelativeDirectories ?? [])
+                {
+                    // The leading slash anchors the pattern to the transfer root; the trailing slash
+                    // makes it match a directory only, so a file that happens to share the name is
+                    // still copied, and rsync prunes the whole subtree.
+                    var pattern = "/" + RsyncEscape(ToPosixPath(directory).Trim('/')) + "/";
+                    call += " --exclude=" + BashQuote(pattern, "excluded folder");
                 }
             }
 
@@ -808,8 +846,36 @@ public static partial class ScriptGenerator
     // The Python switches on bool(excluded_by_op). Its dict is never empty-valued on the real path,
     // because map_excluded_to_ops only creates a key when it appends, so "any operation has an
     // exclude" and "the dict is non-empty" agree on every input the pipeline produces.
-    private static bool HasPerFileExcludes(WbppScriptInput input)
+    private static bool HasExcludedFiles(WbppScriptInput input)
         => input.Operations.Any(o => o.ExcludedRelativePaths.Count > 0);
+
+    // A null list reads as empty, as on CopyOperation itself.
+    private static bool HasExcludedDirectories(WbppScriptInput input)
+        => input.Operations.Any(o => o.ExcludedRelativeDirectories is { Count: > 0 });
+
+    // Either kind of per-path exclude opens the Bash "$4+" channel.
+    private static bool HasPerPathExcludes(WbppScriptInput input)
+        => HasExcludedFiles(input) || HasExcludedDirectories(input);
+
+    // rsync reads *, ? and [ in an exclude pattern as wildcards, so a pattern built from a real
+    // path prefixes each of them, and the closing bracket, with a backslash to match that
+    // character literally. The folder patterns the user wrote are deliberately not passed
+    // through here: their stars are meant.
+    private static string RsyncEscape(string pattern)
+    {
+        var builder = new StringBuilder(pattern.Length);
+        foreach (var c in pattern)
+        {
+            if (c is '*' or '?' or '[' or ']')
+            {
+                builder.Append('\\');
+            }
+
+            builder.Append(c);
+        }
+
+        return builder.ToString();
+    }
 
     // "|".join(re.escape(e).replace(r"\*", ".*") for e in exclusions): each pattern is escaped the
     // way Python escapes it and the escaped star is then restored as the glob the user meant.
