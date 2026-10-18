@@ -28,6 +28,7 @@ using GalactiLog.Core.Integrations;
 using GalactiLog.Core.Io;
 using GalactiLog.Core.Survey;
 using GalactiLog.Core.Targets;
+using GalactiLog.Core.Wbpp;
 using GalactiLog.Data;
 using GalactiLog.Data.Ingest;
 using GalactiLog.Data.Maintenance;
@@ -953,9 +954,10 @@ public static class AppHost
         // lives. Left unbound on a lifetime that is not the classic desktop one, which is what a
         // test surface gets.
         // Spec 12.11 behaviour 9 (Phase 11 Task 4). The resolved answer to "did this process come
-        // up with no window", composed once, here, because this is the one place that holds both
-        // halves of the rule: the switch Program.Main parsed into App.StartupArguments before this
-        // method was called, and the general document this method already read at the top. No
+        // up with no window", composed once, here, because this is the one place that holds every
+        // input of the rule: the switch and the Velopack-launch flag Program.Main put into
+        // App.StartupArguments before this method was called, and the general document this
+        // method already read at the top. No
         // second settings read reaches the startup path (phase review item 2).
         //
         // App.ShouldShowWindowAtStartup is the one owner of the rule and this is its negation,
@@ -969,8 +971,10 @@ public static class AppHost
         // answer with whatever the static held long after Build finished composing everything
         // else, which in a test run is whatever the previous case left there (Task 4 review,
         // minor finding on AppHost.cs).
-        var startedMinimized =
-            !App.ShouldShowWindowAtStartup(App.StartupArguments?.Minimized == true, initialGeneral);
+        var startedMinimized = !App.ShouldShowWindowAtStartup(
+            App.StartupArguments?.Minimized == true,
+            App.StartupArguments?.VelopackLaunch == true,
+            initialGeneral);
         builder.Services.AddSingleton(_ => new StartupState(startedMinimized));
 
         // Ruling Q13's "a stored id wins", at the one moment it has to be true: the id the document
@@ -1687,6 +1691,8 @@ public static class AppHost
                     settingsStore.MutateGeneral,
                     serviceProvider.GetRequiredService<AppWriter>(),
                     serviceProvider.GetRequiredService<ShellIntegration>().CopyTextAsync,
+                    // The page's only source-side disk read; the view-models see it as a delegate.
+                    listSubfolders: SourceSubfolders.OnDisk,
                     // Spec 12.13's quality filter panel (Phase 16 Task 3b), built into the page's
                     // own slot. The page resolves the rig and holds the frames and their gradings;
                     // this lambda is the one place the two shapes meet, and it is here rather than

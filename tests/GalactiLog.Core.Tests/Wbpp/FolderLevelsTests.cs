@@ -796,6 +796,90 @@ public class FolderLevelsTests
     private static string SourceFile
         => Path.Combine(FindRepoRoot(), "src", "GalactiLog.Core", "Wbpp", "FolderLevels.cs");
 
+    [Fact]
+    public void Subfolders_DescribesEachFolderAtTheGivenDepth_AndSaysWhetherItIsCatalogued()
+    {
+        var a = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var b = Frame(@"M31\2026-07-01\Ha\b.fits", 200);
+        var c = Frame(@"M31\2026-07-01\OIII\c.fits", 400);
+        var index = Index(
+            Cat(a, "m31", "M 31", Night(1)), Cat(b, "m31", "M 31", Night(1)), Cat(c, "m31", "M 31", Night(1)),
+            Cat(Frame(@"M31\2026-07-01\OIII\other.fits", 50), "ngc7000", "NGC 7000", Night(1)));
+
+        var rows = FolderLevels.Subfolders(
+            Night(1), "m31",
+            [Under(@"M31\2026-07-01\Ha"), Under(@"M31\2026-07-01\OIII"), Under(@"M31\2026-07-01\Flats")],
+            2, [a, b, c], index);
+
+        Assert.Equal([2, 1, 0], rows.Select(r => r.Level.FrameCount));
+        Assert.All(rows, r => Assert.Equal(2, r.Level.DepthFromRoot));
+        Assert.Equal([300L, 450L, 0L], rows.Select(r => r.Level.SubtreeBytes));
+        Assert.Equal([true, true, false], rows.Select(r => r.IsCatalogued));
+        Assert.Equal(["NGC 7000"], rows[1].Level.OtherTargets);
+    }
+
+    [Fact]
+    public void CopyOperations_MapsSkippedFoldersToRelativeDirectories()
+    {
+        var level = Level(Under(@"M31\2026-07-01"));
+        var skipped = Level(Under(@"M31\2026-07-01\OIII"));
+        var ops = FolderLevels.CopyOperations([new ChosenLevel(Night(1), level, [skipped])], []);
+        Assert.Equal(["OIII"], ops[0].ExcludedRelativeDirectories);
+
+        var plain = FolderLevels.CopyOperations([new ChosenLevel(Night(1), level)], []);
+        Assert.Empty(plain[0].ExcludedRelativeDirectories ?? []);
+    }
+
+    [Fact]
+    public void ExcludedUnderLevels_DropsAFrameUnderASkippedFolder()
+    {
+        var level = Level(Under(@"M31\2026-07-01"));
+        var skipped = Level(Under(@"M31\2026-07-01\OIII"));
+        var a = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var c = Frame(@"M31\2026-07-01\OIII\c.fits", 400);
+        var excluded = new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>> { [Night(1)] = [a, c] };
+
+        var under = FolderLevels.ExcludedUnderLevels([new ChosenLevel(Night(1), level, [skipped])], excluded);
+
+        Assert.Equal([a], under);
+    }
+
+    [Fact]
+    public void Totals_DeductsEachSkippedFolderOnce_AndNotTheExcludedFramesInsideIt()
+    {
+        // Level: 3 frames, 700 bytes. Skipped OIII: 1 frame, 400 bytes. Quality excluded a.fits (100 bytes, under Ha).
+        var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
+        var skipped = new FolderLevel(Under(@"M31\2026-07-01\OIII"), 3, 1, [], [], 400);
+        var a = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+
+        var totals = FolderLevels.Totals([new ChosenLevel(Night(1), level, [skipped])], [a]);
+
+        Assert.Equal(1, totals.FrameCount);
+        Assert.Equal(200L, totals.SizeBytes);
+    }
+
+    [Fact]
+    public void Totals_ASkippedFolderWithUnknownBytes_MakesTheSizeUnknown()
+    {
+        var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
+        var skipped = new FolderLevel(Under(@"M31\2026-07-01\OIII"), 3, 1, [], [], null);
+
+        var totals = FolderLevels.Totals([new ChosenLevel(Night(1), level, [skipped])], []);
+
+        Assert.Equal(2, totals.FrameCount);
+        Assert.Null(totals.SizeBytes);
+    }
+
+    [Fact]
+    public void IsCatalogued_IsTrueOnlyForAFolderSomeCatalogueRowLiesUnder()
+    {
+        var a = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var index = Index(Cat(a, "m31", "M 31", Night(1)));
+        Assert.True(index.IsCatalogued(Under(@"M31\2026-07-01\Ha")));
+        Assert.True(index.IsCatalogued(Under(@"M31")));
+        Assert.False(index.IsCatalogued(Under(@"M31\2026-07-01\Flats")));
+    }
+
     private static DateOnly Night(int day) => new(2026, 7, day);
 
     private static string Under(string relative) => Path.Combine(Root, relative);

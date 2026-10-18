@@ -28,10 +28,20 @@ internal static class Program
     [STAThread]
     public static int Main(string[] args)
     {
-        VelopackApp.Build().Run();
+        // Spec 17.1: the first call. The install, update and uninstall hooks run and exit
+        // inside Run(). The two in-process hooks below are different: Velopack raises them on the
+        // first run after an install (VELOPACK_FIRSTRUN) and on the restart it performs after an
+        // update (VELOPACK_RESTART), sets the flag and the process continues. The flag is folded
+        // into StartupArguments below, so a launch Velopack itself made shows the window whatever
+        // general.start_minimized says (spec 12.11 behaviour 9).
+        var velopackLaunch = false;
+        VelopackApp.Build()
+            .OnFirstRun(_ => velopackLaunch = true)
+            .OnRestarted(_ => velopackLaunch = true)
+            .Run();
 
         // Spec 12.11 behaviour 9 and spec 4.4 step 2 (Phase 11 Task 4). Parsed here, after
-        // Velopack's hooks (spec 17.1 keeps that line first) and ahead of the CLI branch below,
+        // Velopack's hooks (spec 17.1 keeps that call first) and ahead of the CLI branch below,
         // because --minimized is a GUI launch switch and not a verb: spec 12.11 behaviour 8's
         // Startup shortcut launches "GalactiLog.exe --minimized", and before this parse existed
         // that reached CliDispatcher, printed the usage text on stderr and exited 2, which made
@@ -53,14 +63,14 @@ internal static class Program
         // reaches CliDispatcher byte for byte (spec 4.4, spec 15). That sentence is what a
         // reviewer needs in order to be sure nothing in GalactiLog.Cli.Tests can regress, and
         // GalactiLog.Cli.Tests cannot assert it for itself, because the rule lives here.
-        var startup = StartupArguments.Parse(args);
+        var startup = StartupArguments.Parse(args) with { VelopackLaunch = velopackLaunch };
         var guiArgs = startup.Remaining;
 
         // The third static Main hands the Application, beside App.Services and App.Gate, and set
         // before both. AppHost.Build composes it with general.start_minimized into the one
         // StartupState the window decision and spec 12.8's field both read. The whole record
-        // rather than a bare bool, so a second GUI switch later adds a property rather than a
-        // fourth static.
+        // rather than a bare bool, so a second start-up fact adds a property rather than a
+        // fourth static; VelopackLaunch above is that second fact.
         App.StartupArguments = startup;
 
         if (guiArgs.Length > 0)

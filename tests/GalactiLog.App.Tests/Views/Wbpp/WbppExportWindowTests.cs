@@ -40,9 +40,11 @@ public class WbppExportWindowTests
     private static string Markup() => File.ReadAllText(Path.Combine(
         SourceScan.SrcRoot(), "GalactiLog.App", "Views", "TargetDetail", "Wbpp", "WbppExportWindow.axaml"));
 
-    private static ExportHarness Harness(Library? library = null, bool installPickers = true, bool parked = false)
+    private static ExportHarness Harness(Library? library = null, bool installPickers = true, bool parked = false,
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
         => ExportHarness.Create(
-            library ?? new Library().Frame(N1, Ha("a.fits")), [N1], installPickers: installPickers, parked: parked);
+            library ?? new Library().Frame(N1, Ha("a.fits")), [N1], installPickers: installPickers, parked: parked,
+            listSubfolders: listSubfolders);
 
     // A step template's elements sit in the template's own scope under StepHost, so they are
     // found in the visual tree, the way SetupWizardWindowTests finds them.
@@ -103,6 +105,50 @@ public class WbppExportWindowTests
             _ => null,
             _ => { },
             _ => new MemoryStream());
+
+    // A failure here is the tree drawn without its two kinds of row: radios on the chain, ticks
+    // only under the chosen row, and the session row and summary not following a tick.
+    [AvaloniaFact]
+    public void TheTreeIsOpenOnLoad_ChainRowsHaveRadios_DiskRowsHaveTicks_AndAPickRezones()
+    {
+        var date = Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        var harness = Harness(listSubfolders: folder =>
+            string.Equals(folder, date, StringComparison.OrdinalIgnoreCase) ? [Path.Combine(date, "FLAT"), Path.Combine(date, "Ha")] : []);
+        var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var session = harness.Page.Sessions[0];
+        SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10));
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal("Collapse", InStep<Button>(window, "TreeToggleButton").Content);
+        var radios = window.GetVisualDescendants().OfType<RadioButton>().Where(r => r.Name == "ChainRadio" && r.IsEffectivelyVisible).ToList();
+        Assert.Equal(3, radios.Count);   // M31, date, Ha
+
+        // The default pick is Ha, the deepest folder holding the frame: nothing sits under it, and
+        // FLAT, a disk row outside it, is not drawn, so no row carries a tick.
+        Assert.Equal(2, session.ChosenIndex);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
+
+        session.Rows[1].IsChosen = true;   // the date row
+        Assert.True(SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10)));
+        Dispatcher.UIThread.RunJobs();
+        var ticks = window.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Name == "TickBox" && c.IsEffectivelyVisible).ToList();
+        Assert.Equal(2, ticks.Count);    // FLAT and Ha, both under the chosen date row
+        Assert.All(ticks, t => Assert.True(t.IsChecked));
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ChosenPill" && t.IsEffectivelyVisible);
+
+        session.Rows.Single(r => r.FolderName == "Ha").IsChosen = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
+
+        session.ChosenIndex = 1;   // back to the date row
+        Dispatcher.UIThread.RunJobs();
+        session.Rows[1].Children.Single(c => c.FolderName == "FLAT").IsIncluded = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Equal("1 folder skipped", InStep<TextBlock>(window, "SkippedChip").Text);
+        Assert.Contains("after skipping 1 folder", InStep<TextBlock>(window, "NightSummary").Text, StringComparison.Ordinal);
+        window.Close();
+    }
 
     // A failure here is a window whose allotment moved, which every layout pin below depends on.
     [AvaloniaFact]
@@ -186,7 +232,7 @@ public class WbppExportWindowTests
     }
 
     // A failure looks like the two path inks in a StackPanel, which makes the trimming inert and
-    // draws a real N.I.N.A. path over the Change folder button at the minimum width.
+    // draws a real N.I.N.A. path over the tree toggle button at the minimum width.
     [AvaloniaFact]
     public void AtTheMinimumWidth_ARealShapedPathElidesInsteadOfOverrunningTheRow()
     {
@@ -197,12 +243,12 @@ public class WbppExportWindowTests
         var window = Show(wizard, PinnedMinWidth);
 
         var ownName = InStep<TextBlock>(window, "ChosenOwnNameText");
-        var change = InStep<Button>(window, "ChangeFolderButton");
+        var toggle = InStep<Button>(window, "TreeToggleButton");
         Assert.True(InStep<TextBlock>(window, "ChosenLeadingPathText").Bounds.Width > 0);
 
         var pathRight = ownName.TranslatePoint(new Point(ownName.Bounds.Width, 0), window)!.Value.X;
-        var buttonLeft = change.TranslatePoint(default, window)!.Value.X;
-        Assert.True(pathRight <= buttonLeft + 1, "the chosen path overruns the Change folder button");
+        var buttonLeft = toggle.TranslatePoint(default, window)!.Value.X;
+        Assert.True(pathRight <= buttonLeft + 1, "the chosen path overruns the tree toggle button");
 
         window.Close();
     }

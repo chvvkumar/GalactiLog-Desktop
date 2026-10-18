@@ -65,17 +65,28 @@ public sealed record SessionLevels(
     LevelsUnavailable? Unavailable,
     int FramesInRootItself = 0);
 
-/// <summary>One night's picked export folder (core-shapes.md section 4).</summary>
-public sealed record ChosenLevel(DateOnly Night, FolderLevel Level);
+/// <summary>One night's picked export folder (core-shapes.md section 4).
+/// <paramref name="SkippedFolders"/> are subfolders left out of the copy; null reads as none.
+/// Each entry lies strictly under <c>Level.Path</c> and no entry lies under another.</summary>
+public sealed record ChosenLevel(
+    DateOnly Night,
+    FolderLevel Level,
+    IReadOnlyList<FolderLevel>? SkippedFolders = null);
+
+/// <summary>One subfolder offered for skipping, with whether the catalogue holds any file beneath
+/// it. An uncatalogued folder has no known frame count or size.</summary>
+public sealed record SubfolderLevel(FolderLevel Level, bool IsCatalogued);
 
 /// <summary>One night's worth of a WBPP export script's copy step (core-shapes.md section 4).
 /// <paramref name="ExcludedRelativePaths"/> carries native <c>\</c> separators, relative to
-/// <paramref name="SourcePath"/>.</summary>
+/// <paramref name="SourcePath"/>. <paramref name="ExcludedRelativeDirectories"/> lists skipped
+/// subfolders in the same form, with no trailing separator; null reads as none.</summary>
 public sealed record CopyOperation(
     DateOnly Night,
     string SourcePath,
     string EntryName,
-    IReadOnlyList<string> ExcludedRelativePaths);
+    IReadOnlyList<string> ExcludedRelativePaths,
+    IReadOnlyList<string>? ExcludedRelativeDirectories = null);
 
 /// <summary>The export's summary counts, over the chosen levels and their excluded frames
 /// (core-shapes.md section 4). <paramref name="SizeBytes"/> is null when any counted file's size

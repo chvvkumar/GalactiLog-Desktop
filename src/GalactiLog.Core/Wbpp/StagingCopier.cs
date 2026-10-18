@@ -32,7 +32,7 @@ public sealed record StagingIo(
 
 /// <summary>What to copy: every operation's source tree goes to
 /// <c>StagingRoot\EntryName\&lt;relative path&gt;</c>, minus folders and files whose name matches
-/// <paramref name="Exclusions"/> and minus each operation's excluded relative paths.</summary>
+/// <paramref name="Exclusions"/> and minus each operation's excluded relative file paths and excluded relative directories.</summary>
 public sealed record StagingCopyRequest(
     IReadOnlyList<CopyOperation> Operations,
     string StagingRoot,
@@ -102,6 +102,7 @@ public sealed class StagingCopier(StagingIo io)
         foreach (var operation in request.Operations)
         {
             var excludedFiles = new HashSet<string>(operation.ExcludedRelativePaths, StringComparer.OrdinalIgnoreCase);
+            var excludedDirectories = new HashSet<string>(operation.ExcludedRelativeDirectories ?? [], StringComparer.OrdinalIgnoreCase);
             var pending = new Stack<(string Source, string Relative)>();
             pending.Push((operation.SourcePath, ""));
             while (pending.Count > 0)
@@ -133,7 +134,7 @@ public sealed class StagingCopier(StagingIo io)
                         {
                             skipped.Add(new StagingSkip(entry.FullName, StagingSkipReason.ReparsePoint));
                         }
-                        else if (!isExcluded(entry.Name))
+                        else if (!isExcluded(entry.Name) && !excludedDirectories.Contains(relative))
                         {
                             pending.Push((entry.FullName, relative));
                         }

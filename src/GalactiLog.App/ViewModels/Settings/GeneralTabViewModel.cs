@@ -45,7 +45,8 @@ public sealed partial class GeneralTabViewModel : GeneralSettingsTabViewModel
 
     /// <summary>Spec 12.11 behaviour 9, stated where the control is.</summary>
     public const string StartMinimizedDescription =
-        "GalactiLog starts in the notification area with no window. Scanning runs on its normal schedule.";
+        "GalactiLog starts in the notification area with no window. Scanning runs on its normal schedule. "
+        + "The first run after an install and the restart after an update show the window regardless.";
 
     /// <summary>
     /// Spec 12.11 behaviour 10 and ruling Q6, stated exactly as the notice actually behaves. The

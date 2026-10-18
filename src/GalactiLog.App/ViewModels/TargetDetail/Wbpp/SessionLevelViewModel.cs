@@ -1,6 +1,7 @@
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using GalactiLog.Core.Io;
 using GalactiLog.Core.Wbpp;
 
 namespace GalactiLog.App.ViewModels.TargetDetail.Wbpp;
@@ -74,17 +75,21 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         "This night's frames are spread across more than one library folder, so no single folder holds them all";
 
     private readonly Action<SessionLevelViewModel> _chosenChanged;
-
     /// <param name="levels">The night's levels, as <c>FolderLevels.ForSession</c> produced
     /// them.</param>
     /// <param name="ownTargetName">The page's own target's display name, passed through to the
-    /// level rows for the same-name note on a contamination entry.</param>
+    /// rows for the same-name note on a contamination entry.</param>
     /// <param name="chosenChanged">Called when this night's pick moves, so the page can recompute
-    /// its totals, re-run the staging check and withdraw a generated script.</param>
+    /// its totals, re-run the staging check and withdraw a generated script. A tick change calls
+    /// it too, because a skip moves the same figures and the same script.</param>
+    /// <param name="listSubfolders">The page's lister: reads the folders inside a row, off the UI
+    /// thread, and answers through <see cref="FolderNodeViewModel.SetChildren"/>. Null lists
+    /// nothing: every row answers at once with its chain children alone.</param>
     public SessionLevelViewModel(
         SessionLevels levels,
         string ownTargetName,
-        Action<SessionLevelViewModel> chosenChanged)
+        Action<SessionLevelViewModel> chosenChanged,
+        Action<SessionLevelViewModel, FolderNodeViewModel>? listSubfolders = null)
     {
         ArgumentNullException.ThrowIfNull(levels);
         ArgumentNullException.ThrowIfNull(chosenChanged);
@@ -93,10 +98,32 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         _chosenChanged = chosenChanged;
         GroupName = "WbppLevels_" + levels.Night.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
 
-        Rows = HasLevels
-            ? [.. levels.Levels.Select((level, index) =>
-                new LevelRowViewModel(level, index, GroupName, ownTargetName, Choose))]
-            : [];
+        // Open on load, unless the night has no tree to open: its toggle is hidden, so an open
+        // panel there could not be closed.
+        _isExpanded = HasLevels;
+
+        Action<FolderNodeViewModel> list = listSubfolders is { } lister
+            ? row => lister(this, row)
+            : row => row.SetChildren([]);
+
+        // Levels arrive depth ascending, so every parent is built before its children. The parent
+        // is the deepest level already built that contains this one.
+        var rows = new List<FolderNodeViewModel>(HasLevels ? levels.Levels.Count : 0);
+        for (var index = 0; HasLevels && index < levels.Levels.Count; index++)
+        {
+            var level = levels.Levels[index];
+            var parent = rows
+                .Where(row => PathConfinement.IsUnderOrEqual(row.Level.Path, level.Path)
+                    && !string.Equals(row.Level.Path, level.Path, StringComparison.OrdinalIgnoreCase))
+                .MaxBy(row => row.Level.Path.Length);
+            var row = new FolderNodeViewModel(
+                new SubfolderLevel(level, true), true, index, GroupName, ownTargetName, parent, list, OnRowChanged);
+            parent?.AddChainChild(row);
+            rows.Add(row);
+        }
+
+        Rows = rows;
+        Roots = [.. rows.Where(row => row.Parent is null)];
 
         // The default pick is Task 2's, never re-derived here. The backing field first, then the
         // row, so the night does not report a change before the page has finished building it.
@@ -104,6 +131,13 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         if (HasLevels)
         {
             Rows[_chosenIndex].IsChosen = true;
+        }
+
+        ApplyZones();
+
+        foreach (var row in rows)
+        {
+            row.IsExpanded = true;
         }
     }
 
@@ -123,9 +157,14 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// </summary>
     public string GroupName { get; }
 
-    /// <summary>The level tree, in <see cref="SessionLevels.Levels"/>' own order: depth ascending,
-    /// then the path under <c>OrdinalIgnoreCase</c>. Empty when no level is available.</summary>
-    public IReadOnlyList<LevelRowViewModel> Rows { get; }
+    /// <summary>The chain rows, one per level, in <see cref="SessionLevels.Levels"/>' own order:
+    /// depth ascending, then the path under <c>OrdinalIgnoreCase</c>. Empty when no level is
+    /// available.</summary>
+    public IReadOnlyList<FolderNodeViewModel> Rows { get; }
+
+    /// <summary>The chain rows no other level contains, which are the top of the tree under the
+    /// scan root.</summary>
+    public IReadOnlyList<FolderNodeViewModel> Roots { get; }
 
     /// <summary>Whether this night offers a level tree at all.</summary>
     public bool HasLevels => Levels.Unavailable is null;
@@ -190,14 +229,15 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// is in the root is an unavailable row instead and states nothing here.</summary>
     public bool HasRootFramesText => HasLevels && Levels.FramesInRootItself > 0;
 
-    /// <summary>Whether the level tree is open.</summary>
+    /// <summary>Whether the night's tree is open. Open when the page loads, on a night that offers
+    /// one.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ToggleLabel))]
     private bool _isExpanded;
 
     /// <summary>The tree toggle's label, which states what pressing it does, as every other
     /// disclosure on this page and in the session pane does.</summary>
-    public string ToggleLabel => IsExpanded ? "Done" : "Change folder";
+    public string ToggleLabel => IsExpanded ? "Collapse" : "Expand";
 
     /// <summary>Opens and closes this night's level tree. Not a change: it withdraws no generated
     /// script.</summary>
@@ -217,8 +257,92 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ChosenOtherTargetsTooltip))]
     private int _chosenIndex;
 
-    /// <summary>This night's pick, or null when it offers none and contributes nothing.</summary>
-    public ChosenLevel? Chosen => HasLevels ? new ChosenLevel(Night, Levels.Levels[ChosenIndex]) : null;
+    /// <summary>This night's pick with its skipped folders, or null when it offers none and
+    /// contributes nothing. <see cref="ChosenLevel.SkippedFolders"/> is null when nothing is
+    /// skipped.</summary>
+    public ChosenLevel? Chosen
+    {
+        get
+        {
+            if (!HasLevels)
+            {
+                return null;
+            }
+
+            List<FolderLevel> skipped = [.. Rows[ChosenIndex].TopMostSkipped()];
+            return new ChosenLevel(Night, Levels.Levels[ChosenIndex], skipped.Count == 0 ? null : skipped);
+        }
+    }
+
+    // ------------------------------------------------------------------ the skips
+
+    /// <summary>How many folders this night skips, beside the chosen path, or empty for none.
+    /// </summary>
+    /// <remarks>Counts the top-most unticked rows under the chosen row only: a tick kept on a row
+    /// the pick has since moved away from does not apply and is not counted.</remarks>
+    public string SkippedText => (HasLevels ? Rows[ChosenIndex].TopMostSkipped().Count() : 0) switch
+    {
+        <= 0 => "",
+        1 => "1 folder skipped",
+        var count => string.Create(CultureInfo.InvariantCulture, $"{count:N0} folders skipped"),
+    };
+
+    /// <summary>Whether this night states a skip.</summary>
+    public bool HasSkippedText => SkippedText.Length > 0;
+
+    /// <summary>The line under the tree stating what this night copies. Set by the page through
+    /// <see cref="SetSummary"/>.</summary>
+    [ObservableProperty]
+    private string _summaryText = "";
+
+    /// <summary>Records what this night alone copies, as the page computed it.</summary>
+    /// <param name="totals">This night's totals, from <c>FolderLevels.Totals</c> over its chosen
+    /// level alone, so the line and the footer cannot disagree.</param>
+    /// <param name="skippedCount">How many top-most folders this night skips.</param>
+    /// <remarks>The size reads <c>unknown</c> as everywhere else, never a partial sum.</remarks>
+    public void SetSummary(ExportTotals totals, int skippedCount)
+    {
+        ArgumentNullException.ThrowIfNull(totals);
+
+        var text = "This night copies " + WbppPathText.Frames(totals.FrameCount) + ", " + WbppPathText.Bytes(totals.SizeBytes);
+        SummaryText = skippedCount switch
+        {
+            <= 0 => text,
+            1 => text + " after skipping 1 folder",
+            _ => text + string.Create(CultureInfo.InvariantCulture, $" after skipping {skippedCount:N0} folders"),
+        };
+    }
+
+    // A chain row reports a pick when its radio takes it; anything else a row reports is a tick.
+    // The chosen row's own tick is inert, so reading a report from a chosen row as a pick loses
+    // nothing.
+    private void OnRowChanged(FolderNodeViewModel row)
+    {
+        if (row.IsChain && row.IsChosen)
+        {
+            Choose(row.Index);
+            return;
+        }
+
+        OnPropertyChanged(nameof(SkippedText));
+        OnPropertyChanged(nameof(HasSkippedText));
+        _chosenChanged(this);
+    }
+
+    // A night with no levels has no tree to zone, and a pick moved there indexes nothing.
+    private void ApplyZones()
+    {
+        if (!HasLevels)
+        {
+            return;
+        }
+
+        var chosen = Rows[ChosenIndex];
+        foreach (var root in Roots)
+        {
+            root.ApplyZone(chosen);
+        }
+    }
 
     /// <summary>
     /// Whether every level this night offers drags another night's or another target's frames
@@ -226,12 +350,12 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// </summary>
     /// <remarks>In that state there is no clean level to move to, so the cost is a fact about the
     /// export rather than something the tree can talk the user out of, and the spec shows the
-    /// chosen level's badge on the row itself: the tree is closed when the page opens, and a cost
-    /// visible only after pressing Change folder on every night is a cost no user reads.</remarks>
+    /// chosen level's badge on the row itself: a collapsed tree hides the row badges, and a cost
+    /// visible only inside an open tree on every night is a cost a user can miss.</remarks>
     public bool EveryLevelIsContaminated =>
         HasLevels && Levels.Levels.All(level => level.IsContaminated);
 
-    private LevelRowViewModel? ChosenRow => HasLevels ? Rows[ChosenIndex] : null;
+    private FolderNodeViewModel? ChosenRow => HasLevels ? Rows[ChosenIndex] : null;
 
     /// <summary>The chosen level's own other-nights badge, shown on the session row in the state
     /// above and empty otherwise. The string is the row's, never recomputed here.</summary>
@@ -304,6 +428,9 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             row.IsChosen = row.Index == value;
         }
 
+        ApplyZones();
+        OnPropertyChanged(nameof(SkippedText));
+        OnPropertyChanged(nameof(HasSkippedText));
         _chosenChanged(this);
     }
 }
