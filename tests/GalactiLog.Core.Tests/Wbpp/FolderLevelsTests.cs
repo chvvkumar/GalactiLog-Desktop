@@ -730,6 +730,24 @@ public class FolderLevelsTests
     }
 
     [Fact]
+    public void CopyOperations_PerNight_AssignEachExcludeOnlyToItsOwnNightsLevel()
+    {
+        // Two nights sharing one chosen folder: a path-only rule hands both excludes to the first.
+        var first = Frame(@"M31\Ha\first.fits");
+        var second = Frame(@"M31\Ha\second.fits");
+        var chosen = new[]
+        {
+            new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))),
+            new ChosenLevel(Night(2), Level(Under(@"M31\Ha"))),
+        };
+
+        var ops = FolderLevels.CopyOperations(chosen, Excluded((Night(1), [first]), (Night(2), [second])));
+
+        Assert.Equal(["first.fits"], ops[0].ExcludedRelativePaths);
+        Assert.Equal(["second.fits"], ops[1].ExcludedRelativePaths);
+    }
+
+    [Fact]
     public void CopyOperations_DropAnExcludeUnderNoChosenLevel()
     {
         var chosen = new[] { new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))) };
@@ -856,6 +874,35 @@ public class FolderLevelsTests
 
         Assert.Equal(1, totals.FrameCount);
         Assert.Equal(200L, totals.SizeBytes);
+    }
+
+    [Fact]
+    public void HoldsLights_IsTrueOnlyForTheDirectParentOfALightRow()
+    {
+        var light = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var flat = Frame(@"M31\2026-07-01\Flats\f.fits", 100);
+        var index = Index(Cat(light, "m31", "M 31", Night(1)), Cat(flat, "m31", "M 31", Night(1), isLight: false));
+
+        Assert.True(index.HoldsLights(Under(@"M31\2026-07-01\Ha")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Flats")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Nowhere")));
+    }
+
+    [Fact]
+    public void Totals_ForeignExcludes_DeductBytesButNotCounts()
+    {
+        var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
+        var chosen = new[] { new ChosenLevel(Night(1), level) };
+        var foreign = Frame(@"M31\2026-07-01\Ha\z.fits", 150);
+        var unknown = Frame(@"M31\2026-07-01\Ha\y.fits", null);
+
+        var totals = FolderLevels.Totals(chosen, [], [foreign]);
+        Assert.Equal(3, totals.FrameCount);
+        Assert.Equal(550L, totals.SizeBytes);
+
+        Assert.Null(FolderLevels.Totals(chosen, [], [foreign, unknown]).SizeBytes);
+        Assert.Equal(700L, FolderLevels.Totals(chosen, []).SizeBytes);
     }
 
     [Fact]

@@ -1385,6 +1385,33 @@ public class ScriptGeneratorTests
         return builder.ToString();
     }
 
+    [Theory]
+    [InlineData(WbppScriptType.PowerShell)]
+    [InlineData(WbppScriptType.Bash)]
+    public void Generate_WithADestinationSubfolder_MatchesItsGolden(WbppScriptType type)
+    {
+        var ops = new[]
+        {
+            new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\Date_2026-07-01\LIGHT\Target_A", "2026-07-01", []),
+            new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\Date_2026-07-01\FLAT\Cam\Angle_1", "2026-07-01", [@"B_0003.fits"], null, @"FLAT\Cam\Angle_1"),
+        };
+        var text = ScriptGenerator.Generate(type, new WbppScriptInput(ops, @"E:\Staging\Target A", "Target A", ScriptGenerator.DefaultExclusions, "wbpp_Target_A" + Extension(type)));
+        Assert.Equal(ReadGolden("calibration-subfolder" + Extension(type)), text);
+    }
+
+    [Theory]
+    [InlineData(@"C:\abs")]
+    [InlineData(@"FLAT\..\x")]
+    [InlineData("FLAT\nX")]
+    [InlineData("")]
+    public void Generate_RefusesAnUnsafeDestinationSubfolder(string subfolder)
+    {
+        var op = new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\x", "n", [], null, subfolder);
+        var input = new WbppScriptInput([op], @"E:\Staging\Target A", "Target A", ScriptGenerator.DefaultExclusions, "wbpp_Target_A.sh");
+        var ex = Assert.Throws<WbppUnsafeValueException>(() => ScriptGenerator.Generate(WbppScriptType.Bash, input));
+        Assert.Equal("destination subfolder", ex.ValueName);
+    }
+
     // ---- reading the goldens ----
 
     private static string ReadGolden(string fileName)

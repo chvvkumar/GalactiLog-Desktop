@@ -98,6 +98,14 @@ public sealed class StagingCopier(StagingIo io)
                 $"The export folder name '{unsafeEntry.EntryName}' is not one plain folder name, so nothing was copied.");
         }
 
+        var unsafeSubfolder = request.Operations.FirstOrDefault(o => o.DestinationSubfolder is not null && IsUnsafeSubfolder(o.DestinationSubfolder));
+        if (unsafeSubfolder is not null)
+        {
+            return new StagingCopyResult(
+                StagingOutcome.Aborted, 0, 0, skipped, failed, partial,
+                $"The export subfolder '{unsafeSubfolder.DestinationSubfolder}' is not a relative folder path, so nothing was copied.");
+        }
+
         // Pass 1: enumerate, total, and decide skips. Nothing is written here.
         foreach (var operation in request.Operations)
         {
@@ -113,7 +121,7 @@ public sealed class StagingCopier(StagingIo io)
                 }
 
                 var (directory, relativeDirectory) = pending.Pop();
-                directories.Add(Path.Combine(request.StagingRoot, operation.EntryName, relativeDirectory));
+                directories.Add(Path.Combine(request.StagingRoot, operation.EntryName, operation.DestinationSubfolder ?? "", relativeDirectory));
                 List<FileSystemInfo> entries;
                 try
                 {
@@ -148,7 +156,7 @@ public sealed class StagingCopier(StagingIo io)
 
                     filesTotal++;
                     bytesTotal += file.Length;
-                    var destination = Path.Combine(request.StagingRoot, operation.EntryName, relative);
+                    var destination = Path.Combine(request.StagingRoot, operation.EntryName, operation.DestinationSubfolder ?? "", relative);
                     long? existing;
                     try
                     {
@@ -392,10 +400,16 @@ public sealed class StagingCopier(StagingIo io)
     internal static bool IsUnsafeEntryName(string name)
         => name.Length == 0 || name.IndexOfAny(['\\', '/', ':']) >= 0 || name is "." or "..";
 
+    /// <summary>A destination subfolder must be a non-empty relative path: not rooted, no colon, no
+    /// <c>.</c> or <c>..</c> segment.</summary>
+    internal static bool IsUnsafeSubfolder(string subfolder)
+        => subfolder.Length == 0 || Path.IsPathRooted(subfolder) || subfolder.Contains(':')
+            || subfolder.Split('\\', '/').Any(seg => seg is "." or "..");
+
     /// <summary>A path-component matcher mirroring the web's <c>makeExcluder</c>, applied to every
     /// folder and file name as the PowerShell script's predicate is: each pattern matches a whole
     /// component, <c>*</c> matches any run of characters, ignore case like <c>-match</c>.</summary>
-    internal static Func<string, bool> PathComponentExcluder(IReadOnlyList<string> patterns)
+    public static Func<string, bool> PathComponentExcluder(IReadOnlyList<string> patterns)
     {
         var alternatives = patterns
             .Select(p => p.Trim())

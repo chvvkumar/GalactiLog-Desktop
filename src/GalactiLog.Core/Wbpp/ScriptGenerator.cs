@@ -290,9 +290,10 @@ public static partial class ScriptGenerator
         ArgumentNullException.ThrowIfNull(input);
         ValidateInput(type, input);
 
+        // A night's calibration operations share its entry, so the header names each night once.
         var sessionDates = string.Join(
             ", ",
-            input.Operations.Select(o => o.Night.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
+            input.Operations.Select(o => o.Night).Distinct().Select(n => n.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)));
 
         return type == WbppScriptType.Bash
             ? GenerateBash(input, sessionDates)
@@ -375,6 +376,18 @@ public static partial class ScriptGenerator
                     nameof(operation.EntryName),
                     operation.EntryName,
                     "a staging entry name is one folder name: it may not be rooted, carry a separator, or be a relative-path component");
+            }
+
+            if (operation.DestinationSubfolder is { } subfolder)
+            {
+                RefuseLineBreaks(subfolder, "destination subfolder");
+                if (StagingCopier.IsUnsafeSubfolder(subfolder))
+                {
+                    throw new WbppUnsafeValueException(
+                        "destination subfolder",
+                        subfolder,
+                        "a destination subfolder is a relative folder path: it may not be empty, rooted, carry a drive colon, or contain a . or .. segment");
+                }
             }
         }
 
@@ -485,7 +498,7 @@ public static partial class ScriptGenerator
         foreach (var operation in input.Operations)
         {
             var job = "    @{ Src = " + PowerShellQuote(operation.SourcePath, nameof(operation.SourcePath))
-                + "; Dst = (Join-Path $StagingRoot " + PowerShellQuote(operation.EntryName, nameof(operation.EntryName)) + ")";
+                + "; Dst = (Join-Path $StagingRoot " + PowerShellQuote(operation.DestinationSubfolder is null ? operation.EntryName : operation.EntryName + "\\" + operation.DestinationSubfolder, nameof(operation.EntryName)) + ")";
             if (hasExcludedFiles)
             {
                 // The port's relative paths already carry backslashes, so the Python's separator
@@ -782,7 +795,9 @@ public static partial class ScriptGenerator
             // The target name is a quoted %s argument and never part of a format string, which is
             // the Python's own hardening.
             $@"printf '%s  Target: %s%s\n' ""$C_DIM"" {BashQuote(input.TargetName, nameof(input.TargetName))} ""$C_RESET""",
-            @"printf '%s  %s session folder(s) -> %s%s\n' ""$C_DIM"" ""$TOTAL"" ""$STAGING_ROOT"" ""$C_RESET""",
+            // $TOTAL counts operations; the session count names distinct nights, and reads as
+            // $TOTAL whenever the two agree, which keeps every one-operation-per-night golden.
+            $@"printf '%s  %s session folder(s) -> %s%s\n' ""$C_DIM"" {SessionCountArgument(input)} ""$STAGING_ROOT"" ""$C_RESET""",
             @"printf '\n'",
             "",
             "copy_folder() {",
@@ -800,7 +815,7 @@ public static partial class ScriptGenerator
         foreach (var operation in input.Operations)
         {
             var call = "copy_folder " + index.ToString(CultureInfo.InvariantCulture)
-                + " " + BashQuote(operation.EntryName, nameof(operation.EntryName))
+                + " " + BashQuote(operation.DestinationSubfolder is null ? operation.EntryName : operation.EntryName + "/" + ToPosixPath(operation.DestinationSubfolder), nameof(operation.EntryName))
                 + " " + BashQuote(ToPosixPath(operation.SourcePath) + "/", nameof(operation.SourcePath));
             if (hasPerPathExcludes)
             {
@@ -842,6 +857,14 @@ public static partial class ScriptGenerator
     // -----------------------------------------------------------------------------------------
     // Shared helpers
     // -----------------------------------------------------------------------------------------
+
+    private static string SessionCountArgument(WbppScriptInput input)
+    {
+        var nights = input.Operations.Select(o => o.Night).Distinct().Count();
+        return nights == input.Operations.Count
+            ? @"""$TOTAL"""
+            : "\"" + nights.ToString(CultureInfo.InvariantCulture) + "\"";
+    }
 
     // The Python switches on bool(excluded_by_op). Its dict is never empty-valued on the real path,
     // because map_excluded_to_ops only creates a key when it appends, so "any operation has an

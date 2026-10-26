@@ -26,6 +26,7 @@ internal sealed class Library
 
     private readonly List<WbppCataloguePath> _catalogue = [];
     private readonly Dictionary<DateOnly, List<WbppFramePath>> _nights = [];
+    private readonly Dictionary<Guid, FrameKeys> _keys = [];
 
     /// <summary>The page's own group key, passed through unchanged. Never synthesised from a
     /// <see cref="Guid"/>: a resolved key is stored upper cased and would then read as another
@@ -35,6 +36,9 @@ internal sealed class Library
     /// <summary>The target's display name.</summary>
     public string TargetName { get; set; } = "M 31";
 
+    /// <summary>When true the query answers no match keys, so no night has a light set.</summary>
+    public bool WithoutKeys { get; set; }
+
     /// <summary>The configured scan roots.</summary>
     public List<string> ScanRoots { get; } = [Root];
 
@@ -43,10 +47,11 @@ internal sealed class Library
     public Dictionary<string, Guid> Ids { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Adds one of this target's own LIGHT frames on one night.</summary>
-    public Library Frame(DateOnly night, string path, long? size = 1_000L)
+    public Library Frame(DateOnly night, string path, long? size = 1_000L, FrameKeys? keys = null)
     {
         var id = Guid.NewGuid();
         Ids[path] = id;
+        _keys[id] = keys ?? CalibrationFixtures.K();
         Night(night).Add(new WbppFramePath(id, path, size));
         _catalogue.Add(new WbppCataloguePath(path, GroupKey, TargetName, night, true, size));
         return this;
@@ -89,7 +94,8 @@ internal sealed class Library
 
         return new WbppPaths(
             byNight,
-            ContaminationIndex.Build([.. ScanRoots], _catalogue));
+            ContaminationIndex.Build([.. ScanRoots], _catalogue),
+            WithoutKeys ? null : _keys);
     }
 
     private List<WbppFramePath> Night(DateOnly night)
@@ -153,6 +159,11 @@ internal sealed class ExportHarness : IDisposable
     /// <summary>What the folder picker returns. Null is a cancelled picker.</summary>
     public string? PickedFolder { get; set; }
 
+    /// <summary>How many times the page posted to the UI thread.</summary>
+    public int PostCount => Volatile.Read(ref _postCount);
+
+    private int _postCount;
+
     /// <summary>The page itself.</summary>
     public WbppExportViewModel Page { get; private set; } = null!;
 
@@ -189,7 +200,10 @@ internal sealed class ExportHarness : IDisposable
         Func<IReadOnlyList<WbppFrame>, IReadOnlyDictionary<Guid, FrameGrading>, string,
             Action<IReadOnlyCollection<Guid>>, object>? createPanel = null,
         bool parked = false,
-        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null,
+        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
+        CalibrationWalk.Walker? walk = null,
+        Func<GeneralSettings, GeneralSettings>? general = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -203,6 +217,10 @@ internal sealed class ExportHarness : IDisposable
                 WbppExclusionsDocument = exclusions,
             },
         };
+        if (general is not null)
+        {
+            harness.General = general(harness.General);
+        }
 
         harness.Page = new WbppExportViewModel(
             library.GroupKey,
@@ -233,8 +251,14 @@ internal sealed class ExportHarness : IDisposable
                 return Task.CompletedTask;
             },
             createPanel,
-            post: action => action(),
-            listSubfolders: listSubfolders);
+            post: action =>
+            {
+                Interlocked.Increment(ref harness._postCount);
+                action();
+            },
+            listSubfolders: listSubfolders,
+            readForeignLights: readForeignLights ?? ((_, _, _, _) => []),
+            walk: walk);
 
         if (installPickers)
         {

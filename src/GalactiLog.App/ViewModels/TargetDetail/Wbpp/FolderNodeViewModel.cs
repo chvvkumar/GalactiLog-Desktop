@@ -123,6 +123,52 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         _list = list;
         _changed = changed;
         FolderName = WbppPathText.OwnName(Level.Path);
+
+        // Seeded from the catalogue facts without reporting: the session re-ticks its chosen row
+        // and reports a listing's unticked rows once they are in place.
+        _isIncluded = StartsTicked(Level);
+        _reasonTag = _isIncluded ? null : ReasonFor(Level);
+    }
+
+    /// <summary>Whether a folder starts ticked: false only when it holds none of this night's own
+    /// frames and some other target's or other night's.</summary>
+    public static bool StartsTicked(FolderLevel level)
+        => !(level.FrameCount == 0 && (level.OtherTargets.Count > 0 || level.OtherNights.Count > 0));
+
+    /// <summary>Why a folder starts unticked: the first other target's lights, else another night,
+    /// else null.</summary>
+    public static string? ReasonFor(FolderLevel level)
+        => level.OtherTargets.Count > 0 ? level.OtherTargets[0] + "'s lights"
+            : level.OtherNights.Count > 0 ? "other night"
+            : null;
+
+    /// <summary>Why this row started unticked, or null; cleared for good once the user ticks it.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasReasonTag))]
+    [NotifyPropertyChangedFor(nameof(RowTag))]
+    private string? _reasonTag;
+
+    /// <summary>Whether this row carries a reason.</summary>
+    public bool HasReasonTag => ReasonTag is not null;
+
+    /// <summary>The tag a skipped row reads: its reason, else <see cref="SkippedText"/>.</summary>
+    public string RowTag => IsSkipped ? (ReasonTag ?? SkippedText) : "";
+
+    // Other targets' and other nights' LIGHT files under this folder, as the page read them.
+    private int _foreignCount;
+
+    /// <summary>Records how many foreign LIGHT files lie under this folder, which turns the frame
+    /// count into "k of n files".</summary>
+    public void SetForeignCount(int count)
+    {
+        if (_foreignCount == count)
+        {
+            return;
+        }
+
+        _foreignCount = count;
+        OnPropertyChanged(nameof(FrameCountText));
     }
 
     /// <summary>The folder this row draws, which is what an untick puts on the chosen level.
@@ -157,7 +203,10 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
     /// <summary>The night's own LIGHT frames under this folder, or <see cref="NotCataloguedText"/>.
     /// </summary>
-    public string FrameCountText => IsCatalogued ? WbppPathText.Frames(Level.FrameCount) : NotCataloguedText;
+    public string FrameCountText => !IsCatalogued ? NotCataloguedText
+        : _foreignCount > 0 ? string.Create(
+            CultureInfo.InvariantCulture, $"{Level.FrameCount:N0} of {Level.FrameCount + _foreignCount:N0} files")
+        : WbppPathText.Frames(Level.FrameCount);
 
     /// <summary>The total size of every catalogued file under this folder, or the literal
     /// <c>unknown</c> when any one contributing size is null, never a partial sum. Empty when the
@@ -203,7 +252,8 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsChildren))]
     [NotifyPropertyChangedFor(nameof(IsSkipped))]
     [NotifyPropertyChangedFor(nameof(RowOpacity))]
-    private bool _isIncluded = true;
+    [NotifyPropertyChangedFor(nameof(RowTag))]
+    private bool _isIncluded;
 
     /// <summary>Whether this row's children are open. The first opening lists them.</summary>
     [ObservableProperty]
@@ -247,11 +297,19 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsChildren))]
     [NotifyPropertyChangedFor(nameof(IsVisible))]
     [NotifyPropertyChangedFor(nameof(IsChosenZone))]
+    [NotifyPropertyChangedFor(nameof(RowTag))]
     private FolderZone _zone;
 
-    /// <summary>Whether this row is drawn: every row but a disk row outside the chosen one.
-    /// </summary>
-    public bool IsVisible => Zone != FolderZone.Hidden;
+    /// <summary>Whether this row is drawn: every row but a disk row outside the chosen one, and
+    /// a folder the Calibration found block owns.</summary>
+    public bool IsVisible => Zone != FolderZone.Hidden && !IsOwnedByCalibration;
+
+    /// <summary>Whether the night's Calibration found block owns this folder (the edge rule): it
+    /// reaches staging through its calibration operations alone, so the tree does not draw it and
+    /// <see cref="TopMostSkipped"/> does not name it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVisible))]
+    private bool _isOwnedByCalibration;
 
     /// <summary>Whether this row is the chosen one, which carries the highlight and the pill.
     /// </summary>
@@ -312,6 +370,12 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         Children = rows;
         ChildrenText = rows.Count == 0 ? NoFoldersText : "";
         IsListing = false;
+
+        // A listed row seeded unticked is a skip the session has not heard of yet.
+        if (rows.FirstOrDefault(row => !row.IsChain && !row.IsIncluded) is { } unticked)
+        {
+            _changed(unticked);
+        }
     }
 
     /// <summary>Places this row and every row under it against the night's chosen row.</summary>
@@ -349,6 +413,11 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     {
         foreach (var child in Children)
         {
+            if (child.IsOwnedByCalibration)
+            {
+                continue;
+            }
+
             if (!child.IsIncluded)
             {
                 yield return child.Level;
@@ -413,5 +482,13 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         _list(this);
     }
 
-    partial void OnIsIncludedChanged(bool value) => _changed(this);
+    partial void OnIsIncludedChanged(bool value)
+    {
+        if (value)
+        {
+            ReasonTag = null;
+        }
+
+        _changed(this);
+    }
 }
