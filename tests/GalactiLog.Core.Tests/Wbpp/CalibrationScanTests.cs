@@ -64,6 +64,23 @@ public class CalibrationScanTests
     }
 
     [Fact]
+    public void Operations_ExcludeTheRowFoldersFilesThatAreNotInTheRow()
+    {
+        // An unparsable header or a sidecar beside the flats is scanned as Other and never joins the
+        // row, so the footer does not count it; the operation must not copy it either.
+        var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true));
+        var all = new[]
+        {
+            new ScannedFrame(@"W:\N\FLAT\f1.fits", 100, CalibrationType.Flat, Keys, 0.01, N),
+            new ScannedFrame(@"W:\N\FLAT\broken.fits", 100, CalibrationType.Other, Keys, null, null),
+            new ScannedFrame(@"W:\N\FLAT\notes.txt", 5, CalibrationType.Other, Keys, null, null),
+            new ScannedFrame(@"W:\N\Other\x.fits", 5, CalibrationType.Other, Keys, null, null),
+        };
+        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], all));
+        Assert.Equal(["broken.fits", "notes.txt"], op.ExcludedRelativePaths);
+    }
+
+    [Fact]
     public void Operations_UntickedRows_ProduceNothing()
     {
         var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true));

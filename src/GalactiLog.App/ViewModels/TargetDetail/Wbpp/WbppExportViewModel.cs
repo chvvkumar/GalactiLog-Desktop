@@ -948,11 +948,13 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         var darks = (Count: calibration.Sum(c => c.DarkCount), Bytes: calibration.Sum(c => c.DarkBytes));
         var bias = (Count: calibration.Sum(c => c.BiasCount), Bytes: calibration.Sum(c => c.BiasBytes));
         var other = calibration.Sum(c => c.OtherBytes);
-        var calibrationFrames = flats.Count + darkFlats.Count + darks.Count + bias.Count;
+        // Every file the copier will copy beyond the lights: calibration frames and uncatalogued
+        // files under the chosen folder, so the count agrees with the copier's.
+        var extraFiles = calibration.Sum(c => c.Count);
 
-        FrameCountText = calibrationFrames == 0
+        FrameCountText = extraFiles == 0
             ? WbppPathText.Frames(totals.FrameCount)
-            : string.Create(CultureInfo.InvariantCulture, $"{totals.FrameCount + calibrationFrames:N0} frames");
+            : string.Create(CultureInfo.InvariantCulture, $"{totals.FrameCount + extraFiles:N0} files");
         FolderCountText = totals.FolderCount == 1
             ? "1 folder"
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");

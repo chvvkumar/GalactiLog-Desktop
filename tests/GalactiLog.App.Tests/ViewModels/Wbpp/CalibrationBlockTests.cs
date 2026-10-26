@@ -214,8 +214,20 @@ public class CalibrationBlockTests
         Assert.Equal(
             "lights " + MetricText.Bytes(2_000) + " (2), flats " + MetricText.Bytes(200) + " (2), flat-darks 0",
             h.Page.BreakdownText);
-        Assert.Equal("4 frames", h.Page.FrameCountText);
+        Assert.Equal("4 files", h.Page.FrameCountText);
         Assert.EndsWith(" plus 2 flats, " + MetricText.Bytes(200), session.SummaryText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Footer_CountsAnUncataloguedSidecarUnderTheChosenFolder_AsTheCopierWill()
+    {
+        var disk = DateFirstDisk().Add(F(Path.Combine(LightDir, "a.json"), CalibrationType.Other, K(), size: 50));
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: disk.Walker);
+        Scanned(h.Page.Sessions[0]);
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        Assert.Equal(MetricText.Bytes(2_250), h.Page.SizeText);
+        Assert.Equal("5 files", h.Page.FrameCountText);
     }
 
     [Fact]

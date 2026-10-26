@@ -52,6 +52,15 @@ public static class CalibrationScan
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList();
+            // Files directly in the folder that are not row frames (unparsable headers, sidecars) are
+            // never counted by the footer, so no operation copies them.
+            var inRow = new HashSet<string>(row.Frames.Select(f => f.Frame.FilePath), StringComparer.OrdinalIgnoreCase);
+            var strays = allFrames
+                .Where(f => !inRow.Contains(f.FilePath)
+                            && Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(f.FilePath) ?? "").Equals(
+                                Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase))
+                .Select(f => Path.GetFileName(f.FilePath))
+                .ToList();
             var held = row.Types;
             foreach (var type in CalibrationTypes.Where(held.Contains))
             {
@@ -59,6 +68,7 @@ public static class CalibrationScan
                 var excluded = row.Frames
                     .Where(f => f.Frame.Type != type || (anySelected && !f.Selected))
                     .Select(f => Path.GetFileName(f.Frame.FilePath))
+                    .Concat(strays)
                     .ToList();
                 ops.Add(new CopyOperation(night, row.Folder, entryName, excluded, childDirs.Count == 0 ? null : childDirs, DestinationSubfolder(scannedLevel, row.Folder, type)));
             }

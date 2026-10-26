@@ -808,7 +808,7 @@ public class HelpTopicsTests
             + "flat-darks whose camera, filter, binning, gain, offset and rotation match them. "
             + "Folders holding another target's lights start unticked and say so. Matched "
             + "calibration is copied under the night's folder in FLAT and DARKFLAT subfolders, and "
-            + "the size shown is the full size of what will be copied. Look in the parent folder "
+            + "the file count and size shown are those of everything that will be copied. Look in the parent folder "
             + "when flats live higher up, or press Rescan after changing files on disk.",
         ["target.frames"] =
             "Each frame is graded by its distance from a typical baseline, not a fixed "
