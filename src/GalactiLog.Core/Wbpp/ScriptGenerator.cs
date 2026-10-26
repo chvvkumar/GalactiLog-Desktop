@@ -376,6 +376,18 @@ public static partial class ScriptGenerator
                     operation.EntryName,
                     "a staging entry name is one folder name: it may not be rooted, carry a separator, or be a relative-path component");
             }
+
+            if (operation.DestinationSubfolder is { } subfolder)
+            {
+                RefuseLineBreaks(subfolder, "destination subfolder");
+                if (StagingCopier.IsUnsafeSubfolder(subfolder))
+                {
+                    throw new WbppUnsafeValueException(
+                        "destination subfolder",
+                        subfolder,
+                        "a destination subfolder is a relative folder path: it may not be empty, rooted, carry a drive colon, or contain a . or .. segment");
+                }
+            }
         }
 
         foreach (var pattern in input.Exclusions)
@@ -485,7 +497,7 @@ public static partial class ScriptGenerator
         foreach (var operation in input.Operations)
         {
             var job = "    @{ Src = " + PowerShellQuote(operation.SourcePath, nameof(operation.SourcePath))
-                + "; Dst = (Join-Path $StagingRoot " + PowerShellQuote(operation.EntryName, nameof(operation.EntryName)) + ")";
+                + "; Dst = (Join-Path $StagingRoot " + PowerShellQuote(operation.DestinationSubfolder is null ? operation.EntryName : operation.EntryName + "\\" + operation.DestinationSubfolder, nameof(operation.EntryName)) + ")";
             if (hasExcludedFiles)
             {
                 // The port's relative paths already carry backslashes, so the Python's separator
@@ -800,7 +812,7 @@ public static partial class ScriptGenerator
         foreach (var operation in input.Operations)
         {
             var call = "copy_folder " + index.ToString(CultureInfo.InvariantCulture)
-                + " " + BashQuote(operation.EntryName, nameof(operation.EntryName))
+                + " " + BashQuote(operation.DestinationSubfolder is null ? operation.EntryName : operation.EntryName + "/" + ToPosixPath(operation.DestinationSubfolder), nameof(operation.EntryName))
                 + " " + BashQuote(ToPosixPath(operation.SourcePath) + "/", nameof(operation.SourcePath));
             if (hasPerPathExcludes)
             {
