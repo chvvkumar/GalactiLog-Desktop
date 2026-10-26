@@ -18,9 +18,6 @@ internal static class WbppPathText
 {
     /// <summary>The folder's own name, which is the last component of an absolute folder path.
     /// </summary>
-    /// <remarks>The seam's own rule, not a second spelling of it: the staging entry names are built
-    /// on <see cref="FolderLevels.BaseName"/>, and the rename note compares a name from here against
-    /// one of those, so a root path has to answer the same on both sides.</remarks>
     public static string OwnName(string path) => FolderLevels.BaseName(path);
 
     /// <summary>Everything above the folder's own name, in the secondary ink. Empty when the
@@ -462,32 +459,6 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// <summary>The chosen folder's own name, drawn in the primary ink.</summary>
     public string ChosenOwnName => Chosen is { } chosen ? WbppPathText.OwnName(chosen.Level.Path) : "";
 
-    /// <summary>
-    /// The name this night will be copied under, when it differs from the chosen folder's own
-    /// name, and empty otherwise. Spec 12.13's rename note, shown on the rows it happens to and on
-    /// no others.
-    /// </summary>
-    /// <remarks>The name itself is <c>FolderLevels.StagingNames</c>' answer, set by the page.
-    /// Nothing here re-derives, re-cases or re-suffixes it: the collision rule, the date prefix and
-    /// the numeric suffix all live in Task 2's one member.</remarks>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(HasStagingName))]
-    private string _stagingName = "";
-
-    /// <summary>Whether this night states a rename.</summary>
-    public bool HasStagingName => StagingName.Length > 0;
-
-    /// <summary>Why the rename happened, for the note's tooltip.</summary>
-    public string StagingNameTooltip =>
-        "Another chosen folder has the same name, so this night is copied under a distinct one";
-
-    /// <summary>Records the staging entry name Task 2 gave this night, and states it only when it
-    /// differs from the folder's own name.</summary>
-    /// <param name="entryName">The entry name, exactly as <c>FolderLevels.StagingNames</c>
-    /// returned it.</param>
-    public void SetStagingEntryName(string entryName)
-        => StagingName = string.Equals(entryName, ChosenOwnName, StringComparison.Ordinal) ? "" : entryName;
-
     private void Choose(int index)
     {
         if (ChosenIndex == index)
@@ -733,23 +704,26 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         MarkOwned();
     }
 
-    /// <summary>The night's calibration copy operations, under the night's own staging entry.
-    /// </summary>
+    /// <summary>The night's calibration copy sources: every ticked row not copied in place by the
+    /// lights operation.</summary>
     /// <remarks>A row the lights operation already copies (under the chosen level and under none of
     /// its skipped folders) is left to it; <see cref="CalibrationInPlaceExcludes"/> trims it.</remarks>
-    public IReadOnlyList<CopyOperation> CalibrationOperations(string entryName)
+    public IReadOnlyList<CopySource> CalibrationSources()
     {
-        if (Match is null || ScannedLevelPath is not { } scanned || Chosen is not { } chosen)
+        if (Match is null || ScannedLevelPath is null || Chosen is not { } chosen)
         {
             return [];
         }
 
         var skipped = SkippedPaths(chosen);
-        return CalibrationScan.Operations(
-            Night, entryName, scanned,
+        return CalibrationScan.CopySources(
+            Night, ScanRoot,
             [.. TickedRows().Where(r => !CalibrationScan.CopiedInPlace(chosen.Level.Path, r.Row, skipped))],
             ScannedFrames);
     }
+
+    /// <summary><see cref="CalibrationScan.LongestRelative"/> over this night's scanned frames.</summary>
+    public int LongestScannedRelative(string folder) => CalibrationScan.LongestRelative(folder, ScannedFrames);
 
     /// <summary>The calibration frames the lights operation skips one by one in a folder it copies
     /// in place: an in-place row's unselected frames, or all of them when it is unticked. Their

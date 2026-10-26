@@ -480,8 +480,7 @@ public class WbppExportStagingTests
             harness.Page.LongPathText,
             StringComparison.Ordinal);
         Assert.EndsWith(
-            "Choose a shorter staging folder, or a deeper folder for the nights with the longest "
-            + "paths.",
+            "partial copy. Choose a shorter staging folder.",
             harness.Page.LongPathText,
             StringComparison.Ordinal);
 
@@ -505,15 +504,10 @@ public class WbppExportStagingTests
     }
 
     [Fact]
-    public void ALevelChangeAloneTurnsTheWarningOn()
+    public void ALevelChangeLeavesTheFigureAlone_BecauseThePathUnderTheScanRootFixesIt()
     {
-        // A shallower level lengthens what sits under it, with no staging change at all. A failure
-        // looks like a clean page shown to a user who then picks the level that breaks their copy.
-        var deep = Path.Combine(
-            Library.Root, "M31", "2025-03-20", "Ha", new string('d', 60), "a.fits");
-        using var harness = ExportHarness.Create(
-            new Library().Frame(N1, deep), [N1], storedStaging: ShortStaging);
-
+        var deep = Path.Combine(Library.Root, "M31", "2025-03-20", "Ha", new string('d', 60), "a.fits");
+        using var harness = ExportHarness.Create(new Library().Frame(N1, deep), [N1], storedStaging: ShortStaging);
         var session = harness.Page.Sessions[0];
         var shallow = session.Rows.Single(row => row.FolderName == "M31");
         var deepest = session.Rows[^1];
@@ -521,14 +515,8 @@ public class WbppExportStagingTests
         deepest.IsChosen = true;
         var deepFigure = harness.Page.LongestDestinationLength;
         shallow.IsChosen = true;
-        Assert.True(harness.Page.LongestDestinationLength > deepFigure);
 
-        deepest.IsChosen = true;
-        PadStagingTo(harness, 259);
-        Assert.False(harness.Page.HasLongPathWarning);
-
-        shallow.IsChosen = true;
-        Assert.True(harness.Page.HasLongPathWarning);
+        Assert.Equal(deepFigure, harness.Page.LongestDestinationLength);
     }
 
     // Pads the staging root until the page's own measured longest destination equals

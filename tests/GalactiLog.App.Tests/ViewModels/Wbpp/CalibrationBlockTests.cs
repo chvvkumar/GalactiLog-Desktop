@@ -151,7 +151,7 @@ public class CalibrationBlockTests
     }
 
     [Fact]
-    public void CalibrationOperations_CarryTheTypeSubfolder_AndJoinTheLightsOperation()
+    public void CalibrationSources_LandUnderTheirOwnFolderNames_BesideTheLights()
     {
         using var h = ExportHarness.Create(DateFirst(), [N], walk: DateFirstDisk().Walker);
         var session = h.Page.Sessions[0];
@@ -159,10 +159,25 @@ public class CalibrationBlockTests
         Stage(h);
         Generate(h.Page);
 
+        // S = {Date_2025-10-15\M31\LIGHT, Date_2025-10-15\FLAT\ZWO ASI2600MM Pro\Angle_128.85}; the start
+        // folder is the date folder and is kept, so both entries begin with it.
         var script = h.Page.ScriptText!;
-        Assert.Contains(@"LIGHT\FLAT\ZWO ASI2600MM Pro\Angle_128.85", script, StringComparison.Ordinal);
-        Assert.Contains(Angle128, script, StringComparison.Ordinal);
+        Assert.Contains(@"Join-Path $StagingRoot 'Date_2025-10-15\M31\LIGHT'", script, StringComparison.Ordinal);
+        Assert.Contains(@"Join-Path $StagingRoot 'Date_2025-10-15\FLAT\ZWO ASI2600MM Pro\Angle_128.85'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(@"LIGHT\FLAT", script, StringComparison.Ordinal);
         Assert.DoesNotContain(Angle139, script, StringComparison.Ordinal);
+        Assert.Equal("Folder names kept from " + DateDir, h.Page.FolderNamesKeptText);
+    }
+
+    [Fact]
+    public void TheLongPathFigureMeasuresTheCalibrationOperationToo()
+    {
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: DateFirstDisk().Walker, storedStaging: @"C:\s");
+        Scanned(h.Page.Sessions[0]);
+
+        // The flats operation's entry plus its longest file beats Date_2025-10-15\M31\LIGHT plus a.fits.
+        var flats = @"Date_2025-10-15\FLAT\ZWO ASI2600MM Pro\Angle_128.85";
+        Assert.Equal(@"C:\s".Length + 1 + h.Page.SubfolderName.Length + 1 + flats.Length + 1 + "f1.fits".Length, h.Page.LongestDestinationLength);
     }
 
     [Fact]
@@ -490,7 +505,7 @@ public class CalibrationBlockTests
         Assert.Equal(before + 1, disk.Calls.Count);
         Assert.Equal(DateDir, disk.Calls[^1]);
         Assert.True(CalRow(session, FlatDir).IsTicked);
-        var op = Assert.Single(session.CalibrationOperations("E"));
+        var op = Assert.Single(session.CalibrationSources());
         Assert.True(Is(FlatDir, op.SourcePath));
         Assert.Contains(session.Chosen!.SkippedFolders!, level => Is(level.Path, FlatDir));
 

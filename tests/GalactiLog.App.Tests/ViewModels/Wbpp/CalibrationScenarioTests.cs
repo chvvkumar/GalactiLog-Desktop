@@ -261,7 +261,9 @@ public class CalibrationScenarioTests
         Generate(h.Page);
         var jobs = Jobs(h.Page.ScriptText!);
         var entry = jobs.Single(j => Is(j.Src, leaf)).Dst;
-        Assert.Equal(entry + @"\FLAT\CamA\Angle_128.85", jobs.Single(j => Is(j.Src, flatA128)).Dst);
+        // Both land under the date folder they share, each by its own path.
+        Assert.Equal(@"Date_X\LIGHT\CamA\Target_T\Angle_128.85", entry);
+        Assert.Equal(@"Date_X\FLAT\CamA\Angle_128.85", jobs.Single(j => Is(j.Src, flatA128)).Dst);
         Assert.Equal(2, jobs.Count);
         Assert.DoesNotContain(jobs, j => j.Dst.Contains("Angle_139.07", StringComparison.Ordinal) || j.Dst.Contains("CamB", StringComparison.Ordinal));
 
@@ -310,7 +312,7 @@ public class CalibrationScenarioTests
     }
 
     [Fact]
-    public async Task Asiair_SinglePile_WithAMisfiledDarkFlat_IsReachedByLookHigher_AndRoutedByHeader()
+    public async Task Asiair_SinglePile_WithAMisfiledDarkFlat_IsReachedByLookHigher_AndCopiedAsOneFolder()
     {
         using var t = new Tree();
         var plan = t.P("Plan");
@@ -347,21 +349,18 @@ public class CalibrationScenarioTests
         Stage(h);
         Generate(h.Page);
         var jobs = Jobs(h.Page.ScriptText!);
-        var entry = jobs.Single(j => Is(j.Src, ic)).Dst;
-        var fromPile = jobs.Where(j => Is(j.Src, pile)).ToList();
-        Assert.Equal(2, fromPile.Count);
-        var flat = fromPile.Single(j => j.Dst == entry + @"\FLAT");
-        Assert.Equal(["Flat_Ha_dark.fit", "Flat_Oiii_1.fit", "Flat_Oiii_2.fit"], flat.ExcludeFiles.Order(StringComparer.Ordinal));
-        var darkFlat = fromPile.Single(j => j.Dst.StartsWith(entry + @"\DARKFLAT", StringComparison.Ordinal));
-        Assert.Equal(
-            ["Flat_Ha_1.fit", "Flat_Ha_2.fit", "Flat_Ha_3.fit", "Flat_Oiii_1.fit", "Flat_Oiii_2.fit"],
-            darkFlat.ExcludeFiles.Order(StringComparer.Ordinal));
+        // The pile is one folder, so it is one operation under its own path: the misfiled dark
+        // flat travels with the flats it was filed among, and the unselected frames stay behind.
+        Assert.Equal(@"Plan\Light\IC1848", jobs.Single(j => Is(j.Src, ic)).Dst);
+        var fromPile = Assert.Single(jobs, j => Is(j.Src, pile));
+        Assert.Equal(@"Plan\Flat", fromPile.Dst);
+        Assert.Equal(["Flat_Oiii_1.fit", "Flat_Oiii_2.fit"], fromPile.ExcludeFiles.Order(StringComparer.Ordinal));
 
         var result = await Copy(h);
         Assert.Equal(StagingOutcome.Completed, result.Outcome);
         var staged = Staged(h);
-        Assert.Equal(3, staged.Count(p => p.Contains(@"\FLAT\Flat_Ha_", StringComparison.Ordinal)));
-        Assert.Single(staged, p => p.EndsWith("Flat_Ha_dark.fit", StringComparison.Ordinal) && p.Contains(@"\DARKFLAT\", StringComparison.Ordinal));
+        Assert.Equal(3, staged.Count(p => p.StartsWith(@"Plan\Flat\Flat_Ha_", StringComparison.Ordinal) && !p.EndsWith("dark.fit", StringComparison.Ordinal)));
+        Assert.Single(staged, p => p == @"Plan\Flat\Flat_Ha_dark.fit");
         Assert.DoesNotContain(staged, p => p.Contains("Oiii", StringComparison.Ordinal));
     }
 
@@ -420,7 +419,7 @@ public class CalibrationScenarioTests
         Assert.Equal(4, result.Copied);
         var staged = Staged(h);
         Assert.DoesNotContain(staged, p => p.EndsWith("x1.fits", StringComparison.Ordinal) || p.EndsWith("x2.fits", StringComparison.Ordinal));
-        Assert.Equal(3, staged.Count(p => Path.GetDirectoryName(p)!.Split(Path.DirectorySeparatorChar).Length == 1));
+        Assert.Equal(3, staged.Count(p => Path.GetDirectoryName(p) == Path.Combine("2025-10-15", "LIGHT", "Ha")));
     }
 
     [Fact]

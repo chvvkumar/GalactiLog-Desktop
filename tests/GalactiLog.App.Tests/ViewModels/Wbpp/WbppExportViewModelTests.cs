@@ -790,42 +790,24 @@ public class WbppExportViewModelTests
     }
 
     [Fact]
-    public void TheStagingRenameIsStatedOnTheRowsItHappensToAndNoOthers()
+    public void TheReviewStepNamesTheStartFolder_TheDeepestFolderEveryCopiedFolderShares()
     {
-        // Nights 1 and 3 both pick a leaf named Ha, which is the collision case; night 2 picks
-        // OIII and states nothing.
-        var library = new Library()
-            .Frame(N1, Ha(N1, "a.fits"))
-            .Frame(N2, Path.Combine(Library.Root, "M31", "2025-03-21", "OIII", "a.fits"))
-            .Frame(N3, Ha(N3, "a.fits"));
+        using var two = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N2, Ha(N2, "a.fits")), [N1, N2]);
+        Assert.Equal(@"Folder names kept from C:\p16lib\M31", two.Page.FolderNamesKeptText);
 
-        using var harness = ExportHarness.Create(library, [N1, N2, N3]);
-
-        Assert.Equal("2025-03-20_Ha", harness.Page.Sessions[0].StagingName);
-        Assert.Equal("", harness.Page.Sessions[1].StagingName);
-        Assert.False(harness.Page.Sessions[1].HasStagingName);
-        Assert.Equal("2025-03-22_Ha", harness.Page.Sessions[2].StagingName);
+        using var one = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1]);
+        Assert.Equal(@"Folder names kept from C:\p16lib", one.Page.FolderNamesKeptText);
     }
 
     [Fact]
-    public void ARefreshWithNoNightOfferingAPick_ClearsTheNamesRatherThanLeavingThemStanding()
+    public void TheReviewStepSaysEachScanRoot_WhenTheNightsSitUnderTwoRoots()
     {
-        // Latent rather than shipped: the levels are fixed at load and a night with levels always
-        // has a pick, so nothing on the page reaches this state today. The rule is pinned anyway,
-        // because a row keeping its last name would state a rename for a plan the page no longer
-        // holds, and the state is one level list away from being reachable.
-        using var harness = ExportHarness.Create(new Library().EmptyNight(N1), [N1]);
-        var session = harness.Page.Sessions[0];
-        Assert.Null(session.Chosen);
+        var library = new Library().Frame(N1, Ha(N1, "a.fits"));
+        library.ScanRoots.Add(Library.SecondRoot);
+        library.Frame(N2, Path.Combine(Library.SecondRoot, "M31", "2025-03-21", "Ha", "a.fits"));
+        using var harness = ExportHarness.Create(library, [N1, N2]);
 
-        session.SetStagingEntryName("2025-03-20_Ha");
-        Assert.True(session.HasStagingName);
-
-        // A pick moving with nothing to pick is what reaches the refresh's early return.
-        session.ChosenIndex = 0;
-
-        Assert.Equal("", session.StagingName);
-        Assert.False(session.HasStagingName);
+        Assert.Equal("Folder names kept from each scan root", harness.Page.FolderNamesKeptText);
     }
 
     // ------------------------------------------------------ 10.4 the totals, including unknown

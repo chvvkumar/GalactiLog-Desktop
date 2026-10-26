@@ -223,13 +223,6 @@
                                 Command="{Binding ToggleCommand}" />
                       </Grid>
     
-                      <!-- Spec 12.13's rename note, on the rows it happens to and on no others. The
-                           name is FolderLevels.StagingNames' answer and is never re-derived here. -->
-                      <TextBlock Text="{Binding StagingName, StringFormat='Copied under {0}'}"
-                                 IsVisible="{Binding HasStagingName}"
-                                 ToolTip.Tip="{Binding StagingNameTooltip}"
-                                 Foreground="{DynamicResource ColorTextSecondary}" />
-    
                       <!-- Seam review ruling 3's partial case: the night keeps its levels and states
                            the count its levels leave behind, read from SessionLevels and never
                            subtracted from two figures. -->
@@ -529,7 +522,7 @@
     <!-- Step 5: the summary, the blocks and warnings, and the running copy's progress. -->
     <DataTemplate DataType="wbpp:ReviewStep">
       <StackPanel Spacing="10">
-        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="4">
+        <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto,Auto" ColumnSpacing="16" RowSpacing="4">
           <TextBlock Grid.Row="0" Text="Nights" Foreground="{DynamicResource ColorTextSecondary}" />
           <TextBlock Grid.Row="0" Grid.Column="1" x:Name="ReviewNights" Text="{Binding NightsText}" />
           <TextBlock Grid.Row="1" Text="Folders" Foreground="{DynamicResource ColorTextSecondary}" />
@@ -547,6 +540,11 @@
           <TextBlock Grid.Row="5" Grid.Column="1" x:Name="ReviewDestination" Classes="mono" TextWrapping="Wrap" Text="{Binding DestinationText}" />
           <TextBlock Grid.Row="6" Text="Method" Foreground="{DynamicResource ColorTextSecondary}" />
           <TextBlock Grid.Row="6" Grid.Column="1" x:Name="ReviewMethod" Text="{Binding MethodText}" />
+          <TextBlock Grid.Row="7" Grid.Column="1" x:Name="ReviewFolderNames"
+                     Text="{Binding Page.FolderNamesKeptText}"
+                     IsVisible="{Binding Page.FolderNamesKeptText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                     TextWrapping="Wrap"
+                     Foreground="{DynamicResource ColorTextSecondary}" />
         </Grid>
 
         <TextBlock Text="{Binding Page.FooterNoteText}"

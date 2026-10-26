@@ -514,7 +514,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         TotalFrameCount = sessions.Sum(levels => levels.TotalFrameCount);
         IsLoading = false;
 
-        RefreshStagingNames();
         RecheckStaging(StagingPath);
         RefreshFooter();
         foreach (var session in Sessions)
@@ -588,7 +587,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
     private void OnLevelChanged(SessionLevelViewModel session)
     {
-        RefreshStagingNames();
         ReadForeignLights(session);
         _scanDriver?.Follow(session);
 
@@ -660,30 +658,21 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             .OfType<FrameKeys>());
     }
 
-    // The lights operations, then each night's calibration operations under that night's own
-    // staging entry name.
-    private IReadOnlyList<CopyOperation> PlanOperations()
-    {
-        var chosen = ChosenLevels();
-        List<CopyOperation> operations = [.. FolderLevels.CopyOperations(chosen, PlanExcludes())];
-        if (chosen.Count == 0)
-        {
-            return operations;
-        }
+    // The lights source of every chosen level in page order, then every night's calibration
+    // sources. StagingLayout.Plan names them all at once, so nothing here derives an entry name.
+    private IReadOnlyList<CopySource> PlanSources() =>
+    [
+        .. FolderLevels.CopySources(
+            ChosenLevels(),
+            [.. Sessions.Where(session => session.Chosen is not null).Select(session => session.ScanRoot)],
+            PlanExcludes()),
+        .. Sessions.SelectMany(session => session.CalibrationSources()),
+    ];
 
-        var names = FolderLevels.StagingNames(chosen);
-        var index = 0;
-        foreach (var session in Sessions)
-        {
-            if (session.Chosen is not null)
-            {
-                operations.AddRange(session.CalibrationOperations(names[index]));
-                index++;
-            }
-        }
+    private StagingPlan PlanStaging() => StagingLayout.Plan(PlanSources());
 
-        return operations;
-    }
+    // Generate and the copy both call this, so the script and the figures read one plan.
+    private IReadOnlyList<CopyOperation> PlanOperations() => PlanStaging().Operations;
 
     /// <summary>
     /// Reads the folders inside one row of a night's folder tree and hands them back to it as
@@ -797,7 +786,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     }
 
     // Each night's per-file excludes for the copy plan: its own filtered frames under its chosen
-    // level, then its foreign files, keyed by night so CopyOperations never hands one night's
+    // level, then its foreign files, keyed by night so CopySources never hands one night's
     // excludes to another night's operation on the same folder.
     private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> PlanExcludes()
     {
@@ -843,39 +832,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         }
 
         return excluded;
-    }
-
-    private void RefreshStagingNames()
-    {
-        var chosen = ChosenLevels();
-        if (chosen.Count == 0)
-        {
-            // Nothing to name, so nothing states a rename: the names are cleared rather than left
-            // standing at whatever the last refresh set (review P3-9). Latent today, because the
-            // levels are fixed at load and a night with levels always has a pick.
-            foreach (var session in Sessions)
-            {
-                session.SetStagingEntryName("");
-            }
-
-            return;
-        }
-
-        // The names are Task 2's, including a date prefix and a _2 suffix. Nothing here re-derives,
-        // re-cases or re-suffixes one: each row is told its own name and decides only whether to
-        // state it.
-        var names = FolderLevels.StagingNames(chosen);
-        var index = 0;
-        foreach (var session in Sessions)
-        {
-            if (session.Chosen is null)
-            {
-                continue;
-            }
-
-            session.SetStagingEntryName(names[index]);
-            index++;
-        }
     }
 
     // ------------------------------------------------------------------ the footer
@@ -937,6 +893,12 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// measurable. Task 2's arithmetic, never computed here.</summary>
     public int LongestDestinationLength { get; private set; }
 
+    /// <summary>The review step's line on where the copied folder names start: "Folder names kept
+    /// from" the plan's start folder, "Folder names kept from each scan root" when the plan has
+    /// operations under several roots, and empty when it has none.</summary>
+    [ObservableProperty]
+    private string _folderNamesKeptText = "";
+
     private void RefreshFooter()
     {
         if (IsLoading)
@@ -945,10 +907,15 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             FolderCountText = "";
             SizeText = "";
             TotalSizeBytes = null;
+            FolderNamesKeptText = "";
             return;
         }
 
         var chosen = ChosenLevels();
+        var plan = PlanStaging();
+        FolderNamesKeptText = plan.StartFolder is { } start ? "Folder names kept from " + start
+            : plan.Operations.Count > 0 ? "Folder names kept from each scan root"
+            : "";
         var excludedByNight = ExcludedByNight();
         var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, excludedByNight);
         var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded());
@@ -1014,31 +981,30 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             : totals.FrameCount <= 0 ? EmptyExportWarning
             : "";
 
-        RefreshLongPath(chosen);
+        RefreshLongPath(plan.Operations);
         GenerateCommand.NotifyCanExecuteChanged();
     }
 
     // Recomputed on a level change and on a staging folder change, because both move the figure,
     // and on nothing else. A figure computed once at load shows a clean page to a user who then
     // picks the level that breaks their copy.
-    private void RefreshLongPath(IReadOnlyList<ChosenLevel> chosen)
+    private void RefreshLongPath(IReadOnlyList<CopyOperation> operations)
     {
         LongestDestinationLength = 0;
         LongPathText = "";
 
-        if (_catalogue is not { } catalogue || CopyDestination is not { } staging || chosen.Count == 0)
+        if (_catalogue is not { } catalogue || CopyDestination is not { } staging || operations.Count == 0)
         {
             return;
         }
 
-        var names = FolderLevels.StagingNames(chosen);
-        var longest = 0;
-        for (var i = 0; i < chosen.Count; i++)
-        {
-            longest = Math.Max(
-                longest,
-                FolderLevels.LongestDestinationLength(chosen[i], staging, names[i], catalogue));
-        }
+        // Every operation, calibration included: the scan supplies the figure for files the
+        // catalogue does not hold.
+        var longest = operations.Max(operation => FolderLevels.LongestDestinationLength(
+            operation,
+            staging,
+            catalogue,
+            Sessions.Count == 0 ? 0 : Sessions.Max(session => session.LongestScannedRelative(operation.SourcePath))));
 
         LongestDestinationLength = longest;
         if (longest >= LongPathThreshold)
@@ -1047,8 +1013,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 + longest.ToString(CultureInfo.InvariantCulture)
                 + " characters. Windows refuses a path of 260 characters or more unless long paths "
                 + "are enabled, and the script stops at the first file it cannot create, leaving a "
-                + "partial copy. Choose a shorter staging folder, or a deeper folder for the nights "
-                + "with the longest paths.";
+                + "partial copy. Choose a shorter staging folder.";
         }
     }
 
@@ -1328,7 +1293,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private void AfterStagingChanged()
     {
         StagingFolderText = _committedStaging ?? "";
-        RefreshLongPath(ChosenLevels());
+        RefreshLongPath(PlanOperations());
         OnPropertyChanged(nameof(CopyDestination));
 
         // GenerateDisabledReason and IsGenerateAvailable are expressions over the committed value,
@@ -1416,7 +1381,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     // The subfolder moves every destination path, so the long-path figure and any script follow it.
     partial void OnIsSubfolderOnChanged(bool value)
     {
-        RefreshLongPath(ChosenLevels());
+        RefreshLongPath(PlanOperations());
         WithdrawScript();
     }
 
@@ -1792,7 +1757,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             "excluded file" => "one of the frames the filter excluded",
             "excluded folder" => "one of the skipped folders",
             "SourcePath" => "one of the folders this export copies from",
-            "EntryName" => "one of the staging folder names",
+            "EntryName" => "one of the folder paths this export writes",
             "StagingRoot" => "the staging folder",
             "TargetName" => "the target name",
             "FileName" => "the script file name",
