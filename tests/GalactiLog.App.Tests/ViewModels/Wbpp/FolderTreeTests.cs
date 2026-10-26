@@ -523,7 +523,7 @@ public class FolderTreeTests
     }
 
     [Fact]
-    public void AMixedFolder_StaysTicked_ExcludesForeignFilesPerFile_AndReadsKOfN()
+    public async Task AMixedFolder_StaysTicked_ExcludesForeignFilesPerFile_AndReadsKOfN()
     {
         var x1 = Ha(N1, "x1.fits");
         var x2 = Ha(N1, "x2.fits");
@@ -566,8 +566,129 @@ public class FolderTreeTests
         h.Destination = h.ScriptPath("wbpp.ps1");
         Generate(h.Page);
 
-        Assert.Contains("x1.fits", h.Page.ScriptText!, StringComparison.Ordinal);
-        Assert.Contains("x2.fits", h.Page.ScriptText!, StringComparison.Ordinal);
+        Assert.Equal(["@('x1.fits', 'x2.fits')"], ExcludeFilesOf(h.Page.ScriptText!));
+
+        // The in-app copy leaves them out too: the fake disk lists every file in the folder.
+        var source = h.TempFolder("source");
+        foreach (var name in new[] { "a.fits", "b.fits", "c.fits", "x1.fits", "x2.fits" })
+        {
+            File.WriteAllBytes(Path.Combine(source, name), [1]);
+        }
+
+        var created = new List<string>();
+        h.Page.StagingIoFor = _ => new StagingIo(
+            _ => new MemoryStream([1]),
+            _ => new DirectoryInfo(source).GetFiles(),
+            _ => null,
+            _ => { },
+            path =>
+            {
+                lock (created)
+                {
+                    created.Add(Path.GetFileName(path));
+                }
+
+                return new MemoryStream();
+            });
+        var result = await h.Page.RunCopyAsync(new Progress<StagingProgress>(), io => io, CancellationToken.None);
+
+        Assert.Equal(3, result.Copied);
+        Assert.Equal(["a.fits", "b.fits", "c.fits"], created.Order(StringComparer.Ordinal));
+    }
+
+    // Each PowerShell job's ExcludeFiles array, in job order.
+    private static IReadOnlyList<string> ExcludeFilesOf(string script)
+        => [.. script.Split('\n')
+            .Where(line => line.TrimStart().StartsWith("@{ Src", StringComparison.Ordinal))
+            .Select(line => line[(line.IndexOf("ExcludeFiles = ", StringComparison.Ordinal) + "ExcludeFiles = ".Length)..])
+            .Select(rest => rest[..(rest.IndexOf(')', StringComparison.Ordinal) + 1)])];
+
+    [Fact]
+    public void TwoNightsSharingOneChosenFolder_EachExcludeOnlyTheirOwnNightsForeignFiles()
+    {
+        // A flat layout: both nights' frames in one folder, so each night's foreign read returns
+        // the other night's frame, and both nights choose that same folder.
+        var flat = Path.Combine(M31, "Ha");
+        var n1 = Path.Combine(flat, "n1.fits");
+        var n2 = Path.Combine(flat, "n2.fits");
+        var library = new Library().Frame(N1, n1).Frame(N2, n2);
+        using var h = ExportHarness.Create(library, [N1, N2], listSubfolders: _ => [], readForeignLights: (_, _, night, _) =>
+            night == N1 ? [new WbppFramePath(library.Ids[n2], n2, 1_000)] : [new WbppFramePath(library.Ids[n1], n1, 1_000)]);
+        foreach (var session in h.Page.Sessions)
+        {
+            session.ChosenIndex = Row(session, flat).Index;
+            Settle(session);
+        }
+
+        Until(() => h.Page.Sessions.All(session => session.ForeignExcluded.Count == 1));
+        h.Page.StagingPath = h.TempFolder("staging");
+        h.Page.CommitStagingCommand.Execute(null);
+        h.Page.SavedConfirmationDuration = TimeSpan.Zero;
+        h.Destination = h.ScriptPath("wbpp.ps1");
+        Generate(h.Page);
+
+        Assert.Equal(["@('n2.fits')", "@('n1.fits')"], ExcludeFilesOf(h.Page.ScriptText!));
+    }
+
+    [Fact]
+    public void AForeignReadLandingAfterGenerate_WithdrawsTheScript()
+    {
+        using var gate = new ManualResetEventSlim(false);
+        using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], readForeignLights: (_, _, _, _) =>
+        {
+            gate.Wait(TimeSpan.FromSeconds(10));
+            return [new WbppFramePath(Guid.NewGuid(), Ha(N1, "x.fits"), 500)];
+        });
+        h.Page.StagingPath = h.TempFolder("staging");
+        h.Page.CommitStagingCommand.Execute(null);
+        h.Page.SavedConfirmationDuration = TimeSpan.Zero;
+        h.Destination = h.ScriptPath("wbpp.ps1");
+        Generate(h.Page);
+        Assert.True(h.Page.HasScript);
+
+        gate.Set();
+
+        Until(() => !h.Page.HasScript);
+    }
+
+    [Fact]
+    public void PickingAShallowerLevel_ReReadsTheForeignLights_ForTheNewFolder()
+    {
+        // Another night's frame under Date (outside Ha) keeps the calibration start at Ha, so the
+        // first read is bounded to Ha and knows nothing of Date's other files.
+        var library = new Library()
+            .Frame(N1, Ha(N1, "a.fits"))
+            .Frame(N2, Path.Combine(Date, "Other", "z.fits"));
+        var reads = new List<string>();
+        using var h = ExportHarness.Create(library, [N1], listSubfolders: _ => [], readForeignLights: (folder, _, _, _) =>
+        {
+            lock (reads)
+            {
+                reads.Add(folder);
+            }
+
+            return Is(folder, Date) ? [new WbppFramePath(Guid.NewGuid(), Path.Combine(Date, "OIII", "f.fits"), 500)] : [];
+        });
+        var session = h.Page.Sessions[0];
+        var date = Row(session, Date);
+        Until(() => { lock (reads) { return reads.Count == 1; } });
+        lock (reads)
+        {
+            Assert.Equal([HaFolder], reads);
+        }
+
+        Assert.Equal("1 light frame", date.FrameCountText);
+
+        session.ChosenIndex = date.Index;
+        Until(() => date.FrameCountText == "1 of 2 files");
+
+        // A deeper pick, and the same shallow one again, read nothing more.
+        session.ChosenIndex = Row(session, HaFolder).Index;
+        session.ChosenIndex = date.Index;
+        lock (reads)
+        {
+            Assert.Equal([HaFolder, Date], reads);
+        }
     }
 
     [Fact]

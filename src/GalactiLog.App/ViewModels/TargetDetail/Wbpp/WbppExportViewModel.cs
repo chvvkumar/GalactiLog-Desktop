@@ -122,6 +122,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
     private readonly Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? _readForeignLights;
 
+    // The folder each night's foreign lights were last read under. UI thread only.
+    private readonly Dictionary<DateOnly, string> _foreignFolder = [];
+
     // The night's frames as the query returned them, which is what an excluded image id is
     // resolved against. The catalogue itself is never held: the query returns the built index
     // (seam-review ruling 6) and a 200,000 frame library never materialises here.
@@ -473,7 +476,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         RefreshStagingNames();
         RecheckStaging(StagingPath);
         RefreshFooter();
-        ReadForeignLights();
+        foreach (var session in Sessions)
+        {
+            ReadForeignLights(session);
+        }
 
         // The slot is filled last, so the panel is built over a page whose levels and rig key are
         // already settled. Null leaves it empty, which is the correct reading of "no filter".
@@ -532,8 +538,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
     private void OnLevelChanged(SessionLevelViewModel session)
     {
-        _ = session;
         RefreshStagingNames();
+        ReadForeignLights(session);
 
         // A level change moves the source set the staging rule's second clause tests against, so
         // the check is re-run: a folder that was legal under one pick can become illegal under a
@@ -598,51 +604,77 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Reads each available night's foreign LIGHT files under its calibration start level, which
-    /// bounds the read to the folder the header scan will cover, and hands them to the night.
+    /// Reads one night's foreign LIGHT files under the shallower of its calibration start level and
+    /// its chosen level, which bounds the read to the folders the scan and the copy cover, and hands
+    /// them to the night. A pick inside the folder last read reads nothing again.
     /// </summary>
-    /// <remarks>On <c>Task.Run</c> and back through <see cref="_post"/>, as the listing is. A
-    /// failed read leaves the night with none, logged, never rethrown.</remarks>
-    private void ReadForeignLights()
+    /// <remarks>On <c>Task.Run</c> and back through <see cref="_post"/>, as the listing is. An
+    /// answer for a folder that is no longer the night's latest read is dropped. Arrival withdraws a
+    /// generated script, because the excludes it was built from have changed. A failed read leaves
+    /// the night as it was, logged, never rethrown.</remarks>
+    private void ReadForeignLights(SessionLevelViewModel session)
     {
-        if (_readForeignLights is not { } read)
+        if (_readForeignLights is not { } read || !session.HasLevels)
         {
             return;
         }
 
+        var levels = session.Levels;
+        var folder = levels.Levels[Math.Min(CalibrationClimb.StartLevel(levels, session.ChosenIndex), session.ChosenIndex)].Path;
+        var night = session.Night;
+        if (_foreignFolder.TryGetValue(night, out var last) && PathConfinement.IsUnderOrEqual(last, folder))
+        {
+            return;
+        }
+
+        _foreignFolder[night] = folder;
         var groupKey = _groupKey;
         var token = _closing.Token;
-        foreach (var session in Sessions.Where(session => session.HasLevels))
+        _ = Task.Run(() =>
         {
-            var night = session.Night;
-            var folder = session.Levels.Levels[CalibrationClimb.StartLevel(session.Levels, session.ChosenIndex)].Path;
-            _ = Task.Run(() =>
+            IReadOnlyList<WbppFramePath> frames;
+            try
             {
-                IReadOnlyList<WbppFramePath> frames;
-                try
+                frames = read(folder, groupKey, night, token);
+            }
+            catch (Exception ex)
+            {
+                if (ex is not OperationCanceledException)
                 {
-                    frames = read(folder, groupKey, night, token);
-                }
-                catch (Exception ex)
-                {
-                    if (ex is not OperationCanceledException)
-                    {
-                        _logger.LogWarning(ex, "Reading the foreign lights under {Folder} failed", folder);
-                    }
-
-                    return;
+                    _logger.LogWarning(ex, "Reading the foreign lights under {Folder} failed", folder);
                 }
 
-                _post(() =>
+                return;
+            }
+
+            _post(() =>
+            {
+                if (!_disposed && ReferenceEquals(_foreignFolder[night], folder))
                 {
-                    if (!_disposed)
-                    {
-                        session.SetForeignLights(frames);
-                        RefreshFooter();
-                    }
-                });
+                    session.SetForeignLights(frames);
+                    WithdrawScript();
+                    RefreshFooter();
+                }
             });
+        });
+    }
+
+    // Each night's per-file excludes for the copy plan: its own filtered frames under its chosen
+    // level, then its foreign files, keyed by night so CopyOperations never hands one night's
+    // excludes to another night's operation on the same folder.
+    private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> PlanExcludes()
+    {
+        var excludedByNight = ExcludedByNight();
+        var plan = new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>>();
+        foreach (var session in Sessions)
+        {
+            if (session.Chosen is { } chosen)
+            {
+                plan[session.Night] = [.. FolderLevels.ExcludedUnderLevels([chosen], excludedByNight), .. session.ForeignExcluded];
+            }
         }
+
+        return plan;
     }
 
     // Every night's foreign files the copy leaves out one by one.
@@ -1251,8 +1283,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     {
         var destination = CopyDestination ?? throw new InvalidOperationException(NoStagingReason);
         var chosen = ChosenLevels();
-        var operations = FolderLevels.CopyOperations(
-            chosen, [.. FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()), .. ForeignExcluded()]);
+        var operations = FolderLevels.CopyOperations(chosen, PlanExcludes());
         var request = new StagingCopyRequest(operations, destination, Exclusions);
         var writer = _appWriter;
         var io = StagingIoFor;
@@ -1445,8 +1476,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         GenerateError = "";
 
         var chosen = ChosenLevels();
-        var operations = FolderLevels.CopyOperations(
-            chosen, [.. FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()), .. ForeignExcluded()]);
+        var operations = FolderLevels.CopyOperations(chosen, PlanExcludes());
         var fileName = ScriptGenerator.FileNameFor(type, _targetName);
 
         string text;

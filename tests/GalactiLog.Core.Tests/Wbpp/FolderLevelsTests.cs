@@ -730,6 +730,24 @@ public class FolderLevelsTests
     }
 
     [Fact]
+    public void CopyOperations_PerNight_AssignEachExcludeOnlyToItsOwnNightsLevel()
+    {
+        // Two nights sharing one chosen folder: a path-only rule hands both excludes to the first.
+        var first = Frame(@"M31\Ha\first.fits");
+        var second = Frame(@"M31\Ha\second.fits");
+        var chosen = new[]
+        {
+            new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))),
+            new ChosenLevel(Night(2), Level(Under(@"M31\Ha"))),
+        };
+
+        var ops = FolderLevels.CopyOperations(chosen, Excluded((Night(1), [first]), (Night(2), [second])));
+
+        Assert.Equal(["first.fits"], ops[0].ExcludedRelativePaths);
+        Assert.Equal(["second.fits"], ops[1].ExcludedRelativePaths);
+    }
+
+    [Fact]
     public void CopyOperations_DropAnExcludeUnderNoChosenLevel()
     {
         var chosen = new[] { new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))) };

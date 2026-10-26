@@ -549,18 +549,37 @@ public static class FolderLevels
     public static IReadOnlyList<CopyOperation> CopyOperations(
         IReadOnlyList<ChosenLevel> chosen,
         IReadOnlyList<WbppFramePath> excludedUnderLevels)
+        => CopyOperations(chosen, excludedUnderLevels.Select(frame => ((DateOnly?)null, frame)));
+
+    /// <summary>
+    /// As the path-only overload, but each frame is assigned only among the chosen levels of its
+    /// own night, longest containing path first. Two nights sharing one chosen folder, or nesting,
+    /// then each exclude only their own night's frames.
+    /// </summary>
+    public static IReadOnlyList<CopyOperation> CopyOperations(
+        IReadOnlyList<ChosenLevel> chosen,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> excludedByNight)
+        => CopyOperations(
+            chosen,
+            excludedByNight.SelectMany(pair => pair.Value.Select(frame => ((DateOnly?)pair.Key, frame))));
+
+    // A null night matches every level, which is the path-only rule.
+    private static IReadOnlyList<CopyOperation> CopyOperations(
+        IReadOnlyList<ChosenLevel> chosen,
+        IEnumerable<(DateOnly? Night, WbppFramePath Frame)> excluded)
     {
         var names = StagingNames(chosen);
         var perLevel = chosen.Select(_ => new List<string>()).ToList();
 
-        foreach (var frame in excludedUnderLevels)
+        foreach (var (night, frame) in excluded)
         {
             var best = -1;
             var bestLength = -1;
             for (var i = 0; i < chosen.Count; i++)
             {
                 var path = chosen[i].Level.Path;
-                if (PathConfinement.IsUnderOrEqual(path, frame.FilePath) && path.Length > bestLength)
+                if ((night is null || chosen[i].Night == night)
+                    && PathConfinement.IsUnderOrEqual(path, frame.FilePath) && path.Length > bestLength)
                 {
                     best = i;
                     bestLength = path.Length;
