@@ -241,3 +241,13 @@ public sealed record CalibrationMatch(
     IReadOnlyList<CalibrationRow> Rows,
     IReadOnlyList<string> MissingFlatWarnings,
     bool EveryFilterHasAFlat);
+
+/// <summary>A path the calibration walk could not fully read, and why.</summary>
+public sealed record ScanIssue(string Path, string Reason);
+
+/// <summary>What <c>CalibrationWalk</c> found: every file below the root, the paths it could not
+/// read, and how many headers it read.</summary>
+public sealed record WalkResult(IReadOnlyList<ScannedFrame> Frames, IReadOnlyList<ScanIssue> Issues, int HeadersRead);
+
+/// <summary>The settings that turn a capture instant into a night.</summary>
+public sealed record NightRule(bool UseImagingNight, double? ObserverLongitude, string? ObserverTimezone);
