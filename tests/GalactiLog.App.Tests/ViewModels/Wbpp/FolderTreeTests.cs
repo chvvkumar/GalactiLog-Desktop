@@ -604,7 +604,7 @@ public class FolderTreeTests
             .Select(rest => rest[..(rest.IndexOf(')', StringComparison.Ordinal) + 1)])];
 
     [Fact]
-    public void TwoNightsSharingOneChosenFolder_EachExcludeOnlyTheirOwnNightsForeignFiles()
+    public void TwoNightsSharingOneChosenFolder_AreOneJobThatCopiesBothNightsFrames()
     {
         // A flat layout: both nights' frames in one folder, so each night's foreign read returns
         // the other night's frame, and both nights choose that same folder.
@@ -627,7 +627,10 @@ public class FolderTreeTests
         h.Destination = h.ScriptPath("wbpp.ps1");
         Generate(h.Page);
 
-        Assert.Equal(["@('n2.fits')", "@('n1.fits')"], ExcludeFilesOf(h.Page.ScriptText!));
+        // Each night lists the other's frame as foreign, so the merged job, which stands for both
+        // nights, excludes neither.
+        var job = Assert.Single(h.Page.ScriptText!.Split('\n'), line => line.TrimStart().StartsWith("@{ Src", StringComparison.Ordinal));
+        Assert.DoesNotContain("ExcludeFiles", job, StringComparison.Ordinal);
     }
 
     [Fact]

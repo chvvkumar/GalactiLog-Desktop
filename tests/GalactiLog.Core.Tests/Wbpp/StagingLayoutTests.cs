@@ -90,18 +90,19 @@ public class StagingLayoutTests
     }
 
     [Fact]
-    public void TheSameSourceFromTwoNights_IsOneOperation_WithBothNightsExcludedFiles()
+    public void TheSameSourceFromTwoNights_IsOneOperation_ExcludingOnlyWhatBothNightsExclude()
     {
         var shared = Path.Combine(Root, "2026", "Date_2026-10-18", "LIGHT");
         var plan = StagingLayout.Plan([
-            S(N18, shared, files: ["a.fits"], dirs: ["OIII"]),
-            S(N19, shared, files: ["b.fits"], dirs: ["OIII", "Ha"])]);
+            S(N18, shared, files: ["a.fits", "bad.fits"], dirs: ["OIII"]),
+            S(N19, shared, files: ["b.fits", "bad.fits"], dirs: ["OIII", "Ha"])]);
 
         var op = Assert.Single(plan.Operations);
         Assert.Equal(N18, op.Night);
         Assert.Equal(Root, plan.StartFolder);
         Assert.Equal(@"2026\Date_2026-10-18\LIGHT", op.EntryName);
-        Assert.Equal(["a.fits", "b.fits"], op.ExcludedRelativePaths);
+        // Each list is relative to its own night: a.fits is wanted by N19, b.fits by N18.
+        Assert.Equal(["bad.fits"], op.ExcludedRelativePaths);
         Assert.Equal(["OIII"], op.ExcludedRelativeDirectories);
     }
 

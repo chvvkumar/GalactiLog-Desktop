@@ -56,9 +56,11 @@ public static class StagingLayout
     private static string Relative(string baseFolder, string path)
         => Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseFolder, path));
 
-    // Same folder from several nights becomes one entry (first night wins; files union, directories
-    // intersect, so a directory is left out only when every night left it out). A folder nested under
-    // another source is dropped unless it sits under a directory that source excludes.
+    // Same folder from several nights becomes one entry (first night wins). Excluded files and
+    // directories both intersect: each night's lists are relative to that night, since another
+    // night's frames are foreign to it, so the merged entry leaves out only what every night left
+    // out. A folder nested under another source is dropped unless it sits under a directory that
+    // source excludes.
     private static List<Kept> Dedupe(IReadOnlyList<CopySource> sources)
     {
         var groups = new List<Kept>();
@@ -71,7 +73,7 @@ public static class StagingLayout
                 groups.Add(new Kept(s, [.. s.ExcludedRelativePaths.Distinct(StringComparer.OrdinalIgnoreCase)], [.. dirs.Distinct(StringComparer.OrdinalIgnoreCase)]));
                 continue;
             }
-            g.Files.AddRange(s.ExcludedRelativePaths.Where(f => !g.Files.Contains(f, StringComparer.OrdinalIgnoreCase)));
+            g.Files.RemoveAll(f => !s.ExcludedRelativePaths.Contains(f, StringComparer.OrdinalIgnoreCase));
             g.Dirs.RemoveAll(d => !dirs.Contains(d, StringComparer.OrdinalIgnoreCase));
         }
 
