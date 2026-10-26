@@ -626,7 +626,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// (which reaches the page through the same path) does not rebuild the rows.</summary>
     private void Rematch(SessionLevelViewModel session, bool force)
     {
-        if (session.ScannedLevelIndex < 0 || session.ScanState != CalibrationScanState.Done)
+        if (session.ScannedLevelIndex < 0 || session.IsScanning)
         {
             return;
         }
@@ -958,7 +958,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
         var size = totals.SizeBytes is long lights ? lights + calibration.Sum(c => c.Bytes) : (long?)null;
         SizeText = WbppPathText.Bytes(size)
-            + (Sessions.Any(session => session.ScanState == CalibrationScanState.Scanning) ? ", sizing" : "");
+            + (Sessions.Any(session => session.IsScanning) ? ", sizing" : "");
 
         static string Group((int Count, long Bytes) group) => group.Count == 0
             ? "0"

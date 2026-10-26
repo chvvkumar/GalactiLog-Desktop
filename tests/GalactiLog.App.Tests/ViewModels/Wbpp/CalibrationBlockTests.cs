@@ -141,7 +141,7 @@ public class CalibrationBlockTests
 
         var before = disk.Calls.Count;
         session.LookHigherCommand.Execute(null);
-        Until(() => session.CalibrationRows.Count == 1 && session.ScanState == CalibrationScanState.Done);
+        Scanned(session);
 
         Assert.Equal(before + 1, disk.Calls.Count);
         Assert.Equal(plan, disk.Calls[^1]);
@@ -254,7 +254,6 @@ public class CalibrationBlockTests
         session.RescanCommand.Execute(null);
         Until(() => disk.Calls.Count == 2);
         Scanned(session);
-        Until(() => session.CalibrationRows.Count == 2);
 
         Assert.False(CalRow(session, Angle128).IsTicked);
         Assert.True(CalRow(session, Angle139).IsTicked);
@@ -328,5 +327,97 @@ public class CalibrationBlockTests
         Assert.EndsWith(", skipped 2 files that could not be read", session.ScanSentence, StringComparison.Ordinal);
         Assert.Contains(bad1, session.IssuesTooltip, StringComparison.Ordinal);
         Assert.Contains(bad2, session.IssuesTooltip, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AWalkerThatThrows_StatesCouldNotScan_AndTheExportStaysUsable()
+    {
+        using var h = ExportHarness.Create(
+            DateFirst(), [N], walk: (_, _, _, _, _) => throw new InvalidOperationException("disk gone"));
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+
+        Assert.StartsWith("Could not scan", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Empty(session.CalibrationRows);
+        Assert.Equal(MetricText.Bytes(2_000), h.Page.SizeText);
+
+        Stage(h);
+        Assert.True(h.Page.GenerateCommand.CanExecute(WbppScriptType.PowerShell));
+        Generate(h.Page);
+        Assert.True(h.Page.HasScript);
+        Assert.NotNull(h.Page.CopyDestination);
+    }
+
+    [Fact]
+    public void ANightWithNoLightSets_WalksOnce_NeverClimbs_AndWarnsOfNothing()
+    {
+        // The target-first layout that climbs twice when the lights have keys.
+        var target = Path.Combine(Library.Root, "Target_Y");
+        var light = Path.Combine(target, "LIGHT");
+        var night = Path.Combine(light, "2025-10-15");
+        var library = new Library { WithoutKeys = true }
+            .Frame(N, Path.Combine(night, "a.fits"))
+            .Foreign(Path.Combine(light, "2025-10-16", "b.fits"), N2, "obj:M 31", "M 31");
+        var disk = new FakeDisk()
+            .Add(F(Path.Combine(night, "a.fits"), CalibrationType.Light, K(), night: N))
+            .Add(F(Path.Combine(target, "FLAT", "f1.fits"), CalibrationType.Flat, K(), night: N));
+        using var h = ExportHarness.Create(library, [N], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+
+        Assert.Equal([night], disk.Calls);
+        Assert.Empty(session.Warnings);
+        Assert.Null(session.LookHigherText);
+        Assert.Equal("No calibration frames under 2025-10-15", session.NoCalibrationText);
+    }
+
+    [Fact]
+    public void AStaleScan_IsDroppedAfterRescan()
+    {
+        var disk = DateFirstDisk();
+        var gate = new ManualResetEventSlim(false);
+        var stale = Path.Combine(DateDir, "STALE");
+        var calls = 0;
+        var firstReturned = false;
+        CalibrationWalk.Walker walk = (root, sizeOnly, rule, progress, ct) =>
+        {
+            if (Interlocked.Increment(ref calls) > 1)
+            {
+                return disk.Walker(root, sizeOnly, rule, progress, ct);
+            }
+
+            gate.Wait(TimeSpan.FromSeconds(30));
+            Volatile.Write(ref firstReturned, true);
+            return new WalkResult([F(Path.Combine(stale, "s.fits"), CalibrationType.Flat, K(), night: N)], [], 1);
+        };
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: walk);
+        var session = h.Page.Sessions[0];
+        Until(() => Volatile.Read(ref calls) == 1);
+
+        session.RescanCommand.Execute(null);
+        Scanned(session);
+        Assert.Equal(2, session.CalibrationRows.Count);
+
+        gate.Set();
+        Until(() => Volatile.Read(ref firstReturned));
+        Assert.False(SpinWait.SpinUntil(
+            () => session.CalibrationRows.Any(row => Is(row.Row.Folder, stale)), TimeSpan.FromMilliseconds(300)));
+        Assert.Equal(2, session.CalibrationRows.Count);
+        Assert.Equal(CalibrationScanState.Done, session.ScanState);
+    }
+
+    [Fact]
+    public void ACalibrationRowTick_WithdrawsAGeneratedScript()
+    {
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: DateFirstDisk().Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Stage(h);
+        Generate(h.Page);
+        Assert.True(h.Page.HasScript);
+
+        CalRow(session, Angle139).IsTicked = true;
+
+        Assert.False(h.Page.HasScript);
     }
 }

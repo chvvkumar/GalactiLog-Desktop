@@ -157,6 +157,7 @@ internal sealed class CalibrationScanDriver(
                     {
                         session.FailScan(failed);
                         published(session);
+                        session.MarkDone();
                     });
                     return;
                 }
@@ -166,6 +167,7 @@ internal sealed class CalibrationScanDriver(
                 {
                     session.CompleteScan(frames, roots, level, headers, issues, elapsed);
                     published(session);
+                    session.MarkDone();
                 });
 
                 // The Look in offer's file count: the parent listed, sizes only, no header read.

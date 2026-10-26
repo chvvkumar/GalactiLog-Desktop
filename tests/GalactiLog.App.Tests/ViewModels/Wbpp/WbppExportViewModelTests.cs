@@ -36,6 +36,9 @@ internal sealed class Library
     /// <summary>The target's display name.</summary>
     public string TargetName { get; set; } = "M 31";
 
+    /// <summary>When true the query answers no match keys, so no night has a light set.</summary>
+    public bool WithoutKeys { get; set; }
+
     /// <summary>The configured scan roots.</summary>
     public List<string> ScanRoots { get; } = [Root];
 
@@ -92,7 +95,7 @@ internal sealed class Library
         return new WbppPaths(
             byNight,
             ContaminationIndex.Build([.. ScanRoots], _catalogue),
-            _keys);
+            WithoutKeys ? null : _keys);
     }
 
     private List<WbppFramePath> Night(DateOnly night)

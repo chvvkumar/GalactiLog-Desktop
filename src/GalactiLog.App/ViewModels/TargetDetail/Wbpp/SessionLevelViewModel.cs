@@ -577,6 +577,14 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [ObservableProperty]
     private string? _lookHigherText;
 
+    /// <summary>Whether a scan is running. Cleared when its result is taken, ahead of
+    /// <see cref="ScanState"/>, which turns Done only after the page has matched and published the
+    /// result, so an observer of Done always sees the finished rows.</summary>
+    internal bool IsScanning { get; private set; }
+
+    /// <summary>The last mutation of a scan's publish: the block reads Done.</summary>
+    internal void MarkDone() => ScanState = CalibrationScanState.Done;
+
     /// <summary>The level the last scan reached, or -1 before one finished.</summary>
     public int ScannedLevelIndex { get; private set; } = -1;
 
@@ -618,6 +626,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// keeps it on screen until the new one lands.</summary>
     internal void BeginScan(string folder, bool fresh)
     {
+        IsScanning = true;
         ScanState = CalibrationScanState.Scanning;
         ReportProgress(fresh ? 0 : HeadersRead, folder);
         LookHigherText = null;
@@ -664,7 +673,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         };
         IssuesTooltip = string.Join(Environment.NewLine, issues.Select(issue => issue.Path));
         ProgressText = "";
-        ScanState = CalibrationScanState.Done;
+        IsScanning = false;
     }
 
     /// <summary>A scan that failed: the night exports its lights alone.</summary>
@@ -678,7 +687,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         IssuesTooltip = "";
         ProgressText = "";
         ClearResult();
-        ScanState = CalibrationScanState.Done;
+        IsScanning = false;
     }
 
     /// <summary>Takes the file count the listing of a parent level found.</summary>
@@ -830,7 +839,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     }
 
     private void RefreshLookHigher()
-        => LookHigherText = ScanState == CalibrationScanState.Done
+        => LookHigherText = !IsScanning
             && Match is { EveryFilterHasAFlat: false } match
             && match.LightSets.Count > 0
             && ScannedLevelIndex >= 0
