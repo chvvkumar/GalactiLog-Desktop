@@ -131,6 +131,10 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         if (HasLevels)
         {
             Rows[_chosenIndex].IsChosen = true;
+
+            // The chosen row is never auto-unticked; its report is a pick of the same index, so
+            // nothing reaches the page mid-build.
+            Rows[_chosenIndex].IsIncluded = true;
         }
 
         ApplyZones();
@@ -273,6 +277,43 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             return new ChosenLevel(Night, Levels.Levels[ChosenIndex], skipped.Count == 0 ? null : skipped);
         }
     }
+
+    // Other targets' and other nights' LIGHT files under the night's start level, as the page read
+    // them after load. Empty until then.
+    private IReadOnlyList<WbppFramePath> _foreign = [];
+
+    /// <summary>Takes the foreign LIGHT files the page read for this night and states each row's
+    /// share of them. Called on the UI thread.</summary>
+    public void SetForeignLights(IReadOnlyList<WbppFramePath> frames)
+    {
+        ArgumentNullException.ThrowIfNull(frames);
+
+        _foreign = frames;
+        foreach (var root in Roots)
+        {
+            CountForeign(root);
+        }
+    }
+
+    /// <summary>States the foreign file count on a row and every row under it, for rows a listing
+    /// built after the foreign files arrived.</summary>
+    public void CountForeign(FolderNodeViewModel row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+
+        row.SetForeignCount(_foreign.Count(frame => PathConfinement.IsUnderOrEqual(row.Level.Path, frame.FilePath)));
+        foreach (var child in row.Children)
+        {
+            CountForeign(child);
+        }
+    }
+
+    /// <summary>The foreign LIGHT files the copy leaves out one by one: those under the chosen level
+    /// and under no skipped folder, which is left out whole.</summary>
+    public IReadOnlyList<WbppFramePath> ForeignExcluded => Chosen is { } chosen
+        ? [.. _foreign.Where(frame => PathConfinement.IsUnderOrEqual(chosen.Level.Path, frame.FilePath)
+            && !(chosen.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)))]
+        : [];
 
     // ------------------------------------------------------------------ the skips
 
@@ -426,6 +467,12 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         foreach (var row in Rows)
         {
             row.IsChosen = row.Index == value;
+        }
+
+        // The newly chosen row copies whole, whatever its tick said under the old pick.
+        if (HasLevels)
+        {
+            Rows[value].IsIncluded = true;
         }
 
         ApplyZones();

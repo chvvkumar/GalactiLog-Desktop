@@ -1693,6 +1693,7 @@ public static class AppHost
                     serviceProvider.GetRequiredService<ShellIntegration>().CopyTextAsync,
                     // The page's only source-side disk read; the view-models see it as a delegate.
                     listSubfolders: SourceSubfolders.OnDisk,
+                    readForeignLights: serviceProvider.GetRequiredService<WbppPathsQuery>().ForeignLightsUnder,
                     // Spec 12.13's quality filter panel (Phase 16 Task 3b), built into the page's
                     // own slot. The page resolves the rig and holds the frames and their gradings;
                     // this lambda is the one place the two shapes meet, and it is here rather than

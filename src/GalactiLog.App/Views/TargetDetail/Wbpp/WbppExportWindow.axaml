@@ -68,7 +68,7 @@
                          IsVisible="{Binding IsChosenZone}"
                          Classes="t-caption"
                          Foreground="{DynamicResource ColorAccent}" />
-              <TextBlock Text="{x:Static wbpp:FolderNodeViewModel.SkippedText}"
+              <TextBlock Text="{Binding RowTag}"
                          IsVisible="{Binding IsSkipped}"
                          Foreground="{DynamicResource ColorWarning}" />
             </StackPanel>

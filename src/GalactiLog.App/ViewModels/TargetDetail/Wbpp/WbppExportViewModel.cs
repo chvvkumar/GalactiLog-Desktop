@@ -120,6 +120,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private readonly Action<Action> _post;
     private readonly ILogger _logger;
     private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
+    private readonly Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? _readForeignLights;
 
     // The night's frames as the query returned them, which is what an excluded image id is
     // resolved against. The catalogue itself is never held: the query returns the built index
@@ -173,6 +174,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// child directories as absolute paths, or null when it cannot be read. Called off the UI
     /// thread, once per folder tree row the first time it is expanded, which for the night's
     /// levels is on load. Null lists nothing: each tree shows its levels alone.</param>
+    /// <param name="readForeignLights">Normally <c>WbppPathsQuery.ForeignLightsUnder</c>: the LIGHT
+    /// files under a folder that are not this group's on this night. Called off the UI thread, once
+    /// per available night after load. Null reads nothing.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
@@ -187,7 +191,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             Action<IReadOnlyCollection<Guid>>, object>? createQualityPanel = null,
         Action<Action>? post = null,
         ILogger? logger = null,
-        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null,
+        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null)
     {
         ArgumentNullException.ThrowIfNull(nights);
         ArgumentNullException.ThrowIfNull(readPaths);
@@ -210,6 +215,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         _post = post ?? UiPost.Default;
         _logger = logger ?? NullLogger.Instance;
         _listSubfolders = listSubfolders;
+        _readForeignLights = readForeignLights;
 
         var general = _getGeneral();
 
@@ -467,6 +473,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         RefreshStagingNames();
         RecheckStaging(StagingPath);
         RefreshFooter();
+        ReadForeignLights();
 
         // The slot is filled last, so the panel is built over a page whose levels and rig key are
         // already settled. Null leaves it empty, which is the correct reading of "no filter".
@@ -584,10 +591,62 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 if (!_disposed)
                 {
                     row.SetChildren(result);
+                    session.CountForeign(row);
                 }
             });
         });
     }
+
+    /// <summary>
+    /// Reads each available night's foreign LIGHT files under its calibration start level, which
+    /// bounds the read to the folder the header scan will cover, and hands them to the night.
+    /// </summary>
+    /// <remarks>On <c>Task.Run</c> and back through <see cref="_post"/>, as the listing is. A
+    /// failed read leaves the night with none, logged, never rethrown.</remarks>
+    private void ReadForeignLights()
+    {
+        if (_readForeignLights is not { } read)
+        {
+            return;
+        }
+
+        var groupKey = _groupKey;
+        var token = _closing.Token;
+        foreach (var session in Sessions.Where(session => session.HasLevels))
+        {
+            var night = session.Night;
+            var folder = session.Levels.Levels[CalibrationClimb.StartLevel(session.Levels, session.ChosenIndex)].Path;
+            _ = Task.Run(() =>
+            {
+                IReadOnlyList<WbppFramePath> frames;
+                try
+                {
+                    frames = read(folder, groupKey, night, token);
+                }
+                catch (Exception ex)
+                {
+                    if (ex is not OperationCanceledException)
+                    {
+                        _logger.LogWarning(ex, "Reading the foreign lights under {Folder} failed", folder);
+                    }
+
+                    return;
+                }
+
+                _post(() =>
+                {
+                    if (!_disposed)
+                    {
+                        session.SetForeignLights(frames);
+                        RefreshFooter();
+                    }
+                });
+            });
+        }
+    }
+
+    // Every night's foreign files the copy leaves out one by one.
+    private IReadOnlyList<WbppFramePath> ForeignExcluded() => [.. Sessions.SelectMany(session => session.ForeignExcluded)];
 
     private IReadOnlyList<ChosenLevel> ChosenLevels() =>
         [.. Sessions.Select(session => session.Chosen).OfType<ChosenLevel>()];
@@ -708,7 +767,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         var chosen = ChosenLevels();
         var excludedByNight = ExcludedByNight();
         var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, excludedByNight);
-        var totals = FolderLevels.Totals(chosen, excludedUnder);
+        var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded());
         Totals = totals;
 
         FrameCountText = WbppPathText.Frames(totals.FrameCount);
@@ -725,7 +784,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             if (session.Chosen is { } night)
             {
                 session.SetSummary(
-                    FolderLevels.Totals([night], FolderLevels.ExcludedUnderLevels([night], excludedByNight)),
+                    FolderLevels.Totals(
+                        [night], FolderLevels.ExcludedUnderLevels([night], excludedByNight), session.ForeignExcluded),
                     night.SkippedFolders?.Count ?? 0);
             }
         }
@@ -1192,7 +1252,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         var destination = CopyDestination ?? throw new InvalidOperationException(NoStagingReason);
         var chosen = ChosenLevels();
         var operations = FolderLevels.CopyOperations(
-            chosen, FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()));
+            chosen, [.. FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()), .. ForeignExcluded()]);
         var request = new StagingCopyRequest(operations, destination, Exclusions);
         var writer = _appWriter;
         var io = StagingIoFor;
@@ -1385,8 +1445,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         GenerateError = "";
 
         var chosen = ChosenLevels();
-        var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight());
-        var operations = FolderLevels.CopyOperations(chosen, excludedUnder);
+        var operations = FolderLevels.CopyOperations(
+            chosen, [.. FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()), .. ForeignExcluded()]);
         var fileName = ScriptGenerator.FileNameFor(type, _targetName);
 
         string text;

@@ -407,6 +407,169 @@ public class FolderTreeTests
         Assert.Contains(WbppExportViewModel.SkipsEmptyWarning, wizard.Review.Blocks);
     }
 
+    private static readonly DateOnly N2 = new(2025, 3, 21);
+
+    private static readonly string Light = Path.Combine(Date, "LIGHT");
+
+    private static void Until(Func<bool> condition)
+        => Assert.True(SpinWait.SpinUntil(condition, TimeSpan.FromSeconds(10)));
+
+    // Own frames under Date\LIGHT\Target_A, another target's under Date\LIGHT\Target_M 45.
+    private static ExportHarness ForeignTargetHarness() => ExportHarness.Create(
+        new Library()
+            .Frame(N1, Path.Combine(Light, "Target_A", "a.fits"))
+            .Foreign(Path.Combine(Light, "Target_M 45", "m.fits"), N1, "obj:M 45", "M 45"),
+        [N1],
+        listSubfolders: folder => Is(folder, Light)
+            ? [Path.Combine(Light, "Target_A"), Path.Combine(Light, "Target_M 45")]
+            : []);
+
+    [Fact]
+    public void AFolderHoldingOnlyAnotherTargetsLights_StartsUnticked_WithTheTargetsName()
+    {
+        using var h = ForeignTargetHarness();
+        var session = h.Page.Sessions[0];
+        session.ChosenIndex = Row(session, Date).Index;
+        Settle(session);
+
+        var foreign = Child(Row(session, Light), "Target_M 45");
+        Assert.False(foreign.IsIncluded);
+        Assert.Equal("M 45's lights", foreign.ReasonTag);
+        Assert.True(foreign.HasReasonTag);
+        Assert.Equal("M 45's lights", foreign.RowTag);
+        Assert.True(Child(Row(session, Light), "Target_A").IsIncluded);
+        Assert.Equal("", Child(Row(session, Light), "Target_A").RowTag);
+        Assert.Equal([Path.Combine(Light, "Target_M 45")], SkippedPaths(session));
+    }
+
+    [Fact]
+    public void AFolderHoldingOnlyThisTargetsOtherNight_StartsUnticked_AsOtherNight()
+    {
+        var date2 = Path.Combine(M31, N2.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N2, Ha(N2, "b.fits"));
+        using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
+            Is(folder, M31) ? [Date, date2] : []);
+        var session = h.Page.Sessions[0];
+        session.ChosenIndex = Row(session, M31).Index;
+        Settle(session);
+
+        var other = Child(Row(session, M31), N2.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+        Assert.False(other.IsIncluded);
+        Assert.Equal("other night", other.ReasonTag);
+        Assert.Equal("other night", other.RowTag);
+        Assert.True(Row(session, Date).IsIncluded);
+        Assert.Equal([date2], SkippedPaths(session));
+    }
+
+    [Fact]
+    public void TickingAnAutoUntickedRow_ClearsItsReason_AndIsKeptOnRescan()
+    {
+        using var h = ForeignTargetHarness();
+        var session = h.Page.Sessions[0];
+        var date = Row(session, Date);
+        session.ChosenIndex = date.Index;
+        Settle(session);
+        var foreign = Child(Row(session, Light), "Target_M 45");
+
+        foreign.IsIncluded = true;
+
+        Assert.Null(foreign.ReasonTag);
+        Assert.False(foreign.HasReasonTag);
+        Assert.Equal("", foreign.RowTag);
+        Assert.Null(session.Chosen!.SkippedFolders);
+
+        // The pick moves away and back, which re-zones the tree: the user's tick stands.
+        session.ChosenIndex = Row(session, Light).Index;
+        session.ChosenIndex = date.Index;
+        Settle(session);
+
+        Assert.True(foreign.IsIncluded);
+        Assert.Null(foreign.ReasonTag);
+        Assert.Null(session.Chosen!.SkippedFolders);
+
+        // Unticked by hand, the row reads the plain skipped tag: the reason is gone for good.
+        foreign.IsIncluded = false;
+        Assert.Equal(FolderNodeViewModel.SkippedText, foreign.RowTag);
+    }
+
+    [Fact]
+    public void TheChosenRow_IsNeverAutoUnticked()
+    {
+        // Two foreign-only levels, which the catalogue never produces for a chain, so the rule
+        // is pinned on the view-model directly.
+        var top = Path.Combine(Library.Root, "M31");
+        var levels = new SessionLevels(
+            N1,
+            Library.Root,
+            [
+                new FolderLevel(top, 1, 0, ["NGC 7000"], [], 10),
+                new FolderLevel(Path.Combine(top, "x"), 2, 0, [], ["2025-03-21"], 10),
+            ],
+            0,
+            0,
+            0,
+            null);
+        var session = new SessionLevelViewModel(levels, "M 31", _ => { });
+
+        Assert.True(session.Rows[0].IsIncluded);
+        Assert.Null(session.Rows[0].ReasonTag);
+        Assert.False(session.Rows[1].IsIncluded);
+        Assert.Equal("other night", session.Rows[1].RowTag);
+
+        session.ChosenIndex = 1;
+
+        Assert.True(session.Rows[1].IsIncluded);
+        Assert.Null(session.Rows[1].ReasonTag);
+    }
+
+    [Fact]
+    public void AMixedFolder_StaysTicked_ExcludesForeignFilesPerFile_AndReadsKOfN()
+    {
+        var x1 = Ha(N1, "x1.fits");
+        var x2 = Ha(N1, "x2.fits");
+        var library = new Library()
+            .Frame(N1, Ha(N1, "a.fits"))
+            .Frame(N1, Ha(N1, "b.fits"))
+            .Frame(N1, Ha(N1, "c.fits"))
+            .Foreign(x1, N1, size: 500)
+            .Foreign(x2, N1, size: 500);
+        var reads = new List<(string Folder, string Key, DateOnly Night)>();
+        using var h = ExportHarness.Create(library, [N1], listSubfolders: _ => [], readForeignLights: (folder, key, night, _) =>
+        {
+            lock (reads)
+            {
+                reads.Add((folder, key, night));
+            }
+
+            return [new WbppFramePath(Guid.NewGuid(), x1, 500), new WbppFramePath(Guid.NewGuid(), x2, 500)];
+        });
+        var session = h.Page.Sessions[0];
+        var ha = Row(session, HaFolder);
+        session.ChosenIndex = ha.Index;
+        Settle(session);
+        Until(() => ha.FrameCountText == "3 of 5 files");
+
+        Assert.True(ha.IsIncluded);
+        lock (reads)
+        {
+            Assert.Equal(library.GroupKey, reads.Single().Key);
+            Assert.Equal(N1, reads.Single().Night);
+        }
+
+        Assert.Equal(2, session.ForeignExcluded.Count);
+        Until(() => h.Page.SizeText == MetricText.Bytes(3_000));
+        Assert.Equal("3 light frames", h.Page.FrameCountText);
+
+        h.Page.StagingPath = h.TempFolder("staging");
+        h.Page.CommitStagingCommand.Execute(null);
+        h.Page.SavedConfirmationDuration = TimeSpan.Zero;
+        h.Destination = h.ScriptPath("wbpp.ps1");
+        Generate(h.Page);
+
+        Assert.Contains("x1.fits", h.Page.ScriptText!, StringComparison.Ordinal);
+        Assert.Contains("x2.fits", h.Page.ScriptText!, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void QuotingRefusal_NamesASkippedFolder()
     {
