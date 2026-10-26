@@ -828,7 +828,13 @@ public static class HelpTopics
             + "counts every catalogued file in the chosen folders, whatever target or frame type, and "
             + "reads unknown rather than a partial total when any file's size was never recorded. "
             + "Sidecars and files GalactiLog never read are copied too and are not counted, and a "
-            + "night with no folder to copy contributes nothing."),
+            + "night with no folder to copy contributes nothing. When the step opens, GalactiLog "
+            + "reads the headers of the files beside this night's lights and ticks the flats and "
+            + "flat-darks whose camera, filter, binning, gain, offset and rotation match them. "
+            + "Folders holding another target's lights start unticked and say so. Matched "
+            + "calibration is copied under the night's folder in FLAT and DARKFLAT subfolders, and "
+            + "the size shown is the full size of what will be copied. Look in the parent folder "
+            + "when flats live higher up, or press Rescan after changing files on disk."),
 
         new("export.quality", "Quality filter",
             "Enable filters turns the chips on; each chip is an absolute limit you type, judged "
