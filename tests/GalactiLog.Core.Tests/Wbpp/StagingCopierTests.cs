@@ -461,9 +461,9 @@ public sealed class StagingCopierTests : IDisposable
     [InlineData(".")]
     [InlineData("..")]
     [InlineData("a:b")]
-    [InlineData(@"a\b")]
-    [InlineData("a/b")]
-    public async Task AnUnsafeEntryNameAbortsBeforeAnythingIsWritten(string entryName)
+    [InlineData(@"..\escaped")]
+    [InlineData(@"C:\elsewhere")]
+    public async Task AnUnsafeEntryAbortsBeforeAnythingIsWritten(string entryName)
     {
         SixFiles();
         using var writer = Writer();
@@ -472,8 +472,22 @@ public sealed class StagingCopierTests : IDisposable
         var result = await new StagingCopier(StagingIo.For(writer)).RunAsync(request, null, CancellationToken.None);
 
         Assert.Equal(StagingOutcome.Aborted, result.Outcome);
-        Assert.Contains("is not one plain folder name", result.AbortReason);
+        Assert.Contains("is not a relative folder path", result.AbortReason);
         Assert.False(Directory.Exists(_staging));
+    }
+
+    [Fact]
+    public async Task ARelativeEntryPathLandsEachFileUnderIt()
+    {
+        SixFiles();
+        using var writer = Writer();
+        var request = new StagingCopyRequest([new CopyOperation(new DateOnly(2026, 1, 1), _source, @"2026\Date_2026-01-01\LIGHT", [])], _staging, []);
+
+        var result = await new StagingCopier(StagingIo.For(writer)).RunAsync(request, null, CancellationToken.None);
+
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Equal(6, result.Copied);
+        Assert.True(File.Exists(Path.Combine(_staging, "2026", "Date_2026-01-01", "LIGHT", "frame1.fits")));
     }
 
     [Fact]

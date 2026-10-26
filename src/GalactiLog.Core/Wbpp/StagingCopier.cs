@@ -90,12 +90,12 @@ public sealed class StagingCopier(StagingIo io)
         var filesDone = 0;
         var bytesDone = 0L;
 
-        var unsafeEntry = request.Operations.FirstOrDefault(o => IsUnsafeEntryName(o.EntryName));
+        var unsafeEntry = request.Operations.FirstOrDefault(o => IsUnsafeSubfolder(o.EntryName));
         if (unsafeEntry is not null)
         {
             return new StagingCopyResult(
                 StagingOutcome.Aborted, 0, 0, skipped, failed, partial,
-                $"The export folder name '{unsafeEntry.EntryName}' is not one plain folder name, so nothing was copied.");
+                $"The export folder path '{unsafeEntry.EntryName}' is not a relative folder path, so nothing was copied.");
         }
 
         var unsafeSubfolder = request.Operations.FirstOrDefault(o => o.DestinationSubfolder is not null && IsUnsafeSubfolder(o.DestinationSubfolder));
@@ -395,12 +395,7 @@ public sealed class StagingCopier(StagingIo io)
         ? $"The staging folder refused '{refused.Path}': it lies outside the staging folder or behind a junction or link. Pick another staging folder."
         : ex.Message;
 
-    /// <summary>The script generator's entry name rule: one folder name, never empty, rooted, holding
-    /// a separator or a colon, or a relative-path component.</summary>
-    internal static bool IsUnsafeEntryName(string name)
-        => name.Length == 0 || name.IndexOfAny(['\\', '/', ':']) >= 0 || name is "." or "..";
-
-    /// <summary>A destination subfolder must be a non-empty relative path: not rooted, no colon, no
+    /// <summary>A destination subfolder or an export entry must be a non-empty relative path: not rooted, no colon, no
     /// <c>.</c> or <c>..</c> segment.</summary>
     internal static bool IsUnsafeSubfolder(string subfolder)
         => subfolder.Length == 0 || Path.IsPathRooted(subfolder) || subfolder.Contains(':')

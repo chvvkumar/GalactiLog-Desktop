@@ -361,21 +361,20 @@ public static partial class ScriptGenerator
             // it far less helpfully.
             RefuseLineBreaks(operation.EntryName, nameof(operation.EntryName));
 
-            // The entry name is the other half of every destination the script writes, and both
-            // flavours join it to the staging root without resolving it. Measured: an entry name of
-            // "..\escaped" made Copy-Item land the file beside the staging root and made
-            // mkdir -p create a folder beside it, so the staging guarantee this file holds at its
-            // own choke point needs the name as well as the root. FolderLevels.StagingNames returns
-            // folder basenames and cannot produce one of these, which is exactly why the guard
+            // The entry is a relative path under the staging root and is the other half of every
+            // destination the script writes; both flavours join it to the staging root without
+            // resolving it. Measured: an entry of "..\escaped" made Copy-Item land the file beside
+            // the staging root and made mkdir -p create a folder beside it, so the staging
+            // guarantee this file holds at its own choke point needs the entry as well as the
+            // root. It is measured the same way as a destination subfolder. StagingLayout.Plan
+            // names the entries and cannot produce an unsafe one, which is exactly why the guard
             // belongs here rather than there.
-            if (operation.EntryName.Length == 0
-                || operation.EntryName.IndexOfAny(['\\', '/', ':']) >= 0
-                || operation.EntryName is "." or "..")
+            if (StagingCopier.IsUnsafeSubfolder(operation.EntryName))
             {
                 throw new WbppUnsafeValueException(
                     nameof(operation.EntryName),
                     operation.EntryName,
-                    "a staging entry name is one folder name: it may not be rooted, carry a separator, or be a relative-path component");
+                    "a staging entry is a relative folder path: it may not be empty, rooted, carry a drive colon, or contain a . or .. segment");
             }
 
             if (operation.DestinationSubfolder is { } subfolder)
@@ -815,7 +814,7 @@ public static partial class ScriptGenerator
         foreach (var operation in input.Operations)
         {
             var call = "copy_folder " + index.ToString(CultureInfo.InvariantCulture)
-                + " " + BashQuote(operation.DestinationSubfolder is null ? operation.EntryName : operation.EntryName + "/" + ToPosixPath(operation.DestinationSubfolder), nameof(operation.EntryName))
+                + " " + BashQuote(operation.DestinationSubfolder is null ? ToPosixPath(operation.EntryName) : ToPosixPath(operation.EntryName) + "/" + ToPosixPath(operation.DestinationSubfolder), nameof(operation.EntryName))
                 + " " + BashQuote(ToPosixPath(operation.SourcePath) + "/", nameof(operation.SourcePath));
             if (hasPerPathExcludes)
             {
