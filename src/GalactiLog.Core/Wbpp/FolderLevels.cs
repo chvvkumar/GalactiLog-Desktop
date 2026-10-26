@@ -80,7 +80,8 @@ public sealed class ContaminationIndex
                 index.targetNames.TryAdd(row.TargetKey, row.TargetName);
             }
 
-            foreach (var folder in FolderLevels.AncestorChain(row.FilePath, root))
+            var chain = FolderLevels.AncestorChain(row.FilePath, root);
+            foreach (var folder in chain)
             {
                 if (!index.folders.TryGetValue(folder, out var facts))
                 {
@@ -91,6 +92,12 @@ public sealed class ContaminationIndex
                 if (occupies)
                 {
                     facts.Occupants.Add((row.TargetKey, row.Night!.Value));
+                }
+
+                // The chain's last folder is the frame's own parent, the only one that holds it directly.
+                if (occupies && ReferenceEquals(folder, chain[^1]))
+                {
+                    facts.HoldsLightsDirectly = true;
                 }
 
                 if (row.FileSize is long size)
@@ -191,11 +198,17 @@ public sealed class ContaminationIndex
         internal bool BytesUnknown { get; set; }
 
         internal int LongestRelative { get; set; }
+
+        internal bool HoldsLightsDirectly { get; set; }
     }
 
     /// <summary>True when the index holds facts for the folder: some catalogue row under a scan
     /// root lies beneath it.</summary>
     public bool IsCatalogued(string folder) => folders.ContainsKey(folder);
+
+    /// <summary>True when a catalogued LIGHT row with a night has <paramref name="folder"/> as its
+    /// immediate parent directory, so a calibration scan can skip reading headers there.</summary>
+    public bool HoldsLights(string folder) => folders.TryGetValue(folder, out var facts) && facts.HoldsLightsDirectly;
 
     // Null when no catalogue row sits under the folder at all.
     internal FolderFacts? Facts(string folder) => folders.GetValueOrDefault(folder);
@@ -575,6 +588,18 @@ public static class FolderLevels
     public static ExportTotals Totals(
         IReadOnlyList<ChosenLevel> chosen,
         IReadOnlyList<WbppFramePath> excludedUnderLevels)
+        => Totals(chosen, excludedUnderLevels, []);
+
+    /// <summary>
+    /// As the two-argument overload, and <paramref name="foreignExcluded"/> frames (other targets'
+    /// lights the copy leaves out) deduct their bytes but never their counts, since they were never
+    /// in a level's frame count. Only a foreign frame under a chosen level and outside every skipped
+    /// folder deducts; a null size makes the total null.
+    /// </summary>
+    public static ExportTotals Totals(
+        IReadOnlyList<ChosenLevel> chosen,
+        IReadOnlyList<WbppFramePath> excludedUnderLevels,
+        IReadOnlyList<WbppFramePath> foreignExcluded)
     {
         var frameCount = chosen.Sum(level => level.Level.FrameCount
             - (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount)) - excludedUnderLevels.Count;
@@ -592,6 +617,16 @@ public static class FolderLevels
         foreach (var frame in excludedUnderLevels)
         {
             size = frame.FileSize is long bytes && size is long running ? running - bytes : null;
+        }
+
+        foreach (var frame in foreignExcluded)
+        {
+            var counted = chosen.Any(level => PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)
+                && !(level.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)));
+            if (counted)
+            {
+                size = frame.FileSize is long bytes && size is long running ? running - bytes : null;
+            }
         }
 
         return new ExportTotals(frameCount, chosen.Count, size);

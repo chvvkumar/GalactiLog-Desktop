@@ -859,6 +859,35 @@ public class FolderLevelsTests
     }
 
     [Fact]
+    public void HoldsLights_IsTrueOnlyForTheDirectParentOfALightRow()
+    {
+        var light = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var flat = Frame(@"M31\2026-07-01\Flats\f.fits", 100);
+        var index = Index(Cat(light, "m31", "M 31", Night(1)), Cat(flat, "m31", "M 31", Night(1), isLight: false));
+
+        Assert.True(index.HoldsLights(Under(@"M31\2026-07-01\Ha")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Flats")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Nowhere")));
+    }
+
+    [Fact]
+    public void Totals_ForeignExcludes_DeductBytesButNotCounts()
+    {
+        var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
+        var chosen = new[] { new ChosenLevel(Night(1), level) };
+        var foreign = Frame(@"M31\2026-07-01\Ha\z.fits", 150);
+        var unknown = Frame(@"M31\2026-07-01\Ha\y.fits", null);
+
+        var totals = FolderLevels.Totals(chosen, [], [foreign]);
+        Assert.Equal(3, totals.FrameCount);
+        Assert.Equal(550L, totals.SizeBytes);
+
+        Assert.Null(FolderLevels.Totals(chosen, [], [foreign, unknown]).SizeBytes);
+        Assert.Equal(700L, FolderLevels.Totals(chosen, []).SizeBytes);
+    }
+
+    [Fact]
     public void Totals_ASkippedFolderWithUnknownBytes_MakesTheSizeUnknown()
     {
         var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
