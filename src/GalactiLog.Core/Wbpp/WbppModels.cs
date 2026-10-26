@@ -194,3 +194,50 @@ public sealed record WbppScriptInput(
     string TargetName,
     IReadOnlyList<string> Exclusions,
     string FileName);
+
+/// <summary>What a scanned file is, from its header's frame type (calibration pre-selection).</summary>
+public enum CalibrationType { Light, Flat, DarkFlat, Dark, Bias, Other }
+
+/// <summary>The header values a frame is matched on. Null means the header did not carry the key.</summary>
+public sealed record FrameKeys(
+    string? Camera,
+    string? Filter,
+    double? Binning,
+    double? Gain,
+    double? Offset,
+    string? Telescope,
+    double? RotatorAngle,
+    string? ReadoutMode);
+
+/// <summary>One file found while scanning a night's folder hierarchy.</summary>
+public sealed record ScannedFrame(
+    string FilePath,
+    long Size,
+    CalibrationType Type,
+    FrameKeys Keys,
+    double? ExposureSeconds,
+    DateOnly? Night);
+
+/// <summary>One distinct combination of keys over the night's light frames.</summary>
+public sealed record LightSet(FrameKeys Keys, int FrameCount);
+
+/// <summary>One calibration frame with whether it was selected and why or why not.</summary>
+public sealed record FrameMatch(ScannedFrame Frame, bool Selected, string Note);
+
+/// <summary>One folder of calibration frames. <see cref="DefaultTicked"/> is true when any frame in
+/// it was selected.</summary>
+public sealed record CalibrationRow(string Folder, IReadOnlyList<FrameMatch> Frames, bool DefaultTicked, string Note)
+{
+    public int SelectedCount => Frames.Count(f => f.Selected);
+    public int TotalCount => Frames.Count;
+    public long SelectedBytes => Frames.Where(f => f.Selected).Sum(f => f.Frame.Size);
+    public long TotalBytes => Frames.Sum(f => f.Frame.Size);
+    public IReadOnlyList<CalibrationType> Types => Frames.Select(f => f.Frame.Type).Distinct().ToList();
+}
+
+/// <summary>The outcome of matching a night's calibration frames to its light sets.</summary>
+public sealed record CalibrationMatch(
+    IReadOnlyList<LightSet> LightSets,
+    IReadOnlyList<CalibrationRow> Rows,
+    IReadOnlyList<string> MissingFlatWarnings,
+    bool EveryFilterHasAFlat);
