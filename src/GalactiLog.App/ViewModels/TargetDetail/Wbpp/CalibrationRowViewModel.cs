@@ -46,8 +46,5 @@ public sealed partial class CalibrationRowViewModel : ObservableObject
     /// <summary>"same night", the night gap, or the first mismatching key.</summary>
     public string Note => Row.Note;
 
-    /// <summary>Reserved for a note drawn in the warning ink. Always false today.</summary>
-    public bool IsWarningNote => false;
-
     partial void OnIsTickedChanged(bool value) => _changed(this);
 }
