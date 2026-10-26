@@ -78,6 +78,28 @@ public static class CalibrationMatcher
         return new CalibrationMatch(lightSets, rows, warnings, warnings.Count == 0);
     }
 
+    /// <summary>One line per group of light sets that differ only in filter, for the Calibration found
+    /// block: "Light sets: Ha, Oiii on ZWO ASI2600MM Pro, gain 110, offset 50, bin 1, rotation 128.9".</summary>
+    public static IReadOnlyList<string> LightSetLines(IReadOnlyList<LightSet> sets)
+        => [.. sets
+            .GroupBy(set => set.Keys with { Filter = null })
+            .Select(group =>
+            {
+                var keys = group.Key;
+                var filters = group.Select(set => set.Keys.Filter).OfType<string>().Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+                var camera = keys.Camera ?? "unknown camera";
+                var text = "Light sets: " + (filters.Count > 0 ? string.Join(", ", filters) + " on " + camera : camera + ", no filter");
+                foreach (var (name, value) in new[] { ("gain", keys.Gain), ("offset", keys.Offset), ("bin", keys.Binning), ("rotation", keys.RotatorAngle) })
+                {
+                    if (value is { } number)
+                    {
+                        text += ", " + name + " " + number.ToString("0.##", CultureInfo.InvariantCulture);
+                    }
+                }
+
+                return text;
+            })];
+
     internal static FrameKeys Normalise(FrameKeys k) => k with
     {
         Camera = Clean(k.Camera),

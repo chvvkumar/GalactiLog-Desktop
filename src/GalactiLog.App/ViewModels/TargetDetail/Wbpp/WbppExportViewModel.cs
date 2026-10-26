@@ -122,6 +122,12 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
     private readonly Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? _readForeignLights;
 
+    // Null without a walker: no night shows the Calibration found block.
+    private readonly CalibrationScanDriver? _scanDriver;
+
+    // Each catalogued light's match keys, by image id, for the light sets. Null reads as none.
+    private IReadOnlyDictionary<Guid, FrameKeys>? _keys;
+
     // The folder each night's foreign lights were last read under. UI thread only.
     private readonly Dictionary<DateOnly, string> _foreignFolder = [];
 
@@ -180,6 +186,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// <param name="readForeignLights">Normally <c>WbppPathsQuery.ForeignLightsUnder</c>: the LIGHT
     /// files under a folder that are not this group's on this night. Called off the UI thread, once
     /// per available night after load. Null reads nothing.</param>
+    /// <param name="walk">Normally <c>CalibrationWalk.OnDisk</c>: every file under a folder, sized,
+    /// with the headers worth reading. Called off the UI thread, per night after load and on Rescan.
+    /// Null hides the Calibration found block and copies lights alone.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
@@ -195,7 +204,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         Action<Action>? post = null,
         ILogger? logger = null,
         Func<string, IReadOnlyList<string>?>? listSubfolders = null,
-        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null)
+        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
+        CalibrationWalk.Walker? walk = null)
     {
         ArgumentNullException.ThrowIfNull(nights);
         ArgumentNullException.ThrowIfNull(readPaths);
@@ -219,6 +229,25 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         _logger = logger ?? NullLogger.Instance;
         _listSubfolders = listSubfolders;
         _readForeignLights = readForeignLights;
+        _scanDriver = walk is null
+            ? null
+            : new CalibrationScanDriver(
+                walk,
+                () => _catalogue,
+                () =>
+                {
+                    var settings = _getGeneral();
+                    return new NightRule(
+                        settings.UseImagingNight,
+                        settings.ObserverLongitude,
+                        string.IsNullOrEmpty(settings.ObserverTimezone) ? null : settings.ObserverTimezone);
+                },
+                LightSetsFor,
+                OnScanPublished,
+                _post,
+                () => _disposed,
+                _closing.Token,
+                _logger);
 
         var general = _getGeneral();
 
@@ -307,6 +336,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> byNight =
                 new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>>();
             ContaminationIndex? catalogue = null;
+            IReadOnlyDictionary<Guid, FrameKeys>? keys = null;
 
             try
             {
@@ -315,6 +345,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 var paths = _readPaths(groupKey, nights, scanRoots, token);
                 byNight = paths.Nights;
                 catalogue = paths.Catalogue;
+                keys = paths.Keys;
 
                 foreach (var night in nights)
                 {
@@ -374,7 +405,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            _post(() => Publish(sessions, byNight, catalogue, frames, gradings));
+            _post(() => Publish(sessions, byNight, catalogue, keys, frames, gradings));
         },
             token);
     }
@@ -446,6 +477,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         IReadOnlyList<SessionLevels> sessions,
         IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> byNight,
         ContaminationIndex? catalogue,
+        IReadOnlyDictionary<Guid, FrameKeys>? keys,
         IReadOnlyList<WbppFrame> frames,
         IReadOnlyDictionary<Guid, FrameGrading> gradings)
     {
@@ -456,6 +488,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         _framesByNight = byNight;
         _catalogue = catalogue;
+        _keys = keys;
         Frames = frames;
         Gradings = gradings;
 
@@ -469,7 +502,14 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 levels,
                 _targetName,
                 OnLevelChanged,
-                _listSubfolders is null ? null : ListSubfolders))];
+                _listSubfolders is null ? null : ListSubfolders)
+            {
+                HasCalibrationBlock = _scanDriver is not null && levels.Unavailable is null,
+                Catalogue = catalogue,
+                NightFrames = byNight.TryGetValue(levels.Night, out var nightFrames) ? nightFrames : [],
+                RescanRequested = Rescan,
+                LookHigherRequested = LookHigher,
+            })];
         TotalFrameCount = sessions.Sum(levels => levels.TotalFrameCount);
         IsLoading = false;
 
@@ -479,7 +519,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         foreach (var session in Sessions)
         {
             ReadForeignLights(session);
+            _scanDriver?.Start(session);
         }
+
+        // The footer states "sizing" while the scans run.
+        RefreshFooter();
 
         // The slot is filled last, so the panel is built over a page whose levels and rig key are
         // already settled. Null leaves it empty, which is the correct reading of "no filter".
@@ -530,6 +574,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         }
 
         _excludedImageIds = next;
+        foreach (var session in Sessions)
+        {
+            Rematch(session, force: false);
+        }
+
         WithdrawScript();
         RefreshFooter();
     }
@@ -545,8 +594,93 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         // the check is re-run: a folder that was legal under one pick can become illegal under a
         // shallower one.
         RecheckStaging(StagingPath);
+        Rematch(session, force: false);
         WithdrawScript();
         RefreshFooter();
+    }
+
+    // ------------------------------------------------------------------ the calibration scan
+
+    private void Rescan(SessionLevelViewModel session)
+    {
+        _scanDriver?.Start(session);
+        RefreshFooter();
+    }
+
+    private void LookHigher(SessionLevelViewModel session)
+    {
+        _scanDriver?.LookHigher(session);
+        RefreshFooter();
+    }
+
+    // A scan result landed (or failed): match it, withdraw a generated script, restate the totals.
+    private void OnScanPublished(SessionLevelViewModel session)
+    {
+        Rematch(session, force: true);
+        WithdrawScript();
+        RefreshFooter();
+    }
+
+    /// <summary>Matches a night's cached scan against its current light sets, without walking.
+    /// Unless forced, a match whose light sets are unchanged is kept, so a calibration row tick
+    /// (which reaches the page through the same path) does not rebuild the rows.</summary>
+    private void Rematch(SessionLevelViewModel session, bool force)
+    {
+        if (session.ScannedLevelIndex < 0 || session.ScanState != CalibrationScanState.Done)
+        {
+            return;
+        }
+
+        var sets = LightSetsFor(session);
+        if (!force && session.Match is { } match && match.LightSets.SequenceEqual(sets))
+        {
+            return;
+        }
+
+        session.ApplyMatch(CalibrationMatcher.Match(sets, session.Night, session.ScannedFrames));
+    }
+
+    // The night's light sets: the keys of its catalogued lights under the chosen level, less the
+    // quality-excluded frames and those under skipped folders.
+    private IReadOnlyList<LightSet> LightSetsFor(SessionLevelViewModel session)
+    {
+        if (session.Chosen is not { } chosen || _keys is not { } keys
+            || !_framesByNight.TryGetValue(session.Night, out var frames))
+        {
+            return [];
+        }
+
+        return CalibrationMatcher.LightSets(frames
+            .Where(frame => !_excludedImageIds.Contains(frame.ImageId)
+                && PathConfinement.IsUnderOrEqual(chosen.Level.Path, frame.FilePath)
+                && !(chosen.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)))
+            .Select(frame => keys.GetValueOrDefault(frame.ImageId))
+            .OfType<FrameKeys>());
+    }
+
+    // The lights operations, then each night's calibration operations under that night's own
+    // staging entry name.
+    private IReadOnlyList<CopyOperation> PlanOperations()
+    {
+        var chosen = ChosenLevels();
+        List<CopyOperation> operations = [.. FolderLevels.CopyOperations(chosen, PlanExcludes())];
+        if (chosen.Count == 0)
+        {
+            return operations;
+        }
+
+        var names = FolderLevels.StagingNames(chosen);
+        var index = 0;
+        foreach (var session in Sessions)
+        {
+            if (session.Chosen is not null)
+            {
+                operations.AddRange(session.CalibrationOperations(names[index]));
+                index++;
+            }
+        }
+
+        return operations;
     }
 
     /// <summary>
@@ -598,6 +732,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 {
                     row.SetChildren(result);
                     session.CountForeign(row);
+                    session.MarkOwned(row);
                 }
             });
         });
@@ -753,6 +888,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _sizeText = "";
 
+    /// <summary>The size split by kind, "lights 7.1 GB (420), flats 2.7 GB (210), flat-darks 0,
+    /// other 12 MB". Empty without a walker.</summary>
+    [ObservableProperty]
+    private string _breakdownText = "";
+
     /// <summary>The staging folder on its own line under the figures.</summary>
     [ObservableProperty]
     private string _stagingFolderText = "";
@@ -802,11 +942,35 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded());
         Totals = totals;
 
-        FrameCountText = WbppPathText.Frames(totals.FrameCount);
+        var calibration = Sessions.Select(session => session.CalibrationTotals()).ToList();
+        var flats = (Count: calibration.Sum(c => c.FlatCount), Bytes: calibration.Sum(c => c.FlatBytes));
+        var darkFlats = (Count: calibration.Sum(c => c.DarkFlatCount), Bytes: calibration.Sum(c => c.DarkFlatBytes));
+        var darks = (Count: calibration.Sum(c => c.DarkCount), Bytes: calibration.Sum(c => c.DarkBytes));
+        var bias = (Count: calibration.Sum(c => c.BiasCount), Bytes: calibration.Sum(c => c.BiasBytes));
+        var other = calibration.Sum(c => c.OtherBytes);
+        var calibrationFrames = flats.Count + darkFlats.Count + darks.Count + bias.Count;
+
+        FrameCountText = calibrationFrames == 0
+            ? WbppPathText.Frames(totals.FrameCount)
+            : string.Create(CultureInfo.InvariantCulture, $"{totals.FrameCount + calibrationFrames:N0} frames");
         FolderCountText = totals.FolderCount == 1
             ? "1 folder"
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
-        SizeText = WbppPathText.Bytes(totals.SizeBytes);
+        var size = totals.SizeBytes is long lights ? lights + calibration.Sum(c => c.Bytes) : (long?)null;
+        SizeText = WbppPathText.Bytes(size)
+            + (Sessions.Any(session => session.ScanState == CalibrationScanState.Scanning) ? ", sizing" : "");
+
+        static string Group((int Count, long Bytes) group) => group.Count == 0
+            ? "0"
+            : WbppPathText.Bytes(group.Bytes) + string.Create(CultureInfo.InvariantCulture, $" ({group.Count:N0})");
+        BreakdownText = _scanDriver is null
+            ? ""
+            : "lights " + WbppPathText.Bytes(totals.SizeBytes) + string.Create(CultureInfo.InvariantCulture, $" ({totals.FrameCount:N0})")
+                + ", flats " + Group(flats)
+                + ", flat-darks " + Group(darkFlats)
+                + (darks.Count > 0 ? ", darks " + Group(darks) : "")
+                + (bias.Count > 0 ? ", bias " + Group(bias) : "")
+                + (other > 0 ? ", other " + WbppPathText.Bytes(other) : "");
         StagingFolderText = _committedStaging ?? "";
 
         // Each night's own line under its tree, from the same seam over that night alone, so the
@@ -818,7 +982,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 session.SetSummary(
                     FolderLevels.Totals(
                         [night], FolderLevels.ExcludedUnderLevels([night], excludedByNight), session.ForeignExcluded),
-                    night.SkippedFolders?.Count ?? 0);
+                    session.SkippedCount,
+                    session.CalibrationTotals());
             }
         }
 
@@ -1282,8 +1447,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         IProgress<StagingProgress> progress, Func<StagingIo, StagingIo> track, CancellationToken ct)
     {
         var destination = CopyDestination ?? throw new InvalidOperationException(NoStagingReason);
-        var chosen = ChosenLevels();
-        var operations = FolderLevels.CopyOperations(chosen, PlanExcludes());
+        var operations = PlanOperations();
         var request = new StagingCopyRequest(operations, destination, Exclusions);
         var writer = _appWriter;
         var io = StagingIoFor;
@@ -1475,8 +1639,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         GenerateError = "";
 
-        var chosen = ChosenLevels();
-        var operations = FolderLevels.CopyOperations(chosen, PlanExcludes());
+        var operations = PlanOperations();
         var fileName = ScriptGenerator.FileNameFor(type, _targetName);
 
         string text;
@@ -1618,6 +1781,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             "StagingRoot" => "the staging folder",
             "TargetName" => "the target name",
             "FileName" => "the script file name",
+            "destination subfolder" => "a calibration folder name",
             _ => valueName,
         };
 
@@ -1659,6 +1823,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _closing.Cancel();
+        _scanDriver?.CancelAll();
         (QualityPanel as IDisposable)?.Dispose();
     }
 }

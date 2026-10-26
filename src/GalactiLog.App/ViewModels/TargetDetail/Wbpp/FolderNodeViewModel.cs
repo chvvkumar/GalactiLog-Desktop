@@ -300,9 +300,16 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(RowTag))]
     private FolderZone _zone;
 
-    /// <summary>Whether this row is drawn: every row but a disk row outside the chosen one.
-    /// </summary>
-    public bool IsVisible => Zone != FolderZone.Hidden;
+    /// <summary>Whether this row is drawn: every row but a disk row outside the chosen one, and
+    /// a folder the Calibration found block owns.</summary>
+    public bool IsVisible => Zone != FolderZone.Hidden && !IsOwnedByCalibration;
+
+    /// <summary>Whether the night's Calibration found block owns this folder (the edge rule): it
+    /// reaches staging through its calibration operations alone, so the tree does not draw it and
+    /// <see cref="TopMostSkipped"/> does not name it.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsVisible))]
+    private bool _isOwnedByCalibration;
 
     /// <summary>Whether this row is the chosen one, which carries the highlight and the pill.
     /// </summary>
@@ -406,6 +413,11 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     {
         foreach (var child in Children)
         {
+            if (child.IsOwnedByCalibration)
+            {
+                continue;
+            }
+
             if (!child.IsIncluded)
             {
                 yield return child.Level;
