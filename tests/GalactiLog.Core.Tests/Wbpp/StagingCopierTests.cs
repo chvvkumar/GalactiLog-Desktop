@@ -507,4 +507,43 @@ public sealed class StagingCopierTests : IDisposable
         Assert.False(Directory.Exists(Destination("OIII")));
         Assert.Empty(result.Skipped);
     }
+
+    [Fact]
+    public async Task RunAsync_PlacesAnOperationUnderItsDestinationSubfolder()
+    {
+        var bytes = Source(@"Angle_128.85\flat1.fits", 4096);
+        var op = new CopyOperation(new(2026, 1, 1), _source, Entry, [], null, @"FLAT\ZWO ASI2600MM Pro");
+        var result = await new StagingCopier(StagingIo.For(Writer())).RunAsync(new([op], _staging, []), null, default);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Equal(bytes, File.ReadAllBytes(Destination(@"FLAT\ZWO ASI2600MM Pro\Angle_128.85\flat1.fits")));
+    }
+
+    [Fact]
+    public async Task RunAsync_TwoOperationsSharingAnEntryName_SkipExistingSameSizeFiles()
+    {
+        Source(@"light1.fits", 4096);
+        var lights = new CopyOperation(new(2026, 1, 1), _source, Entry, [@"Angle_128.85\flat1.fits"]);
+        var flats = new CopyOperation(new(2026, 1, 1), Path.Combine(_source, "Angle_128.85"), Entry, [], null, "FLAT");
+        Source(@"Angle_128.85\flat1.fits", 2048);
+        var copier = new StagingCopier(StagingIo.For(Writer()));
+        var first = await copier.RunAsync(new([lights, flats], _staging, []), null, default);
+        var second = await copier.RunAsync(new([lights, flats], _staging, []), null, default);
+        Assert.Equal(2, first.Copied);
+        Assert.Equal(0, second.Copied);
+        Assert.All(second.Skipped, s => Assert.Equal(StagingSkipReason.ExistsSameSize, s.Reason));
+        Assert.Empty(second.Failed);
+    }
+
+    [Theory]
+    [InlineData(@"C:\abs")]
+    [InlineData(@"FLAT\..\x")]
+    [InlineData("a:b")]
+    [InlineData("")]
+    public async Task RunAsync_RefusesAnUnsafeDestinationSubfolder(string subfolder)
+    {
+        var op = new CopyOperation(new(2026, 1, 1), _source, Entry, [], null, subfolder);
+        var result = await new StagingCopier(StagingIo.For(Writer())).RunAsync(new([op], _staging, []), null, default);
+        Assert.Equal(StagingOutcome.Aborted, result.Outcome);
+        Assert.Contains("subfolder", result.AbortReason, StringComparison.OrdinalIgnoreCase);
+    }
 }

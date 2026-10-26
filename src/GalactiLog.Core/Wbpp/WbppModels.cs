@@ -80,13 +80,16 @@ public sealed record SubfolderLevel(FolderLevel Level, bool IsCatalogued);
 /// <summary>One night's worth of a WBPP export script's copy step (core-shapes.md section 4).
 /// <paramref name="ExcludedRelativePaths"/> carries native <c>\</c> separators, relative to
 /// <paramref name="SourcePath"/>. <paramref name="ExcludedRelativeDirectories"/> lists skipped
-/// subfolders in the same form, with no trailing separator; null reads as none.</summary>
+/// subfolders in the same form, with no trailing separator; null reads as none.
+/// <paramref name="DestinationSubfolder"/> places the operation under <c>EntryName\&lt;subfolder&gt;</c>:
+/// relative, native separators, no leading or trailing separator; null reads as none.</summary>
 public sealed record CopyOperation(
     DateOnly Night,
     string SourcePath,
     string EntryName,
     IReadOnlyList<string> ExcludedRelativePaths,
-    IReadOnlyList<string>? ExcludedRelativeDirectories = null);
+    IReadOnlyList<string>? ExcludedRelativeDirectories = null,
+    string? DestinationSubfolder = null);
 
 /// <summary>The export's summary counts, over the chosen levels and their excluded frames
 /// (core-shapes.md section 4). <paramref name="SizeBytes"/> is null when any counted file's size
