@@ -985,9 +985,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         GenerateCommand.NotifyCanExecuteChanged();
     }
 
-    // Recomputed on a level change and on a staging folder change, because both move the figure,
-    // and on nothing else. A figure computed once at load shows a clean page to a user who then
-    // picks the level that breaks their copy.
+    // Recomputed on every footer refresh, from the same plan the footer reads, because a level
+    // change, a staging folder change and a calibration tick all move the figure. A figure
+    // computed once at load shows a clean page to a user who then picks the level that breaks
+    // their copy.
     private void RefreshLongPath(IReadOnlyList<CopyOperation> operations)
     {
         LongestDestinationLength = 0;

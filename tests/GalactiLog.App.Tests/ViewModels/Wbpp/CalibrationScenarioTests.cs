@@ -423,7 +423,7 @@ public class CalibrationScenarioTests
     }
 
     [Fact]
-    public async Task DateFolderChosen_EdgeRule_CopiesCalibrationOnceUnderTypeFolders()
+    public async Task DateFolderChosen_CopiesFlatsOnceUnderTheirOwnFolderName()
     {
         using var t = new Tree();
         var date = t.P("2025-10-15");

@@ -2,6 +2,7 @@ using System.Globalization;
 using GalactiLog.App.Services;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
+using GalactiLog.Core.Io;
 using GalactiLog.Core.Wbpp;
 using Xunit;
 
@@ -575,6 +576,7 @@ public class FolderTreeTests
             File.WriteAllBytes(Path.Combine(source, name), [1]);
         }
 
+        var destination = h.Page.CopyDestination!;
         var created = new List<string>();
         h.Page.StagingIoFor = _ => new StagingIo(
             _ => new MemoryStream([1]),
@@ -603,8 +605,56 @@ public class FolderTreeTests
             .Select(line => line[(line.IndexOf("ExcludeFiles = ", StringComparison.Ordinal) + "ExcludeFiles = ".Length)..])
             .Select(rest => rest[..(rest.IndexOf(')', StringComparison.Ordinal) + 1)])];
 
+    // Copies the page's plan through the in-app copier over real files that mirror the fake
+    // library, and returns every written file relative to the copy destination, sorted.
+    private static async Task<IReadOnlyList<string>> StageAsync(ExportHarness h, params string[] files)
+    {
+        var staging = h.TempFolder("staging");
+        h.Page.StagingPath = staging;
+        h.Page.CommitStagingCommand.Execute(null);
+        h.Page.SavedConfirmationDuration = TimeSpan.Zero;
+
+        var mirror = h.TempFolder("mirror");
+        foreach (var file in files)
+        {
+            var real = Path.Combine(mirror, Path.GetRelativePath(Library.Root, file));
+            Directory.CreateDirectory(Path.GetDirectoryName(real)!);
+            File.WriteAllBytes(real, [1]);
+        }
+
+        var destination = h.Page.CopyDestination!;
+        var created = new List<string>();
+        h.Page.StagingIoFor = _ => new StagingIo(
+            _ => new MemoryStream([1]),
+            folder => new DirectoryInfo(PathConfinement.IsUnderOrEqual(Library.Root, folder)
+                ? Path.Combine(mirror, Path.GetRelativePath(Library.Root, folder))
+                : folder).GetFileSystemInfos(),
+            _ => null,
+            _ => { },
+            path =>
+            {
+                lock (created)
+                {
+                    created.Add(Path.GetRelativePath(destination, path));
+                }
+
+                return new MemoryStream();
+            });
+        var result = await h.Page.RunCopyAsync(new Progress<StagingProgress>(), io => io, CancellationToken.None);
+
+        Assert.Empty(result.Failed);
+        return [.. created.Order(StringComparer.OrdinalIgnoreCase)];
+    }
+
+    // A foreign read over a multi-night library: every other night's frame under the folder.
+    private static Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>> OtherNights(
+        Library library, params (DateOnly Night, string Path)[] frames)
+        => (folder, _, night, _) => [.. frames
+            .Where(frame => frame.Night != night && PathConfinement.IsUnderOrEqual(folder, frame.Path))
+            .Select(frame => new WbppFramePath(library.Ids[frame.Path], frame.Path, 1_000))];
+
     [Fact]
-    public void TwoNightsSharingOneChosenFolder_AreOneJobThatCopiesBothNightsFrames()
+    public async Task TwoNightsSharingOneChosenFolder_AreOneJobThatCopiesBothNightsFrames()
     {
         // A flat layout: both nights' frames in one folder, so each night's foreign read returns
         // the other night's frame, and both nights choose that same folder.
@@ -612,8 +662,7 @@ public class FolderTreeTests
         var n1 = Path.Combine(flat, "n1.fits");
         var n2 = Path.Combine(flat, "n2.fits");
         var library = new Library().Frame(N1, n1).Frame(N2, n2);
-        using var h = ExportHarness.Create(library, [N1, N2], listSubfolders: _ => [], readForeignLights: (_, _, night, _) =>
-            night == N1 ? [new WbppFramePath(library.Ids[n2], n2, 1_000)] : [new WbppFramePath(library.Ids[n1], n1, 1_000)]);
+        using var h = ExportHarness.Create(library, [N1, N2], listSubfolders: _ => [], readForeignLights: OtherNights(library, (N1, n1), (N2, n2)));
         foreach (var session in h.Page.Sessions)
         {
             session.ChosenIndex = Row(session, flat).Index;
@@ -621,16 +670,76 @@ public class FolderTreeTests
         }
 
         Until(() => h.Page.Sessions.All(session => session.ForeignExcluded.Count == 1));
-        h.Page.StagingPath = h.TempFolder("staging");
-        h.Page.CommitStagingCommand.Execute(null);
-        h.Page.SavedConfirmationDuration = TimeSpan.Zero;
+        var staged = await StageAsync(h, n1, n2);
         h.Destination = h.ScriptPath("wbpp.ps1");
         Generate(h.Page);
 
         // Each night lists the other's frame as foreign, so the merged job, which stands for both
-        // nights, excludes neither.
+        // nights, excludes neither, and both nights' frames land.
         var job = Assert.Single(h.Page.ScriptText!.Split('\n'), line => line.TrimStart().StartsWith("@{ Src", StringComparison.Ordinal));
         Assert.DoesNotContain("ExcludeFiles", job, StringComparison.Ordinal);
+        Assert.Equal([@"M31\Ha\n1.fits", @"M31\Ha\n2.fits"], staged);
+    }
+
+    [Fact]
+    public async Task ANightNestedInsideAnotherNightsFolder_StagesBothNightsFrames_LessItsOwnRejects()
+    {
+        // Filter folders holding both nights: night 1 has Ha and OIII, so it picks M31; night 2
+        // has Ha only, so it picks M31\Ha, which night 1's job copies. Night 1 lists night 2's Ha
+        // frames as foreign; the merged job still copies the one night 2 keeps.
+        var ha = Path.Combine(M31, "Ha");
+        var oiii = Path.Combine(M31, "OIII");
+        var a1 = Path.Combine(ha, "a1.fits");
+        var o1 = Path.Combine(oiii, "o1.fits");
+        var a2 = Path.Combine(ha, "a2.fits");
+        var r2 = Path.Combine(ha, "r2.fits");
+        var library = new Library().Frame(N1, a1).Frame(N1, o1).Frame(N2, a2).Frame(N2, r2);
+        using var h = ExportHarness.Create(library, [N1, N2],
+            listSubfolders: folder => Is(folder, M31) ? [ha, oiii] : [],
+            readForeignLights: OtherNights(library, (N1, a1), (N1, o1), (N2, a2), (N2, r2)));
+        var (night1, night2) = (h.Page.Sessions[0], h.Page.Sessions[1]);
+        night1.ChosenIndex = Row(night1, M31).Index;
+        night2.ChosenIndex = Row(night2, ha).Index;
+        Settle(night1);
+        Settle(night2);
+        h.Page.SetExcludedFrames([library.Ids[r2]]);
+
+        Until(() => night1.ForeignExcluded.Count == 2 && night2.ForeignExcluded.Count == 1);
+        var staged = await StageAsync(h, a1, o1, a2, r2);
+
+        Assert.Equal([@"M31\Ha\a1.fits", @"M31\Ha\a2.fits", @"M31\OIII\o1.fits"], staged);
+    }
+
+    [Fact]
+    public async Task ASharedFolderWithASubfolderOneNightSkips_CopiesWhatTheOtherNightKeeps()
+    {
+        // Both nights pick M31. Night 2 unticks OIII, so its list names nothing there; night 1
+        // lists night 2's OIII frame as foreign and rejects its own o1r. Only o1 of OIII copies.
+        var ha = Path.Combine(M31, "Ha");
+        var oiii = Path.Combine(M31, "OIII");
+        var a1 = Path.Combine(ha, "a1.fits");
+        var o1 = Path.Combine(oiii, "o1.fits");
+        var o1r = Path.Combine(oiii, "o1r.fits");
+        var a2 = Path.Combine(ha, "a2.fits");
+        var o2 = Path.Combine(oiii, "o2.fits");
+        var library = new Library().Frame(N1, a1).Frame(N1, o1).Frame(N1, o1r).Frame(N2, a2).Frame(N2, o2);
+        using var h = ExportHarness.Create(library, [N1, N2],
+            listSubfolders: folder => Is(folder, M31) ? [ha, oiii] : [],
+            readForeignLights: OtherNights(library, (N1, a1), (N1, o1), (N1, o1r), (N2, a2), (N2, o2)));
+        foreach (var session in h.Page.Sessions)
+        {
+            session.ChosenIndex = Row(session, M31).Index;
+            Settle(session);
+        }
+
+        var night2 = h.Page.Sessions[1];
+        Row(night2, oiii).IsIncluded = false;
+        h.Page.SetExcludedFrames([library.Ids[o1r]]);
+
+        Until(() => h.Page.Sessions[0].ForeignExcluded.Count == 2 && night2.ForeignExcluded.Count == 1);
+        var staged = await StageAsync(h, a1, o1, o1r, a2, o2);
+
+        Assert.Equal([@"M31\Ha\a1.fits", @"M31\Ha\a2.fits", @"M31\OIII\o1.fits"], staged);
     }
 
     [Fact]
