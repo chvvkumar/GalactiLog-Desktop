@@ -164,6 +164,11 @@ public static class CalibrationMatcher
         CalibrationType.Bias => "bias, not selected",
         CalibrationType.DarkFlat => "flat-darks, no matching flat",
         _ when lightSets.Count == 0 => "no light sets",
-        _ => FirstMismatch(lightSets[0].Keys, f.Keys) ?? "not the nearest night",
+        _ => FirstMismatch(SameFilterOrFirst(lightSets, f.Keys).Keys, f.Keys) ?? "not the nearest night",
     };
+
+    // The light set a rejected flat is explained against: the first with its filter, so a
+    // wrong-angle Oiii flat reads "rotation", not "filter Oiii" against an Ha set.
+    private static LightSet SameFilterOrFirst(IReadOnlyList<LightSet> lightSets, FrameKeys flat)
+        => lightSets.FirstOrDefault(set => SameText(Clean(set.Keys.Filter), Clean(flat.Filter))) ?? lightSets[0];
 }

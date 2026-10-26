@@ -108,4 +108,38 @@ public class CalibrationMatcherTests
             [F(@"W:\L\a.fits", CalibrationType.Light, K()), F(@"W:\L\a.json", CalibrationType.Other, K())]);
         Assert.Empty(m.Rows);
     }
+
+    [Fact]
+    public void Match_ARejectedFlat_IsExplainedAgainstTheLightSetWithItsFilter()
+    {
+        var sets = CalibrationMatcher.LightSets([K(filter: "Ha"), K(filter: "Oiii")]);
+        var m = CalibrationMatcher.Match(sets, N, [F(@"W:\FLAT\o.fits", CalibrationType.Flat, K(filter: " oiii", rot: 139.07), night: N)]);
+        Assert.Equal("rotation 139.07", m.Rows.Single().Note);
+    }
+
+    [Fact]
+    public void Match_TwoLightSetsOfOneFilterAtTwoAngles_EachRowSelectsOnlyItsOwnAngle()
+    {
+        var sets = CalibrationMatcher.LightSets([K(rot: 128.85), K(rot: 139.07)]);
+        var frames = new[]
+        {
+            F(@"W:\FLAT\A128\a.fits", CalibrationType.Flat, K(rot: 128.85), night: N),
+            F(@"W:\FLAT\A128\b.fits", CalibrationType.Flat, K(rot: 128.9), night: N),
+            F(@"W:\FLAT\A139\a.fits", CalibrationType.Flat, K(rot: 139.07), night: N),
+            F(@"W:\FLAT\A139\b.fits", CalibrationType.Flat, K(rot: 139.0), night: N),
+            F(@"W:\FLAT\A128\stray.fits", CalibrationType.Flat, K(rot: 150), night: N),
+        };
+        var m = CalibrationMatcher.Match(sets, N, frames);
+        Assert.Equal(2, m.Rows.Count);
+        foreach (var row in m.Rows)
+        {
+            var angle = row.Folder.EndsWith("A128", StringComparison.Ordinal) ? 128.85 : 139.07;
+            Assert.All(row.Frames, f => Assert.Equal(
+                Math.Abs(f.Frame.Keys.RotatorAngle!.Value - angle) <= CalibrationMatcher.RotatorToleranceDegrees, f.Selected));
+            Assert.Equal(2, row.SelectedCount);
+        }
+        // No flat of one angle matches the other angle's set.
+        Assert.False(CalibrationMatcher.KeysMatch(sets[0].Keys, frames[2].Keys));
+        Assert.False(CalibrationMatcher.KeysMatch(sets[1].Keys, frames[0].Keys));
+    }
 }
