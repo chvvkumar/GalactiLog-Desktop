@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # WBPP Session Export
 # Target: Target A
-# Sessions: 2026-07-01, 2026-07-01
+# Sessions: 2026-07-01
 #
 # To run this script:
 #   chmod +x wbpp_Target_A.sh && ./wbpp_Target_A.sh
@@ -25,7 +25,7 @@ mkdir -p -- "$STAGING_ROOT"
 TOTAL=2
 printf '%s%s%s\n' "$C_TITLE" 'WBPP staging copy' "$C_RESET"
 printf '%s  Target: %s%s\n' "$C_DIM" 'Target A' "$C_RESET"
-printf '%s  %s session folder(s) -> %s%s\n' "$C_DIM" "$TOTAL" "$STAGING_ROOT" "$C_RESET"
+printf '%s  %s session folder(s) -> %s%s\n' "$C_DIM" "1" "$STAGING_ROOT" "$C_RESET"
 printf '\n'
 
 copy_folder() {

@@ -1,6 +1,6 @@
 # WBPP Session Export
 # Target: Target A
-# Sessions: 2026-07-01, 2026-07-01
+# Sessions: 2026-07-01
 #
 # To run this script:
 #   Open PowerShell in this folder. Files downloaded via a browser are blocked
