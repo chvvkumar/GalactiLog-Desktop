@@ -91,6 +91,21 @@ public sealed record CopyOperation(
     IReadOnlyList<string>? ExcludedRelativeDirectories = null,
     string? DestinationSubfolder = null);
 
+/// <summary>One folder the export copies, before it is named: the night it belongs to, the scan
+/// root it sits under, its absolute path and what the copy leaves out of it. Excludes are relative
+/// to <paramref name="SourcePath"/> with native separators; a null directory list reads as none.</summary>
+public sealed record CopySource(
+    DateOnly Night,
+    string ScanRoot,
+    string SourcePath,
+    IReadOnlyList<string> ExcludedRelativePaths,
+    IReadOnlyList<string>? ExcludedRelativeDirectories = null);
+
+/// <summary>The named operations of one export and the folder their entry paths are relative to;
+/// <paramref name="StartFolder"/> is null when the sources sit under several scan roots (each
+/// entry is then relative to its own root) and when there are no operations.</summary>
+public sealed record StagingPlan(string? StartFolder, IReadOnlyList<CopyOperation> Operations);
+
 /// <summary>The export's summary counts, over the chosen levels and their excluded frames
 /// (core-shapes.md section 4). <paramref name="SizeBytes"/> is null when any counted file's size
 /// is unknown.</summary>
