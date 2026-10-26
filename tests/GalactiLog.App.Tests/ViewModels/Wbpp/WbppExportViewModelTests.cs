@@ -202,7 +202,8 @@ internal sealed class ExportHarness : IDisposable
         bool parked = false,
         Func<string, IReadOnlyList<string>?>? listSubfolders = null,
         Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
-        CalibrationWalk.Walker? walk = null)
+        CalibrationWalk.Walker? walk = null,
+        Func<GeneralSettings, GeneralSettings>? general = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -216,6 +217,10 @@ internal sealed class ExportHarness : IDisposable
                 WbppExclusionsDocument = exclusions,
             },
         };
+        if (general is not null)
+        {
+            harness.General = general(harness.General);
+        }
 
         harness.Page = new WbppExportViewModel(
             library.GroupKey,
