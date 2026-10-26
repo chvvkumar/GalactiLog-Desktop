@@ -28,7 +28,7 @@ public class CalibrationScanTests
         var row = Row(@"W:\N\FLAT",
             M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\f2.fits", CalibrationType.Flat, true),
             M(@"W:\N\FLAT\f3.fits", CalibrationType.Flat, false), M(@"W:\N\FLAT\df1.fits", CalibrationType.DarkFlat, true));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)]);
+        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []);
         Assert.Equal(2, ops.Count);
         Assert.Equal("FLAT", ops[0].DestinationSubfolder);
         Assert.Equal(["f3.fits", "df1.fits"], ops[0].ExcludedRelativePaths);
@@ -43,7 +43,7 @@ public class CalibrationScanTests
         var row = Row(@"W:\N\FLAT\Cam",
             M(@"W:\N\FLAT\Cam\a_128.85.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\Cam\b_128.85.fits", CalibrationType.Flat, true),
             M(@"W:\N\FLAT\Cam\c_270.00.fits", CalibrationType.Flat, false));
-        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)]));
+        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []));
         Assert.Equal(["c_270.00.fits"], op.ExcludedRelativePaths);
         Assert.Equal(@"FLAT\Cam", op.DestinationSubfolder);
     }
@@ -55,7 +55,7 @@ public class CalibrationScanTests
             M(@"W:\N\Dark\d1.fits", CalibrationType.Dark, false), M(@"W:\N\Dark\d2.fits", CalibrationType.Dark, false),
             M(@"W:\N\Dark\b1.fits", CalibrationType.Bias, false), M(@"W:\N\Dark\l1.fits", CalibrationType.Light, false),
             M(@"W:\N\Dark\o1.fits", CalibrationType.Other, false));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)]);
+        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []);
         Assert.Equal(2, ops.Count);
         Assert.Equal("DARK", ops[0].DestinationSubfolder);
         Assert.Equal(["b1.fits", "l1.fits", "o1.fits"], ops[0].ExcludedRelativePaths);
@@ -67,7 +67,7 @@ public class CalibrationScanTests
     public void Operations_UntickedRows_ProduceNothing()
     {
         var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true));
-        Assert.Empty(CalibrationScan.Operations(N, "E", @"W:\N", [(row, false)]));
+        Assert.Empty(CalibrationScan.Operations(N, "E", @"W:\N", [(row, false)], []));
     }
 
     [Fact]
@@ -75,9 +75,28 @@ public class CalibrationScanTests
     {
         var b = Row(@"W:\N\B", M(@"W:\N\B\f.fits", CalibrationType.Flat, true));
         var a = Row(@"W:\N\A", M(@"W:\N\A\b.fits", CalibrationType.Bias, true), M(@"W:\N\A\d.fits", CalibrationType.Dark, true));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(b, true), (a, true)]);
+        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(b, true), (a, true)], []);
         Assert.Equal([@"W:\N\A", @"W:\N\A", @"W:\N\B"], ops.Select(o => o.SourcePath));
         Assert.Equal([@"DARK\A", @"BIAS\A", @"FLAT\B"], ops.Select(o => o.DestinationSubfolder));
+    }
+
+    [Fact]
+    public void Operations_ExcludeChildDirectoriesOfTheRowFolder()
+    {
+        var row = Row(@"W:\FLAT", M(@"W:\FLAT\a.fits", CalibrationType.Flat, true));
+        ScannedFrame S(string p) => new(p, 1, CalibrationType.Flat, Keys, null, N);
+        var all = new[] { S(@"W:\FLAT\a.fits"), S(@"W:\FLAT\old\a.fits"), S(@"W:\FLAT\rejects\deep\b.fits"), S(@"W:\FLAT\Old\c.fits"), S(@"W:\FLAT2\d.fits") };
+        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\", [(row, true)], all));
+        Assert.Equal(["old", "rejects"], op.ExcludedRelativeDirectories);
+    }
+
+    [Fact]
+    public void Operations_SkipATypeWithNoSelectedFrameWhenOtherTypesAreSelected()
+    {
+        var row = Row(@"W:\N\FLAT",
+            M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\df1.fits", CalibrationType.DarkFlat, false));
+        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []));
+        Assert.Equal("FLAT", op.DestinationSubfolder);
     }
 
     [Fact]

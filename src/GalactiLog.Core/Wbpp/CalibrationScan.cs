@@ -36,20 +36,31 @@ public static class CalibrationScan
     }
 
     public static IReadOnlyList<CopyOperation> Operations(
-        DateOnly night, string entryName, string scannedLevel, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows)
+        DateOnly night, string entryName, string scannedLevel, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
+        IReadOnlyList<ScannedFrame> allFrames)
     {
         var ops = new List<CopyOperation>();
         foreach (var (row, _) in rows.Where(r => r.Ticked).OrderBy(r => r.Row.Folder, StringComparer.OrdinalIgnoreCase))
         {
             var anySelected = row.SelectedCount > 0;
+            // The copier recurses, so child folders are excluded: a row is only the files directly in its folder.
+            var childDirs = allFrames
+                .Where(f => PathConfinement.IsUnderOrEqual(row.Folder, f.FilePath)
+                            && !Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(f.FilePath) ?? "").Equals(
+                                Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase))
+                .Select(f => Path.GetRelativePath(row.Folder, f.FilePath).Split(Path.DirectorySeparatorChar)[0])
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Order(StringComparer.OrdinalIgnoreCase)
+                .ToList();
             var held = row.Types;
             foreach (var type in CalibrationTypes.Where(held.Contains))
             {
+                if (anySelected && !row.Frames.Any(f => f.Frame.Type == type && f.Selected)) continue;
                 var excluded = row.Frames
                     .Where(f => f.Frame.Type != type || (anySelected && !f.Selected))
                     .Select(f => Path.GetFileName(f.Frame.FilePath))
                     .ToList();
-                ops.Add(new CopyOperation(night, row.Folder, entryName, excluded, null, DestinationSubfolder(scannedLevel, row.Folder, type)));
+                ops.Add(new CopyOperation(night, row.Folder, entryName, excluded, childDirs.Count == 0 ? null : childDirs, DestinationSubfolder(scannedLevel, row.Folder, type)));
             }
         }
         return ops;

@@ -253,7 +253,8 @@ public sealed record WalkResult(IReadOnlyList<ScannedFrame> Frames, IReadOnlyLis
 public sealed record NightRule(bool UseImagingNight, double? ObserverLongitude, string? ObserverTimezone);
 
 /// <summary>Frame counts and bytes the calibration copy will add, per type. <c>Other</c> is the
-/// non-calibration, non-light files under the chosen level that the copy carries along.</summary>
+/// non-calibration, non-light files under the chosen level, carried only when they lie under the
+/// chosen lights folder, since calibration operations exclude them.</summary>
 public sealed record CalibrationTotals(
     int FlatCount, long FlatBytes,
     int DarkFlatCount, long DarkFlatBytes,
