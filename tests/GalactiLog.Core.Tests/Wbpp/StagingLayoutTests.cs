@@ -121,6 +121,43 @@ public class StagingLayoutTests
     }
 
     [Fact]
+    public void ADroppedInnerSource_KeepsItsFrames_ThatTheOuterListsAsForeign()
+    {
+        // Night 18 at M31 lists night 19's Ha frames as foreign; night 19 at M31\Ha wants them.
+        var m31 = Path.Combine(Root, "M31");
+        var outer = S(N18, m31, files: [@"Ha\n19.fits", @"Ha\rej19.fits", @"OIII\rej18.fits"]);
+        var inner = S(N19, Path.Combine(m31, "Ha"), files: ["n18.fits", "rej19.fits"]);
+
+        foreach (var sources in new CopySource[][] { [outer, inner], [inner, outer] })
+        {
+            var op = Assert.Single(StagingLayout.Plan(sources).Operations);
+            Assert.Equal(m31, op.SourcePath);
+            Assert.Equal(N18, op.Night);
+            // n19 is wanted by its own night, n18 by the outer; rej19 both nights leave out, and
+            // OIII is covered by the outer alone.
+            Assert.Equal([@"Ha\rej19.fits", @"OIII\rej18.fits"], op.ExcludedRelativePaths.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.Null(op.ExcludedRelativeDirectories);
+        }
+    }
+
+    [Fact]
+    public void ASharedFolder_LeavesOutAFileOnlyWhenEveryNightExcludesIt_ByFileOrDirectory()
+    {
+        // Night 19 unticks OIII, so its list names nothing there. Night 18 lists night 19's OIII
+        // frame as foreign and its own rejected OIII frame.
+        var m31 = Path.Combine(Root, "M31");
+        var plan = StagingLayout.Plan([
+            S(N18, m31, files: [@"OIII\n19.fits", @"OIII\rej18.fits", @"Ha\n19.fits"]),
+            S(N19, m31, files: [@"Ha\n18.fits"], dirs: ["OIII"])]);
+
+        var op = Assert.Single(plan.Operations);
+        // Both OIII files are excluded by both nights; Ha\n19 is wanted by night 19, and OIII
+        // itself is wanted by night 18 (its other OIII frames copy).
+        Assert.Equal([@"OIII\n19.fits", @"OIII\rej18.fits"], op.ExcludedRelativePaths);
+        Assert.Null(op.ExcludedRelativeDirectories);
+    }
+
+    [Fact]
     public void ANestedSourceUnderAnExcludedDirectoryOfTheOuter_IsItsOwnOperation()
     {
         // Part C's shape: the outer leaves FLAT out, so the inner tick copies it on its own.

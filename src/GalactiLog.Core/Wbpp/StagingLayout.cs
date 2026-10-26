@@ -56,33 +56,55 @@ public static class StagingLayout
     private static string Relative(string baseFolder, string path)
         => Path.TrimEndingDirectorySeparator(Path.GetRelativePath(baseFolder, path));
 
-    // Same folder from several nights becomes one entry (first night wins). Excluded files and
-    // directories both intersect: each night's lists are relative to that night, since another
-    // night's frames are foreign to it, so the merged entry leaves out only what every night left
-    // out. A folder nested under another source is dropped unless it sits under a directory that
-    // source excludes.
+    // One operation per kept folder (first night wins). A folder nested under another source is
+    // dropped into that source's operation unless every source holding it excludes it as a
+    // directory. Each source's excludes are relative to that source, and another night's frames
+    // are foreign to it, so the operation leaves a file or directory out only when every member
+    // source that covers it (whose folder holds it) excludes it; a path only one source covers
+    // keeps that source's verdict. A source inside a directory the operation leaves out is not a
+    // member: it stays its own operation.
     private static List<Kept> Dedupe(IReadOnlyList<CopySource> sources)
     {
-        var groups = new List<Kept>();
+        var folders = new List<CopySource>();
         foreach (var s in sources)
         {
-            var dirs = s.ExcludedRelativeDirectories ?? [];
-            var g = groups.FirstOrDefault(x => Same(x.Source.SourcePath, s.SourcePath));
-            if (g is null)
+            if (!folders.Any(f => Same(f.SourcePath, s.SourcePath)))
             {
-                groups.Add(new Kept(s, [.. s.ExcludedRelativePaths.Distinct(StringComparer.OrdinalIgnoreCase)], [.. dirs.Distinct(StringComparer.OrdinalIgnoreCase)]));
-                continue;
+                folders.Add(s);
             }
-            g.Files.RemoveAll(f => !s.ExcludedRelativePaths.Contains(f, StringComparer.OrdinalIgnoreCase));
-            g.Dirs.RemoveAll(d => !dirs.Contains(d, StringComparer.OrdinalIgnoreCase));
         }
 
-        return groups.Where(inner => !groups.Any(outer =>
-            !ReferenceEquals(outer, inner)
-            && PathConfinement.IsUnderOrEqual(outer.Source.SourcePath, inner.Source.SourcePath)
-            && !outer.Dirs.Any(d => PathConfinement.IsUnderOrEqual(Path.Combine(outer.Source.SourcePath, d), inner.Source.SourcePath))))
-            .ToList();
+        var kept = folders.Where(f => !sources.Any(s =>
+            !Same(s.SourcePath, f.SourcePath)
+            && PathConfinement.IsUnderOrEqual(s.SourcePath, f.SourcePath)
+            && !ExcludesDirectory(s, f.SourcePath))).ToList();
+
+        // A source joins the innermost kept folder that holds it.
+        string KeptFolderOf(CopySource s) => kept
+            .Where(k => PathConfinement.IsUnderOrEqual(k.SourcePath, s.SourcePath))
+            .MaxBy(k => Path.TrimEndingDirectorySeparator(k.SourcePath).Length)!.SourcePath;
+
+        return kept.Select(k =>
+        {
+            var members = sources.Where(s => Same(KeptFolderOf(s), k.SourcePath))
+                .Select(s => (Source: s, Files: s.ExcludedRelativePaths.ToHashSet(StringComparer.OrdinalIgnoreCase)))
+                .ToList();
+            bool Excludes((CopySource Source, HashSet<string> Files) m, string path, bool isFile)
+                => (isFile && m.Files.Contains(Path.GetRelativePath(m.Source.SourcePath, path))) || ExcludesDirectory(m.Source, path);
+            List<string> Survivors(Func<CopySource, IEnumerable<string>> list, bool isFile) => members
+                .SelectMany(m => list(m.Source).Select(rel => Path.Combine(m.Source.SourcePath, rel)))
+                .Where(abs => members.All(m => !PathConfinement.IsUnderOrEqual(m.Source.SourcePath, abs) || Excludes(m, abs, isFile)))
+                .Select(abs => Path.GetRelativePath(k.SourcePath, abs))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            return new Kept(k, Survivors(m => m.ExcludedRelativePaths, isFile: true), Survivors(m => m.ExcludedRelativeDirectories ?? [], isFile: false));
+        }).ToList();
     }
+
+    // A source excludes a file when the file is one of its excluded files or lies under one of its
+    // excluded directories; it excludes a directory only by the second test.
+    private static bool ExcludesDirectory(CopySource s, string path)
+        => (s.ExcludedRelativeDirectories ?? []).Any(d => PathConfinement.IsUnderOrEqual(Path.Combine(s.SourcePath, d), path));
 
     // The deepest folder holding every kept source, climbing from the first one. Falls back to the
     // scan root when the climb reaches the root or lands on a folder that is itself copied.
