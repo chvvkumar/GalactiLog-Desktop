@@ -523,11 +523,18 @@ public class WbppPathsQueryTests(ITestOutputHelper output)
         library.AddFrame(m33, Night1, @$"{folder}\flat.fits", 4L, "FLAT");
         library.AddFrame(m33, Night1, @$"{Root}\Date_2025-10-150\sibling.fits", 5L);
         library.AddFrame(m33, Night1, @$"{Root}\DateX2025-10-15\wild.fits", 6L);
+        library.AddFrame(null, Night1, @$"{folder}\unresolved.fits", 7L);
+        library.AddFrame(m31, null, @$"{folder}\undated.fits", 8L);
 
         var found = library.Query.ForeignLightsUnder(folder, library.GroupKey(m31), Night1);
 
         Assert.Equal(
-            [@$"{folder}\otherNight.fits", @$"{folder}\sub\otherTarget.fits"],
+            [
+                @$"{folder}\otherNight.fits",
+                @$"{folder}\sub\otherTarget.fits",
+                @$"{folder}\undated.fits",
+                @$"{folder}\unresolved.fits",
+            ],
             found.Select(f => f.FilePath).OrderBy(p => p, StringComparer.Ordinal));
     }
 

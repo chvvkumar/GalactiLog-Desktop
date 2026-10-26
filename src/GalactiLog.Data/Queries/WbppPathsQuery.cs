@@ -223,7 +223,6 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
     {
         // Stored paths are Windows paths; the source guard allows only Path.GetFullPath from Path.
         var prefix = Path.GetFullPath(folder.TrimEnd('\\', '/') + "\\");
-        var full = prefix;
         var pattern = prefix.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
 
         using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString.Value));
@@ -242,7 +241,7 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
             FROM images i
             WHERE i.{SqlFragments.LightFrameOnly}
               AND i.file_path LIKE {like} ESCAPE '\'
-              AND NOT ({scope} AND i.session_date = {nightParameter});
+              AND NOT (coalesce({scope}, 0) AND coalesce(i.session_date = {nightParameter}, 0));
             """;
         parameters.ApplyTo(command);
 
@@ -252,7 +251,7 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
         {
             cancellationToken.ThrowIfCancellationRequested();
             var path = Path.GetFullPath(reader.GetString(1));
-            if (PathConfinement.IsUnderOrEqual(full, path))
+            if (PathConfinement.IsUnderOrEqual(prefix, path))
             {
                 found.Add(new WbppFramePath(reader.GetGuid(0), path, ReadNullableLong(reader, 2)));
             }
