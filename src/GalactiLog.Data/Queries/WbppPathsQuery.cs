@@ -1,4 +1,5 @@
 using System.Globalization;
+using GalactiLog.Core.Io;
 using GalactiLog.Core.Wbpp;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -16,9 +17,14 @@ namespace GalactiLog.Data.Queries;
 /// streamed into <c>ContaminationIndex.Build</c> as the reader walks them, so a 200,000 frame
 /// library never materialises 200,000 records for a caller to hold (seam review finding 14).
 /// </param>
+/// <param name="Keys">The calibration matching keys of every frame in <paramref name="Nights"/>,
+/// by frame id, read from the catalogue columns and <c>raw_headers</c>. Trailing and optional so a
+/// caller that builds this record by hand need not supply it; consumers read null as empty.
+/// <see cref="WbppPathsQuery.Read"/> always fills it.</param>
 public sealed record WbppPaths(
     IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> Nights,
-    ContaminationIndex Catalogue);
+    ContaminationIndex Catalogue,
+    IReadOnlyDictionary<Guid, FrameKeys>? Keys = null);
 
 /// <summary>
 /// The one read the WBPP export page issues (spec 12.13, W3), port of <c>_fetch_session_paths</c>
@@ -115,6 +121,9 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
         // make this an index-only scan for every row except an unresolved dated LIGHT one, whose
         // group key needs raw_headers and which therefore still visits the table.
         //
+        // Statement A's nine key columns are bounded by the IN list: only the requested nights'
+        // LIGHT rows of this group read them, so the json_extract calls never touch the full table.
+        //
         // The two CASE guards are load-bearing (seam review finding 14).
         // SqlFragments.GroupKeyExpression carries json_extract(i.raw_headers, '$.OBJECT'), and
         // raw_headers is the largest column in the table. SQLite's coalesce short-circuits, so the
@@ -123,7 +132,11 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
         // expensive column unreachable for exactly the rows whose key nothing reads.
         command.CommandText =
             $"""
-            SELECT i.id, i.file_path, i.file_size, i.session_date
+            SELECT i.id, i.file_path, i.file_size, i.session_date,
+                   i.camera, i.filter_used, i.camera_gain, i.telescope,
+                   json_extract(i.raw_headers, '$.OFFSET'), json_extract(i.raw_headers, '$.XBINNING'),
+                   json_extract(i.raw_headers, '$.READOUTM'), json_extract(i.raw_headers, '$.ROTATANG'),
+                   json_extract(i.raw_headers, '$.ROTATOR')
             FROM images i
             WHERE i.{SqlFragments.LightFrameOnly}
               AND {scope}
@@ -145,16 +158,29 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
             lists.TryAdd(night, []);
         }
 
+        var keys = new Dictionary<Guid, FrameKeys>();
         using var reader = command.ExecuteReader();
         while (reader.Read())
         {
             // A row reaches here only through the IN predicate, so its session_date is one of the
             // requested nights and the lookup cannot miss.
             var night = SqlReaders.ReadDate(reader, 3)!.Value;
+            var id = reader.GetGuid(0);
             lists[night].Add(new WbppFramePath(
-                reader.GetGuid(0),
+                id,
                 Path.GetFullPath(reader.GetString(1)),
                 ReadNullableLong(reader, 2)));
+            // rotator_position is OBJCTROT, the sky angle, and is deliberately not selected: the
+            // mechanical angle is ROTATANG, else ROTATOR.
+            keys[id] = new FrameKeys(
+                SqlReaders.ReadText(reader, 4),
+                SqlReaders.ReadText(reader, 5),
+                ReadJsonNumber(reader, 9),
+                ReadJsonNumber(reader, 6),
+                ReadJsonNumber(reader, 8),
+                SqlReaders.ReadText(reader, 7),
+                ReadJsonNumber(reader, 11) ?? ReadJsonNumber(reader, 12),
+                SqlReaders.ReadText(reader, 10));
         }
 
         // Insertion ordered, because the contract is "in the requested order" and a plain
@@ -175,8 +201,78 @@ public sealed class WbppPathsQuery(DatabaseConnectionString connectionString)
         reader.NextResult();
         var catalogue = ContaminationIndex.Build(scanRoots, CatalogueRows(reader, cancellationToken));
 
-        return new WbppPaths(byNight, catalogue);
+        return new WbppPaths(byNight, catalogue, keys);
     }
+
+    /// <summary>
+    /// The LIGHT files under <paramref name="folder"/> that belong to another target or another
+    /// night than the one being exported, so the export can exclude them from a folder it copies.
+    /// Synchronous, off the UI thread.
+    /// </summary>
+    /// <remarks>
+    /// The prefix is the normalised folder plus a separator, so <c>Date_2025-10-150</c> is not under
+    /// <c>Date_2025-10-15</c>; <c>%</c>, <c>_</c> and the escape character are escaped so a folder
+    /// name cannot act as a wildcard. SQLite's LIKE is case-insensitive for ASCII only, so the rows
+    /// are re-checked in C# with <see cref="PathConfinement.IsUnderOrEqual"/>.
+    /// </remarks>
+    public IReadOnlyList<WbppFramePath> ForeignLightsUnder(
+        string folder,
+        string groupKey,
+        DateOnly night,
+        CancellationToken cancellationToken = default)
+    {
+        // Stored paths are Windows paths; the source guard allows only Path.GetFullPath from Path.
+        var prefix = Path.GetFullPath(folder.TrimEnd('\\', '/') + "\\");
+        var full = prefix;
+        var pattern = prefix.Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_") + "%";
+
+        using var context = new GalactiLogContext(GalactiLogContextOptions.Create(connectionString.Value));
+        context.Database.OpenConnection();
+        var connection = (SqliteConnection)context.Database.GetDbConnection();
+
+        var parameters = new SqlParameters();
+        var scope = SqlFragments.GroupScope(groupKey, parameters.Add);
+        var like = parameters.Add(pattern);
+        var nightParameter = parameters.Add(night.ToString(SqlReaders.DateFormat, CultureInfo.InvariantCulture));
+
+        using var command = connection.CreateCommand();
+        command.CommandText =
+            $"""
+            SELECT i.id, i.file_path, i.file_size
+            FROM images i
+            WHERE i.{SqlFragments.LightFrameOnly}
+              AND i.file_path LIKE {like} ESCAPE '\'
+              AND NOT ({scope} AND i.session_date = {nightParameter});
+            """;
+        parameters.ApplyTo(command);
+
+        var found = new List<WbppFramePath>();
+        using var reader = command.ExecuteReader();
+        while (reader.Read())
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var path = Path.GetFullPath(reader.GetString(1));
+            if (PathConfinement.IsUnderOrEqual(full, path))
+            {
+                found.Add(new WbppFramePath(reader.GetGuid(0), path, ReadNullableLong(reader, 2)));
+            }
+        }
+
+        return found;
+    }
+
+    /// <summary>A number out of <c>json_extract</c>, which yields INTEGER, REAL or TEXT depending
+    /// on how the header was written. Text is parsed invariant; anything unparseable is null.</summary>
+    private static double? ReadJsonNumber(SqliteDataReader reader, int ordinal)
+        => reader.IsDBNull(ordinal)
+            ? null
+            : reader.GetValue(ordinal) switch
+            {
+                long l => l,
+                double d => d,
+                string t when double.TryParse(t, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) => v,
+                _ => null,
+            };
 
     /// <summary>One <c>WbppCataloguePath</c> per catalogue row, yielded as the reader walks it.
     /// Nothing outside this method and <c>ContaminationIndex.Build</c> ever holds one. The token is
