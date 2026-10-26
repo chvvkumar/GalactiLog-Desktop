@@ -14,57 +14,45 @@ public class CalibrationScanTests
     private static CalibrationRow Row(string folder, params FrameMatch[] frames) =>
         new(folder, frames, frames.Any(f => f.Selected), "");
 
-    [Theory]
-    [InlineData(@"W:\A\Date_X", @"W:\A\Date_X\FLAT\Cam\Angle_1", CalibrationType.Flat, @"FLAT\Cam\Angle_1")]
-    [InlineData(@"W:\A\Plan", @"W:\A\Plan\Flat", CalibrationType.DarkFlat, @"DARKFLAT\Flat")]
-    [InlineData(@"W:\A\Plan", @"W:\A\Plan\Flat", CalibrationType.Flat, "FLAT")]
-    [InlineData(@"W:\A\Date_X", @"W:\A\Date_X", CalibrationType.Bias, "BIAS")]
-    public void DestinationSubfolder_FollowsTheTypeThenTheRelativePath(string level, string folder, CalibrationType type, string expected)
-        => Assert.Equal(expected, CalibrationScan.DestinationSubfolder(level, folder, type));
-
     [Fact]
-    public void Operations_OnePerTickedRowPerType_WithUnselectedAndOtherTypeFilesExcluded()
+    public void CopySources_OnePerTickedRow_WithTheUnselectedFramesExcluded()
     {
         var row = Row(@"W:\N\FLAT",
             M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\f2.fits", CalibrationType.Flat, true),
             M(@"W:\N\FLAT\f3.fits", CalibrationType.Flat, false), M(@"W:\N\FLAT\df1.fits", CalibrationType.DarkFlat, true));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []);
-        Assert.Equal(2, ops.Count);
-        Assert.Equal("FLAT", ops[0].DestinationSubfolder);
-        Assert.Equal(["f3.fits", "df1.fits"], ops[0].ExcludedRelativePaths);
-        Assert.Equal(@"DARKFLAT\FLAT", ops[1].DestinationSubfolder);
-        Assert.Equal(["f1.fits", "f2.fits", "f3.fits"], ops[1].ExcludedRelativePaths);
-        Assert.All(ops, o => { Assert.Equal(@"W:\N\FLAT", o.SourcePath); Assert.Equal("E", o.EntryName); Assert.Null(o.ExcludedRelativeDirectories); });
+
+        var source = Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], []));
+
+        Assert.Equal(N, source.Night);
+        Assert.Equal(@"W:\", source.ScanRoot);
+        Assert.Equal(@"W:\N\FLAT", source.SourcePath);
+        Assert.Equal(["f3.fits"], source.ExcludedRelativePaths);
+        Assert.Null(source.ExcludedRelativeDirectories);
     }
 
     [Fact]
-    public void Operations_ExcludesUnselectedFilesInsideATickedRow()
+    public void CopySources_ExcludeUnselectedFilesInsideATickedRow()
     {
         var row = Row(@"W:\N\FLAT\Cam",
             M(@"W:\N\FLAT\Cam\a_128.85.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\Cam\b_128.85.fits", CalibrationType.Flat, true),
             M(@"W:\N\FLAT\Cam\c_270.00.fits", CalibrationType.Flat, false));
-        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []));
-        Assert.Equal(["c_270.00.fits"], op.ExcludedRelativePaths);
-        Assert.Equal(@"FLAT\Cam", op.DestinationSubfolder);
+
+        Assert.Equal(["c_270.00.fits"], Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], [])).ExcludedRelativePaths);
     }
 
     [Fact]
-    public void Operations_ATickedRowWithNoSelection_CopiesAllItsFramesOfEachType()
+    public void CopySources_ATickedRowWithNoSelection_CopiesEveryCalibrationFrame_AndLeavesLightsAndOthers()
     {
         var row = Row(@"W:\N\Dark",
             M(@"W:\N\Dark\d1.fits", CalibrationType.Dark, false), M(@"W:\N\Dark\d2.fits", CalibrationType.Dark, false),
             M(@"W:\N\Dark\b1.fits", CalibrationType.Bias, false), M(@"W:\N\Dark\l1.fits", CalibrationType.Light, false),
             M(@"W:\N\Dark\o1.fits", CalibrationType.Other, false));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []);
-        Assert.Equal(2, ops.Count);
-        Assert.Equal("DARK", ops[0].DestinationSubfolder);
-        Assert.Equal(["b1.fits", "l1.fits", "o1.fits"], ops[0].ExcludedRelativePaths);
-        Assert.Equal(@"BIAS\Dark", ops[1].DestinationSubfolder);
-        Assert.Equal(["d1.fits", "d2.fits", "l1.fits", "o1.fits"], ops[1].ExcludedRelativePaths);
+
+        Assert.Equal(["l1.fits", "o1.fits"], Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], [])).ExcludedRelativePaths);
     }
 
     [Fact]
-    public void Operations_ExcludeTheRowFoldersFilesThatAreNotInTheRow()
+    public void CopySources_ExcludeTheRowFoldersFilesThatAreNotInTheRow()
     {
         // An unparsable header or a sidecar beside the flats is scanned as Other and never joins the
         // row, so the footer does not count it; the operation must not copy it either.
@@ -76,7 +64,7 @@ public class CalibrationScanTests
             new ScannedFrame(@"W:\N\FLAT\notes.txt", 5, CalibrationType.Other, Keys, null, null),
             new ScannedFrame(@"W:\N\Other\x.fits", 5, CalibrationType.Other, Keys, null, null),
         };
-        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], all));
+        var op = Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], all));
         Assert.Equal(["broken.fits", "notes.txt"], op.ExcludedRelativePaths);
     }
 
@@ -127,39 +115,47 @@ public class CalibrationScanTests
     }
 
     [Fact]
-    public void Operations_UntickedRows_ProduceNothing()
+    public void CopySources_UntickedRows_ProduceNothing()
     {
         var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true));
-        Assert.Empty(CalibrationScan.Operations(N, "E", @"W:\N", [(row, false)], []));
+        Assert.Empty(CalibrationScan.CopySources(N, @"W:\", [(row, false)], []));
     }
 
     [Fact]
-    public void Operations_AreOrderedByFolderThenType()
+    public void CopySources_AreOrderedByFolder()
     {
         var b = Row(@"W:\N\B", M(@"W:\N\B\f.fits", CalibrationType.Flat, true));
         var a = Row(@"W:\N\A", M(@"W:\N\A\b.fits", CalibrationType.Bias, true), M(@"W:\N\A\d.fits", CalibrationType.Dark, true));
-        var ops = CalibrationScan.Operations(N, "E", @"W:\N", [(b, true), (a, true)], []);
-        Assert.Equal([@"W:\N\A", @"W:\N\A", @"W:\N\B"], ops.Select(o => o.SourcePath));
-        Assert.Equal([@"DARK\A", @"BIAS\A", @"FLAT\B"], ops.Select(o => o.DestinationSubfolder));
+
+        Assert.Equal([@"W:\N\A", @"W:\N\B"], CalibrationScan.CopySources(N, @"W:\", [(b, true), (a, true)], []).Select(s => s.SourcePath));
     }
 
     [Fact]
-    public void Operations_ExcludeChildDirectoriesOfTheRowFolder()
+    public void CopySources_ExcludeChildDirectoriesOfTheRowFolder()
     {
         var row = Row(@"W:\FLAT", M(@"W:\FLAT\a.fits", CalibrationType.Flat, true));
         ScannedFrame S(string p) => new(p, 1, CalibrationType.Flat, Keys, null, N);
         var all = new[] { S(@"W:\FLAT\a.fits"), S(@"W:\FLAT\old\a.fits"), S(@"W:\FLAT\rejects\deep\b.fits"), S(@"W:\FLAT\Old\c.fits"), S(@"W:\FLAT2\d.fits") };
-        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\", [(row, true)], all));
+        var op = Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], all));
         Assert.Equal(["old", "rejects"], op.ExcludedRelativeDirectories);
     }
 
     [Fact]
-    public void Operations_SkipATypeWithNoSelectedFrameWhenOtherTypesAreSelected()
+    public void CopySources_ExcludeAnUnselectedFrameOfAnotherType()
     {
-        var row = Row(@"W:\N\FLAT",
-            M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\df1.fits", CalibrationType.DarkFlat, false));
-        var op = Assert.Single(CalibrationScan.Operations(N, "E", @"W:\N", [(row, true)], []));
-        Assert.Equal("FLAT", op.DestinationSubfolder);
+        var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true), M(@"W:\N\FLAT\df1.fits", CalibrationType.DarkFlat, false));
+
+        Assert.Equal(["df1.fits"], Assert.Single(CalibrationScan.CopySources(N, @"W:\", [(row, true)], [])).ExcludedRelativePaths);
+    }
+
+    [Fact]
+    public void LongestRelative_IsTheLongestPathUnderTheFolder_AndZeroWhenNoneIsUnderIt()
+    {
+        ScannedFrame S(string p) => new(p, 1, CalibrationType.Flat, Keys, null, N);
+        var frames = new[] { S(@"W:\N\FLAT\f1.fits"), S(@"W:\N\FLAT\sub\longer_name.fits"), S(@"W:\N\FLAT2\x.fits") };
+
+        Assert.Equal(@"sub\longer_name.fits".Length, CalibrationScan.LongestRelative(@"W:\N\FLAT", frames));
+        Assert.Equal(0, CalibrationScan.LongestRelative(@"W:\N\DARK", frames));
     }
 
     [Fact]

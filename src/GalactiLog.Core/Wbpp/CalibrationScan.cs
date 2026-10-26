@@ -2,44 +2,21 @@ using GalactiLog.Core.Io;
 
 namespace GalactiLog.Core.Wbpp;
 
-/// <summary>Turns matched calibration rows and the user's ticks into copy operations and totals.
+/// <summary>Turns matched calibration rows and the user's ticks into copy sources and totals.
 /// Pure logic, no I/O.</summary>
 public static class CalibrationScan
 {
     private static readonly CalibrationType[] CalibrationTypes =
         [CalibrationType.Flat, CalibrationType.DarkFlat, CalibrationType.Dark, CalibrationType.Bias];
 
-    public static string TypeFolderName(CalibrationType type) => type switch
+    /// <summary>One copy source per ticked row, ordered by folder (OrdinalIgnoreCase). The excluded
+    /// files are the row's unselected frames when any frame is selected, every Light or Other typed
+    /// frame in the row, and the stray files directly in the folder; the excluded directories are
+    /// the child folders holding scanned frames, null when there are none.</summary>
+    public static IReadOnlyList<CopySource> CopySources(
+        DateOnly night, string scanRoot, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyList<ScannedFrame> allFrames)
     {
-        CalibrationType.Flat => "FLAT",
-        CalibrationType.DarkFlat => "DARKFLAT",
-        CalibrationType.Dark => "DARK",
-        CalibrationType.Bias => "BIAS",
-        _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Only calibration types have a folder."),
-    };
-
-    /// <summary>The type folder, then the row folder's path below the scanned level, with that
-    /// path's first segment dropped when it already names the type folder.</summary>
-    public static string DestinationSubfolder(string scannedLevel, string folder, CalibrationType type)
-    {
-        var typeFolder = TypeFolderName(type);
-        var relative = Path.GetRelativePath(scannedLevel, folder);
-        if (relative == ".") return typeFolder;
-
-        var segments = relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
-        var rest = segments.Length > 0 && segments[0].Equals(typeFolder, StringComparison.OrdinalIgnoreCase)
-            ? segments[1..]
-            : segments;
-        return rest.Length == 0
-            ? typeFolder
-            : typeFolder + Path.DirectorySeparatorChar + string.Join(Path.DirectorySeparatorChar, rest);
-    }
-
-    public static IReadOnlyList<CopyOperation> Operations(
-        DateOnly night, string entryName, string scannedLevel, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
-        IReadOnlyList<ScannedFrame> allFrames)
-    {
-        var ops = new List<CopyOperation>();
+        var sources = new List<CopySource>();
         foreach (var (row, _) in rows.Where(r => r.Ticked).OrderBy(r => r.Row.Folder, StringComparer.OrdinalIgnoreCase))
         {
             var anySelected = row.SelectedCount > 0;
@@ -51,26 +28,28 @@ public static class CalibrationScan
                 .Order(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             // Files directly in the folder that are not row frames (unparsable headers, sidecars) are
-            // never counted by the footer, so no operation copies them.
+            // never counted by the footer, so no source copies them.
             var inRow = new HashSet<string>(row.Frames.Select(f => f.Frame.FilePath), StringComparer.OrdinalIgnoreCase);
             var strays = allFrames
                 .Where(f => !inRow.Contains(f.FilePath) && DirectlyIn(row.Folder, f.FilePath))
-                .Select(f => Path.GetFileName(f.FilePath))
+                .Select(f => Path.GetFileName(f.FilePath));
+            var excluded = row.Frames
+                .Where(f => (anySelected && !f.Selected) || f.Frame.Type is CalibrationType.Light or CalibrationType.Other)
+                .Select(f => Path.GetFileName(f.Frame.FilePath))
+                .Concat(strays)
                 .ToList();
-            var held = row.Types;
-            foreach (var type in CalibrationTypes.Where(held.Contains))
-            {
-                if (anySelected && !row.Frames.Any(f => f.Frame.Type == type && f.Selected)) continue;
-                var excluded = row.Frames
-                    .Where(f => f.Frame.Type != type || (anySelected && !f.Selected))
-                    .Select(f => Path.GetFileName(f.Frame.FilePath))
-                    .Concat(strays)
-                    .ToList();
-                ops.Add(new CopyOperation(night, row.Folder, entryName, excluded, childDirs.Count == 0 ? null : childDirs, DestinationSubfolder(scannedLevel, row.Folder, type)));
-            }
+            sources.Add(new CopySource(night, scanRoot, row.Folder, excluded, childDirs.Count == 0 ? null : childDirs));
         }
-        return ops;
+        return sources;
     }
+
+    /// <summary>The longest <c>Path.GetRelativePath(folder, frame.FilePath)</c> length over the
+    /// frames under <paramref name="folder"/>, 0 when none is under it.</summary>
+    public static int LongestRelative(string folder, IReadOnlyList<ScannedFrame> frames)
+        => frames.Where(f => PathConfinement.IsUnderOrEqual(folder, f.FilePath))
+            .Select(f => Path.GetRelativePath(folder, f.FilePath).Length)
+            .DefaultIfEmpty(0)
+            .Max();
 
     /// <summary>True for a row the lights operation copies in place: its folder lies under or equal
     /// to the chosen level and under none of that operation's skipped folders (the user's unticked
