@@ -904,6 +904,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// the strings. Null while the levels are still being computed.</summary>
     public ExportTotals? Totals { get; private set; }
 
+    /// <summary>The full byte total <see cref="SizeText"/> formats: lights plus the scan's selected
+    /// calibration and uncatalogued files. Null while unknown or still loading.</summary>
+    public long? TotalSizeBytes { get; private set; }
+
     /// <summary>Spec 12.13's empty-export warning, or the no-frames sentence beside it, and empty
     /// when neither applies.</summary>
     [ObservableProperty]
@@ -933,6 +937,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             FrameCountText = "";
             FolderCountText = "";
             SizeText = "";
+            TotalSizeBytes = null;
             return;
         }
 
@@ -959,6 +964,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             ? "1 folder"
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
         var size = totals.SizeBytes is long lights ? lights + calibration.Sum(c => c.Bytes) : (long?)null;
+        TotalSizeBytes = size;
         SizeText = WbppPathText.Bytes(size)
             + (Sessions.Any(session => session.IsScanning) ? ", sizing" : "");
 

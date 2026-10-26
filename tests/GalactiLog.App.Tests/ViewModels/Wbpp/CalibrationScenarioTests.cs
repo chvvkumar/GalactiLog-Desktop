@@ -172,7 +172,7 @@ public class CalibrationScenarioTests
             var start = new ProcessStartInfo("icacls") { RedirectStandardOutput = true, RedirectStandardError = true };
             foreach (var arg in args) start.ArgumentList.Add(arg);
             using var process = Process.Start(start)!;
-            process.WaitForExit(15_000);
+            Assert.True(process.WaitForExit(15_000), "icacls did not exit");
             Assert.Equal(0, process.ExitCode);
         }
 
@@ -186,14 +186,19 @@ public class CalibrationScenarioTests
 
         public void Dispose()
         {
-            foreach (var dir in _locked)
+            try
             {
-                Icacls(dir, "/remove:d", Environment.UserName);
+                foreach (var dir in _locked)
+                {
+                    Icacls(dir, "/remove:d", Environment.UserName);
+                }
             }
-
-            if (Directory.Exists(Root))
+            finally
             {
-                Directory.Delete(Root, recursive: true);
+                if (Directory.Exists(Root))
+                {
+                    Directory.Delete(Root, recursive: true);
+                }
             }
         }
     }
@@ -289,9 +294,7 @@ public class CalibrationScenarioTests
         Assert.Equal("same night", same.Note);
         var earlier = CalRow(session, flat09);
         Assert.False(earlier.IsTicked);
-        Assert.True(
-            earlier.Note.Contains("earlier", StringComparison.Ordinal) || earlier.Note.Contains("not the nearest", StringComparison.Ordinal),
-            earlier.Note);
+        Assert.Equal("not the nearest night", earlier.Note);
         Assert.DoesNotContain(session.CalibrationRows, r => Is(r.Row.Folder, night14));
         Assert.Empty(session.Warnings);
     }
@@ -489,6 +492,7 @@ public class CalibrationScenarioTests
         var result = await Copy(h);
         Assert.Equal(StagingOutcome.Completed, result.Outcome);
         Assert.Empty(result.Failed);
+        Assert.Empty(result.Skipped);
         Assert.Equal(3, result.Copied);
         Assert.DoesNotContain(Staged(h), p => p.EndsWith("broken.fits", StringComparison.Ordinal));
     }
@@ -509,7 +513,7 @@ public class CalibrationScenarioTests
         var session = h.Page.Sessions[0];
         Scanned(session);
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
-        var footerBytes = h.Page.Totals!.SizeBytes!.Value + h.Page.Sessions.Sum(s => s.CalibrationTotals().Bytes);
+        var footerBytes = h.Page.TotalSizeBytes;
         var footerFiles = h.Page.Totals!.FrameCount + h.Page.Sessions.Sum(s => s.CalibrationTotals().Count);
 
         Stage(h);
