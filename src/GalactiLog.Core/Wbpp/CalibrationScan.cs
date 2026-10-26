@@ -45,9 +45,7 @@ public static class CalibrationScan
             var anySelected = row.SelectedCount > 0;
             // The copier recurses, so child folders are excluded: a row is only the files directly in its folder.
             var childDirs = allFrames
-                .Where(f => PathConfinement.IsUnderOrEqual(row.Folder, f.FilePath)
-                            && !Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(f.FilePath) ?? "").Equals(
-                                Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase))
+                .Where(f => PathConfinement.IsUnderOrEqual(row.Folder, f.FilePath) && !DirectlyIn(row.Folder, f.FilePath))
                 .Select(f => Path.GetRelativePath(row.Folder, f.FilePath).Split(Path.DirectorySeparatorChar)[0])
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Order(StringComparer.OrdinalIgnoreCase)
@@ -56,9 +54,7 @@ public static class CalibrationScan
             // never counted by the footer, so no operation copies them.
             var inRow = new HashSet<string>(row.Frames.Select(f => f.Frame.FilePath), StringComparer.OrdinalIgnoreCase);
             var strays = allFrames
-                .Where(f => !inRow.Contains(f.FilePath)
-                            && Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(f.FilePath) ?? "").Equals(
-                                Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase))
+                .Where(f => !inRow.Contains(f.FilePath) && DirectlyIn(row.Folder, f.FilePath))
                 .Select(f => Path.GetFileName(f.FilePath))
                 .ToList();
             var held = row.Types;
@@ -76,20 +72,25 @@ public static class CalibrationScan
         return ops;
     }
 
-    /// <summary>True for a row whose folder lies under the chosen level and directly holds one of
-    /// the night's own lights (a single-folder layout). The lights operation copies that folder in
-    /// place, so the row gets no calibration operation of its own.</summary>
-    public static bool CopiedInPlace(string chosenLevelPath, CalibrationRow row, IReadOnlyCollection<string> nightLightPaths)
+    /// <summary>True for a row the lights operation copies in place: its folder lies under or equal
+    /// to the chosen level and under none of that operation's skipped folders (the user's unticked
+    /// folders and the folders the block owns). Such a row gets no calibration operation of its own;
+    /// its unwanted frames are excluded one by one instead (<see cref="InPlaceExcludes"/>).</summary>
+    public static bool CopiedInPlace(string chosenLevelPath, CalibrationRow row, IReadOnlyCollection<string> skippedFolders)
         => PathConfinement.IsUnderOrEqual(chosenLevelPath, row.Folder)
-           && nightLightPaths.Any(path => Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(path) ?? "").Equals(
-               Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase));
+           && !skippedFolders.Any(skipped => PathConfinement.IsUnderOrEqual(skipped, row.Folder));
+
+    /// <summary>True when <paramref name="path"/> sits directly in <paramref name="folder"/>.</summary>
+    private static bool DirectlyIn(string folder, string path)
+        => Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(path) ?? "").Equals(
+            Path.TrimEndingDirectorySeparator(folder), StringComparison.OrdinalIgnoreCase);
 
     /// <summary>The calibration frames the lights operation must skip in rows copied in place: the
     /// unselected ones of a ticked row (none when the row selects nothing, which copies them all),
     /// and every one of an unticked row.</summary>
     public static IReadOnlyList<ScannedFrame> InPlaceExcludes(
-        string chosenLevelPath, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyCollection<string> nightLightPaths)
-        => [.. rows.Where(r => CopiedInPlace(chosenLevelPath, r.Row, nightLightPaths))
+        string chosenLevelPath, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyCollection<string> skippedFolders)
+        => [.. rows.Where(r => CopiedInPlace(chosenLevelPath, r.Row, skippedFolders))
             .SelectMany(r => r.Row.Frames.Where(f => !r.Ticked || (r.Row.SelectedCount > 0 && !f.Selected)))
             .Select(f => f.Frame)
             .Where(f => CalibrationTypes.Contains(f.Type))];
@@ -112,7 +113,9 @@ public static class CalibrationScan
             .Where(f => f.Type != CalibrationType.Light && f.Type != CalibrationType.Other)
             .ToList();
         var other = allFrames
-            .Where(f => f.Type == CalibrationType.Other
+            // A LIGHT the caller does not know as catalogued is uncatalogued, and the lights
+            // operation copies it like any other file.
+            .Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
                         && PathConfinement.IsUnderOrEqual(chosenLevelPath, f.FilePath)
                         && !skippedFolders.Any(s => PathConfinement.IsUnderOrEqual(s, f.FilePath)))
             .ToList();

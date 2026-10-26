@@ -111,6 +111,31 @@ public static class CalibrationWalk
         Scan(root, skipHeaderRead, nightRule, UserFiles.EnumerateFileSystemEntries,
             path => ReadFrame(path, 0, nightRule), progress, ct);
 
+    /// <summary>Wraps a walker so it honours the page's global name patterns as the copier does:
+    /// a file with a path component below the walked root that a pattern matches (a <c>WBPP</c>
+    /// output folder, <c>masters</c>, a <c>*CALIBRATED</c> name) is neither header-read nor
+    /// returned, so it forms no row and is never counted.</summary>
+    /// <remarks>ponytail: the excluded folders are still listed by the inner walker, only their
+    /// headers are skipped; a directory-name predicate on <see cref="Walker"/> stops the listing
+    /// too, if a large WBPP output folder makes the listing itself slow.</remarks>
+    public static Walker Excluding(Walker walk, IReadOnlyList<string> patterns)
+    {
+        ArgumentNullException.ThrowIfNull(walk);
+        var isExcluded = StagingCopier.PathComponentExcluder(patterns);
+        return (root, skipHeaderRead, nightRule, progress, ct) =>
+        {
+            bool Hidden(string path) => PathConfinement.IsUnderOrEqual(root, path)
+                && Path.GetRelativePath(root, path).Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries).Any(isExcluded);
+
+            var result = walk(root, file => Hidden(file) || skipHeaderRead(file), nightRule, progress, ct);
+            return result with
+            {
+                Frames = [.. result.Frames.Where(frame => !Hidden(frame.FilePath))],
+                Issues = [.. result.Issues.Where(issue => !Hidden(issue.Path))],
+            };
+        };
+    }
+
     internal static CalibrationType TypeOf(string? imageType) => imageType?.Trim().ToUpperInvariant() switch
     {
         "LIGHT" => CalibrationType.Light,

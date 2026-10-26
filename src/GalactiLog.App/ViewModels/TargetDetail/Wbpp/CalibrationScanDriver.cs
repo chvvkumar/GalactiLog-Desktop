@@ -20,6 +20,7 @@ internal sealed class CalibrationScanDriver(
     CalibrationWalk.Walker walk,
     Func<string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>> cataloguedLightsUnder,
     Func<NightRule> nightRule,
+    Func<IReadOnlyList<string>> exclusions,
     Func<SessionLevelViewModel, IReadOnlyList<LightSet>> lightSets,
     Action<SessionLevelViewModel> published,
     Action<Action> post,
@@ -30,12 +31,44 @@ internal sealed class CalibrationScanDriver(
     private readonly Dictionary<DateOnly, CancellationTokenSource> _running = [];
     private readonly Dictionary<DateOnly, int> _generation = [];
 
-    /// <summary>Scans a night afresh from its start level.</summary>
+    // The roots the night's latest scan covers, kept and running, so a pick change can tell
+    // whether the chosen folder lies inside them.
+    private readonly Dictionary<DateOnly, IReadOnlyList<string>> _covered = [];
+
+    /// <summary>Scans a night afresh from its start level, or from the chosen level when the pick
+    /// is shallower, so nothing under the chosen folder escapes the scan.</summary>
     public void Start(SessionLevelViewModel session)
     {
         if (session.HasLevels)
         {
-            Run(session, CalibrationClimb.StartLevel(session.Levels, session.ChosenIndex), manual: false);
+            Run(session, Math.Min(CalibrationClimb.StartLevel(session.Levels, session.ChosenIndex), session.ChosenIndex), manual: false);
+        }
+    }
+
+    /// <summary>After a pick change: when the chosen level lies above every root the night's scan
+    /// covers, scans it as one more climb step over the folders it newly exposes (a fresh scan
+    /// when the last one did not finish), after which the block owns them under the edge rule.
+    /// </summary>
+    public void Follow(SessionLevelViewModel session)
+    {
+        if (!session.HasLevels || !_covered.TryGetValue(session.Night, out var roots))
+        {
+            return;
+        }
+
+        var chosen = session.Levels.Levels[session.ChosenIndex].Path;
+        if (roots.Any(root => PathConfinement.IsUnderOrEqual(root, chosen)))
+        {
+            return;
+        }
+
+        if (session.ScanState == CalibrationScanState.Done && session.ScannedLevelIndex >= 0)
+        {
+            Run(session, session.ChosenIndex, manual: true);
+        }
+        else
+        {
+            Start(session);
         }
     }
 
@@ -81,6 +114,8 @@ internal sealed class CalibrationScanDriver(
         IReadOnlyList<string> keptRoots = manual ? session.ScannedRoots : [];
         IReadOnlyList<ScanIssue> keptIssues = manual ? session.Issues : [];
         var keptHeaders = manual ? session.HeadersRead : 0;
+        _covered[night] = [.. keptRoots, levels.Levels[startIndex].Path];
+        var walker = CalibrationWalk.Excluding(walk, exclusions());
         session.BeginScan(levels.Levels[startIndex].Path, fresh: !manual);
 
         // Read on the UI thread, inside a post.
@@ -127,7 +162,7 @@ internal sealed class CalibrationScanDriver(
 
                         // A climb walks only what it newly exposes: folders an earlier step read are
                         // sized again but not header-read, and the first record of a file is kept.
-                        var result = walk(
+                        var result = walker(
                             root,
                             file => catalogued.Contains(file) || earlier.Any(done => PathConfinement.IsUnderOrEqual(done, file)),
                             rule,
@@ -186,7 +221,7 @@ internal sealed class CalibrationScanDriver(
 
                 try
                 {
-                    var listed = walk(levels.Levels[parent].Path, _ => true, rule, null, token);
+                    var listed = walker(levels.Levels[parent].Path, _ => true, rule, null, token);
                     var count = listed.Frames.Count(frame => !roots.Any(done => PathConfinement.IsUnderOrEqual(done, frame.FilePath)));
                     Post(() => session.SetLookHigherCount(parent, count));
                 }

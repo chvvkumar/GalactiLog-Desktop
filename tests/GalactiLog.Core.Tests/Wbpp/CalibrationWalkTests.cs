@@ -200,4 +200,38 @@ public sealed class CalibrationWalkTests : IDisposable
         raw.Remove("ROTATOR");
         Assert.Null(CalibrationWalk.KeysOf(new ExtractedMetadata { RawHeaders = raw, RotatorPosition = 307 }).RotatorAngle);
     }
+
+    [Fact]
+    public void Excluding_DropsFilesUnderAPatternMatchedComponent_AndNeverReadsThem()
+    {
+        var real = Fits(@"Date_X\FLAT\f1.fits", "FLAT");
+        var wbpp = Fits(@"Date_X\WBPP\calibrated\flat\f1_c.fits", "FLAT");
+        var named = Fits(@"Date_X\FLAT_CALIBRATED\f2.fits", "FLAT");
+        var read = new List<string>();
+        CalibrationWalk.Walker inner = (root, skip, rule, progress, ct) => CalibrationWalk.Scan(
+            root, skip, rule, UserFiles.EnumerateFileSystemEntries,
+            p => { read.Add(p); return CalibrationWalk.ReadFrame(p, 0, rule); }, progress, ct);
+
+        var r = CalibrationWalk.Excluding(inner, ScriptGenerator.DefaultExclusions)(Path.Combine(_root, "Date_X"), _ => false, _rule, null, default);
+
+        Assert.Equal([real], r.Frames.Select(f => f.FilePath));
+        Assert.Equal([real], read);
+        Assert.Equal(1, r.HeadersRead);
+        Assert.DoesNotContain(wbpp, r.Frames.Select(f => f.FilePath));
+        Assert.DoesNotContain(named, r.Frames.Select(f => f.FilePath));
+    }
+
+    [Fact]
+    public void Excluding_TestsOnlyComponentsBelowTheRoot()
+    {
+        // A pattern-named folder above the walked root does not hide what is under it, as the
+        // copier tests names only below an operation's source.
+        var path = Fits(@"WBPP\Date_X\FLAT\f1.fits", "FLAT");
+        CalibrationWalk.Walker inner = (root, skip, rule, progress, ct) => CalibrationWalk.Scan(
+            root, skip, rule, UserFiles.EnumerateFileSystemEntries, p => CalibrationWalk.ReadFrame(p, 0, rule), progress, ct);
+
+        var r = CalibrationWalk.Excluding(inner, ["WBPP"])(Path.Combine(_root, "WBPP", "Date_X"), _ => false, _rule, null, default);
+
+        Assert.Equal([path], r.Frames.Select(f => f.FilePath));
+    }
 }

@@ -570,4 +570,90 @@ public class CalibrationScenarioTests
         Assert.Equal(h.Page.TotalSizeBytes, result.BytesCopied);
         Assert.Equal("6 files", h.Page.FrameCountText);
     }
+
+    [Fact]
+    public async Task ChosenFolderHoldsFlats_LightsInASubfolder_CopiesMatchedOnce_AndExcludesTheRest()
+    {
+        using var t = new Tree();
+        var dir = t.P("T", "2025-10-15");
+        var lights = t.P("T", "2025-10-15", "LIGHT");
+        t.Light(N, Path.Combine(lights, "L1.fits"))
+            .Light(N, Path.Combine(lights, "L2.fits"))
+            .Cal(Path.Combine(dir, "F128_1.fits"), "FLAT")
+            .Cal(Path.Combine(dir, "F128_2.fits"), "FLAT")
+            .Cal(Path.Combine(dir, "F139_1.fits"), "FLAT", rotation: 139.07)
+            .Cal(Path.Combine(dir, "F139_2.fits"), "FLAT", rotation: 139.07);
+        using var h = t.Open(N);
+        var session = h.Page.Sessions[0];
+        session.ChosenIndex = Row(session, dir).Index;
+        Scanned(session);
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        var row = CalRow(session, dir);
+        Assert.True(row.IsTicked);
+        Assert.Equal("2 of 4 files", row.CountText);
+
+        Stage(h);
+        Generate(h.Page);
+        var job = Assert.Single(Jobs(h.Page.ScriptText!));
+        Assert.True(Is(dir, job.Src));
+        Assert.Equal(["F139_1.fits", "F139_2.fits"], job.ExcludeFiles.Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Empty(job.ExcludeDirs);
+        var footerBytes = h.Page.TotalSizeBytes;
+        var footerFiles = h.Page.Totals!.FrameCount + session.CalibrationTotals().Count;
+
+        var result = await Copy(h);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Empty(result.Skipped);
+        Assert.Empty(result.Failed);
+        var entry = job.Dst;
+        Assert.Equal(
+            new[] { "F128_1.fits", "F128_2.fits", Path.Combine("LIGHT", "L1.fits"), Path.Combine("LIGHT", "L2.fits") }
+                .Select(name => Path.Combine(entry, name)),
+            Staged(h));
+        Assert.Equal(footerBytes, result.BytesCopied);
+        Assert.Equal(4, footerFiles);
+        Assert.Equal(footerFiles, result.Copied);
+        Assert.Equal("4 files", h.Page.FrameCountText);
+    }
+
+    [Fact]
+    public async Task AWbppOutputFolderInsideTheNight_SuppliesNoFlats_AndIsNotCounted()
+    {
+        using var t = new Tree();
+        var date = t.P("2025-10-15");
+        var lights = t.P("2025-10-15", "LIGHT", "M 31");
+        var flats = t.P("2025-10-15", "FLAT");
+        var calibrated = t.P("2025-10-15", "WBPP", "calibrated", "flat");
+        t.Light(N, Path.Combine(lights, "a.fits"))
+            .Cal(Path.Combine(flats, "f1.fits"), "FLAT")
+            .Cal(Path.Combine(flats, "f2.fits"), "FLAT")
+            .Cal(Path.Combine(calibrated, "f1_c.fits"), "FLAT")
+            .Cal(Path.Combine(calibrated, "f2_c.fits"), "FLAT");
+        using var h = t.Open(N);
+        var session = h.Page.Sessions[0];
+        session.ChosenIndex = Row(session, date).Index;
+        Scanned(session);
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        Assert.Equal([flats], session.CalibrationRows.Select(r => r.Row.Folder));
+        Assert.Contains(", 2 headers", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Equal(2, session.CalibrationTotals().FlatCount);
+        Assert.Equal(0, session.CalibrationTotals().OtherCount);
+        var footerBytes = h.Page.TotalSizeBytes;
+        var footerFiles = h.Page.Totals!.FrameCount + session.CalibrationTotals().Count;
+
+        Stage(h);
+        Generate(h.Page);
+        Assert.DoesNotContain(Jobs(h.Page.ScriptText!), j => j.Src.Contains("WBPP", StringComparison.OrdinalIgnoreCase));
+
+        var result = await Copy(h);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Empty(result.Failed);
+        var staged = Staged(h);
+        Assert.DoesNotContain(staged, p => p.Contains("WBPP", StringComparison.OrdinalIgnoreCase) || p.EndsWith("_c.fits", StringComparison.Ordinal));
+        Assert.Equal(3, staged.Count);
+        Assert.Equal(footerBytes, result.BytesCopied);
+        Assert.Equal(footerFiles, result.Copied);
+    }
 }

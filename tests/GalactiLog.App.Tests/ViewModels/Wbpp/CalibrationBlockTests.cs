@@ -464,4 +464,60 @@ public class CalibrationBlockTests
 
         Assert.False(h.Page.HasScript);
     }
+
+    [Fact]
+    public void APickAboveTheScannedRoot_WalksTheNewlyExposedFolder_AndItsFlatsBecomeRows()
+    {
+        // Date_2025-10-15 holds another night's and another target's lights, so the scan starts
+        // at M31 and the automatic climb stops below the date folder.
+        var library = DateFirst()
+            .Foreign(Path.Combine(DateDir, "NGC7000", "c.fits"), N2);
+        var disk = DateFirstDiskWithout()
+            .Add(F(Path.Combine(DateDir, "NGC7000", "c.fits"), CalibrationType.Light, K(), night: N2))
+            .Add(F(Path.Combine(FlatDir, "f1.fits"), CalibrationType.Flat, K(), night: N));
+        using var h = ExportHarness.Create(library, [N], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Until(() => session.LookHigherText == "Look in Date_2025-10-15, 2 files");
+        Assert.Equal(M31Dir, disk.Calls[0]);
+        Assert.Empty(session.CalibrationRows);
+        Assert.True(session.ChosenIndex > Row(session, DateDir).Index);
+
+        var before = disk.Calls.Count;
+        session.ChosenIndex = Row(session, DateDir).Index;
+        Scanned(session);
+
+        Assert.Equal(before + 1, disk.Calls.Count);
+        Assert.Equal(DateDir, disk.Calls[^1]);
+        Assert.True(CalRow(session, FlatDir).IsTicked);
+        var op = Assert.Single(session.CalibrationOperations("E"));
+        Assert.True(Is(FlatDir, op.SourcePath));
+        Assert.Contains(session.Chosen!.SkippedFolders!, level => Is(level.Path, FlatDir));
+
+        // A pick back inside the scanned roots walks nothing more.
+        session.ChosenIndex = Row(session, M31Dir).Index;
+        Assert.False(SpinWait.SpinUntil(() => disk.Calls.Count > before + 1, TimeSpan.FromMilliseconds(300)));
+    }
+
+    [Fact]
+    public void ThePagesExclusionPatterns_KeepAWbppOutputFolderOutOfTheScan()
+    {
+        var calibrated = Path.Combine(DateDir, "WBPP", "calibrated", "flat");
+        var disk = DateFirstDisk()
+            .Add(F(Path.Combine(calibrated, "f1_c.fits"), CalibrationType.Flat, K(), night: N))
+            .Add(F(Path.Combine(DateDir, "masters", "m.fits"), CalibrationType.Flat, K(), night: N));
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+
+        Assert.Equal(2, session.CalibrationRows.Count);
+        Assert.DoesNotContain(session.CalibrationRows, row => row.Row.Folder.Contains("WBPP", StringComparison.Ordinal)
+            || row.Row.Folder.Contains("masters", StringComparison.Ordinal));
+        Assert.DoesNotContain(session.ScannedFrames, frame => frame.FilePath.Contains("WBPP", StringComparison.Ordinal));
+        Assert.Contains("3 headers", session.ScanSentence, StringComparison.Ordinal);
+    }
+
+    private static FakeDisk DateFirstDiskWithout() => new FakeDisk()
+        .Add(F(Path.Combine(LightDir, "a.fits"), CalibrationType.Light, K(), night: N, size: 1_000))
+        .Add(F(Path.Combine(LightDir, "b.fits"), CalibrationType.Light, K(), night: N, size: 1_000));
 }

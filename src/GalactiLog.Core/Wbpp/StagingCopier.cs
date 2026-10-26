@@ -409,7 +409,7 @@ public sealed class StagingCopier(StagingIo io)
     /// <summary>A path-component matcher mirroring the web's <c>makeExcluder</c>, applied to every
     /// folder and file name as the PowerShell script's predicate is: each pattern matches a whole
     /// component, <c>*</c> matches any run of characters, ignore case like <c>-match</c>.</summary>
-    internal static Func<string, bool> PathComponentExcluder(IReadOnlyList<string> patterns)
+    public static Func<string, bool> PathComponentExcluder(IReadOnlyList<string> patterns)
     {
         var alternatives = patterns
             .Select(p => p.Trim())

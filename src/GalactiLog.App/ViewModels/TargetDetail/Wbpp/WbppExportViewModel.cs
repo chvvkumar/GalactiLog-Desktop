@@ -242,6 +242,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                         settings.ObserverLongitude,
                         string.IsNullOrEmpty(settings.ObserverTimezone) ? null : settings.ObserverTimezone);
                 },
+                () => Exclusions,
                 LightSetsFor,
                 OnScanPublished,
                 _post,
@@ -589,6 +590,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     {
         RefreshStagingNames();
         ReadForeignLights(session);
+        _scanDriver?.Follow(session);
 
         // A level change moves the source set the staging rule's second clause tests against, so
         // the check is re-run: a folder that was legal under one pick can become illegal under a

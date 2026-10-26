@@ -81,28 +81,49 @@ public class CalibrationScanTests
     }
 
     [Fact]
-    public void CopiedInPlace_OnlyForARowWhoseFolderDirectlyHoldsTheNightsLights_UnderTheChosenLevel()
+    public void CopiedInPlace_ForARowUnderOrAtTheChosenLevel_UnderNoSkippedFolder()
     {
         var row = Row(@"W:\T\2025-10-15", M(@"W:\T\2025-10-15\f1.fits", CalibrationType.Flat, true));
-        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15", row, [@"W:\T\2025-10-15\l1.fits"]));
-        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T", row, [@"W:\T\2025-10-15\l1.fits"]));
-        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15", row, [@"W:\T\2025-10-15\Ha\l1.fits"]));
-        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15\Ha", row, [@"W:\T\2025-10-15\l1.fits"]));
+        // The chosen folder itself, lights directly in it or only in a subfolder.
+        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15", row, []));
+        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T", row, []));
+        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T", row, [@"W:\T\2025-10-14"]));
+        // Outside the chosen level, or left out of the lights operation whole.
+        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15\Ha", row, []));
+        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T", row, [@"W:\T\2025-10-15"]));
+        Assert.False(CalibrationScan.CopiedInPlace(@"W:\", row, [@"W:\T"]));
     }
 
     [Fact]
     public void InPlaceExcludes_UnselectedFramesOfATickedRow_AllOfAnUntickedOne_NothingElsewhere()
     {
         const string Dir = @"W:\T\2025-10-15";
-        string[] lights = [Dir + @"\l1.fits"];
         var mixed = Row(Dir,
             M(Dir + @"\f1.fits", CalibrationType.Flat, true), M(Dir + @"\f2.fits", CalibrationType.Flat, false));
         var none = Row(Dir, M(Dir + @"\f1.fits", CalibrationType.Flat, false), M(Dir + @"\f2.fits", CalibrationType.Flat, false));
         var elsewhere = Row(@"W:\T\FLAT", M(@"W:\T\FLAT\g.fits", CalibrationType.Flat, false));
+        var owned = Row(Dir + @"\FLAT", M(Dir + @"\FLAT\h.fits", CalibrationType.Flat, false));
 
-        Assert.Equal([Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, true), (elsewhere, false)], lights).Select(f => f.FilePath));
-        Assert.Equal([Dir + @"\f1.fits", Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, false)], lights).Select(f => f.FilePath));
-        Assert.Empty(CalibrationScan.InPlaceExcludes(Dir, [(none, true)], lights));
+        Assert.Equal([Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, true), (elsewhere, false)], []).Select(f => f.FilePath));
+        Assert.Equal([Dir + @"\f1.fits", Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, false)], []).Select(f => f.FilePath));
+        Assert.Empty(CalibrationScan.InPlaceExcludes(Dir, [(none, true)], []));
+        // A row in a skipped (owned) folder has its own operation, so nothing is excluded for it.
+        Assert.Empty(CalibrationScan.InPlaceExcludes(Dir, [(owned, false)], [Dir + @"\FLAT"]));
+    }
+
+    [Fact]
+    public void Totals_CountAnUncataloguedLightUnderTheChosenLevelAsOther()
+    {
+        var all = new[]
+        {
+            new ScannedFrame(@"W:\N\LIGHT\stray.fits", 7, CalibrationType.Light, Keys, null, N),
+            new ScannedFrame(@"W:\N\LIGHT\notes.txt", 3, CalibrationType.Other, Keys, null, null),
+            new ScannedFrame(@"W:\N\skip\x.fits", 9, CalibrationType.Light, Keys, null, N),
+            new ScannedFrame(@"W:\Elsewhere\y.fits", 11, CalibrationType.Light, Keys, null, N),
+        };
+        var totals = CalibrationScan.Totals(@"W:\N", [], all, [@"W:\N\skip"]);
+        Assert.Equal(2, totals.OtherCount);
+        Assert.Equal(10, totals.OtherBytes);
     }
 
     [Fact]

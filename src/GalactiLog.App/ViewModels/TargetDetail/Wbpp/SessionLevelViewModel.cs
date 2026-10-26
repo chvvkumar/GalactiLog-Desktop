@@ -735,8 +735,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>The night's calibration copy operations, under the night's own staging entry.
     /// </summary>
-    /// <remarks>A row whose folder holds this night's own lights is left to the lights operation,
-    /// which copies it in place; <see cref="CalibrationInPlaceExcludes"/> trims it.</remarks>
+    /// <remarks>A row the lights operation already copies (under the chosen level and under none of
+    /// its skipped folders) is left to it; <see cref="CalibrationInPlaceExcludes"/> trims it.</remarks>
     public IReadOnlyList<CopyOperation> CalibrationOperations(string entryName)
     {
         if (Match is null || ScannedLevelPath is not { } scanned || Chosen is not { } chosen)
@@ -744,10 +744,10 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             return [];
         }
 
-        var lights = NightLightPaths();
+        var skipped = SkippedPaths(chosen);
         return CalibrationScan.Operations(
             Night, entryName, scanned,
-            [.. TickedRows().Where(r => !CalibrationScan.CopiedInPlace(chosen.Level.Path, r.Row, lights))],
+            [.. TickedRows().Where(r => !CalibrationScan.CopiedInPlace(chosen.Level.Path, r.Row, skipped))],
             ScannedFrames);
     }
 
@@ -757,11 +757,12 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// counts catalogued lights only.</summary>
     public IReadOnlyList<WbppFramePath> CalibrationInPlaceExcludes()
         => Match is not null && Chosen is { } chosen
-            ? [.. CalibrationScan.InPlaceExcludes(chosen.Level.Path, TickedRows(), NightLightPaths())
+            ? [.. CalibrationScan.InPlaceExcludes(chosen.Level.Path, TickedRows(), SkippedPaths(chosen))
                 .Select(frame => new WbppFramePath(Guid.Empty, frame.FilePath, frame.Size))]
             : [];
 
-    private List<string> NightLightPaths() => [.. NightFrames.Select(frame => frame.FilePath)];
+    // The lights operation's effective skip set: the user's unticked folders and the owned ones.
+    private static List<string> SkippedPaths(ChosenLevel chosen) => [.. (chosen.SkippedFolders ?? []).Select(level => level.Path)];
 
     /// <summary>What the night's selected calibration and its uncatalogued files add to the copy.
     /// </summary>
@@ -782,7 +783,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             chosen.Level.Path,
             TickedRows(),
             [.. ScannedFrames.Where(frame => !known.Contains(frame.FilePath))],
-            [.. (chosen.SkippedFolders ?? []).Select(level => level.Path)]);
+            SkippedPaths(chosen));
     }
 
     /// <summary>Marks the rows under <paramref name="row"/>, itself included, that the block owns.
