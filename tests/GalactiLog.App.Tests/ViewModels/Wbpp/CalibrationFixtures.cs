@@ -17,8 +17,8 @@ internal static class CalibrationFixtures
 
 /// <summary>
 /// A fictional disk for the calibration walk: every file it holds, and a <see cref="Walker"/> that
-/// answers a root with the files under it, as <c>CalibrationWalk.Scan</c> would. A file in a
-/// size-only directory comes back typed Other with no keys and no header read. Records every root
+/// answers a root with the files under it, as <c>CalibrationWalk.Scan</c> would. A file the
+/// skip predicate names comes back typed Other with no keys and no header read. Records every root
 /// it was called with; an optional gate parks every call until released.
 /// </summary>
 internal sealed class FakeDisk
@@ -54,7 +54,7 @@ internal sealed class FakeDisk
         return this;
     }
 
-    public CalibrationWalk.Walker Walker => (root, sizeOnly, _, progress, _) =>
+    public CalibrationWalk.Walker Walker => (root, skipHeaderRead, _, progress, _) =>
     {
         lock (_calls)
         {
@@ -66,7 +66,7 @@ internal sealed class FakeDisk
         var headers = 0;
         foreach (var file in Files.Where(f => PathConfinement.IsUnderOrEqual(root, f.FilePath)))
         {
-            if (sizeOnly(Path.GetDirectoryName(file.FilePath)!))
+            if (skipHeaderRead(file.FilePath))
             {
                 frames.Add(new ScannedFrame(file.FilePath, file.Size, CalibrationType.Other, NoKeys, null, null));
                 continue;

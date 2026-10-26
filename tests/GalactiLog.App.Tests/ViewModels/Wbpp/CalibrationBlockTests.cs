@@ -231,6 +231,38 @@ public class CalibrationBlockTests
     }
 
     [Fact]
+    public void SingleFolder_CataloguedLightsAreNotRead_AndFlatsBesideThemAreCopiedInPlace()
+    {
+        var dir = Path.Combine(Library.Root, "T", "2025-10-15");
+        var a = Path.Combine(dir, "a.fits");
+        var x = Path.Combine(dir, "x.fits");
+        var library = new Library().Frame(N, a).Foreign(x, N);
+        var disk = new FakeDisk()
+            .Add(F(a, CalibrationType.Light, K(), night: N, size: 1_000))
+            .Add(F(x, CalibrationType.Light, K(), night: N, size: 1_000))
+            .Add(F(Path.Combine(dir, "f1.fits"), CalibrationType.Flat, K(), night: N))
+            .Add(F(Path.Combine(dir, "f2.fits"), CalibrationType.Flat, K(gain: 200), night: N));
+        using var h = ExportHarness.Create(
+            library, [N], readForeignLights: (_, _, _, _) => [new WbppFramePath(Guid.NewGuid(), x, 1_000)], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+
+        // The own and the foreign light are sized only: two headers, the two flats.
+        Assert.Contains(", 2 headers", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Equal("1 of 2 files", CalRow(session, dir).CountText);
+        Until(() => session.ForeignExcluded.Count == 1);
+
+        Stage(h);
+        Generate(h.Page);
+        var jobs = h.Page.ScriptText!.Split('\n').Where(line => line.TrimStart().StartsWith("@{ Src", StringComparison.Ordinal)).ToList();
+        var job = Assert.Single(jobs);
+        Assert.Contains("ExcludeFiles = @('x.fits', 'f2.fits')", job, StringComparison.Ordinal);
+        Assert.DoesNotContain("FLAT", job, StringComparison.Ordinal);
+        Assert.Equal(MetricText.Bytes(1_100), h.Page.SizeText);
+        Assert.Equal(1_100, h.Page.TotalSizeBytes);
+    }
+
+    [Fact]
     public void APickChange_RecomputesFromCachedFrames_WithoutWalking()
     {
         var ha = Path.Combine(M31Dir, "Ha");

@@ -735,10 +735,33 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>The night's calibration copy operations, under the night's own staging entry.
     /// </summary>
+    /// <remarks>A row whose folder holds this night's own lights is left to the lights operation,
+    /// which copies it in place; <see cref="CalibrationInPlaceExcludes"/> trims it.</remarks>
     public IReadOnlyList<CopyOperation> CalibrationOperations(string entryName)
-        => Match is not null && ScannedLevelPath is { } scanned
-            ? CalibrationScan.Operations(Night, entryName, scanned, TickedRows(), ScannedFrames)
+    {
+        if (Match is null || ScannedLevelPath is not { } scanned || Chosen is not { } chosen)
+        {
+            return [];
+        }
+
+        var lights = NightLightPaths();
+        return CalibrationScan.Operations(
+            Night, entryName, scanned,
+            [.. TickedRows().Where(r => !CalibrationScan.CopiedInPlace(chosen.Level.Path, r.Row, lights))],
+            ScannedFrames);
+    }
+
+    /// <summary>The calibration frames the lights operation skips one by one in a folder it copies
+    /// in place: an in-place row's unselected frames, or all of them when it is unticked. Their
+    /// selected siblings are counted once, in <see cref="CalibrationTotals"/>; the lights total
+    /// counts catalogued lights only.</summary>
+    public IReadOnlyList<WbppFramePath> CalibrationInPlaceExcludes()
+        => Match is not null && Chosen is { } chosen
+            ? [.. CalibrationScan.InPlaceExcludes(chosen.Level.Path, TickedRows(), NightLightPaths())
+                .Select(frame => new WbppFramePath(Guid.Empty, frame.FilePath, frame.Size))]
             : [];
+
+    private List<string> NightLightPaths() => [.. NightFrames.Select(frame => frame.FilePath)];
 
     /// <summary>What the night's selected calibration and its uncatalogued files add to the copy.
     /// </summary>

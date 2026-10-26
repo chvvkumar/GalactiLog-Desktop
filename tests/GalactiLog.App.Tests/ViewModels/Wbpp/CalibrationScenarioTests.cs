@@ -109,12 +109,13 @@ public class CalibrationScenarioTests
             return bytes.Length;
         }
 
-        private static FitsBuilder Header(string type, string camera, string? filter, double? rotation, double exposure, string dateObs)
+        private static FitsBuilder Header(string type, string camera, string? filter, double? rotation, double exposure, string dateObs,
+            long gain = 110)
         {
             var b = new FitsBuilder().Card("SIMPLE", true).Card("BITPIX", 16L).Card("NAXIS", 0L)
                 .Card("IMAGETYP", type).Card("INSTRUME", camera);
             if (filter is not null) b.Card("FILTER", filter);
-            b.Card("XBINNING", 1L).Card("GAIN", 110L).Card("OFFSET", 50L).Card("TELESCOP", "SQA55");
+            b.Card("XBINNING", 1L).Card("GAIN", gain).Card("OFFSET", 50L).Card("TELESCOP", "SQA55");
             if (rotation is { } r) b.Card("ROTATANG", r);
             return b.Card("EXPOSURE", exposure).Card("DATE-OBS", dateObs);
         }
@@ -145,9 +146,9 @@ public class CalibrationScenarioTests
 
         /// <summary>An uncatalogued calibration frame.</summary>
         public Tree Cal(string path, string type, string camera = "ZWO ASI2600MM Pro", string? filter = "Ha",
-            double? rotation = 128.85, double exposure = 1.5, string dateObs = Dawn)
+            double? rotation = 128.85, double exposure = 1.5, string dateObs = Dawn, long gain = 110)
         {
-            Write(path, Header(type, camera, filter, rotation, exposure, dateObs).Build().ToArray());
+            Write(path, Header(type, camera, filter, rotation, exposure, dateObs, gain).Build().ToArray());
             return this;
         }
 
@@ -274,8 +275,6 @@ public class CalibrationScenarioTests
         t.Light(N14, Path.Combine(night14, "a.fits"), dateObs: "2025-10-15T03:00:00")
             .Light(N, Path.Combine(night15, "b.fits"))
             .Light(N, Path.Combine(night15, "c.fits"))
-            // A mis-filed flat in a light folder: header-read, it would become a row.
-            .Cal(Path.Combine(night14, "stray_flat.fits"), "FLAT", dateObs: "2025-10-15T11:30:00")
             .Cal(Path.Combine(flat15, "f1.fits"), "FLAT")
             .Cal(Path.Combine(flat15, "f2.fits"), "FLAT")
             .Cal(Path.Combine(flat09, "e1.fits"), "FLAT", dateObs: "2025-10-10T11:30:00")
@@ -514,6 +513,7 @@ public class CalibrationScenarioTests
         Scanned(session);
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
         var footerBytes = h.Page.TotalSizeBytes;
+        Assert.NotNull(footerBytes);
         var footerFiles = h.Page.Totals!.FrameCount + h.Page.Sessions.Sum(s => s.CalibrationTotals().Count);
 
         Stage(h);
@@ -525,5 +525,49 @@ public class CalibrationScenarioTests
         Assert.Equal(MetricText.Bytes(result.BytesCopied), h.Page.SizeText);
         Assert.Equal(footerFiles, result.Copied);
         Assert.StartsWith(result.Copied.ToString(System.Globalization.CultureInfo.InvariantCulture) + " ", h.Page.FrameCountText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SingleFolderLayout_LightsAndFlatsTogether_CopiesEachFileOnce()
+    {
+        using var t = new Tree();
+        var dir = t.P("T", "2025-10-15");
+        t.Light(N, Path.Combine(dir, "L_Ha_1.fits"))
+            .Light(N, Path.Combine(dir, "L_Ha_2.fits"))
+            .Light(N, Path.Combine(dir, "L_Oiii_1.fits"), filter: "Oiii")
+            .Cal(Path.Combine(dir, "F_Ha_1.fits"), "FLAT")
+            .Cal(Path.Combine(dir, "F_Ha_2.fits"), "FLAT")
+            .Cal(Path.Combine(dir, "F_Oiii_1.fits"), "FLAT", filter: "Oiii")
+            .Cal(Path.Combine(dir, "F_Ha_gain200.fits"), "FLAT", gain: 200);
+        using var h = t.Open(N);
+        var session = h.Page.Sessions[0];
+        Assert.True(Is(dir, session.Chosen!.Level.Path));
+        Scanned(session);
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        // The catalogued lights are sized only; the four flats beside them are read.
+        Assert.Contains(", 4 headers", session.ScanSentence, StringComparison.Ordinal);
+        var row = CalRow(session, dir);
+        Assert.True(row.IsTicked);
+        Assert.Equal("3 of 4 files", row.CountText);
+        Assert.Empty(session.Warnings);
+
+        Stage(h);
+        Generate(h.Page);
+        var job = Assert.Single(Jobs(h.Page.ScriptText!));
+        Assert.True(Is(dir, job.Src));
+        Assert.Equal(["F_Ha_gain200.fits"], job.ExcludeFiles);
+
+        var result = await Copy(h);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Empty(result.Skipped);
+        Assert.Empty(result.Failed);
+        var entry = job.Dst;
+        Assert.Equal(
+            new[] { "F_Ha_1.fits", "F_Ha_2.fits", "F_Oiii_1.fits", "L_Ha_1.fits", "L_Ha_2.fits", "L_Oiii_1.fits" }
+                .Select(name => Path.Combine(entry, name)),
+            Staged(h));
+        Assert.Equal(h.Page.TotalSizeBytes, result.BytesCopied);
+        Assert.Equal("6 files", h.Page.FrameCountText);
     }
 }

@@ -18,7 +18,7 @@ namespace GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 /// </remarks>
 internal sealed class CalibrationScanDriver(
     CalibrationWalk.Walker walk,
-    Func<ContaminationIndex?> catalogue,
+    Func<string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>> cataloguedLightsUnder,
     Func<NightRule> nightRule,
     Func<SessionLevelViewModel, IReadOnlyList<LightSet>> lightSets,
     Action<SessionLevelViewModel> published,
@@ -76,7 +76,7 @@ internal sealed class CalibrationScanDriver(
         var levels = session.Levels;
         var sets = lightSets(session);
         var rule = nightRule();
-        var index = catalogue();
+        var ownLights = session.NightFrames.Select(frame => frame.FilePath).ToList();
         IReadOnlyList<ScannedFrame> kept = manual ? session.ScannedFrames : [];
         IReadOnlyList<string> keptRoots = manual ? session.ScannedRoots : [];
         IReadOnlyList<ScanIssue> keptIssues = manual ? session.Issues : [];
@@ -109,6 +109,11 @@ internal sealed class CalibrationScanDriver(
                 var roots = new List<string>(keptRoots);
                 var issues = new List<ScanIssue>(keptIssues);
                 var headers = keptHeaders;
+
+                // The catalogue already describes its lights, so they are sized, never read: this
+                // night's own, plus the foreign ones (other targets, other nights) under each root.
+                // Anything else in a light folder (a flat beside the lights) is read.
+                var catalogued = new HashSet<string>(ownLights, StringComparer.OrdinalIgnoreCase);
                 var level = startIndex;
                 try
                 {
@@ -118,12 +123,13 @@ internal sealed class CalibrationScanDriver(
                         var earlier = roots.ToArray();
                         var before = headers;
                         var progress = new Throttled(count => Post(() => session.ReportProgress(before + count, root)));
+                        catalogued.UnionWith(CataloguedUnder(root, night, token));
 
                         // A climb walks only what it newly exposes: folders an earlier step read are
                         // sized again but not header-read, and the first record of a file is kept.
                         var result = walk(
                             root,
-                            dir => (index?.HoldsLights(dir) ?? false) || earlier.Any(done => PathConfinement.IsUnderOrEqual(done, dir)),
+                            file => catalogued.Contains(file) || earlier.Any(done => PathConfinement.IsUnderOrEqual(done, file)),
                             rule,
                             progress,
                             token);
@@ -194,6 +200,21 @@ internal sealed class CalibrationScanDriver(
                 }
             },
             CancellationToken.None);
+    }
+
+    // The catalogued lights under a root that are not this night's own. A failed read is logged
+    // and reads as none: those lights are then header-read, typed LIGHT, and never become rows.
+    private List<string> CataloguedUnder(string root, DateOnly night, CancellationToken token)
+    {
+        try
+        {
+            return [.. cataloguedLightsUnder(root, night, token).Select(frame => frame.FilePath)];
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            logger.LogWarning(ex, "Reading the catalogued lights under {Folder} failed", root);
+            return [];
+        }
     }
 
     // At most one progress post per 100 ms, so a 36,000 header walk does not flood the UI thread.

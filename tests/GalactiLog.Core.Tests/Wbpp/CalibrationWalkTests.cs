@@ -39,8 +39,8 @@ public sealed class CalibrationWalkTests : IDisposable
         return path;
     }
 
-    private WalkResult Walk(Func<string, bool>? sizeOnly = null, IProgress<int>? progress = null, CancellationToken ct = default)
-        => CalibrationWalk.Scan(_root, sizeOnly ?? (_ => false), _rule, UserFiles.EnumerateFileSystemEntries,
+    private WalkResult Walk(Func<string, bool>? skipHeaderRead = null, IProgress<int>? progress = null, CancellationToken ct = default)
+        => CalibrationWalk.Scan(_root, skipHeaderRead ?? (_ => false), _rule, UserFiles.EnumerateFileSystemEntries,
             p => CalibrationWalk.ReadFrame(p, 0, _rule), progress, ct);
 
     private sealed class SyncProgress(Action<int> a) : IProgress<int>
@@ -72,18 +72,21 @@ public sealed class CalibrationWalkTests : IDisposable
     }
 
     [Fact]
-    public void Scan_SizeOnlyDirectories_AreSizedButNotRead()
+    public void Scan_SkippedFiles_AreSizedButNotRead_AndTheirNeighboursAreRead()
     {
-        Fits(Path.Combine("LIGHT", "T", "l.fits"), "LIGHT");
-        Fits(Path.Combine("FLAT", "f.fits"), "FLAT");
+        // A light folder holding a catalogued light and a flat beside it: the predicate is per
+        // file, so the light is sized only and the flat in the same folder is read.
+        var light = Fits(Path.Combine("T", "2025-10-15", "l.fits"), "LIGHT");
+        Fits(Path.Combine("T", "2025-10-15", "f.fits"), "FLAT");
 
-        var r = Walk(d => d.Contains("LIGHT"));
+        var r = Walk(path => path == light);
 
         Assert.Equal(1, r.HeadersRead);
-        var light = r.Frames.Single(f => f.FilePath.EndsWith("l.fits"));
-        Assert.Equal(CalibrationType.Other, light.Type);
-        Assert.True(light.Size > 0);
-        Assert.Equal(new FrameKeys(null, null, null, null, null, null, null, null), light.Keys);
+        var sized = r.Frames.Single(f => f.FilePath.EndsWith("l.fits"));
+        Assert.Equal(CalibrationType.Other, sized.Type);
+        Assert.True(sized.Size > 0);
+        Assert.Equal(new FrameKeys(null, null, null, null, null, null, null, null), sized.Keys);
+        Assert.Equal(CalibrationType.Flat, r.Frames.Single(f => f.FilePath.EndsWith("f.fits")).Type);
     }
 
     [Fact]

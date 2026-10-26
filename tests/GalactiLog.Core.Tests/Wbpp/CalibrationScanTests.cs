@@ -81,6 +81,31 @@ public class CalibrationScanTests
     }
 
     [Fact]
+    public void CopiedInPlace_OnlyForARowWhoseFolderDirectlyHoldsTheNightsLights_UnderTheChosenLevel()
+    {
+        var row = Row(@"W:\T\2025-10-15", M(@"W:\T\2025-10-15\f1.fits", CalibrationType.Flat, true));
+        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15", row, [@"W:\T\2025-10-15\l1.fits"]));
+        Assert.True(CalibrationScan.CopiedInPlace(@"W:\T", row, [@"W:\T\2025-10-15\l1.fits"]));
+        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15", row, [@"W:\T\2025-10-15\Ha\l1.fits"]));
+        Assert.False(CalibrationScan.CopiedInPlace(@"W:\T\2025-10-15\Ha", row, [@"W:\T\2025-10-15\l1.fits"]));
+    }
+
+    [Fact]
+    public void InPlaceExcludes_UnselectedFramesOfATickedRow_AllOfAnUntickedOne_NothingElsewhere()
+    {
+        const string Dir = @"W:\T\2025-10-15";
+        string[] lights = [Dir + @"\l1.fits"];
+        var mixed = Row(Dir,
+            M(Dir + @"\f1.fits", CalibrationType.Flat, true), M(Dir + @"\f2.fits", CalibrationType.Flat, false));
+        var none = Row(Dir, M(Dir + @"\f1.fits", CalibrationType.Flat, false), M(Dir + @"\f2.fits", CalibrationType.Flat, false));
+        var elsewhere = Row(@"W:\T\FLAT", M(@"W:\T\FLAT\g.fits", CalibrationType.Flat, false));
+
+        Assert.Equal([Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, true), (elsewhere, false)], lights).Select(f => f.FilePath));
+        Assert.Equal([Dir + @"\f1.fits", Dir + @"\f2.fits"], CalibrationScan.InPlaceExcludes(Dir, [(mixed, false)], lights).Select(f => f.FilePath));
+        Assert.Empty(CalibrationScan.InPlaceExcludes(Dir, [(none, true)], lights));
+    }
+
+    [Fact]
     public void Operations_UntickedRows_ProduceNothing()
     {
         var row = Row(@"W:\N\FLAT", M(@"W:\N\FLAT\f1.fits", CalibrationType.Flat, true));

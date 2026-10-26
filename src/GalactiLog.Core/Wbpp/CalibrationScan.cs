@@ -76,6 +76,24 @@ public static class CalibrationScan
         return ops;
     }
 
+    /// <summary>True for a row whose folder lies under the chosen level and directly holds one of
+    /// the night's own lights (a single-folder layout). The lights operation copies that folder in
+    /// place, so the row gets no calibration operation of its own.</summary>
+    public static bool CopiedInPlace(string chosenLevelPath, CalibrationRow row, IReadOnlyCollection<string> nightLightPaths)
+        => PathConfinement.IsUnderOrEqual(chosenLevelPath, row.Folder)
+           && nightLightPaths.Any(path => Path.TrimEndingDirectorySeparator(Path.GetDirectoryName(path) ?? "").Equals(
+               Path.TrimEndingDirectorySeparator(row.Folder), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The calibration frames the lights operation must skip in rows copied in place: the
+    /// unselected ones of a ticked row (none when the row selects nothing, which copies them all),
+    /// and every one of an unticked row.</summary>
+    public static IReadOnlyList<ScannedFrame> InPlaceExcludes(
+        string chosenLevelPath, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyCollection<string> nightLightPaths)
+        => [.. rows.Where(r => CopiedInPlace(chosenLevelPath, r.Row, nightLightPaths))
+            .SelectMany(r => r.Row.Frames.Where(f => !r.Ticked || (r.Row.SelectedCount > 0 && !f.Selected)))
+            .Select(f => f.Frame)
+            .Where(f => CalibrationTypes.Contains(f.Type))];
+
     /// <summary>Rows strictly under the chosen level: the edge rule's directory-exclude list.</summary>
     public static IReadOnlyList<FolderLevel> OwnedFolders(string chosenLevelPath, IReadOnlyList<CalibrationRow> rows) =>
         rows.Where(r => PathConfinement.IsUnderOrEqual(chosenLevelPath, r.Folder)

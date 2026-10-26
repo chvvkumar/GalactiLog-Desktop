@@ -233,7 +233,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             ? null
             : new CalibrationScanDriver(
                 walk,
-                () => _catalogue,
+                (folder, night, ct) => readForeignLights is { } read ? read(folder, groupKey, night, ct) : [],
                 () =>
                 {
                     var settings = _getGeneral();
@@ -805,7 +805,12 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         {
             if (session.Chosen is { } chosen)
             {
-                plan[session.Night] = [.. FolderLevels.ExcludedUnderLevels([chosen], excludedByNight), .. session.ForeignExcluded];
+                plan[session.Night] =
+                [
+                    .. FolderLevels.ExcludedUnderLevels([chosen], excludedByNight),
+                    .. session.ForeignExcluded,
+                    .. session.CalibrationInPlaceExcludes(),
+                ];
             }
         }
 

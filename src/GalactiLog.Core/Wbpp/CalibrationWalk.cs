@@ -11,18 +11,21 @@ namespace GalactiLog.Core.Wbpp;
 /// <see cref="OnDisk"/> as a <see cref="Walker"/>.</summary>
 public static class CalibrationWalk
 {
-    public delegate WalkResult Walker(string root, Func<string, bool> sizeOnlyDirectory, NightRule nightRule,
+    /// <summary>Walks <c>root</c>. <c>skipHeaderRead</c> takes a file's full path and is true for a
+    /// file to size without reading its header: a catalogued light, or a file an earlier climb step
+    /// already read.</summary>
+    public delegate WalkResult Walker(string root, Func<string, bool> skipHeaderRead, NightRule nightRule,
         IProgress<int>? progress, CancellationToken ct);
 
     private static readonly FrameKeys NoKeys = new(null, null, null, null, null, null, null, null);
 
-    /// <summary>Walks <paramref name="root"/> without recursion. A file in a directory for which
-    /// <paramref name="sizeOnlyDirectory"/> is true, or with an extension the header reader does
-    /// not support, is sized and typed <see cref="CalibrationType.Other"/>; any other file goes to
+    /// <summary>Walks <paramref name="root"/> without recursion. A file for which
+    /// <paramref name="skipHeaderRead"/> is true, or with an extension the header reader does not
+    /// support, is sized and typed <see cref="CalibrationType.Other"/>; any other file goes to
     /// <paramref name="readFrame"/>, whose null return is a <see cref="ScanIssue"/>. A directory
     /// that throws <see cref="IOException"/> or <see cref="UnauthorizedAccessException"/> on
     /// enumeration is an issue and is skipped; reparse-point directories are skipped silently.</summary>
-    public static WalkResult Scan(string root, Func<string, bool> sizeOnlyDirectory, NightRule nightRule,
+    public static WalkResult Scan(string root, Func<string, bool> skipHeaderRead, NightRule nightRule,
         Func<string, IEnumerable<FileSystemInfo>> enumerate, Func<string, ScannedFrame?> readFrame,
         IProgress<int>? progress, CancellationToken ct)
     {
@@ -48,7 +51,6 @@ public static class CalibrationWalk
                 continue;
             }
 
-            var sizeOnly = sizeOnlyDirectory(dir);
             foreach (var entry in entries)
             {
                 ct.ThrowIfCancellationRequested();
@@ -61,7 +63,7 @@ public static class CalibrationWalk
 
                 var size = file.Length;
                 ScannedFrame? read = null;
-                if (!sizeOnly && FrameReader.IsSupported(file.FullName))
+                if (FrameReader.IsSupported(file.FullName) && !skipHeaderRead(file.FullName))
                 {
                     read = readFrame(file.FullName);
                     headers++;
@@ -105,8 +107,8 @@ public static class CalibrationWalk
     }
 
     /// <summary>The walk over the real disk, reading headers through <see cref="FrameReader"/>.</summary>
-    public static readonly Walker OnDisk = (root, sizeOnlyDirectory, nightRule, progress, ct) =>
-        Scan(root, sizeOnlyDirectory, nightRule, UserFiles.EnumerateFileSystemEntries,
+    public static readonly Walker OnDisk = (root, skipHeaderRead, nightRule, progress, ct) =>
+        Scan(root, skipHeaderRead, nightRule, UserFiles.EnumerateFileSystemEntries,
             path => ReadFrame(path, 0, nightRule), progress, ct);
 
     internal static CalibrationType TypeOf(string? imageType) => imageType?.Trim().ToUpperInvariant() switch
