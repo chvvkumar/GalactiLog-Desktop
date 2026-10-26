@@ -81,6 +81,22 @@ public class StagingLayoutTests
     }
 
     [Fact]
+    public void TwoScanRoots_WithANestedRelativePath_Collide()
+    {
+        // M31 and M31\FLAT\Ha would write one folder tree, so both take their night.
+        var twoNights = StagingLayout.Plan([
+            S(N18, @"W:\Astro\Incoming\M31"),
+            S(N19, @"X:\Archive\m31\FLAT\Ha", root: @"X:\Archive")]);
+        Assert.Equal([@"2026-10-18_M31", @"2026-10-19_m31\FLAT\Ha"], Entries(twoNights));
+
+        // One night on both: the prefix still nests, so the suffix pass separates them.
+        var oneNight = StagingLayout.Plan([
+            S(N18, @"W:\Astro\Incoming\M31\FLAT\Ha"),
+            S(N18, @"X:\Archive\M31", root: @"X:\Archive")]);
+        Assert.Equal([@"2026-10-18_M31\FLAT\Ha", @"2026-10-18_M31_2"], Entries(oneNight));
+    }
+
+    [Fact]
     public void TwoScanRoots_WithoutACollision_AreRelativeToTheirOwnRoot()
     {
         var plan = StagingLayout.Plan([S(N18, @"W:\Astro\Incoming\M31\LIGHT"), S(N19, @"X:\Archive\NGC7000\LIGHT", root: @"X:\Archive")]);

@@ -130,20 +130,20 @@ public static class StagingLayout
         }
     }
 
-    // Colliding entries take their night as a prefix; any that still collide get _2, _3 after the
-    // first segment.
+    // Entries collide when they are the same path or one nests inside the other (whole segments,
+    // case-insensitive), since both would write one folder tree. Colliding entries take their
+    // night as a prefix; any that still collide get _2, _3 after the first segment.
     private static string[] ResolveCollisions(List<Kept> kept, string[] entries)
     {
-        var counts = entries.GroupBy(e => e, StringComparer.OrdinalIgnoreCase).ToDictionary(g => g.Key, g => g.Count(), StringComparer.OrdinalIgnoreCase);
+        static bool Collide(string a, string b) => PathConfinement.IsUnderOrEqual(a, b) || PathConfinement.IsUnderOrEqual(b, a);
         var result = new string[entries.Length];
-        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         for (var i = 0; i < entries.Length; i++)
         {
-            var entry = counts[entries[i]] > 1
+            var entry = entries.Where((e, j) => j != i && Collide(e, entries[i])).Any()
                 ? kept[i].Source.Night.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "_" + entries[i]
                 : entries[i];
             var final = entry;
-            for (var n = 2; !taken.Add(final); n++)
+            for (var n = 2; result.Take(i).Any(r => Collide(r, final)); n++)
             {
                 var cut = entry.IndexOf(Path.DirectorySeparatorChar);
                 final = cut < 0 ? entry + "_" + n : entry.Insert(cut, "_" + n);
