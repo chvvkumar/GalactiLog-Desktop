@@ -58,7 +58,7 @@ public class CalibrationBlockTests
         => [.. (session.CopySources.Single(s => Is(s.Level.Path, source)).SkippedFolders ?? []).Select(l => l.Path)];
 
     private static void Generate(WbppExportViewModel page)
-        => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static Library DateFirst() => new Library()
         .Frame(N, Path.Combine(LightDir, "a.fits"))

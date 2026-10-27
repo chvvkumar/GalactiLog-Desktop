@@ -166,6 +166,24 @@ internal sealed class ExportHarness : IDisposable
 
     private readonly Lock _postGate = new();
 
+    // The delegates the page runs on pool threads that are still running; Dispose waits for none.
+    private int _inFlight;
+
+    private volatile bool _disposed;
+
+    private T Tracked<T>(Func<T> work)
+    {
+        Interlocked.Increment(ref _inFlight);
+        try
+        {
+            return work();
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlight);
+        }
+    }
+
     /// <summary>Runs a case's own write as the UI thread would: never interleaved with a post.
     /// </summary>
     public void OnUi(Action action)
@@ -188,7 +206,7 @@ internal sealed class ExportHarness : IDisposable
     public void Release()
     {
         _gate?.Set();
-        Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+        Assert.True(Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
     }
 
     /// <summary>A temporary folder that exists on disk, for a staging value that has to.</summary>
@@ -215,7 +233,8 @@ internal sealed class ExportHarness : IDisposable
         Func<string, IReadOnlyList<string>?>? listSubfolders = null,
         Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
         CalibrationWalk.Walker? walk = null,
-        Func<GeneralSettings, GeneralSettings>? general = null)
+        Func<GeneralSettings, GeneralSettings>? general = null,
+        Action<Action>? post = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -238,12 +257,12 @@ internal sealed class ExportHarness : IDisposable
             library.GroupKey,
             library.TargetName,
             nights,
-            (_, requested, _, _) =>
+            (_, requested, _, _) => harness.Tracked(() =>
             {
                 harness.ReadPathsCalls++;
                 harness._gate?.Wait(TimeSpan.FromSeconds(30));
                 return library.Build(requested);
-            },
+            }),
             (_, night) =>
             {
                 harness.DetailCalls.Add(night);
@@ -268,15 +287,33 @@ internal sealed class ExportHarness : IDisposable
                 Interlocked.Increment(ref harness._postCount);
 
                 // One posted action at a time, as the UI dispatcher runs them: a listing and a scan
-                // result landing together must not interleave their writes to one tree.
-                lock (harness._postGate)
+                // result landing together must not interleave their writes to one tree. A post that
+                // lands after Dispose is dropped, so nothing reaches a torn-down window.
+                void Run()
                 {
-                    action();
+                    if (harness._disposed)
+                    {
+                        return;
+                    }
+
+                    lock (harness._postGate)
+                    {
+                        action();
+                    }
+                }
+
+                if (post is null)
+                {
+                    Run();
+                }
+                else
+                {
+                    post(Run);
                 }
             },
-            listSubfolders: listSubfolders,
-            readForeignLights: readForeignLights ?? ((_, _, _, _) => []),
-            walk: walk);
+            listSubfolders: listSubfolders is null ? null : folder => harness.Tracked(() => listSubfolders(folder)),
+            readForeignLights: (root, groupKey, night, ct) => harness.Tracked(() => (readForeignLights ?? ((_, _, _, _) => []))(root, groupKey, night, ct)),
+            walk: walk is null ? null : (root, skip, rule, progress, ct) => harness.Tracked(() => walk(root, skip, rule, progress, ct)));
 
         if (installPickers)
         {
@@ -290,7 +327,7 @@ internal sealed class ExportHarness : IDisposable
 
         if (!parked)
         {
-            harness.Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+            Assert.True(harness.Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
         }
 
         return harness;
@@ -301,10 +338,29 @@ internal sealed class ExportHarness : IDisposable
     public void SetScanRoots(params string[] roots)
         => General = General with { ScanRoots = roots };
 
+    /// <summary>Cancels the page's background work and waits for it, then drops any post still
+    /// queued. Safe to call twice: a window case disposes before it closes the window.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _gate?.Set();
         Page.Dispose();
+        try
+        {
+            Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+        }
+        catch (AggregateException exception) when (exception.InnerException is OperationCanceledException)
+        {
+            // A load cancelled by the dispose above.
+        }
+
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref _inFlight) == 0, TimeSpan.FromSeconds(30)),
+            "The page's background work did not finish within 30 s of Dispose.");
         if (Directory.Exists(_appDataRoot))
         {
             Directory.Delete(_appDataRoot, recursive: true);
@@ -335,7 +391,7 @@ public class WbppExportViewModelTests
     {
         try
         {
-            page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+            Assert.True(page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
         }
         catch (AggregateException exception) when (exception.InnerException is OperationCanceledException)
         {

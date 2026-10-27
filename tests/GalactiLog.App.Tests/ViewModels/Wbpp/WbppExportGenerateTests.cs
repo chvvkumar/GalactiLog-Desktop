@@ -33,13 +33,13 @@ public class WbppExportGenerateTests
 
     // The command wait lives out of a test body, because xUnit1031 is an error here.
     private static void Generate(WbppExportViewModel page, WbppScriptType type)
-        => page.GenerateCommand.ExecuteAsync(type).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.GenerateCommand.ExecuteAsync(type).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static void CopyScript(WbppExportViewModel page)
-        => page.CopyScriptCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.CopyScriptCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static void CopyRunCommand(WbppExportViewModel page)
-        => page.CopyRunCommandCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.CopyRunCommandCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     // ------------------------------------------------------------------ 10.7 cancelled and done
 

@@ -43,9 +43,23 @@ public class WbppExportWindowTests
 
     private static ExportHarness Harness(Library? library = null, bool installPickers = true, bool parked = false,
         Func<string, IReadOnlyList<string>?>? listSubfolders = null, CalibrationWalk.Walker? walk = null)
-        => ExportHarness.Create(
+        => OnUi(ExportHarness.Create(
             library ?? new Library().Frame(N1, Ha("a.fits")), [N1], installPickers: installPickers, parked: parked,
-            listSubfolders: listSubfolders, walk: walk);
+            listSubfolders: listSubfolders, walk: walk, post: UiThreadPost), parked);
+
+    // A window binds the page, so every post lands on the UI thread, pumped by RunJobs and Until,
+    // rather than writing a bound view-model from a pool thread.
+    private static readonly Action<Action> UiThreadPost = action => Dispatcher.UIThread.Post(action);
+
+    private static ExportHarness OnUi(ExportHarness harness, bool parked = false)
+    {
+        if (!parked)
+        {
+            Dispatcher.UIThread.RunJobs();   // the load's posted publish
+        }
+
+        return harness;
+    }
 
     // A step template's elements sit in the template's own scope under StepHost, so they are
     // found in the visual tree, the way SetupWizardWindowTests finds them.
@@ -118,8 +132,7 @@ public class WbppExportWindowTests
         var wizard = Wizard(harness);
         var window = Show(wizard);
         var session = harness.Page.Sessions[0];
-        SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10));
-        Dispatcher.UIThread.RunJobs();
+        Until(() => session.Rows.All(r => !r.IsListing));
 
         Assert.Equal("Collapse", InStep<Button>(window, "TreeToggleButton").Content);
         Assert.Empty(window.GetVisualDescendants().OfType<RadioButton>());
@@ -137,6 +150,7 @@ public class WbppExportWindowTests
         Assert.Equal("1 folder skipped", InStep<TextBlock>(window, "SkippedChip").Text);
         Assert.Contains("after skipping 1 folder", InStep<TextBlock>(window, "NightSummary").Text, StringComparison.Ordinal);
         Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == FolderNodeViewModel.SkippedText && t.IsEffectivelyVisible);
+        harness.Dispose();
         window.Close();
     }
 
@@ -156,6 +170,7 @@ public class WbppExportWindowTests
         Assert.IsAssignableFrom<ModalPageWindow<WbppExportWizardViewModel>>(window);
         Assert.Equal(WindowStartupLocation.CenterOwner, window.WindowStartupLocation);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -183,6 +198,7 @@ public class WbppExportWindowTests
         Assert.NotNull(InStep<ContentControl>(window, "QualityPanelRegion"));
         Assert.Null(InStepOrNull<ItemsControl>(window, "SessionRows"));
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -198,8 +214,9 @@ public class WbppExportWindowTests
         Assert.Equal("", InStep<TextBlock>(window, "FooterFrameCount").Text);
         Assert.False(window.Named<Button>("NextButton").IsEffectivelyEnabled);
 
-        // Not released: the harness posts inline, so a release would publish off the UI thread. The
-        // settled state is pinned by WbppExportWizardTests and by the other cases here.
+        // Not released: the case pins the loading state only. The settled state is pinned by
+        // WbppExportWizardTests and by the other cases here.
+        harness.Dispose();
         window.Close();
     }
 
@@ -218,6 +235,7 @@ public class WbppExportWindowTests
         Assert.True(badge.IsVisible);
         Assert.Equal("+1 other night", badge.Text);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -240,6 +258,7 @@ public class WbppExportWindowTests
         var buttonLeft = toggle.TranslatePoint(default, window)!.Value.X;
         Assert.True(pathRight <= buttonLeft + 1, "the chosen path overruns the tree toggle button");
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -263,6 +282,7 @@ public class WbppExportWindowTests
         Assert.True(InStep<Button>(window, "StagingPickerButton").IsEffectivelyEnabled);
         Assert.True(InStep<CheckBox>(window, "SubfolderCheckBox").IsChecked);
 
+        harness.Dispose();
         window.Close();
         Dispatcher.UIThread.RunJobs();
 
@@ -290,6 +310,7 @@ public class WbppExportWindowTests
         Assert.False(window.Named<Button>("NextButton").IsEffectivelyEnabled);
         Assert.Equal(ReviewStep.FileSafetyText, InStep<TextBlock>(window, "FileSafetyText").Text);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -308,6 +329,7 @@ public class WbppExportWindowTests
 
         Assert.True(closed);
         Assert.False(window.IsVisible);
+        harness.Dispose();
     }
 
     // Blocks a copier pool thread until the case opens the gate; outside any test body, because
@@ -342,6 +364,7 @@ public class WbppExportWindowTests
         Assert.False(window.IsVisible);
         gate.Set();
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        harness.Dispose();
     }
 
     // A failure here is a result step that traps the user: committed and idle, Escape closes.
@@ -366,6 +389,7 @@ public class WbppExportWindowTests
 
         Assert.True(closed);
         Assert.False(window.IsVisible);
+        harness.Dispose();
     }
 
     // A failure here is a title bar that traps the user behind a running copy, or an idle wizard.
@@ -386,6 +410,7 @@ public class WbppExportWindowTests
         Assert.False(refusedDuringCopy);
         Assert.False(Refuses(window, WindowCloseReason.WindowClosing));
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -411,6 +436,7 @@ public class WbppExportWindowTests
 
         picked.SetResult(null);
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        harness.Dispose();
         window.Close();
     }
 
@@ -428,6 +454,7 @@ public class WbppExportWindowTests
         Assert.Equal(ReviewStep.BackgroundCopyText, hint.Text);
         Assert.Contains(InStep<ProgressBar>(window, "CopyProgressBar"), ((Panel)hint.Parent!).Children);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -494,6 +521,7 @@ public class WbppExportWindowTests
             using var bareWizard = Wizard(bare);
             var bareWindow = Show(bareWizard);
             Assert.Empty(Visible<StackPanel>(bareWindow, "CalibrationBlock"));
+            bare.Dispose();
             bareWindow.Close();
         }
 
@@ -521,6 +549,7 @@ public class WbppExportWindowTests
         Dispatcher.UIThread.RunJobs();
         Assert.Empty(Visible<StackPanel>(window, "CalibrationBlock"));
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -552,6 +581,7 @@ public class WbppExportWindowTests
             Assert.Equal(harness.Page.BreakdownText, breakdown.Text);
             Assert.StartsWith("lights ", breakdown.Text, StringComparison.Ordinal);
 
+            harness.Dispose();
             window.Close();
         }
         finally
@@ -579,6 +609,7 @@ public class WbppExportWindowTests
         Assert.Equal(harness.Page.BreakdownText, breakdown.Text);
         Assert.StartsWith("lights ", breakdown.Text, StringComparison.Ordinal);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -587,7 +618,7 @@ public class WbppExportWindowTests
     [AvaloniaFact]
     public void CalibrationRows_AreDrawnInTheTree_WithTicksFiguresNotesAndNoExpanderOnLeaves()
     {
-        using var harness = ExportHarness.Create(Pleiades.Catalogue(), [Pleiades.N18], walk: Pleiades.Disk().Walker);
+        using var harness = OnUi(ExportHarness.Create(Pleiades.Catalogue(), [Pleiades.N18], walk: Pleiades.Disk().Walker, post: UiThreadPost));
         using var wizard = Wizard(harness);
         var window = Show(wizard);
         var session = harness.Page.Sessions[0];
@@ -611,6 +642,7 @@ public class WbppExportWindowTests
         Assert.True(session.CalibrationRows.Single(r => r.FolderName == "Angle_96.26").IsIncluded);
         Assert.Equal("2 of 2 calibration folders ticked", Visible<TextBlock>(window, "CalibrationTally").Single().Text);
 
+        harness.Dispose();
         window.Close();
     }
 

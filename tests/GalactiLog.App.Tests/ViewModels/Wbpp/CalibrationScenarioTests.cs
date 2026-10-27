@@ -56,7 +56,7 @@ public class CalibrationScenarioTests
         => session.CopySources.Single(s => s.Level.FrameCount > 0).Level.Path;
 
     private static void Generate(WbppExportViewModel page)
-        => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static void Stage(ExportHarness h)
     {

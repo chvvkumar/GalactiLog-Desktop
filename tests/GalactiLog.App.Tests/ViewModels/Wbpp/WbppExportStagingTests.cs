@@ -455,7 +455,7 @@ public class WbppExportStagingTests
 
     // The command wait lives out of a test body, because xUnit1031 is an error here.
     private static void SaveDefaults(WbppExportViewModel page)
-        => page.SaveAsDefaultsCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.SaveAsDefaultsCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     // ------------------------------------------------------------------ 10.12 the 260 ceiling
 
