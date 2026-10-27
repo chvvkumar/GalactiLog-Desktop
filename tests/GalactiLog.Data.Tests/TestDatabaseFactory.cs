@@ -114,13 +114,41 @@ public static class TestDatabaseFactory
     }
 }
 
-public sealed class TestDatabaseHandle(string path, string connectionString) : IDisposable
+public sealed class TestDatabaseHandle : IDisposable
 {
-    public string ConnectionString { get; } = connectionString;
+    private readonly string _path;
+
+    // One idle connection held for the handle's lifetime, as the production connection pool
+    // holds one. Without it every unpooled close is the last one on the file, so SQLite
+    // checkpoints and deletes the -wal and -shm files and the next open creates them again: about
+    // a third of the time of the database-heavy classes when run serially. It takes no lock
+    // between statements, so it changes no case's locking or visibility.
+    private readonly SqliteConnection _held;
+
+    public TestDatabaseHandle(string path, string connectionString)
+    {
+        _path = path;
+        ConnectionString = connectionString;
+        _held = new SqliteConnection(connectionString);
+        _held.Open();
+
+        // Opening alone touches nothing; one read maps the -shm, which is what keeps the file
+        // open in SQLite's sense.
+        using var command = _held.CreateCommand();
+        command.CommandText = "SELECT count(*) FROM sqlite_master;";
+        command.ExecuteScalar();
+    }
+
+    public string ConnectionString { get; }
+
+    // For the few cases whose subject is the file with no connection open on it: closing the held
+    // connection makes the next close the last one again, which checkpoints and removes the -wal.
+    public void CloseHeldConnection() => _held.Dispose();
 
     public void Dispose()
     {
-        foreach (var candidate in new[] { path, path + "-wal", path + "-shm" })
+        _held.Dispose();
+        foreach (var candidate in new[] { _path, _path + "-wal", _path + "-shm" })
         {
             if (File.Exists(candidate))
             {
