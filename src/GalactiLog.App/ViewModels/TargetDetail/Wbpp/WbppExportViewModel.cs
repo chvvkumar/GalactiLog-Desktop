@@ -618,9 +618,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private void OnScanPublished(SessionLevelViewModel session)
     {
         Rematch(session, force: true);
-
-        // A match can tick a shallower folder, which moves the bound of the foreign read.
-        ReadForeignLights(session);
         WithdrawScript();
         RefreshFooter();
     }
@@ -642,6 +639,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         }
 
         session.ApplyMatch(CalibrationMatcher.Match(sets, session.Night, session.ScannedFrames));
+
+        // A match can tick a shallower folder, which moves the bound of the foreign read; a no-op
+        // when the bound is unchanged.
+        ReadForeignLights(session);
     }
 
     // The night's light sets: the keys of its catalogued lights the copy takes, less the

@@ -27,7 +27,11 @@ public abstract class WbppExportStepViewModel(WbppExportViewModel page, Action<A
 public sealed class FoldersStep : WbppExportStepViewModel
 {
     public FoldersStep(WbppExportViewModel page, Action<Action>? post = null)
-        : base(page, post) => Page.PropertyChanged += OnPageChanged;
+        : base(page, post)
+    {
+        _couldAdvance = CanAdvance;
+        Page.PropertyChanged += OnPageChanged;
+    }
 
     public override string Title => "Folders to copy";
 
@@ -35,10 +39,21 @@ public sealed class FoldersStep : WbppExportStepViewModel
 
     public override bool CanAdvance => !Page.IsLoading && Page.Sessions.Any(session => session.CopySources.Count > 0);
 
+    // The answer last raised, so a folder count change raises only when the answer moves.
+    private bool _couldAdvance;
+
     private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(WbppExportViewModel.IsLoading) or nameof(WbppExportViewModel.Sessions))
         {
+            _couldAdvance = CanAdvance;
+            RaiseCanAdvanceChanged();
+        }
+        else if (e.PropertyName is nameof(WbppExportViewModel.FolderCountText) && CanAdvance != _couldAdvance)
+        {
+            // The folder count moves with every tick that moves CanAdvance (no source is no
+            // operation); raised only when the answer moves, as most count changes leave it.
+            _couldAdvance = !_couldAdvance;
             RaiseCanAdvanceChanged();
         }
     }
