@@ -245,13 +245,28 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// </summary>
     internal string TargetKey { get; init; } = "";
 
-    /// <summary>The index in <see cref="SessionLevels.Levels"/> of the shallowest ticked chain
-    /// row, else the default level's, or -1 when this night offers none. The calibration scan and
-    /// the foreign read are bounded by it.</summary>
-    /// <remarks><see cref="Rows"/> is ordered depth first, then path, so the first ticked row is
-    /// the shallowest.</remarks>
-    public int ChosenIndex => !HasLevels ? -1
-        : Rows.FirstOrDefault(row => row.IsIncluded)?.Index ?? Levels.DefaultLevelIndex;
+    /// <summary>The index in <see cref="SessionLevels.Levels"/> of the deepest chain row holding
+    /// every copy source, else the default level's, or -1 when this night offers none. The
+    /// calibration scan and the foreign read are bounded by it, so both reach every folder copied.
+    /// </summary>
+    /// <remarks><see cref="Rows"/> is ordered depth first, then path, so the last row holding every
+    /// source is the deepest.</remarks>
+    public int ChosenIndex
+    {
+        get
+        {
+            if (!HasLevels)
+            {
+                return -1;
+            }
+
+            var sources = CopySources;
+            return sources.Count == 0
+                ? Levels.DefaultLevelIndex
+                : Rows.LastOrDefault(row => sources.All(source => PathConfinement.IsUnderOrEqual(row.Level.Path, source.Level.Path)))?.Index
+                    ?? Levels.DefaultLevelIndex;
+        }
+    }
 
     /// <summary>This night's copy sources, as the tick model reads them off the tree: one per
     /// ticked row whose parent is unticked, each with the unticked rows under it as skipped
@@ -365,21 +380,20 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     private static string Counted(int count, string noun)
         => string.Create(CultureInfo.InvariantCulture, $"{count:N0} {noun}{(count == 1 ? "" : "s")}");
 
-    // A tick moved. The ticks on the row and on every calibration row beneath it are the user's
-    // from here on, so a re-match and a Rescan restore them by folder. A row created for
-    // calibration that the user ticks is kept by a new result, as a matched folder is.
-    private void OnRowChanged(FolderNodeViewModel row)
+    // A tick moved. Only the user's own tick is remembered, by path for every kind of row, so a
+    // match, a re-match and a Rescan restore it and a new result keeps a created row the user
+    // ticked. A tick reseeds the rows beneath it, which forgets what the user set there.
+    private void OnRowChanged(FolderNodeViewModel row, bool byUser)
     {
-        if (row.Row is null && _created.ContainsKey(row.Level.Path))
+        if (byUser)
         {
             _userTicks[row.Level.Path] = row.IsIncluded;
-        }
-
-        foreach (var node in row.Descendants().Prepend(row))
-        {
-            if (node.Row is { } calibration)
+            if (row.IsIncluded)
             {
-                _userTicks[calibration.Folder] = node.IsIncluded;
+                foreach (var node in row.Descendants())
+                {
+                    _userTicks.Remove(node.Level.Path);
+                }
             }
         }
 
@@ -682,7 +696,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
         foreach (var (path, node) in _created.OrderByDescending(pair => pair.Key.Length).ToList())
         {
-            if (!folders.Contains(path) && !_userTicks.ContainsKey(path) && node.Children.Count == 0)
+            // A row a listing named is on disk and stays, whatever the result says.
+            if (!folders.Contains(path) && !_userTicks.ContainsKey(path) && node.Children.Count == 0 && !node.IsListed)
             {
                 node.Parent!.RemoveChild(node);
                 _created.Remove(path);
@@ -702,7 +717,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             node.SetCalibrationRow(row);
             if (first)
             {
-                if (_userTicks.TryGetValue(row.Folder, out var ticked))
+                if (_userTicks.TryGetValue(node.Level.Path, out var ticked))
                 {
                     node.Seed(ticked);
                 }
@@ -737,7 +752,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
             }
             else if (node.Level.FrameCount == 0)
             {
-                node.Seed(_userTicks.TryGetValue(row.Folder, out var ticked) ? ticked : row.DefaultTicked);
+                node.Seed(_userTicks.TryGetValue(node.Level.Path, out var ticked) ? ticked : row.DefaultTicked);
             }
 
             _calibrationNodes[row.Folder] = node;

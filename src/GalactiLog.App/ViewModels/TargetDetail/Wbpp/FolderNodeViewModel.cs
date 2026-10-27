@@ -57,7 +57,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
     private readonly string _ownTargetName;
     private readonly Action<FolderNodeViewModel> _list;
-    private readonly Action<FolderNodeViewModel> _changed;
+    private readonly Action<FolderNodeViewModel, bool> _changed;
     private readonly List<FolderNodeViewModel> _chainChildren = [];
     private bool _listRequested;
     private bool _seeding;
@@ -75,8 +75,8 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <param name="parent">The row this one sits inside, or null for a root.</param>
     /// <param name="list">Called once, the first time this row is expanded, so the page reads the
     /// folders inside and answers through <see cref="SetChildren"/>.</param>
-    /// <param name="changed">Called when the user moves this row's tick, and when a listing under
-    /// a ticked row lands an unticked row.</param>
+    /// <param name="changed">Called with true when the user moves this row's tick, and with false
+    /// when a listing under a ticked row lands an unticked row.</param>
     public FolderNodeViewModel(
         SubfolderLevel folder,
         bool isChain,
@@ -85,7 +85,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         string ownTargetName,
         FolderNodeViewModel? parent,
         Action<FolderNodeViewModel> list,
-        Action<FolderNodeViewModel> changed)
+        Action<FolderNodeViewModel, bool> changed)
     {
         ArgumentNullException.ThrowIfNull(folder);
         ArgumentNullException.ThrowIfNull(list);
@@ -407,6 +407,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
                 built.Add(existing);
             }
 
+            existing.IsListed = true;
             rows.Add(existing);
         }
 
@@ -421,9 +422,13 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         // has not heard of yet.
         if (IsIncluded && built.Any(row => !row.IsIncluded))
         {
-            _changed(this);
+            _changed(this, false);
         }
     }
+
+    /// <summary>Whether a listing of its parent named this folder, so it is on disk whatever a scan
+    /// result says.</summary>
+    internal bool IsListed { get; private set; }
 
     /// <summary>Sets this row's tick and its reason as the constructor does, without a report and
     /// without touching the rows beneath it.</summary>
@@ -507,7 +512,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
 
         if (!_seeding)
         {
-            _changed(this);
+            _changed(this, true);
         }
     }
 }

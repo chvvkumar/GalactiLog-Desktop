@@ -158,6 +158,24 @@ public class FolderTreeTests
     }
 
     [Fact]
+    public void TickingAListedSiblingDateFolder_BoundsTheReadsByTheYearRow_AndExcludesItsForeignLights()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18],
+            listSubfolders: folder => Is(folder, Year) ? [Date15, Date18] : [],
+            readForeignLights: (folder, _, _, _) => PathConfinement.IsUnderOrEqual(folder, ForeignLight)
+                ? [new WbppFramePath(Guid.NewGuid(), ForeignLight, 1_000)]
+                : []);
+        var session = h.Page.Sessions[0];
+        Settle(session);
+
+        Child(Row(session, Year), "Date_2026-10-15").IsIncluded = true;
+
+        Assert.Equal([Date15, Lights], Sources(session));
+        Assert.Equal(0, session.ChosenIndex);   // the year row holds both sources
+        Until(() => session.ForeignExcluded.Any(frame => Is(frame.FilePath, ForeignLight)));
+    }
+
+    [Fact]
     public void UntickingEveryRow_BlamesTheTicks_NotTheFilter()
     {
         using var h = ExportHarness.Create(Catalogue(), [N18]);
@@ -905,7 +923,7 @@ public class FolderTreeTests
     // ------------------------------------------------------------------ calibration on a row
 
     private static FolderNodeViewModel Node(string path, FolderNodeViewModel? parent = null, bool catalogued = false, int frames = 0, int depth = 1)
-        => new(new SubfolderLevel(new FolderLevel(path, depth, frames, [], [], frames * 1_000L), catalogued), false, -1, true, "M 45", parent, _ => { }, _ => { });
+        => new(new SubfolderLevel(new FolderLevel(path, depth, frames, [], [], frames * 1_000L), catalogued), false, -1, true, "M 45", parent, _ => { }, (_, _) => { });
 
     private static CalibrationRow Matched(string folder, int selected, int unselected, string note)
         => new(folder,

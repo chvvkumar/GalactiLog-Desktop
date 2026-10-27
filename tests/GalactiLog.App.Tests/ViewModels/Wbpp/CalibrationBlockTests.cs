@@ -351,6 +351,69 @@ public class CalibrationBlockTests
     }
 
     [Fact]
+    public void ARowAListingNamed_StaysDrawnWhenALaterScanResultDropsIt()
+    {
+        // The match creates the camera and angle rows first; the gated listings then name them.
+        using var release = new ManualResetEventSlim(false);
+        var disk = Disk();
+        var dateWalks = 0;
+        CalibrationWalk.Walker walk = (root, skip, rule, progress, ct) =>
+            Is(root, Date18) && Interlocked.Increment(ref dateWalks) > 1
+                ? throw new InvalidOperationException("disk gone")
+                : disk.Walker(root, skip, rule, progress, ct);
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder =>
+            {
+                if (Is(folder, Flat) || Is(folder, FlatCam))
+                {
+                    release.Wait(TimeSpan.FromSeconds(10));
+                }
+
+                return Is(folder, Date18) ? [Flat, Light]
+                    : Is(folder, Flat) ? [FlatCam]
+                    : Is(folder, FlatCam) ? [Flats, Flats96]
+                    : [];
+            },
+            walk: walk);
+        var session = h.Page.Sessions[0];
+        Row(session, Date18).IsIncluded = true;
+        Scanned(session);
+        Assert.NotNull(Find(session, Flats96));
+        release.Set();
+        Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
+
+        session.RescanCommand.Execute(null);
+        Scanned(session);
+
+        Assert.StartsWith("Could not scan", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Equal(["Angle_45.18", "Angle_96.26"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
+        Assert.True(Find(session, Flat)!.IsIncluded);
+        Assert.Equal([Date18], Sources(session));
+    }
+
+    [Fact]
+    public void AUserUntickBeforeTheFirstMatch_StandsAgainstTheMatchersDefault()
+    {
+        // Flats directly in the M31 folder, which holds the LIGHT folder the night copies.
+        var disk = new FakeDisk()
+            .Add(F(Path.Combine(LightDir, "a.fits"), CalibrationType.Light, K(), night: N, size: 1_000))
+            .Add(F(Path.Combine(LightDir, "b.fits"), CalibrationType.Light, K(), night: N, size: 1_000))
+            .Add(F(Path.Combine(M31Dir, "f1.fits"), CalibrationType.Flat, K(), night: N));
+        disk.Gate = new ManualResetEventSlim(false);
+        using var h = ExportHarness.Create(DateFirst(), [N], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        var m31 = Row(session, M31Dir);
+        m31.IsIncluded = true;
+        m31.IsIncluded = false;
+
+        disk.Gate.Set();
+        Scanned(session);
+
+        Assert.Same(m31, CalRow(session, M31Dir));
+        Assert.False(m31.IsIncluded);
+        Assert.Equal([LightDir], Sources(session));
+    }
+
+    [Fact]
     public void TheStrip_StatesNoCalibration_WithAnEmptyTally()
     {
         var disk = new FakeDisk()
