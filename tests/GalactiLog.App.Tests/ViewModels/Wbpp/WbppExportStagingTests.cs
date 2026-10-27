@@ -238,7 +238,7 @@ public class WbppExportStagingTests
         // folder outside their library when the folder already is outside it and the real problem
         // is that it is inside the folder being copied.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
-        var source = harness.Page.Sessions[0].Chosen!.Level.Path;
+        var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
 
         // The root is removed from around the source, which is the configuration the second rule
         // exists for and the reason spec 12.13 states and tests it in its own right: a source no
@@ -259,7 +259,7 @@ public class WbppExportStagingTests
         // The same slip as the scan-root rows: without a canonical full path the second clause
         // reads a forward-slash spelling as a folder outside every source.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
-        var source = harness.Page.Sessions[0].Chosen!.Level.Path;
+        var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         harness.SetScanRoots(@"C:\p16other");
 
         harness.Page.StagingPath = Path.Combine(source, "staged").Replace('\\', '/');
@@ -273,7 +273,7 @@ public class WbppExportStagingTests
     public void AFolderEqualToAChosenSourceFolder_IsRefusedTheSameWay()
     {
         using var harness = ExportHarness.Create(OneNight(), [N1]);
-        var source = harness.Page.Sessions[0].Chosen!.Level.Path;
+        var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         harness.SetScanRoots(@"C:\p16other");
 
         harness.Page.StagingPath = source;
@@ -331,7 +331,7 @@ public class WbppExportStagingTests
         var writesBefore = harness.MutateCalls;
 
         // Moving the pick up to the date folder puts the staging folder inside the source.
-        harness.Page.Sessions[0].Rows.Single(row => row.FolderName == "2025-03-20").IsChosen = true;
+        harness.Page.Sessions[0].Rows.Single(row => row.FolderName == "2025-03-20").IsIncluded = true;
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
         Assert.False(harness.Page.GenerateCommand.CanExecute(WbppScriptType.PowerShell));
@@ -512,9 +512,14 @@ public class WbppExportStagingTests
         var shallow = session.Rows.Single(row => row.FolderName == "M31");
         var deepest = session.Rows[^1];
 
-        deepest.IsChosen = true;
+        deepest.IsIncluded = true;
+        foreach (var row in session.Rows.Where(r => !ReferenceEquals(r, deepest)))
+        {
+            row.IsIncluded = false;
+        }
+
         var deepFigure = harness.Page.LongestDestinationLength;
-        shallow.IsChosen = true;
+        shallow.IsIncluded = true;
 
         Assert.Equal(deepFigure, harness.Page.LongestDestinationLength);
     }

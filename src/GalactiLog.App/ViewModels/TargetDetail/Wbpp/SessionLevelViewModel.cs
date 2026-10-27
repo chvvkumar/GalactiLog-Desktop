@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -44,7 +43,7 @@ public enum CalibrationScanState { Idle, Scanning, Done }
 
 /// <summary>
 /// One checked night on spec 12.13's Folders to copy list: its row, its unavailable sentence, its
-/// level tree and its chosen level.
+/// folder tree with a tick on every row, and the copy sources those ticks make.
 /// </summary>
 /// <remarks>
 /// <para>
@@ -76,13 +75,15 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         "This night's frames are spread across more than one library folder, so no single folder holds them all";
 
     private readonly Action<SessionLevelViewModel> _chosenChanged;
+    private readonly string _ownTargetName;
+    private readonly Action<FolderNodeViewModel> _list;
+
     /// <param name="levels">The night's levels, as <c>FolderLevels.ForSession</c> produced
     /// them.</param>
     /// <param name="ownTargetName">The page's own target's display name, passed through to the
     /// rows for the same-name note on a contamination entry.</param>
-    /// <param name="chosenChanged">Called when this night's pick moves, so the page can recompute
-    /// its totals, re-run the staging check and withdraw a generated script. A tick change calls
-    /// it too, because a skip moves the same figures and the same script.</param>
+    /// <param name="chosenChanged">Called when a tick on this night moves, so the page can
+    /// recompute its totals, re-run the staging check and withdraw a generated script.</param>
     /// <param name="listSubfolders">The page's lister: reads the folders inside a row, off the UI
     /// thread, and answers through <see cref="FolderNodeViewModel.SetChildren"/>. Null lists
     /// nothing: every row answers at once with its chain children alone.</param>
@@ -97,13 +98,13 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
         Levels = levels;
         _chosenChanged = chosenChanged;
-        GroupName = "WbppLevels_" + levels.Night.ToString("yyyyMMdd", CultureInfo.InvariantCulture);
+        _ownTargetName = ownTargetName;
 
         // Open on load, unless the night has no tree to open: its toggle is hidden, so an open
         // panel there could not be closed.
         _isExpanded = HasLevels;
 
-        Action<FolderNodeViewModel> list = listSubfolders is { } lister
+        _list = listSubfolders is { } lister
             ? row => lister(this, row)
             : row => row.SetChildren([]);
 
@@ -118,7 +119,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
                     && !string.Equals(row.Level.Path, level.Path, StringComparison.OrdinalIgnoreCase))
                 .MaxBy(row => row.Level.Path.Length);
             var row = new FolderNodeViewModel(
-                new SubfolderLevel(level, true), true, index, GroupName, ownTargetName, parent, list, OnRowChanged);
+                new SubfolderLevel(level, true), true, index, false, ownTargetName, parent, _list, OnRowChanged);
             parent?.AddChild(row);
             rows.Add(row);
         }
@@ -126,19 +127,14 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         Rows = rows;
         Roots = [.. rows.Where(row => row.Parent is null)];
 
-        // The default pick is Task 2's, never re-derived here. The backing field first, then the
-        // row, so the night does not report a change before the page has finished building it.
-        _chosenIndex = HasLevels ? levels.DefaultLevelIndex : -1;
+        // The default level is Task 2's, never re-derived here. Seeded, not ticked, so the night
+        // reports nothing before the page has finished building it; every other chain row is
+        // unticked, which makes the default level the night's one source.
         if (HasLevels)
         {
-            Rows[_chosenIndex].IsChosen = true;
-
-            // The chosen row is never auto-unticked; its report is a pick of the same index, so
-            // nothing reaches the page mid-build.
-            Rows[_chosenIndex].IsIncluded = true;
+            Rows[levels.DefaultLevelIndex].Seed(true);
+            Rows[levels.DefaultLevelIndex].SeedBeneath();
         }
-
-        ApplyZones();
 
         foreach (var row in rows)
         {
@@ -157,10 +153,6 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>This night's LIGHT frame count.</summary>
     public string FrameCountText => WbppPathText.Frames(Levels.TotalFrameCount);
-
-    /// <summary>This night's own radio group, so a pick here cannot clear another night's.
-    /// </summary>
-    public string GroupName { get; }
 
     /// <summary>The chain rows, one per level, in <see cref="SessionLevels.Levels"/>' own order:
     /// depth ascending, then the path under <c>OrdinalIgnoreCase</c>. Empty when no level is
@@ -249,45 +241,29 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [RelayCommand]
     private void Toggle() => IsExpanded = !IsExpanded;
 
-    /// <summary>The picked level's index in <see cref="SessionLevels.Levels"/>, or -1 when this
-    /// night offers none.</summary>
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(ChosenLeadingPath))]
-    [NotifyPropertyChangedFor(nameof(ChosenOwnName))]
-    [NotifyPropertyChangedFor(nameof(ChosenOtherNightsBadge))]
-    [NotifyPropertyChangedFor(nameof(ChosenOtherTargetsBadge))]
-    [NotifyPropertyChangedFor(nameof(HasChosenOtherNightsBadge))]
-    [NotifyPropertyChangedFor(nameof(HasChosenOtherTargetsBadge))]
-    [NotifyPropertyChangedFor(nameof(ChosenOtherNightsTooltip))]
-    [NotifyPropertyChangedFor(nameof(ChosenOtherTargetsTooltip))]
-    private int _chosenIndex;
+    /// <summary>The page's group key, which describes a row created for a calibration folder.
+    /// </summary>
+    internal string TargetKey { get; init; } = "";
 
-    /// <summary>This night's pick with its skipped folders, or null when it offers none and
-    /// contributes nothing. <see cref="ChosenLevel.SkippedFolders"/> is null when nothing is
-    /// skipped.</summary>
-    public ChosenLevel? Chosen
-    {
-        get
-        {
-            if (!HasLevels)
-            {
-                return null;
-            }
+    /// <summary>The index in <see cref="SessionLevels.Levels"/> of the shallowest ticked chain
+    /// row, else the default level's, or -1 when this night offers none. The calibration scan and
+    /// the foreign read are bounded by it.</summary>
+    /// <remarks><see cref="Rows"/> is ordered depth first, then path, so the first ticked row is
+    /// the shallowest.</remarks>
+    public int ChosenIndex => !HasLevels ? -1
+        : Rows.FirstOrDefault(row => row.IsIncluded)?.Index ?? Levels.DefaultLevelIndex;
 
-            // The edge rule: the folders the Calibration found block owns are left out of the lights
-            // operation whole. A folder under one already left out is not named again.
-            List<FolderLevel> skipped = [];
-            foreach (var level in Rows[ChosenIndex].TopMostSkipped().Concat(OwnedFolders()).OrderBy(level => level.Path.Length))
-            {
-                if (!skipped.Any(kept => PathConfinement.IsUnderOrEqual(kept.Path, level.Path)))
-                {
-                    skipped.Add(level);
-                }
-            }
+    /// <summary>This night's copy sources, as the tick model reads them off the tree: one per
+    /// ticked row whose parent is unticked, each with the unticked rows under it as skipped
+    /// folders. Empty when the night offers no tree or nothing is ticked.</summary>
+    public IReadOnlyList<ChosenLevel> CopySources
+        => HasLevels ? TickModel.CopySources(Night, [.. Roots.Select(ToTickNode)]) : [];
 
-            return new ChosenLevel(Night, Levels.Levels[ChosenIndex], skipped.Count == 0 ? null : skipped);
-        }
-    }
+    private static TickNode ToTickNode(FolderNodeViewModel row)
+        => new(row.Level, row.IsIncluded, [.. row.Children.Select(ToTickNode)]);
+
+    /// <summary>Whether the copy takes <paramref name="path"/>.</summary>
+    public bool Covers(string path) => FolderLevels.Covers(CopySources, path);
 
     // Other targets' and other nights' LIGHT files under the night's start level, as the page read
     // them after load. Empty until then.
@@ -319,19 +295,21 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         }
     }
 
-    /// <summary>The foreign LIGHT files the copy leaves out one by one: those under the chosen level
-    /// and under no skipped folder, which is left out whole.</summary>
-    public IReadOnlyList<WbppFramePath> ForeignExcluded => Chosen is { } chosen
-        ? [.. _foreign.Where(frame => PathConfinement.IsUnderOrEqual(chosen.Level.Path, frame.FilePath)
-            && !(chosen.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)))]
-        : [];
+    /// <summary>The foreign LIGHT files the copy leaves out one by one: those it would otherwise
+    /// take, under a source and under none of its skipped folders, which are left out whole.
+    /// </summary>
+    public IReadOnlyList<WbppFramePath> ForeignExcluded
+    {
+        get
+        {
+            var sources = CopySources;
+            return [.. _foreign.Where(frame => FolderLevels.Covers(sources, frame.FilePath))];
+        }
+    }
 
     // ------------------------------------------------------------------ the skips
 
-    /// <summary>How many folders this night skips, beside the chosen path, or empty for none.
-    /// </summary>
-    /// <remarks>Counts the top-most unticked rows under the chosen row only: a tick kept on a row
-    /// the pick has since moved away from does not apply and is not counted.</remarks>
+    /// <summary>How many folders this night's sources skip, or empty for none.</summary>
     public string SkippedText => SkippedCount switch
     {
         <= 0 => "",
@@ -339,9 +317,9 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         var count => string.Create(CultureInfo.InvariantCulture, $"{count:N0} folders skipped"),
     };
 
-    /// <summary>How many top-most folders the user's ticks skip under the chosen row. Folders the
-    /// Calibration found block owns are not counted.</summary>
-    public int SkippedCount => HasLevels ? Rows[ChosenIndex].TopMostSkipped().Count() : 0;
+    /// <summary>How many excluded directories this night's sources carry: the unticked rows
+    /// directly under a ticked one.</summary>
+    public int SkippedCount => CopySources.Sum(source => source.SkippedFolders?.Count ?? 0);
 
     /// <summary>Whether this night states a skip.</summary>
     public bool HasSkippedText => SkippedText.Length > 0;
@@ -352,9 +330,9 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     private string _summaryText = "";
 
     /// <summary>Records what this night alone copies, as the page computed it.</summary>
-    /// <param name="totals">This night's totals, from <c>FolderLevels.Totals</c> over its chosen
-    /// level alone, so the line and the footer cannot disagree.</param>
-    /// <param name="skippedCount">How many top-most folders this night skips.</param>
+    /// <param name="totals">This night's totals, from <c>FolderLevels.Totals</c> over its own
+    /// sources alone, so the line and the footer cannot disagree.</param>
+    /// <param name="skippedCount">How many excluded directories this night's sources carry.</param>
     /// <param name="calibration">This night's selected calibration, which the line adds in short
     /// form. Null adds nothing.</param>
     /// <remarks>The size reads <c>unknown</c> as everywhere else, never a partial sum.</remarks>
@@ -387,35 +365,43 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     private static string Counted(int count, string noun)
         => string.Create(CultureInfo.InvariantCulture, $"{count:N0} {noun}{(count == 1 ? "" : "s")}");
 
-    // A chain row reports a pick when its radio takes it; anything else a row reports is a tick.
-    // The chosen row's own tick is inert, so reading a report from a chosen row as a pick loses
-    // nothing.
+    // A tick moved. The ticks on the row and on every calibration row beneath it are the user's
+    // from here on, so a re-match and a Rescan restore them by folder. A row created for
+    // calibration that the user ticks is kept by a new result, as a matched folder is.
     private void OnRowChanged(FolderNodeViewModel row)
     {
-        if (row.IsChain && row.IsChosen)
+        if (row.Row is null && _created.ContainsKey(row.Level.Path))
         {
-            Choose(row.Index);
-            return;
+            _userTicks[row.Level.Path] = row.IsIncluded;
         }
 
-        OnPropertyChanged(nameof(SkippedText));
-        OnPropertyChanged(nameof(HasSkippedText));
+        foreach (var node in row.Descendants().Prepend(row))
+        {
+            if (node.Row is { } calibration)
+            {
+                _userTicks[calibration.Folder] = node.IsIncluded;
+            }
+        }
+
+        RaiseTickFacts();
         _chosenChanged(this);
     }
 
-    // A night with no levels has no tree to zone, and a pick moved there indexes nothing.
-    private void ApplyZones()
+    // Every fact read off the ticks, raised at once.
+    private void RaiseTickFacts()
     {
-        if (!HasLevels)
-        {
-            return;
-        }
-
-        var chosen = Rows[ChosenIndex];
-        foreach (var root in Roots)
-        {
-            root.ApplyZone(chosen);
-        }
+        OnPropertyChanged(nameof(ChosenIndex));
+        OnPropertyChanged(nameof(ChosenLeadingPath));
+        OnPropertyChanged(nameof(ChosenOwnName));
+        OnPropertyChanged(nameof(ChosenOtherNightsBadge));
+        OnPropertyChanged(nameof(ChosenOtherTargetsBadge));
+        OnPropertyChanged(nameof(HasChosenOtherNightsBadge));
+        OnPropertyChanged(nameof(HasChosenOtherTargetsBadge));
+        OnPropertyChanged(nameof(ChosenOtherNightsTooltip));
+        OnPropertyChanged(nameof(ChosenOtherTargetsTooltip));
+        OnPropertyChanged(nameof(SkippedText));
+        OnPropertyChanged(nameof(HasSkippedText));
+        OnPropertyChanged(nameof(CalibrationTally));
     }
 
     /// <summary>
@@ -429,14 +415,19 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     public bool EveryLevelIsContaminated =>
         HasLevels && Levels.Levels.All(level => level.IsContaminated);
 
-    private FolderNodeViewModel? ChosenRow => HasLevels ? Rows[ChosenIndex] : null;
+    // The source holding the most of this night's lights, which the session row names.
+    private ChosenLevel? Primary => CopySources.MaxBy(source => source.Level.FrameCount);
 
-    /// <summary>The chosen level's own other-nights badge, shown on the session row in the state
+    private FolderNodeViewModel? ChosenRow => Primary is { } primary
+        ? Rows.FirstOrDefault(row => string.Equals(row.Level.Path, primary.Level.Path, StringComparison.OrdinalIgnoreCase))
+        : null;
+
+    /// <summary>The primary source's own other-nights badge, shown on the session row in the state
     /// above and empty otherwise. The string is the row's, never recomputed here.</summary>
     public string ChosenOtherNightsBadge =>
         EveryLevelIsContaminated && ChosenRow is { HasOtherNights: true } row ? row.OtherNightsBadge : "";
 
-    /// <summary>The chosen level's own other-targets badge, on the same rule.</summary>
+    /// <summary>The primary source's own other-targets badge, on the same rule.</summary>
     public string ChosenOtherTargetsBadge =>
         EveryLevelIsContaminated && ChosenRow is { HasOtherTargets: true } row ? row.OtherTargetsBadge : "";
 
@@ -452,42 +443,13 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// <summary>The targets themselves, for the session row badge's tooltip.</summary>
     public string ChosenOtherTargetsTooltip => ChosenRow?.OtherTargetsTooltip ?? "";
 
-    /// <summary>The chosen folder's leading path, drawn in the secondary ink. Split once here, so
-    /// the row does not compose the same string twice.</summary>
-    public string ChosenLeadingPath => Chosen is { } chosen ? WbppPathText.LeadingPath(chosen.Level.Path) : "";
+    /// <summary>The primary source's leading path, drawn in the secondary ink. Split once here,
+    /// so the row does not compose the same string twice.</summary>
+    public string ChosenLeadingPath => Primary is { } primary ? WbppPathText.LeadingPath(primary.Level.Path) : "";
 
-    /// <summary>The chosen folder's own name, drawn in the primary ink.</summary>
-    public string ChosenOwnName => Chosen is { } chosen ? WbppPathText.OwnName(chosen.Level.Path) : "";
-
-    private void Choose(int index)
-    {
-        if (ChosenIndex == index)
-        {
-            return;
-        }
-
-        ChosenIndex = index;
-    }
-
-    partial void OnChosenIndexChanged(int value)
-    {
-        foreach (var row in Rows)
-        {
-            row.IsChosen = row.Index == value;
-        }
-
-        // The newly chosen row copies whole, whatever its tick said under the old pick.
-        if (HasLevels)
-        {
-            Rows[value].IsIncluded = true;
-        }
-
-        ApplyZones();
-        MarkOwned();
-        OnPropertyChanged(nameof(SkippedText));
-        OnPropertyChanged(nameof(HasSkippedText));
-        _chosenChanged(this);
-    }
+    /// <summary>The primary source's own name, drawn in the primary ink: the source holding the
+    /// most of this night's lights. Empty when nothing is ticked.</summary>
+    public string ChosenOwnName => Primary is { } primary ? WbppPathText.OwnName(primary.Level.Path) : "";
 
     // ------------------------------------------------------------------ the calibration block
 
@@ -535,8 +497,20 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [ObservableProperty]
     private IReadOnlyList<string> _warnings = [];
 
-    /// <summary>One row per scanned folder holding a calibration frame.</summary>
-    public ObservableCollection<CalibrationRowViewModel> CalibrationRows { get; } = [];
+    /// <summary>The tree rows carrying a calibration row, in the matcher's row order. Empty before
+    /// a match and after a result is dropped.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CalibrationTally))]
+    private IReadOnlyList<FolderNodeViewModel> _calibrationRows = [];
+
+    /// <summary>"1 of 2 calibration folders ticked", or empty when the match found none.</summary>
+    public string CalibrationTally => CalibrationRows.Count switch
+    {
+        0 => "",
+        1 => string.Create(CultureInfo.InvariantCulture, $"{CalibrationRows.Count(row => row.IsIncluded):N0} of 1 calibration folder ticked"),
+        var count => string.Create(
+            CultureInfo.InvariantCulture, $"{CalibrationRows.Count(row => row.IsIncluded):N0} of {count:N0} calibration folders ticked"),
+    };
 
     /// <summary>"No calibration frames under Date_2025-10-15" after a scan that found none, else
     /// empty.</summary>
@@ -575,11 +549,14 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     /// <summary>The files and folders the scan could not read.</summary>
     internal IReadOnlyList<ScanIssue> Issues { get; private set; } = [];
 
-    // The user's own row ticks by folder, kept across a re-match and a Rescan.
+    // The user's own ticks on calibration rows by folder, kept across a re-match and a Rescan.
     private readonly Dictionary<string, bool> _userTicks = new(StringComparer.OrdinalIgnoreCase);
 
-    // Set while rows are rebuilt, so a restored tick is not read as the user's.
-    private bool _applying;
+    // The rows created for calibration folders the tree had not drawn, by path.
+    private readonly Dictionary<string, FolderNodeViewModel> _created = new(StringComparer.OrdinalIgnoreCase);
+
+    // The rows carrying the current match's calibration rows, by folder.
+    private readonly Dictionary<string, FolderNodeViewModel> _calibrationNodes = new(StringComparer.OrdinalIgnoreCase);
 
     // The parent level the last listing counted, and its count.
     private int _lookHigherIndex = -1;
@@ -669,80 +646,171 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         RefreshLookHigher();
     }
 
-    /// <summary>Publishes a match: rows (with the user's ticks restored by folder), light set
-    /// lines, warnings, the Look in offer and the tree rows the block now owns.</summary>
+    /// <summary>Publishes a match: the calibration rows in the tree (created along their path
+    /// where the tree had no row, with the user's ticks restored by folder), light set lines,
+    /// warnings and the Look in offer.</summary>
     internal void ApplyMatch(CalibrationMatch match)
     {
         ArgumentNullException.ThrowIfNull(match);
 
         Match = match;
-        var scanned = ScannedLevelPath ?? "";
-        _applying = true;
-        try
-        {
-            CalibrationRows.Clear();
-            foreach (var row in match.Rows)
-            {
-                var model = new CalibrationRowViewModel(row, scanned, OnCalibrationRowChanged);
-                if (_userTicks.TryGetValue(row.Folder, out var ticked))
-                {
-                    model.IsTicked = ticked;
-                }
-
-                CalibrationRows.Add(model);
-            }
-        }
-        finally
-        {
-            _applying = false;
-        }
-
+        Reconcile(match.Rows);
         LightSetLines = CalibrationMatcher.LightSetLines(match.LightSets);
         Warnings = match.MissingFlatWarnings;
-        NoCalibrationText = match.Rows.Count == 0 ? "No calibration frames under " + WbppPathText.OwnName(scanned) : "";
+        NoCalibrationText = match.Rows.Count == 0 ? "No calibration frames under " + WbppPathText.OwnName(ScannedLevelPath ?? "") : "";
         RefreshLookHigher();
-        MarkOwned();
+        RaiseTickFacts();
     }
 
-    /// <summary>The night's calibration copy sources: every ticked row not copied in place by the
-    /// lights operation.</summary>
-    /// <remarks>A row the lights operation already copies (under the chosen level and under none of
-    /// its skipped folders) is left to it; <see cref="CalibrationInPlaceExcludes"/> trims it.</remarks>
-    public IReadOnlyList<CopySource> CalibrationSources()
+    /// <summary>Brings the tree to a new result (design.md Part C, "Lifecycle"): rows that are no
+    /// longer matched lose their calibration row; rows created for a folder no longer matched, that
+    /// the user never ticked and that hold no row, are removed; each matched folder gets its row,
+    /// created along its path when missing, and its tick: on its first match the user's tick, else
+    /// the matcher's default; on a later match the user's tick or the new default, for a folder
+    /// holding none of this night's lights.</summary>
+    private void Reconcile(IReadOnlyList<CalibrationRow> rows)
     {
-        if (Match is null || ScannedLevelPath is null || Chosen is not { } chosen)
+        var folders = new HashSet<string>(rows.Select(row => row.Folder), StringComparer.OrdinalIgnoreCase);
+        foreach (var (folder, node) in _calibrationNodes.ToList())
         {
-            return [];
+            if (!folders.Contains(folder))
+            {
+                node.SetCalibrationRow(null);
+                _calibrationNodes.Remove(folder);
+            }
         }
 
-        var skipped = SkippedPaths(chosen);
-        return CalibrationScan.CopySources(
-            Night, ScanRoot,
-            [.. TickedRows().Where(r => !CalibrationScan.CopiedInPlace(chosen.Level.Path, r.Row, skipped))],
-            ScannedFrames);
+        foreach (var (path, node) in _created.OrderByDescending(pair => pair.Key.Length).ToList())
+        {
+            if (!folders.Contains(path) && !_userTicks.ContainsKey(path) && node.Children.Count == 0)
+            {
+                node.Parent!.RemoveChild(node);
+                _created.Remove(path);
+            }
+        }
+
+        var nodes = new List<FolderNodeViewModel>(rows.Count);
+        foreach (var row in rows)
+        {
+            if (FindOrCreate(row.Folder) is not { } node)
+            {
+                continue;
+            }
+
+            var first = node.Row is null;
+            var wasTicked = node.IsIncluded;
+            node.SetCalibrationRow(row);
+            if (first)
+            {
+                if (_userTicks.TryGetValue(row.Folder, out var ticked))
+                {
+                    node.Seed(ticked);
+                }
+                else if (row.DefaultTicked)
+                {
+                    // Ruling 2: a matched folder is ticked wherever it sits, and copies what is
+                    // beneath it.
+                    node.Seed(true);
+                    if (!wasTicked)
+                    {
+                        node.SeedBeneath();
+                    }
+                }
+                else if (node.Level.FrameCount == 0)
+                {
+                    // A folder holding this night's lights keeps its tick.
+                    node.Seed(false);
+                }
+
+                // The path to a ticked calibration row opens; the night's levels keep the user's
+                // state.
+                if (node.IsIncluded)
+                {
+                    for (var ancestor = node.Parent; ancestor is not null; ancestor = ancestor.Parent)
+                    {
+                        if (!ancestor.IsChain)
+                        {
+                            ancestor.IsExpanded = true;
+                        }
+                    }
+                }
+            }
+            else if (node.Level.FrameCount == 0)
+            {
+                node.Seed(_userTicks.TryGetValue(row.Folder, out var ticked) ? ticked : row.DefaultTicked);
+            }
+
+            _calibrationNodes[row.Folder] = node;
+            nodes.Add(node);
+        }
+
+        CalibrationRows = nodes;
+        foreach (var node in _created.Values.Concat(_calibrationNodes.Values))
+        {
+            node.RefreshCalibrationText();
+        }
     }
+
+    // The row for a folder: the deepest existing row that contains or is it, then one created row
+    // per missing segment beneath. Null when no root contains the folder.
+    private FolderNodeViewModel? FindOrCreate(string folder)
+    {
+        var node = Roots.FirstOrDefault(root => PathConfinement.IsUnderOrEqual(root.Level.Path, folder));
+        while (node is not null && !SameFolder(node.Level.Path, folder)
+            && node.Children.FirstOrDefault(child => PathConfinement.IsUnderOrEqual(child.Level.Path, folder)) is { } next)
+        {
+            node = next;
+        }
+
+        if (node is null || SameFolder(node.Level.Path, folder))
+        {
+            return node;
+        }
+
+        var path = node.Level.Path;
+        foreach (var segment in Path.GetRelativePath(node.Level.Path, folder).Split(Path.DirectorySeparatorChar))
+        {
+            path = Path.Combine(path, segment);
+            var level = Describe(path, node.Level.DepthFromRoot + 1);
+            var row = new FolderNodeViewModel(
+                level, false, -1, node.IsIncluded && FolderNodeViewModel.StartsTicked(level.Level), _ownTargetName, node, _list, OnRowChanged);
+            var placed = node.AddChild(row);
+            if (ReferenceEquals(placed, row))
+            {
+                _created[path] = row;
+            }
+
+            node = placed;
+        }
+
+        return node;
+    }
+
+    private static bool SameFolder(string left, string right)
+        => PathConfinement.IsUnderOrEqual(left, right) && PathConfinement.IsUnderOrEqual(right, left);
+
+    // A created row's figures, from the catalogue as a listed row's are.
+    private SubfolderLevel Describe(string path, int depth) => Catalogue is { } catalogue
+        ? FolderLevels.Subfolders(Night, TargetKey, [path], depth, NightFrames, catalogue)[0]
+        : new SubfolderLevel(new FolderLevel(path, depth, 0, [], [], 0), false);
 
     /// <summary><see cref="CalibrationScan.LongestRelative"/> over this night's scanned frames.</summary>
     public int LongestScannedRelative(string folder) => CalibrationScan.LongestRelative(folder, ScannedFrames);
 
-    /// <summary>The calibration frames the lights operation skips one by one in a folder it copies
-    /// in place: an in-place row's unselected frames, or all of them when it is unticked. Their
-    /// selected siblings are counted once, in <see cref="CalibrationTotals"/>; the lights total
-    /// counts catalogued lights only.</summary>
+    /// <summary>The calibration frames the copy skips one by one: the unselected frames of every
+    /// ticked calibration row it copies. Their selected siblings are counted once, in
+    /// <see cref="CalibrationTotals"/>; the lights total counts catalogued lights only.</summary>
     public IReadOnlyList<WbppFramePath> CalibrationInPlaceExcludes()
-        => Match is not null && Chosen is { } chosen
-            ? [.. CalibrationScan.InPlaceExcludes(chosen.Level.Path, TickedRows(), SkippedPaths(chosen))
-                .Select(frame => new WbppFramePath(Guid.Empty, frame.FilePath, frame.Size))]
-            : [];
-
-    // The lights operation's effective skip set: the user's unticked folders and the owned ones.
-    private static List<string> SkippedPaths(ChosenLevel chosen) => [.. (chosen.SkippedFolders ?? []).Select(level => level.Path)];
+        => Match is null
+            ? []
+            : [.. CalibrationScan.InPlaceExcludes(CopySources, TickedRows())
+                .Select(frame => new WbppFramePath(Guid.Empty, frame.FilePath, frame.Size))];
 
     /// <summary>What the night's selected calibration and its uncatalogued files add to the copy.
     /// </summary>
     public CalibrationTotals CalibrationTotals()
     {
-        if (Match is null || Chosen is not { } chosen)
+        if (Match is null)
         {
             return new CalibrationTotals(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
         }
@@ -754,86 +822,23 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         var known = new HashSet<string>(
             NightFrames.Concat(_foreign).Select(frame => frame.FilePath), StringComparer.OrdinalIgnoreCase);
         return CalibrationScan.Totals(
-            chosen.Level.Path,
+            CopySources,
             TickedRows(),
-            [.. ScannedFrames.Where(frame => !known.Contains(frame.FilePath))],
-            SkippedPaths(chosen));
-    }
-
-    /// <summary>Marks the rows under <paramref name="row"/>, itself included, that the block owns.
-    /// For rows a listing built after the match.</summary>
-    public void MarkOwned(FolderNodeViewModel row)
-    {
-        ArgumentNullException.ThrowIfNull(row);
-
-        MarkOwned(row, OwnedPaths());
-        OnPropertyChanged(nameof(SkippedText));
-        OnPropertyChanged(nameof(HasSkippedText));
-    }
-
-    private void MarkOwned()
-    {
-        var owned = OwnedPaths();
-        foreach (var root in Roots)
-        {
-            MarkOwned(root, owned);
-        }
-
-        OnPropertyChanged(nameof(SkippedText));
-        OnPropertyChanged(nameof(HasSkippedText));
-    }
-
-    private static void MarkOwned(FolderNodeViewModel row, HashSet<string> owned)
-    {
-        row.IsOwnedByCalibration = owned.Contains(row.Level.Path);
-        foreach (var child in row.Children)
-        {
-            MarkOwned(child, owned);
-        }
-    }
-
-    private HashSet<string> OwnedPaths()
-        => new(OwnedFolders().Select(level => level.Path), StringComparer.OrdinalIgnoreCase);
-
-    // The edge rule's folders: every calibration row under the chosen level, except one holding
-    // this night's lights, which the lights operation must keep. Sized from the catalogue, as the
-    // chosen level is, so the deduction matches what the level counted.
-    private IEnumerable<FolderLevel> OwnedFolders()
-    {
-        if (Match is null || !HasLevels)
-        {
-            return [];
-        }
-
-        return CalibrationScan.OwnedFolders(Levels.Levels[ChosenIndex].Path, Match.Rows)
-            .Where(level => !NightFrames.Any(frame => PathConfinement.IsUnderOrEqual(level.Path, frame.FilePath)))
-            .Select(level => Catalogue is { } catalogue
-                ? level with { SubtreeBytes = FolderLevels.SubtreeBytes(level.Path, catalogue) }
-                : level);
+            [.. ScannedFrames.Where(frame => !known.Contains(frame.FilePath))]);
     }
 
     private List<(CalibrationRow Row, bool Ticked)> TickedRows()
-        => [.. CalibrationRows.Select(row => (row.Row, row.IsTicked))];
-
-    private void OnCalibrationRowChanged(CalibrationRowViewModel row)
-    {
-        if (_applying)
-        {
-            return;
-        }
-
-        _userTicks[row.Row.Folder] = row.IsTicked;
-        _chosenChanged(this);
-    }
+        => [.. CalibrationRows.Select(node => (node.Row!, node.IsIncluded))];
 
     private void ClearResult()
     {
-        CalibrationRows.Clear();
+        Match = null;
+        Reconcile([]);
         LightSetLines = [];
         Warnings = [];
         NoCalibrationText = "";
         LookHigherText = null;
-        MarkOwned();
+        RaiseTickFacts();
     }
 
     private void RefreshLookHigher()

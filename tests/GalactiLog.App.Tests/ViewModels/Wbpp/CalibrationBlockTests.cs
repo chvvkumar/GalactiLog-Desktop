@@ -1,16 +1,18 @@
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
+using GalactiLog.Core.Io;
 using GalactiLog.Core.Wbpp;
 using Xunit;
 using static GalactiLog.App.Tests.ViewModels.Wbpp.CalibrationFixtures;
+using static GalactiLog.App.Tests.ViewModels.Wbpp.Pleiades;
 
 namespace GalactiLog.App.Tests.ViewModels.Wbpp;
 
 /// <summary>
-/// The Calibration found block: the page scans each night's hierarchy through a fake walker on
-/// load, climbs while the parent holds only this target, publishes matched rows, owns the
-/// calibration folders against the lights operation, and folds the selection into the footer.
-/// Nothing here reads a directory.
+/// The calibration strip and the calibration rows in the tree: the page scans each night's
+/// hierarchy through a fake walker on load, climbs while the parent holds only this target, puts
+/// the matched folders into the tree as ticked rows along their path, keeps the user's ticks across
+/// a new result, and folds the selection into the footer. Nothing here reads a directory.
 /// </summary>
 public class CalibrationBlockTests
 {
@@ -36,8 +38,24 @@ public class CalibrationBlockTests
     private static FolderNodeViewModel Row(SessionLevelViewModel session, string path)
         => session.Rows.Single(r => Is(r.Level.Path, path));
 
-    private static CalibrationRowViewModel CalRow(SessionLevelViewModel session, string folder)
-        => session.CalibrationRows.Single(r => Is(r.Row.Folder, folder));
+    private static FolderNodeViewModel CalRow(SessionLevelViewModel session, string folder)
+        => session.CalibrationRows.Single(r => Is(r.Row!.Folder, folder));
+
+    private static FolderNodeViewModel? Find(SessionLevelViewModel session, string path)
+    {
+        var node = session.Roots.FirstOrDefault(r => PathConfinement.IsUnderOrEqual(r.Level.Path, path));
+        while (node is not null && !Is(node.Level.Path, path))
+        {
+            node = node.Children.FirstOrDefault(c => PathConfinement.IsUnderOrEqual(c.Level.Path, path));
+        }
+
+        return node;
+    }
+
+    private static IReadOnlyList<string> Sources(SessionLevelViewModel session) => [.. session.CopySources.Select(s => s.Level.Path)];
+
+    private static IReadOnlyList<string> Skipped(SessionLevelViewModel session, string source)
+        => [.. (session.CopySources.Single(s => Is(s.Level.Path, source)).SkippedFolders ?? []).Select(l => l.Path)];
 
     private static void Generate(WbppExportViewModel page)
         => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
@@ -62,32 +80,291 @@ public class CalibrationBlockTests
     }
 
     [Fact]
-    public void OnPublish_TheNightScansItsStartLevel_AndPublishesMatchedRows()
+    public void OnPublish_MatchedFlats_BecomeTickedRowsAlongTheirPath_AndUnmatchedOnesStartUnticked()
     {
-        var disk = DateFirstDisk();
-        using var h = ExportHarness.Create(DateFirst(), [N], walk: disk.Walker);
+        var disk = Disk();
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Until(() => session.LookHigherText == "Look in 2026, 3 files");
+
+        // The scan walked the date folder; the second call is the Look in offer's count of the year
+        // folder, which reads no header.
+        Assert.Equal([Date18, Year], disk.Calls);
+        Assert.Contains("Scanned Date_2026-10-18, 3 headers", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Equal(2, session.CalibrationRows.Count);
+
+        var flats = Find(session, Flats)!;
+        Assert.True(flats.IsIncluded);
+        Assert.Equal("Angle_45.18", flats.FolderName);
+        Assert.Equal("2 of 2 files, " + MetricText.Bytes(200), flats.CalibrationText);
+        Assert.Equal("same night", flats.NoteTag);
+        Assert.Equal("", flats.FrameCountText);
+        Assert.Same(Row(session, Date18), flats.Parent!.Parent!.Parent);
+        Assert.Equal("FLAT", flats.Parent.Parent.FolderName);
+        Assert.True(flats.Parent.IsExpanded);
+        Assert.True(flats.Parent.Parent.IsExpanded);
+        Assert.False(flats.Parent.IsIncluded);
+        Assert.Equal(1.0, flats.Parent.RowOpacity);
+        Assert.Equal("3 files, " + MetricText.Bytes(300), flats.Parent.CalibrationText);
+
+        var rejected = Find(session, Flats96)!;
+        Assert.False(rejected.IsIncluded);
+        Assert.Equal("rotation 96.26", rejected.NoteTag);
+        Assert.Equal("1 file, " + MetricText.Bytes(100), rejected.CalibrationText);
+        Assert.Equal(0.55, rejected.RowOpacity);
+        Assert.Equal("", rejected.RowTag);
+
+        Assert.Equal([Lights, Flats], Sources(session));
+        Assert.Equal("1 of 2 calibration folders ticked", session.CalibrationTally);
+        Assert.Equal(["No flats found for OIII on ZWO ASI533MM Pro"], session.Warnings);
+        Assert.Equal("", session.SkippedText);
+        Until(() => h.Page.FrameCountText == "5 files");
+        Assert.Equal(MetricText.Bytes(3_200), h.Page.SizeText);
+        Assert.Equal("2 folders", h.Page.FolderCountText);
+        Assert.EndsWith(" plus 2 flats, " + MetricText.Bytes(200), session.SummaryText, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void LookIn_AddsTheOtherDateFoldersRows_UnderTheYearRow_InPlace()
+    {
+        var disk = Disk();
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Until(() => session.LookHigherText is not null);
+        var flats = Find(session, Flats)!;
+        Row(session, Year).IsExpanded = false;
+
+        session.LookHigherCommand.Execute(null);
+        Scanned(session);
+
+        Assert.Equal(Year, disk.Calls[^1]);
+        var borrowed = Find(session, Borrowed)!;
+        Assert.True(borrowed.IsIncluded);
+        Assert.Equal("3 days earlier", borrowed.NoteTag);
+        Assert.Equal("2 of 2 files, " + MetricText.Bytes(200), borrowed.CalibrationText);
+        var date15 = borrowed.Parent!.Parent!.Parent!;
+        Assert.Equal("Date_2026-10-15", date15.FolderName);
+        Assert.Same(Row(session, Year), date15.Parent);
+        Assert.True(date15.IsExpanded);
+        Assert.False(date15.IsIncluded);
+        Assert.Same(flats, Find(session, Flats));
+        Assert.True(flats.IsIncluded);
+        Assert.Equal([Borrowed, Flats, Lights], Sources(session).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.Equal("2 of 3 calibration folders ticked", session.CalibrationTally);
+        Assert.Empty(session.Warnings);
+        Assert.Null(session.LookHigherText);
+
+        // The user's collapse of the year row stands; the tally is what says the new rows are there.
+        Assert.False(Row(session, Year).IsExpanded);
+    }
+
+    [Fact]
+    public void AMatchedFolderUnderATickedAncestor_IsCopiedByThatOperation_WithUnselectedFramesExcludedFileByFile()
+    {
+        var disk = Disk().Add(F(Path.Combine(Flats, "h1.fits"), CalibrationType.Flat, P(rot: 96.26), night: N18));
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Assert.Equal("2 of 3 files, " + MetricText.Bytes(200), Find(session, Flats)!.CalibrationText);
+
+        Row(session, Date18).IsIncluded = true;
+
+        Assert.True(Find(session, Flat)!.IsIncluded);
+        Assert.True(Find(session, Flats)!.IsIncluded);
+        Assert.False(Find(session, Flats96)!.IsIncluded);
+        Assert.Equal([Date18], Sources(session));
+        Assert.Equal([Flats96], Skipped(session, Date18));
+        Assert.Equal([Path.Combine(Flats, "h1.fits")], session.CalibrationInPlaceExcludes().Select(f => f.FilePath));
+        Assert.Equal("5 files", h.Page.FrameCountText);
+        Assert.Equal(MetricText.Bytes(3_200), h.Page.SizeText);
+        Assert.Equal("1 folder", h.Page.FolderCountText);
+
+        Stage(h);
+        Generate(h.Page);
+        var jobs = h.Page.ScriptText!.Split('\n').Where(line => line.TrimStart().StartsWith("@{ Src", StringComparison.Ordinal)).ToList();
+        var job = Assert.Single(jobs);
+        Assert.Contains("Src = '" + Date18 + "'", job, StringComparison.Ordinal);
+        Assert.Contains(@"ExcludeDirs = @('FLAT\ZWO ASI533MM Pro\Angle_96.26\')", job, StringComparison.Ordinal);
+        Assert.Contains(@"'FLAT\ZWO ASI533MM Pro\Angle_45.18\h1.fits'", job, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AMatchedFolderUnderNoTickedAncestor_IsItsOwnOperation_AndUntickingItDropsIt()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: Disk().Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Stage(h);
+        Generate(h.Page);
+        var script = h.Page.ScriptText!;
+        Assert.Contains("Src = '" + Flats + "'", script, StringComparison.Ordinal);
+        Assert.Contains("Src = '" + Lights + "'", script, StringComparison.Ordinal);
+        Assert.DoesNotContain(Flats96, script, StringComparison.Ordinal);
+
+        Find(session, Flats)!.IsIncluded = false;
+
+        Assert.False(h.Page.HasScript);
+        Assert.Equal([Lights], Sources(session));
+        Assert.Equal("0 of 2 calibration folders ticked", session.CalibrationTally);
+        Assert.Equal("3 light frames", h.Page.FrameCountText);
+        Assert.Equal("", session.SkippedText);
+    }
+
+    [Fact]
+    public void TicksOnCalibrationRows_SurviveRescan_LookIn_AndATickOnAnotherBranch()
+    {
+        var disk = Disk();
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Until(() => session.LookHigherText == "Look in 2026, 3 files");
+        Find(session, Flats)!.IsIncluded = false;
+        Find(session, Flats96)!.IsIncluded = true;
+
+        session.RescanCommand.Execute(null);
+        Scanned(session);
+        Assert.False(Find(session, Flats)!.IsIncluded);
+        Assert.True(Find(session, Flats96)!.IsIncluded);
+
+        Until(() => session.LookHigherText is not null);
+        session.LookHigherCommand.Execute(null);
+        Scanned(session);
+        Assert.False(Find(session, Flats)!.IsIncluded);
+        Assert.True(Find(session, Flats96)!.IsIncluded);
+
+        // A pick-equivalent change on another branch re-matches with the same light sets, and walks
+        // nothing.
+        var walks = disk.Calls.Count;
+        Row(session, Target).IsIncluded = true;
+        Assert.False(Find(session, Flats)!.IsIncluded);
+        Assert.True(Find(session, Flats96)!.IsIncluded);
+        Assert.Equal([Borrowed, Flats96, Target], Sources(session).Order(StringComparer.OrdinalIgnoreCase));
+        Assert.False(SpinWait.SpinUntil(() => disk.Calls.Count > walks, TimeSpan.FromMilliseconds(300)));
+    }
+
+    [Fact]
+    public void AQualityExclusionThatChangesTheLightSets_ReseedsUntouchedRows_AndKeepsUserTicks()
+    {
+        var library = Catalogue();
+        using var h = ExportHarness.Create(library, [N18], walk: Disk().Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        Until(() => session.LookHigherText is not null);
+        session.LookHigherCommand.Execute(null);
+        Scanned(session);
+        Assert.True(Find(session, Borrowed)!.IsIncluded);
+        Find(session, Flats96)!.IsIncluded = true;
+
+        h.Page.SetExcludedFrames([library.Ids[L3]]);   // the only OIII light
+
+        Assert.False(Find(session, Borrowed)!.IsIncluded);          // its default flipped and the user never touched it
+        Assert.Equal("filter OIII", Find(session, Borrowed)!.NoteTag);
+        Assert.True(Find(session, Flats96)!.IsIncluded);            // the user's tick stands
+        Assert.True(Find(session, Flats)!.IsIncluded);
+        Assert.Equal("2 of 3 calibration folders ticked", session.CalibrationTally);
+    }
+
+    [Fact]
+    public void ARowCreatedForACalibrationFolder_IsNeverListedTwice_WhenItsParentIsExpanded()
+    {
+        var calls = new List<string>();
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder =>
+            {
+                lock (calls)
+                {
+                    calls.Add(folder);
+                }
+
+                return Is(folder, Date18) ? [Flat, Light]
+                    : Is(folder, Flat) ? [FlatCam]
+                    : Is(folder, FlatCam) ? [Flats, Flats96]
+                    : [];
+            },
+            walk: Disk().Walker);
+        var session = h.Page.Sessions[0];
+        Scanned(session);
+        var flats = Find(session, Flats)!;
+        Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
+
+        var date = Row(session, Date18);
+        Assert.Equal(1, date.Children.Count(c => Is(c.Level.Path, Flat)));
+        var cam = Find(session, FlatCam)!;
+        Assert.Equal(["Angle_45.18", "Angle_96.26"], cam.Children.Select(c => c.FolderName));
+        Assert.Same(flats, Find(session, Flats));
+        Assert.True(flats.IsIncluded);
+        Assert.True(Find(session, Flat)!.IsExpanded);   // whichever landed first, the listing or the match
+        Assert.True(cam.IsExpanded);
+        lock (calls)
+        {
+            Assert.Equal(1, calls.Count(c => Is(c, Flat)));
+            Assert.Equal(1, calls.Count(c => Is(c, FlatCam)));
+        }
+    }
+
+    [Fact]
+    public void AScanResultChange_RemovesRowsTheUserNeverTicked_AndKeepsTheOnesTheyDid()
+    {
+        var full = Disk();
+        var without = new FakeDisk();
+        foreach (var frame in full.Files.Where(f => !PathConfinement.IsUnderOrEqual(Flats96, f.FilePath)))
+        {
+            without.Add(frame);
+        }
+
+        var calls = 0;
+        CalibrationWalk.Walker walk = (root, skip, rule, progress, ct) =>
+            Interlocked.Increment(ref calls) == 1 ? full.Walker(root, skip, rule, progress, ct) : without.Walker(root, skip, rule, progress, ct);
+
+        using (var h = ExportHarness.Create(Catalogue(), [N18], walk: walk))
+        {
+            var session = h.Page.Sessions[0];
+            Scanned(session);
+            Assert.NotNull(Find(session, Flats96));
+
+            session.RescanCommand.Execute(null);
+            Scanned(session);
+
+            Assert.Null(Find(session, Flats96));
+            Assert.NotNull(Find(session, Flats));
+            Assert.Equal(["Angle_45.18"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
+            Assert.Equal("1 of 1 calibration folder ticked", session.CalibrationTally);
+        }
+
+        calls = 0;
+        using (var h = ExportHarness.Create(Catalogue(), [N18], walk: walk))
+        {
+            var session = h.Page.Sessions[0];
+            Scanned(session);
+            Find(session, Flats96)!.IsIncluded = true;
+
+            session.RescanCommand.Execute(null);
+            Scanned(session);
+
+            var kept = Find(session, Flats96)!;
+            Assert.True(kept.IsIncluded);
+            Assert.Null(kept.Row);
+            Assert.Equal(FolderNodeViewModel.NotCataloguedText, kept.FrameCountText);
+            Assert.Contains(Flats96, Sources(session));
+        }
+    }
+
+    [Fact]
+    public void TheStrip_StatesNoCalibration_WithAnEmptyTally()
+    {
+        var disk = new FakeDisk()
+            .Add(F(L1, CalibrationType.Light, P(), night: N18, size: 1_000))
+            .Add(F(L2, CalibrationType.Light, P(), night: N18, size: 1_000))
+            .Add(F(L3, CalibrationType.Light, P(filter: "OIII"), night: N18, size: 1_000));
+        using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
         var session = h.Page.Sessions[0];
         Scanned(session);
 
-        Assert.True(session.HasCalibrationBlock);
-        Assert.Equal([DateDir], disk.Calls);
-        Assert.Equal(2, session.CalibrationRows.Count);
-
-        var ticked = CalRow(session, Angle128);
-        Assert.True(ticked.IsTicked);
-        Assert.Equal("2 of 2 files", ticked.CountText);
-        Assert.Equal(Path.Combine("FLAT", "ZWO ASI2600MM Pro", "Angle_128.85"), ticked.RelativePath);
-        Assert.Equal("same night", ticked.Note);
-
-        var other = CalRow(session, Angle139);
-        Assert.False(other.IsTicked);
-        Assert.Equal("1 file", other.CountText);
-        Assert.Equal("rotation 139.07", other.Note);
-
-        Assert.Contains("Scanned Date_2025-10-15, 3 headers", session.ScanSentence, StringComparison.Ordinal);
-        Assert.Empty(session.Warnings);
-        Assert.Equal(["Light sets: Ha on ZWO ASI2600MM Pro, gain 110, offset 50, bin 1, rotation 128.9"], session.LightSetLines);
-        Assert.Null(session.LookHigherText);
+        Assert.Equal("No calibration frames under Date_2026-10-18", session.NoCalibrationText);
+        Assert.Equal("", session.CalibrationTally);
+        Assert.Empty(session.CalibrationRows);
+        Assert.Equal([Lights], Sources(session));
     }
 
     [Fact]
@@ -108,8 +385,9 @@ public class CalibrationBlockTests
         Scanned(session);
 
         Assert.Equal([night, light, target], disk.Calls);
-        Assert.Equal(Path.Combine(target, "FLAT"), session.CalibrationRows.Single().Row.Folder);
-        Assert.True(session.CalibrationRows.Single().IsTicked);
+        Assert.Equal(Path.Combine(target, "FLAT"), session.CalibrationRows.Single().Row!.Folder);
+        Assert.True(session.CalibrationRows.Single().IsIncluded);
+        Assert.Same(Row(session, target), Find(session, Path.Combine(target, "FLAT"))!.Parent);
         Assert.Equal(0, session.ScannedLevelIndex);
         Assert.Contains("Scanned Target_Y", session.ScanSentence, StringComparison.Ordinal);
     }
@@ -145,7 +423,7 @@ public class CalibrationBlockTests
 
         Assert.Equal(before + 1, disk.Calls.Count);
         Assert.Equal(plan, disk.Calls[^1]);
-        Assert.Equal(Path.Combine(plan, "Flat"), session.CalibrationRows[0].Row.Folder);
+        Assert.Equal(Path.Combine(plan, "Flat"), session.CalibrationRows[0].Row!.Folder);
         Assert.Empty(session.Warnings);
         Assert.Null(session.LookHigherText);
     }
@@ -178,36 +456,6 @@ public class CalibrationBlockTests
         // The flats operation's entry plus its longest file beats Date_2025-10-15\M31\LIGHT plus a.fits.
         var flats = @"Date_2025-10-15\FLAT\ZWO ASI2600MM Pro\Angle_128.85";
         Assert.Equal(@"C:\s".Length + 1 + h.Page.SubfolderName.Length + 1 + flats.Length + 1 + "f1.fits".Length, h.Page.LongestDestinationLength);
-    }
-
-    [Fact]
-    public void EdgeRule_WhenTheDateFolderIsChosen_OwnedFoldersAreExcludedFromTheLightsOperation_AndHiddenInTheTree()
-    {
-        var disk = new FakeDisk()
-            .Add(F(Path.Combine(LightDir, "a.fits"), CalibrationType.Light, K(), night: N))
-            .Add(F(Path.Combine(FlatDir, "f1.fits"), CalibrationType.Flat, K(), night: N));
-        using var h = ExportHarness.Create(
-            new Library().Frame(N, Path.Combine(LightDir, "a.fits")),
-            [N],
-            listSubfolders: folder => Is(folder, DateDir) ? [FlatDir, M31Dir] : [],
-            walk: disk.Walker);
-        var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, DateDir).Index;
-        Scanned(session);
-        var date = Row(session, DateDir);
-        Until(() => date.Children.Any(c => c.FolderName == "FLAT"));
-        var flat = date.Children.Single(c => c.FolderName == "FLAT");
-
-        Until(() => flat.IsOwnedByCalibration);
-        Assert.False(flat.IsVisible);
-        Assert.Equal([FlatDir], (session.Chosen!.SkippedFolders ?? []).Select(level => level.Path));
-        Assert.Equal("", session.SkippedText);
-
-        Stage(h);
-        Generate(h.Page);
-        var script = h.Page.ScriptText!;
-        Assert.Contains(@"Date_2025-10-15\FLAT'", script, StringComparison.Ordinal);
-        Assert.Contains(@"ExcludeDirs = @('FLAT\')", script, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -264,7 +512,8 @@ public class CalibrationBlockTests
 
         // The own and the foreign light are sized only: two headers, the two flats.
         Assert.Contains(", 2 headers", session.ScanSentence, StringComparison.Ordinal);
-        Assert.Equal("1 of 2 files", CalRow(session, dir).CountText);
+        Assert.Equal("1 of 2 files, " + MetricText.Bytes(100), Row(session, dir).CalibrationText);
+        Assert.Same(Row(session, dir), CalRow(session, dir));
         Until(() => session.ForeignExcluded.Count == 1);
 
         Stage(h);
@@ -294,7 +543,7 @@ public class CalibrationBlockTests
         Scanned(session);
         Assert.Equal(["No flats found for Oiii on ZWO ASI2600MM Pro"], session.Warnings);
 
-        session.ChosenIndex = Row(session, ha).Index;
+        Row(session, oiii).IsIncluded = false;
 
         Assert.Empty(session.Warnings);
         Assert.Single(disk.Calls);
@@ -307,15 +556,15 @@ public class CalibrationBlockTests
         using var h = ExportHarness.Create(DateFirst(), [N], walk: disk.Walker);
         var session = h.Page.Sessions[0];
         Scanned(session);
-        CalRow(session, Angle128).IsTicked = false;
-        CalRow(session, Angle139).IsTicked = true;
+        CalRow(session, Angle128).IsIncluded = false;
+        CalRow(session, Angle139).IsIncluded = true;
 
         session.RescanCommand.Execute(null);
         Until(() => disk.Calls.Count == 2);
         Scanned(session);
 
-        Assert.False(CalRow(session, Angle128).IsTicked);
-        Assert.True(CalRow(session, Angle139).IsTicked);
+        Assert.False(CalRow(session, Angle128).IsIncluded);
+        Assert.True(CalRow(session, Angle139).IsIncluded);
     }
 
     [Fact]
@@ -355,12 +604,14 @@ public class CalibrationBlockTests
     }
 
     [Fact]
-    public void WithNoWalker_TheBlockIsHidden_AndBehaviourIsAsBefore()
+    public void WithNoWalker_TheStripIsHidden_AndTheTreeHasNoCalibrationRows()
     {
         using var h = ExportHarness.Create(DateFirst(), [N]);
         var session = h.Page.Sessions[0];
 
         Assert.False(session.HasCalibrationBlock);
+        Assert.Empty(session.CalibrationRows);
+        Assert.Equal("", session.CalibrationTally);
         Assert.Equal(CalibrationScanState.Idle, session.ScanState);
         Assert.Equal(MetricText.Bytes(2_000), h.Page.SizeText);
         Assert.Equal("", h.Page.BreakdownText);
@@ -460,7 +711,7 @@ public class CalibrationBlockTests
         gate.Set();
         Until(() => Volatile.Read(ref firstReturned));
         Assert.False(SpinWait.SpinUntil(
-            () => session.CalibrationRows.Any(row => Is(row.Row.Folder, stale)), TimeSpan.FromMilliseconds(300)));
+            () => session.CalibrationRows.Any(row => Is(row.Row!.Folder, stale)), TimeSpan.FromMilliseconds(300)));
         Assert.Equal(2, session.CalibrationRows.Count);
         Assert.Equal(CalibrationScanState.Done, session.ScanState);
     }
@@ -475,7 +726,7 @@ public class CalibrationBlockTests
         Generate(h.Page);
         Assert.True(h.Page.HasScript);
 
-        CalRow(session, Angle139).IsTicked = true;
+        CalRow(session, Angle139).IsIncluded = true;
 
         Assert.False(h.Page.HasScript);
     }
@@ -499,19 +750,20 @@ public class CalibrationBlockTests
         Assert.True(session.ChosenIndex > Row(session, DateDir).Index);
 
         var before = disk.Calls.Count;
-        session.ChosenIndex = Row(session, DateDir).Index;
+        Row(session, DateDir).IsIncluded = true;
         Scanned(session);
 
         Assert.Equal(before + 1, disk.Calls.Count);
         Assert.Equal(DateDir, disk.Calls[^1]);
-        Assert.True(CalRow(session, FlatDir).IsTicked);
-        var op = Assert.Single(session.CalibrationSources());
-        Assert.True(Is(FlatDir, op.SourcePath));
-        Assert.Contains(session.Chosen!.SkippedFolders!, level => Is(level.Path, FlatDir));
+        Assert.True(Find(session, FlatDir)!.IsIncluded);
+        Assert.Equal([DateDir], Sources(session));
+        Assert.Empty(session.CalibrationInPlaceExcludes());
 
-        // A pick back inside the scanned roots walks nothing more.
-        session.ChosenIndex = Row(session, M31Dir).Index;
+        // An untick back inside the scanned roots walks nothing more.
+        Row(session, DateDir).IsIncluded = false;
         Assert.False(SpinWait.SpinUntil(() => disk.Calls.Count > before + 1, TimeSpan.FromMilliseconds(300)));
+        Assert.Contains(FlatDir, Sources(session));
+        Assert.Contains(M31Dir, Sources(session));
     }
 
     [Fact]
@@ -526,8 +778,8 @@ public class CalibrationBlockTests
         Scanned(session);
 
         Assert.Equal(2, session.CalibrationRows.Count);
-        Assert.DoesNotContain(session.CalibrationRows, row => row.Row.Folder.Contains("WBPP", StringComparison.Ordinal)
-            || row.Row.Folder.Contains("masters", StringComparison.Ordinal));
+        Assert.DoesNotContain(session.CalibrationRows, row => row.Row!.Folder.Contains("WBPP", StringComparison.Ordinal)
+            || row.Row!.Folder.Contains("masters", StringComparison.Ordinal));
         Assert.DoesNotContain(session.ScannedFrames, frame => frame.FilePath.Contains("WBPP", StringComparison.Ordinal));
         Assert.Contains("3 headers", session.ScanSentence, StringComparison.Ordinal);
     }

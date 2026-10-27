@@ -19,16 +19,11 @@
 
   <Window.DataTemplates>
 
-    <!-- One folder in a night's tree, chain or tick: the chosen highlight behind the row, the radio on
-         chain rows, the tick on rows under the chosen one, the name and counts, and its own children
-         below it in a left-bordered panel. Nested rows resolve through this same template. -->
+    <!-- One folder in a night's tree: its tick, the name and counts, and its own children below it
+         in a left-bordered panel. Nested rows resolve through this same template. -->
     <DataTemplate DataType="wbpp:FolderNodeViewModel" x:DataType="wbpp:FolderNodeViewModel">
-      <StackPanel Spacing="2" IsVisible="{Binding IsVisible}">
+      <StackPanel Spacing="2">
         <Grid>
-          <Border CornerRadius="4"
-                  Background="{DynamicResource ColorBgHover}"
-                  IsVisible="{Binding IsChosenZone}" />
-
           <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
                 MinHeight="28"
                 Opacity="{Binding RowOpacity}">
@@ -39,17 +34,8 @@
                     VerticalAlignment="Center"
                     AutomationProperties.Name="{Binding FolderName, StringFormat='List folders in {0}'}" />
 
-            <RadioButton x:Name="ChainRadio"
-                         Grid.Column="1"
-                         IsVisible="{Binding ShowsRadio}"
-                         GroupName="{Binding GroupName}"
-                         IsChecked="{Binding IsChosen, Mode=TwoWay}"
-                         AutomationProperties.Name="{Binding FolderName}"
-                         VerticalAlignment="Center" />
-
             <CheckBox x:Name="TickBox"
                       Grid.Column="2"
-                      IsVisible="{Binding ShowsTick}"
                       IsChecked="{Binding IsIncluded, Mode=TwoWay}"
                       AutomationProperties.Name="{Binding FolderName}"
                       VerticalAlignment="Center" />
@@ -63,11 +49,6 @@
                          TextTrimming="CharacterEllipsis"
                          ToolTip.Tip="{Binding Level.Path}"
                          Foreground="{DynamicResource ColorTextPrimary}" />
-              <TextBlock x:Name="ChosenPill"
-                         Text="{x:Static wbpp:FolderNodeViewModel.CopiesFromHereText}"
-                         IsVisible="{Binding IsChosenZone}"
-                         Classes="t-caption"
-                         Foreground="{DynamicResource ColorAccent}" />
               <TextBlock Text="{Binding RowTag}"
                          IsVisible="{Binding IsSkipped}"
                          Foreground="{DynamicResource ColorWarning}" />
@@ -331,48 +312,6 @@
                                 <ContentControl Classes="callout warn inline" Margin="0,0,0,4">
                                   <TextBlock Text="{Binding}" TextWrapping="Wrap" />
                                 </ContentControl>
-                              </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                          </ItemsControl>
-
-                          <!-- One row per scanned folder holding a calibration frame: tick, path
-                               relative to the scanned level, k of n files, size, and the note. -->
-                          <ItemsControl x:Name="CalibrationRows" ItemsSource="{Binding CalibrationRows}">
-                            <ItemsControl.ItemTemplate>
-                              <DataTemplate x:DataType="wbpp:CalibrationRowViewModel">
-                                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto" MinHeight="28">
-                                  <CheckBox x:Name="CalibrationTick"
-                                            Grid.Column="0"
-                                            IsChecked="{Binding IsTicked, Mode=TwoWay}"
-                                            AutomationProperties.Name="{Binding RelativePath}"
-                                            VerticalAlignment="Center" />
-                                  <TextBlock x:Name="CalibrationPath"
-                                             Grid.Column="1"
-                                             Classes="mono"
-                                             Margin="4,0,8,0"
-                                             Text="{Binding RelativePath}"
-                                             TextTrimming="CharacterEllipsis"
-                                             ToolTip.Tip="{Binding Row.Folder}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource ColorTextPrimary}" />
-                                  <TextBlock x:Name="CalibrationCount"
-                                             Grid.Column="2"
-                                             Margin="0,0,10,0"
-                                             Text="{Binding CountText}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource ColorTextSecondary}" />
-                                  <TextBlock x:Name="CalibrationBytes"
-                                             Grid.Column="3"
-                                             Margin="0,0,10,0"
-                                             Text="{Binding BytesText}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource ColorTextSecondary}" />
-                                  <TextBlock x:Name="CalibrationNote"
-                                             Grid.Column="4"
-                                             Text="{Binding Note}"
-                                             VerticalAlignment="Center"
-                                             Foreground="{DynamicResource ColorTextSecondary}" />
-                                </Grid>
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>

@@ -164,6 +164,18 @@ internal sealed class ExportHarness : IDisposable
 
     private int _postCount;
 
+    private readonly Lock _postGate = new();
+
+    /// <summary>Runs a case's own write as the UI thread would: never interleaved with a post.
+    /// </summary>
+    public void OnUi(Action action)
+    {
+        lock (_postGate)
+        {
+            action();
+        }
+    }
+
     /// <summary>The page itself.</summary>
     public WbppExportViewModel Page { get; private set; } = null!;
 
@@ -254,7 +266,13 @@ internal sealed class ExportHarness : IDisposable
             post: action =>
             {
                 Interlocked.Increment(ref harness._postCount);
-                action();
+
+                // One posted action at a time, as the UI dispatcher runs them: a listing and a scan
+                // result landing together must not interleave their writes to one tree.
+                lock (harness._postGate)
+                {
+                    action();
+                }
             },
             listSubfolders: listSubfolders,
             readForeignLights: readForeignLights ?? ((_, _, _, _) => []),
@@ -490,7 +508,7 @@ public class WbppExportViewModelTests
 
         using var harness = ExportHarness.Create(library, [N1]);
 
-        var chosen = harness.Page.Sessions[0].Chosen!;
+        var chosen = harness.Page.Sessions[0].CopySources.Single();
         Assert.Empty(chosen.Level.OtherTargets);
         Assert.False(chosen.Level.IsContaminated);
         Assert.Equal("Ha", chosen.Level.Path[^2..]);
@@ -544,7 +562,7 @@ public class WbppExportViewModelTests
         Assert.Equal(SessionLevelViewModel.NoFramesText, row.UnavailableText);
         Assert.False(row.HasLevels);
         Assert.Empty(row.Rows);
-        Assert.Null(row.Chosen);
+        Assert.Empty(row.CopySources);
         Assert.Equal(0, harness.Page.Totals!.FolderCount);
     }
 
@@ -723,7 +741,7 @@ public class WbppExportViewModelTests
 
         // Advisory, not a veto: choosing one is how a user deliberately copies a whole night
         // folder that two targets share.
-        m31.IsChosen = true;
+        m31.IsIncluded = true;
         Assert.Equal(m31.Index, harness.Page.Sessions[0].ChosenIndex);
         Assert.Equal("M31", harness.Page.Sessions[0].ChosenOwnName);
     }
@@ -772,7 +790,7 @@ public class WbppExportViewModelTests
     }
 
     [Fact]
-    public void PickingALevelOnOneNight_LeavesAnotherNightsPickAlone()
+    public void TickingALevelOnOneNight_LeavesAnotherNightsTicksAlone()
     {
         var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N2, Ha(N2, "a.fits"));
 
@@ -782,11 +800,10 @@ public class WbppExportViewModelTests
         var second = harness.Page.Sessions[1];
         var before = second.ChosenIndex;
 
-        first.Rows[0].IsChosen = true;
+        first.Rows[0].IsIncluded = true;
 
         Assert.Equal(0, first.ChosenIndex);
         Assert.Equal(before, second.ChosenIndex);
-        Assert.NotEqual(first.GroupName, second.GroupName);
     }
 
     [Fact]
@@ -821,7 +838,7 @@ public class WbppExportViewModelTests
 
         using var harness = ExportHarness.Create(library, [N1]);
 
-        var chosen = harness.Page.Sessions.Select(row => row.Chosen!).ToList();
+        var chosen = harness.Page.Sessions.Select(row => row.CopySources.Single()).ToList();
         var expected = FolderLevels.Totals(chosen, []);
 
         Assert.Equal(expected, harness.Page.Totals);
@@ -886,7 +903,7 @@ public class WbppExportViewModelTests
         using var harness = ExportHarness.Create(library, [N1]);
 
         var session = harness.Page.Sessions[0];
-        session.Rows.Single(row => row.FolderName == "Ha").IsChosen = true;
+        session.Rows.Single(row => row.FolderName == "OIII").IsIncluded = false;
 
         Assert.Equal(1, harness.Page.Totals!.FrameCount);
 

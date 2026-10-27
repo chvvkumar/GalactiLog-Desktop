@@ -11,10 +11,9 @@ using static GalactiLog.App.Tests.ViewModels.Wbpp.Pleiades;
 namespace GalactiLog.App.Tests.ViewModels.Wbpp;
 
 /// <summary>
-/// Step 1 of the export wizard as one folder tree per night: the chain rows with their radios,
-/// the disk rows, the zones the chosen row draws, the ticks under it, and the skipped levels those
-/// ticks put on <see cref="ChosenLevel.SkippedFolders"/>. The lister is a fake; nothing here reads
-/// a directory.
+/// Step 1 of the export wizard as one folder tree per night with a tick on every row: the chain
+/// rows, the disk rows, the copy sources the ticks make and the excluded directories they put on
+/// <see cref="ChosenLevel.SkippedFolders"/>. The lister is a fake; nothing here reads a directory.
 /// </summary>
 public class FolderTreeTests
 {
@@ -51,59 +50,191 @@ public class FolderTreeTests
     private static FolderNodeViewModel Child(FolderNodeViewModel row, string name)
         => row.Children.Single(c => c.FolderName == name);
 
-    private static IReadOnlyList<string> SkippedPaths(SessionLevelViewModel session)
-        => [.. (session.Chosen!.SkippedFolders ?? []).Select(level => level.Path)];
+    private static FolderNodeViewModel? Find(SessionLevelViewModel session, string path)
+    {
+        var node = session.Roots.FirstOrDefault(r => PathConfinement.IsUnderOrEqual(r.Level.Path, path));
+        while (node is not null && !Is(node.Level.Path, path))
+        {
+            node = node.Children.FirstOrDefault(c => PathConfinement.IsUnderOrEqual(c.Level.Path, path));
+        }
 
-    private static void Generate(WbppExportViewModel page)
-        => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
+        return node;
+    }
+
+    private static IReadOnlyList<string> Sources(SessionLevelViewModel session) => [.. session.CopySources.Select(s => s.Level.Path)];
+
+    private static IReadOnlyList<string> Skipped(SessionLevelViewModel session, string source)
+        => [.. (session.CopySources.Single(s => Is(s.Level.Path, source)).SkippedFolders ?? []).Select(l => l.Path)];
 
     [Fact]
-    public void OnLoad_EveryChainRowIsExpanded_AndOnlyTheCopiedChainDirectoriesAreListed_EachOnce()
+    public void OnLoad_TheDefaultLevelIsTicked_AndTheChainAboveItIsUntickedPath()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18]);
+        var session = h.Page.Sessions[0];
+
+        Assert.Equal([Year, Date18, Pleiades.Light, LightCam, Target, Lights], session.Rows.Select(r => r.Level.Path));
+        Assert.Equal(5, session.ChosenIndex);
+        Assert.True(Row(session, Lights).IsIncluded);
+        Assert.All(session.Rows.Take(5), r => Assert.False(r.IsIncluded));
+        Assert.All(session.Rows, r => Assert.True(r.IsExpanded));
+        Assert.All(session.Rows.Take(5), r => Assert.Equal(1.0, r.RowOpacity));   // path, not a decision
+        Assert.All(session.Rows.Take(5), r => Assert.Equal("", r.RowTag));
+        Assert.Equal([Lights], Sources(session));
+        Assert.Null(session.CopySources[0].SkippedFolders);
+        Assert.Equal("Angle_45.18", session.ChosenOwnName);
+        Assert.Equal("", session.SkippedText);
+        Assert.Equal("3 light frames", h.Page.FrameCountText);
+        Assert.Equal("1 folder", h.Page.FolderCountText);
+    }
+
+    [Fact]
+    public void TickingAShallowerRow_TicksEverythingBeneathIt_ExceptForeignLights_AndIsTheOneSource()
+    {
+        var foreignTarget = Path.Combine(LightCam, "Target_NGC7000");
+        var library = Catalogue().Foreign(Path.Combine(foreignTarget, "Angle_12.00", "n2.fits"), N18);
+        using var h = ExportHarness.Create(library, [N18], listSubfolders: folder =>
+            Is(folder, Date18) ? [Pleiades.Flat, Pleiades.Light]
+            : Is(folder, Pleiades.Light) ? [LightCam]
+            : Is(folder, LightCam) ? [foreignTarget, Target]
+            : []);
+        var session = h.Page.Sessions[0];
+        Settle(session);
+        Assert.False(Child(Row(session, Date18), "FLAT").IsIncluded);   // listed under an unticked parent
+
+        Row(session, Date18).IsIncluded = true;
+        Settle(session);
+
+        var other = Child(Row(session, LightCam), "Target_NGC7000");
+        Assert.False(other.IsIncluded);
+        Assert.Equal("NGC 7000's lights", other.RowTag);
+        Assert.True(other.IsSkipped);
+        Assert.Equal(0.55, other.RowOpacity);
+        Assert.True(Child(Row(session, Date18), "FLAT").IsIncluded);
+        Assert.True(Row(session, Lights).IsIncluded);
+        Assert.Equal([Date18], Sources(session));
+        Assert.Equal([foreignTarget], Skipped(session, Date18));
+        Assert.Equal("1 folder skipped", session.SkippedText);
+        Assert.Equal(1, session.ChosenIndex);
+        Assert.Equal("Date_2026-10-18", session.ChosenOwnName);
+    }
+
+    [Fact]
+    public void UntickingARow_KeepsDrawingItsChildren_AndATickedRowBeneathIt_IsASourceOfItsOwn()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: _ => []);
+        var session = h.Page.Sessions[0];
+        h.OnUi(() => Row(session, Date18).IsIncluded = true);
+
+        h.OnUi(() => Row(session, Pleiades.Light).IsIncluded = false);
+
+        Assert.True(Row(session, Pleiades.Light).ShowsChildren);
+        Assert.True(Row(session, LightCam).IsIncluded);
+        Assert.Equal(1.0, Row(session, Pleiades.Light).RowOpacity);   // path to a ticked row
+        Assert.Equal([Date18, LightCam], Sources(session));
+        Assert.Equal([Pleiades.Light], Skipped(session, Date18));
+        Assert.Null(session.CopySources[1].SkippedFolders);
+        Assert.True(session.Covers(L1));
+        Assert.Equal("3 light frames", h.Page.FrameCountText);
+        Assert.Equal("2 folders", h.Page.FolderCountText);
+        Assert.Equal("1 folder skipped", session.SkippedText);
+    }
+
+    [Fact]
+    public void TickingTheYearRow_LeavesAnotherNightsDateFolderUnticked_WithItsReason()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder => Is(folder, Year) ? [Date15, Date18] : []);
+        var session = h.Page.Sessions[0];
+        Settle(session);
+
+        Row(session, Year).IsIncluded = true;
+        Settle(session);
+
+        var other = Child(Row(session, Year), "Date_2026-10-15");
+        Assert.False(other.IsIncluded);
+        Assert.Equal("NGC 7000's lights", other.RowTag);
+        Assert.Equal([Year], Sources(session));
+        Assert.Equal([Date15], Skipped(session, Year));
+        Assert.Equal(0, session.ChosenIndex);
+    }
+
+    [Fact]
+    public void UntickingEveryRow_BlamesTheTicks_NotTheFilter()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18]);
+        var session = h.Page.Sessions[0];
+        // Under the post gate, so the load's foreign read cannot restate the footer mid-write.
+        h.OnUi(() => Row(session, Lights).IsIncluded = false);
+
+        Assert.Empty(session.CopySources);
+        Assert.Equal(5, session.ChosenIndex);   // the scan stays bounded by the default level
+        Assert.Equal(WbppExportViewModel.SkipsEmptyWarning, h.Page.EmptyExportText);
+        Assert.Equal("", session.ChosenOwnName);
+    }
+
+    [Fact]
+    public void ATickedRowUnderATickedParent_AddsNothing_AndListingLandsTicked()
+    {
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder => Is(folder, Lights) ? [Path.Combine(Lights, "calibrated")] : []);
+        var session = h.Page.Sessions[0];
+        Settle(session);
+
+        var calibrated = Child(Row(session, Lights), "calibrated");
+        Assert.True(calibrated.IsIncluded);
+        Assert.Equal([Lights], Sources(session));
+        Assert.Null(session.CopySources[0].SkippedFolders);
+
+        calibrated.IsIncluded = false;
+        Assert.Equal([Path.Combine(Lights, "calibrated")], Skipped(session, Lights));
+        Assert.Equal(FolderNodeViewModel.SkippedText, calibrated.RowTag);
+    }
+
+    [Fact]
+    public void OnLoad_EveryExpandedRowListsOnce_AndCollapsingOrTickingReadsNothingMore()
     {
         var calls = new List<string>();
-        using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
+        using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder =>
         {
             lock (calls)
             {
                 calls.Add(folder);
             }
 
-            return Is(folder, Date) ? [Flat, HaFolder] : [];
+            return Is(folder, Date18) ? [Pleiades.Flat, Pleiades.Light] : [];
         });
         var session = h.Page.Sessions[0];
         Settle(session);
-
-        Assert.True(session.IsExpanded);
-        Assert.All(session.Rows, r => Assert.True(r.IsExpanded));
-
-        // The default pick is the leaf, Ha: the rows above it are open, but their disk children
-        // are hidden, so they are not read.
         lock (calls)
         {
-            Assert.Equal([HaFolder], calls);
+            Assert.Equal([Year, Date18, Pleiades.Light, LightCam, Target, Lights], calls.Order(StringComparer.OrdinalIgnoreCase));
         }
 
-        Assert.Equal("M31", session.Roots.Single().FolderName);
-        Assert.Same(session.Rows[0], session.Rows[1].Parent);
-        Assert.Same(session.Rows[1], session.Rows[2].Parent);
+        // FLAT was listed under an unticked parent: it is drawn, unticked, with no tag.
+        var flat = Child(Row(session, Date18), "FLAT");
+        Assert.False(flat.IsIncluded);
+        Assert.Equal("", flat.RowTag);
 
-        // Choosing the root brings every ancestor into the chosen or copied zone: each lists once.
-        session.ChosenIndex = session.Rows[0].Index;
+        Row(session, Date18).IsExpanded = false;
+        Row(session, Date18).IsExpanded = true;
+        Row(session, Date18).IsIncluded = true;
+        Row(session, Date18).IsIncluded = false;
         Settle(session);
         lock (calls)
         {
-            Assert.Equal([M31, Date, HaFolder], calls.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.Equal(6, calls.Count);
         }
 
-        // Leaving the zone and entering it again reads nothing twice.
-        session.ChosenIndex = session.Rows[2].Index;
-        session.ChosenIndex = session.Rows[0].Index;
-        Settle(session);
+        // And lists on its own first expand only.
+        flat.IsExpanded = true;
+        Settle(flat);
         lock (calls)
         {
-            Assert.Equal([M31, Date, HaFolder], calls.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.Equal(7, calls.Count);
+            Assert.Equal(Pleiades.Flat, calls[^1]);
         }
     }
+
+    private static void Generate(WbppExportViewModel page)
+        => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
 
     [Fact]
     public void AChainChildIsMergedIntoTheListingInPlace_AndKeptWhenTheDiskDoesNotListIt()
@@ -113,7 +244,6 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
-            session.ChosenIndex = date.Index;
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha", "OIII"], date.Children.Select(c => c.FolderName));
@@ -126,7 +256,6 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
-            session.ChosenIndex = date.Index;
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha"], date.Children.Select(c => c.FolderName));
@@ -135,7 +264,7 @@ public class FolderTreeTests
     }
 
     [Fact]
-    public void ForkedLevels_ShowBothLeavesUnderOneParent_WithRadios()
+    public void ForkedLevels_ShowBothLeavesUnderOneParent_BothTicked()
     {
         var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N1, Path.Combine(Oiii, "b.fits"));
         using var h = ExportHarness.Create(library, [N1], listSubfolders: _ => []);
@@ -149,61 +278,22 @@ public class FolderTreeTests
         Assert.Same(date, oiii.Parent);
         Assert.True(ha.IsChain);
         Assert.True(oiii.IsChain);
-        Assert.True(ha.ShowsRadio);
-        Assert.True(oiii.ShowsRadio);
+        Assert.True(ha.IsIncluded);
+        Assert.True(oiii.IsIncluded);
+        Assert.True(date.IsIncluded);
+        Assert.Equal([Date], Sources(session));
         Assert.Equal(2, date.ChainChildren.Count);
     }
 
     [Fact]
-    public void Zones_FollowTheChosenRow()
-    {
-        using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
-            Is(folder, Date) ? [Flat, HaFolder] : []);
-        var session = h.Page.Sessions[0];
-        var m31 = Row(session, M31);
-        var date = Row(session, Date);
-        var ha = Row(session, HaFolder);
-
-        session.ChosenIndex = date.Index;
-        Settle(session);
-        var flat = Child(date, "FLAT");
-        Assert.Equal(FolderZone.NotCopied, m31.Zone);
-        Assert.Equal(FolderZone.Chosen, date.Zone);
-        Assert.Equal(FolderZone.Copied, ha.Zone);
-        Assert.Equal(FolderZone.Copied, flat.Zone);
-        Assert.True(flat.IsVisible);
-        Assert.False(m31.ShowsTick);
-        Assert.False(date.ShowsTick);
-        Assert.True(ha.ShowsTick);
-        Assert.True(flat.ShowsTick);
-        Assert.True(m31.ShowsRadio);
-        Assert.True(date.ShowsRadio);
-        Assert.True(ha.ShowsRadio);
-        Assert.False(flat.ShowsRadio);
-
-        session.ChosenIndex = ha.Index;
-        Assert.Equal(FolderZone.NotCopied, date.Zone);
-        Assert.Equal(FolderZone.Hidden, flat.Zone);
-        Assert.False(flat.IsVisible);
-        Assert.Equal(FolderZone.Chosen, ha.Zone);
-        Assert.False(ha.ShowsTick);
-
-        session.ChosenIndex = m31.Index;
-        Assert.Equal(FolderZone.Chosen, m31.Zone);
-        Assert.Equal(FolderZone.Copied, date.Zone);
-        Assert.Equal(FolderZone.Copied, ha.Zone);
-        Assert.Equal(FolderZone.Copied, flat.Zone);
-    }
-
-    [Fact]
-    public void UntickingATickRow_CountsOnlyWhenUnderTheChosenRow_AndSurvivesAPickChange()
+    public void UntickingARowUnderATickedParent_IsASkip_AndRetickingTheParentReseedsIt()
     {
         using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
             Is(folder, Date) ? [Flat, HaFolder] : []);
         var session = h.Page.Sessions[0];
         Settle(session);
         var date = Row(session, Date);
-        session.ChosenIndex = date.Index;
+        date.IsIncluded = true;
         Settle(session);
         var flat = Child(date, "FLAT");
 
@@ -211,20 +301,21 @@ public class FolderTreeTests
         Assert.Equal("1 folder skipped", session.SkippedText);
         Assert.True(session.HasSkippedText);
         Assert.True(flat.IsSkipped);
-        Assert.Equal([Flat], SkippedPaths(session));
+        Assert.Equal([Flat], Skipped(session, Date));
 
-        session.ChosenIndex = Row(session, HaFolder).Index;
+        date.IsIncluded = false;
         Assert.Equal("", session.SkippedText);
         Assert.False(session.HasSkippedText);
-        Assert.Null(session.Chosen!.SkippedFolders);
         Assert.False(flat.IsIncluded);
+        Assert.Equal([HaFolder], Sources(session));
 
-        session.ChosenIndex = date.Index;
-        Assert.Equal("1 folder skipped", session.SkippedText);
+        date.IsIncluded = true;
+        Assert.True(flat.IsIncluded);   // the cascade seeds it
+        Assert.Equal("", session.SkippedText);
     }
 
     [Fact]
-    public void UntickingAParent_HidesItsChildren_AndOnlyTheParentReachesChosen()
+    public void UntickingAParent_KeepsDrawingItsChildren_AndOnlyTheParentIsExcluded()
     {
         using var h = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1], listSubfolders: folder =>
             Is(folder, Date) ? [Flat]
@@ -233,7 +324,7 @@ public class FolderTreeTests
         var session = h.Page.Sessions[0];
         Settle(session);
         var date = Row(session, Date);
-        session.ChosenIndex = date.Index;
+        date.IsIncluded = true;
         Settle(session);
         var flat = Child(date, "FLAT");
 
@@ -241,19 +332,19 @@ public class FolderTreeTests
         Settle(flat);
         var deeper = flat.Children.Single();
         Assert.True(flat.ShowsChildren);
-        Assert.Equal(FolderZone.Copied, deeper.Zone);
+        Assert.True(deeper.IsIncluded);
 
         deeper.IsIncluded = false;
         flat.IsIncluded = false;
 
-        Assert.False(flat.ShowsChildren);
-        Assert.Equal([Flat], SkippedPaths(session));
+        Assert.True(flat.ShowsChildren);
+        Assert.Equal([Flat], Skipped(session, Date));
+        Assert.False(deeper.IsIncluded);
 
         flat.IsIncluded = true;
 
-        Assert.True(flat.ShowsChildren);
-        Assert.Equal([Deeper], SkippedPaths(session));
-        Assert.False(deeper.IsIncluded);
+        Assert.True(deeper.IsIncluded);
+        Assert.Null(session.CopySources.Single().SkippedFolders);
     }
 
     [Fact]
@@ -263,7 +354,6 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
             Is(folder, Date) ? [HaFolder, Oiii] : []);
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, Date).Index;
         Settle(session);
         h.Page.StagingPath = h.TempFolder("staging");
         h.Page.CommitStagingCommand.Execute(null);
@@ -274,7 +364,7 @@ public class FolderTreeTests
         Assert.Equal("2 light frames", h.Page.FrameCountText);
 
         var oiii = Row(session, Oiii);
-        Assert.True(oiii.ShowsTick);
+        Assert.True(oiii.IsIncluded);
         oiii.IsIncluded = false;
 
         Assert.Equal("1 light frame", h.Page.FrameCountText);
@@ -293,7 +383,6 @@ public class FolderTreeTests
         var session = h.Page.Sessions[0];
         var date = Row(session, Date);
         var ha = Row(session, HaFolder);
-        session.ChosenIndex = date.Index;
         Settle(session);
 
         Assert.Equal(FolderNodeViewModel.UnreadableText, date.ChildrenText);
@@ -314,7 +403,7 @@ public class FolderTreeTests
         Assert.All(session.Rows, r => Assert.Equal(r.ChainChildren, r.Children));
         Assert.All(session.Rows, r => Assert.False(r.IsListing));
         Assert.Equal("", session.SkippedText);
-        Assert.Null(session.Chosen!.SkippedFolders);
+        Assert.Null(session.CopySources.Single().SkippedFolders);
     }
 
     [Fact]
@@ -341,23 +430,23 @@ public class FolderTreeTests
     }
 
     [Fact]
-    public void UntickingAChainRowUnderTheChosenOne_ThenChoosingIt_SkipsNothing()
+    public void UntickingTheOnlyLightsFolder_ThenTickingItAlone_SkipsNothing()
     {
         var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N1, Ha(N1, "b.fits"));
         using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
             Is(folder, Date) ? [HaFolder] : []);
         var session = h.Page.Sessions[0];
         var ha = Row(session, HaFolder);
-        session.ChosenIndex = Row(session, Date).Index;
         Settle(session);
-
+        Row(session, Date).IsIncluded = true;
         ha.IsIncluded = false;
-        Assert.Equal([HaFolder], SkippedPaths(session));
+        Assert.Equal([HaFolder], Skipped(session, Date));
 
-        session.ChosenIndex = ha.Index;
+        Row(session, Date).IsIncluded = false;
+        ha.IsIncluded = true;
 
-        Assert.Null(session.Chosen!.SkippedFolders);
-        Assert.False(ha.ShowsTick);
+        Assert.Equal([HaFolder], Sources(session));
+        Assert.Null(session.CopySources.Single().SkippedFolders);
         Assert.False(ha.IsSkipped);
         Assert.Equal("2 light frames", h.Page.FrameCountText);
     }
@@ -393,7 +482,7 @@ public class FolderTreeTests
             runScript: _ => { },
             post: action => action());
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, Date).Index;
+        Row(session, Date).IsIncluded = true;
         Settle(session);
 
         Row(session, HaFolder).IsIncluded = false;
@@ -433,7 +522,8 @@ public class FolderTreeTests
     {
         using var h = ForeignTargetHarness();
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, Date).Index;
+        Settle(session);
+        Row(session, Date).IsIncluded = true;
         Settle(session);
 
         var foreign = Child(Row(session, Light), "Target_M 45");
@@ -443,7 +533,7 @@ public class FolderTreeTests
         Assert.Equal("M 45's lights", foreign.RowTag);
         Assert.True(Child(Row(session, Light), "Target_A").IsIncluded);
         Assert.Equal("", Child(Row(session, Light), "Target_A").RowTag);
-        Assert.Equal([Path.Combine(Light, "Target_M 45")], SkippedPaths(session));
+        Assert.Equal([Path.Combine(Light, "Target_M 45")], Skipped(session, Date));
     }
 
     [Fact]
@@ -454,7 +544,8 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(library, [N1], listSubfolders: folder =>
             Is(folder, M31) ? [Date, date2] : []);
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, M31).Index;
+        Settle(session);
+        Row(session, M31).IsIncluded = true;
         Settle(session);
 
         var other = Child(Row(session, M31), N2.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
@@ -462,16 +553,17 @@ public class FolderTreeTests
         Assert.Equal("other night", other.ReasonTag);
         Assert.Equal("other night", other.RowTag);
         Assert.True(Row(session, Date).IsIncluded);
-        Assert.Equal([date2], SkippedPaths(session));
+        Assert.Equal([date2], Skipped(session, M31));
     }
 
     [Fact]
-    public void TickingAnAutoUntickedRow_ClearsItsReason_AndIsKeptOnRescan()
+    public void TickingAnAutoUntickedRow_ClearsItsReason_AndATickElsewhereLeavesIt()
     {
         using var h = ForeignTargetHarness();
         var session = h.Page.Sessions[0];
         var date = Row(session, Date);
-        session.ChosenIndex = date.Index;
+        Settle(session);
+        date.IsIncluded = true;
         Settle(session);
         var foreign = Child(Row(session, Light), "Target_M 45");
 
@@ -480,16 +572,17 @@ public class FolderTreeTests
         Assert.Null(foreign.ReasonTag);
         Assert.False(foreign.HasReasonTag);
         Assert.Equal("", foreign.RowTag);
-        Assert.Null(session.Chosen!.SkippedFolders);
+        Assert.Null(session.CopySources.Single().SkippedFolders);
 
-        // The pick moves away and back, which re-zones the tree: the user's tick stands.
-        session.ChosenIndex = Row(session, Light).Index;
-        session.ChosenIndex = date.Index;
+        // A collapse and re-expand, and a filter change, leave the user's tick standing.
+        date.IsExpanded = false;
+        date.IsExpanded = true;
+        h.Page.SetExcludedFrames([]);
         Settle(session);
 
         Assert.True(foreign.IsIncluded);
         Assert.Null(foreign.ReasonTag);
-        Assert.Null(session.Chosen!.SkippedFolders);
+        Assert.Null(session.CopySources.Single().SkippedFolders);
 
         // Unticked by hand, the row reads the plain skipped tag: the reason is gone for good.
         foreign.IsIncluded = false;
@@ -497,7 +590,7 @@ public class FolderTreeTests
     }
 
     [Fact]
-    public void TheChosenRow_IsNeverAutoUnticked()
+    public void TheDefaultLevel_StartsTicked_EvenWhenContaminated_AndItsChainChildSeedsByItsOwnFacts()
     {
         // Two foreign-only levels, which the catalogue never produces for a chain, so the rule
         // is pinned on the view-model directly.
@@ -520,10 +613,11 @@ public class FolderTreeTests
         Assert.False(session.Rows[1].IsIncluded);
         Assert.Equal("other night", session.Rows[1].RowTag);
 
-        session.ChosenIndex = 1;
+        session.Rows[0].IsIncluded = false;
+        session.Rows[1].IsIncluded = true;
 
-        Assert.True(session.Rows[1].IsIncluded);
         Assert.Null(session.Rows[1].ReasonTag);
+        Assert.Equal(1, session.ChosenIndex);
     }
 
     [Fact]
@@ -549,7 +643,6 @@ public class FolderTreeTests
         });
         var session = h.Page.Sessions[0];
         var ha = Row(session, HaFolder);
-        session.ChosenIndex = ha.Index;
         Settle(session);
         Until(() => ha.FrameCountText == "3 of 5 files");
 
@@ -668,7 +761,6 @@ public class FolderTreeTests
         using var h = ExportHarness.Create(library, [N1, N2], listSubfolders: _ => [], readForeignLights: OtherNights(library, (N1, n1), (N2, n2)));
         foreach (var session in h.Page.Sessions)
         {
-            session.ChosenIndex = Row(session, flat).Index;
             Settle(session);
         }
 
@@ -701,8 +793,6 @@ public class FolderTreeTests
             listSubfolders: folder => Is(folder, M31) ? [ha, oiii] : [],
             readForeignLights: OtherNights(library, (N1, a1), (N1, o1), (N2, a2), (N2, r2)));
         var (night1, night2) = (h.Page.Sessions[0], h.Page.Sessions[1]);
-        night1.ChosenIndex = Row(night1, M31).Index;
-        night2.ChosenIndex = Row(night2, ha).Index;
         Settle(night1);
         Settle(night2);
         h.Page.SetExcludedFrames([library.Ids[r2]]);
@@ -731,7 +821,7 @@ public class FolderTreeTests
             readForeignLights: OtherNights(library, (N1, a1), (N1, o1), (N1, o1r), (N2, a2), (N2, o2)));
         foreach (var session in h.Page.Sessions)
         {
-            session.ChosenIndex = Row(session, M31).Index;
+            Row(session, M31).IsIncluded = true;
             Settle(session);
         }
 
@@ -794,12 +884,12 @@ public class FolderTreeTests
 
         Assert.Equal("1 light frame", date.FrameCountText);
 
-        session.ChosenIndex = date.Index;
+        date.IsIncluded = true;
         Until(() => date.FrameCountText == "1 of 2 files");
 
-        // A deeper pick, and the same shallow one again, read nothing more.
-        session.ChosenIndex = Row(session, HaFolder).Index;
-        session.ChosenIndex = date.Index;
+        // An untick, and the same shallow tick again, read nothing more.
+        date.IsIncluded = false;
+        date.IsIncluded = true;
         lock (reads)
         {
             Assert.Equal([HaFolder, Date], reads);
@@ -815,7 +905,7 @@ public class FolderTreeTests
     // ------------------------------------------------------------------ calibration on a row
 
     private static FolderNodeViewModel Node(string path, FolderNodeViewModel? parent = null, bool catalogued = false, int frames = 0, int depth = 1)
-        => new(new SubfolderLevel(new FolderLevel(path, depth, frames, [], [], frames * 1_000L), catalogued), false, -1, "g", "M 45", parent, _ => { }, _ => { });
+        => new(new SubfolderLevel(new FolderLevel(path, depth, frames, [], [], frames * 1_000L), catalogued), false, -1, true, "M 45", parent, _ => { }, _ => { });
 
     private static CalibrationRow Matched(string folder, int selected, int unselected, string note)
         => new(folder,

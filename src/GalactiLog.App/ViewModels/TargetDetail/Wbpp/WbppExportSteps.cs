@@ -33,7 +33,7 @@ public sealed class FoldersStep : WbppExportStepViewModel
 
     public override string HelpTopicId => HelpTopicIds[0];
 
-    public override bool CanAdvance => !Page.IsLoading && Page.Sessions.Any(session => session.Chosen is not null);
+    public override bool CanAdvance => !Page.IsLoading && Page.Sessions.Any(session => session.CopySources.Count > 0);
 
     private void OnPageChanged(object? sender, PropertyChangedEventArgs e)
     {

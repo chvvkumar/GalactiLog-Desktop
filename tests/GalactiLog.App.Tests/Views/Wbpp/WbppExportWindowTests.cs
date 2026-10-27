@@ -106,10 +106,10 @@ public class WbppExportWindowTests
             _ => { },
             _ => new MemoryStream());
 
-    // A failure here is the tree drawn without its two kinds of row: radios on the chain, ticks
-    // only under the chosen row, and the session row and summary not following a tick.
+    // A failure here is the tree drawn without a tick on every row, or a tick on a shallower row
+    // not cascading to the rows beneath it, or the session row and summary not following a tick.
     [AvaloniaFact]
-    public void TheTreeIsOpenOnLoad_ChainRowsHaveRadios_DiskRowsHaveTicks_AndAPickRezones()
+    public void TheTreeIsOpenOnLoad_EveryRowCarriesATick_AndTickingAShallowerRowCascades()
     {
         var date = Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
         var harness = Harness(listSubfolders: folder =>
@@ -121,32 +121,21 @@ public class WbppExportWindowTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Equal("Collapse", InStep<Button>(window, "TreeToggleButton").Content);
-        var radios = window.GetVisualDescendants().OfType<RadioButton>().Where(r => r.Name == "ChainRadio" && r.IsEffectivelyVisible).ToList();
-        Assert.Equal(3, radios.Count);   // M31, date, Ha
-
-        // The default pick is Ha, the deepest folder holding the frame: nothing sits under it, and
-        // FLAT, a disk row outside it, is not drawn, so no row carries a tick.
+        Assert.Empty(window.GetVisualDescendants().OfType<RadioButton>());
+        var ticks = Visible<CheckBox>(window, "TickBox");
+        Assert.Equal(4, ticks.Count);   // M31, date, then FLAT and Ha in the date row's listing order
         Assert.Equal(2, session.ChosenIndex);
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
+        Assert.Equal([false, false, false, true], ticks.Select(t => t.IsChecked == true));
 
-        session.Rows[1].IsChosen = true;   // the date row
-        Assert.True(SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10)));
+        session.Rows[1].IsIncluded = true;   // the date row
         Dispatcher.UIThread.RunJobs();
-        var ticks = window.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Name == "TickBox" && c.IsEffectivelyVisible).ToList();
-        Assert.Equal(2, ticks.Count);    // FLAT and Ha, both under the chosen date row
-        Assert.All(ticks, t => Assert.True(t.IsChecked));
-        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ChosenPill" && t.IsEffectivelyVisible);
+        Assert.Equal([false, true, true, true], Visible<CheckBox>(window, "TickBox").Select(t => t.IsChecked == true));
 
-        session.Rows.Single(r => r.FolderName == "Ha").IsChosen = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
-
-        session.ChosenIndex = 1;   // back to the date row
-        Dispatcher.UIThread.RunJobs();
         session.Rows[1].Children.Single(c => c.FolderName == "FLAT").IsIncluded = false;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("1 folder skipped", InStep<TextBlock>(window, "SkippedChip").Text);
         Assert.Contains("after skipping 1 folder", InStep<TextBlock>(window, "NightSummary").Text, StringComparison.Ordinal);
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == FolderNodeViewModel.SkippedText && t.IsEffectivelyVisible);
         window.Close();
     }
 
@@ -494,10 +483,10 @@ public class WbppExportWindowTests
         where T : Control
         => [.. window.GetVisualDescendants().OfType<T>().Where(c => c.Name == name && c.IsEffectivelyVisible)];
 
-    // A failure here is the block not drawn from the session's state: rows, ticks and notes missing
-    // or not following the view-model, or a block shown on a page that has no walker.
+    // A failure here is the strip not drawn from the session's scan state, or a strip shown on a
+    // page that has no walker.
     [AvaloniaFact]
-    public void CalibrationBlock_RendersRowsTicksAndNotes_AndHidesWithoutAWalker()
+    public void TheStrip_RendersTheScanState_AndHidesWithoutAWalker()
     {
         using (var bare = Harness())
         {
@@ -526,18 +515,6 @@ public class WbppExportWindowTests
         Assert.Empty(Visible<Button>(window, "LookHigherButton"));
         Assert.Empty(Visible<TextBlock>(window, "NoCalibrationLine"));
 
-        var paths = Visible<TextBlock>(window, "CalibrationPath").Select(t => t.Text).ToList();
-        Assert.Equal(session.CalibrationRows.Select(r => r.RelativePath), paths);
-        var ticks = Visible<CheckBox>(window, "CalibrationTick");
-        Assert.Equal(session.CalibrationRows.Select(r => (bool?)r.IsTicked), ticks.Select(t => t.IsChecked));
-        Assert.Equal(["same night", "rotation 139.07"], Visible<TextBlock>(window, "CalibrationNote").Select(t => t.Text));
-        Assert.Equal(session.CalibrationRows.Select(r => r.CountText), Visible<TextBlock>(window, "CalibrationCount").Select(t => t.Text));
-        Assert.Equal(session.CalibrationRows.Select(r => r.BytesText), Visible<TextBlock>(window, "CalibrationBytes").Select(t => t.Text));
-
-        // Two way: the box writes the row's tick.
-        ticks[1].IsChecked = true;
-        Assert.True(session.CalibrationRows[1].IsTicked);
-
         // It collapses with the tree.
         session.IsExpanded = false;
         Dispatcher.UIThread.RunJobs();
@@ -563,7 +540,6 @@ public class WbppExportWindowTests
             Assert.Equal(CalibrationScanState.Scanning, session.ScanState);
             Assert.EndsWith(", sizing", InStep<TextBlock>(window, "FooterSize").Text, StringComparison.Ordinal);
             Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "ScanProgressLine").Single().Text);
-            Assert.Empty(Visible<TextBlock>(window, "CalibrationPath"));
 
             disk.Gate.Set();
             Until(() => session.ScanState == CalibrationScanState.Done
@@ -613,8 +589,7 @@ public class WbppExportWindowTests
         foreach (var name in new[]
         {
             "CalibrationBlock", "CalibrationHeading", "ScanProgressLine", "ScanSentenceLine", "LightSetLines",
-            "CalibrationWarnings", "CalibrationRows", "CalibrationTick", "CalibrationPath", "CalibrationCount",
-            "CalibrationBytes", "CalibrationNote", "NoCalibrationLine", "RescanButton", "LookHigherButton",
+            "CalibrationWarnings", "NoCalibrationLine", "RescanButton", "LookHigherButton",
             "FooterBreakdown", "ReviewBreakdown",
         })
         {
@@ -625,11 +600,8 @@ public class WbppExportWindowTests
         Assert.Contains(@"Text=""Calibration found""", markup, StringComparison.Ordinal);
         Assert.Contains(@"ToolTip.Tip=""{Binding IssuesTooltip}""", markup, StringComparison.Ordinal);
         Assert.Contains(@"Classes=""callout warn inline""", markup, StringComparison.Ordinal);
-        Assert.Contains(@"IsChecked=""{Binding IsTicked, Mode=TwoWay}""", markup, StringComparison.Ordinal);
-        Assert.Matches(new Regex(@"x:Name=""CalibrationPath""\s+[^>]*Classes=""mono"""), markup);
         Assert.Matches(new Regex(@"x:Name=""RescanButton""\s+[^>]*Classes=""quiet sm"""), markup);
         Assert.Matches(new Regex(@"x:Name=""LookHigherButton""\s+[^>]*Classes=""quiet sm"""), markup);
-        Assert.Matches(new Regex(@"x:Name=""CalibrationNote""[^>]*ColorTextSecondary"), markup);
         Assert.Matches(new Regex(@"x:Name=""FooterBreakdown""[^>]*ColorTextSecondary"), markup);
         Assert.True(markup.IndexOf(@"x:Name=""FooterSize""", StringComparison.Ordinal)
             < markup.IndexOf(@"x:Name=""FooterBreakdown""", StringComparison.Ordinal));

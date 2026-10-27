@@ -37,8 +37,23 @@ public class CalibrationScenarioTests
     private static FolderNodeViewModel Row(SessionLevelViewModel session, string path)
         => session.Rows.Single(r => Is(r.Level.Path, path));
 
-    private static CalibrationRowViewModel CalRow(SessionLevelViewModel session, string folder)
-        => session.CalibrationRows.Single(r => Is(r.Row.Folder, folder));
+    private static FolderNodeViewModel CalRow(SessionLevelViewModel session, string folder)
+        => session.CalibrationRows.Single(r => Is(r.Row!.Folder, folder));
+
+    private static FolderNodeViewModel? Find(SessionLevelViewModel session, string path)
+    {
+        var node = session.Roots.FirstOrDefault(r => PathConfinement.IsUnderOrEqual(r.Level.Path, path));
+        while (node is not null && !Is(node.Level.Path, path))
+        {
+            node = node.Children.FirstOrDefault(c => PathConfinement.IsUnderOrEqual(c.Level.Path, path));
+        }
+
+        return node;
+    }
+
+    // The source holding this night's lights, whatever calibration sources sit beside it.
+    private static string LightsSource(SessionLevelViewModel session)
+        => session.CopySources.Single(s => s.Level.FrameCount > 0).Level.Path;
 
     private static void Generate(WbppExportViewModel page)
         => page.GenerateCommand.ExecuteAsync(WbppScriptType.PowerShell).Wait(TimeSpan.FromSeconds(30));
@@ -239,19 +254,19 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(flatB, "H1.fits"), "FLAT", camera: "CamB", rotation: 8.90);
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        Assert.True(Is(leaf, session.Chosen!.Level.Path));
+        Assert.True(Is(leaf, LightsSource(session)));
         Scanned(session);
 
         Assert.StartsWith("Scanned Date_X, ", session.ScanSentence, StringComparison.Ordinal);
         Assert.Equal(3, session.CalibrationRows.Count);
         var ticked = CalRow(session, flatA128);
-        Assert.True(ticked.IsTicked);
-        Assert.Equal("3 of 3 files", ticked.CountText);
-        Assert.Equal("same night", ticked.Note);
-        Assert.False(CalRow(session, flatA139).IsTicked);
-        Assert.Equal("rotation 139.07", CalRow(session, flatA139).Note);
-        Assert.False(CalRow(session, flatB).IsTicked);
-        Assert.Equal("camera CamB", CalRow(session, flatB).Note);
+        Assert.True(ticked.IsIncluded);
+        Assert.Equal("3 of 3 files, " + MetricText.Bytes(3 * 2880), ticked.CalibrationText);
+        Assert.Equal("same night", ticked.NoteTag);
+        Assert.False(CalRow(session, flatA139).IsIncluded);
+        Assert.Equal("rotation 139.07", CalRow(session, flatA139).NoteTag);
+        Assert.False(CalRow(session, flatB).IsIncluded);
+        Assert.Equal("camera CamB", CalRow(session, flatB).NoteTag);
         Assert.Empty(session.Warnings);
 
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
@@ -267,8 +282,8 @@ public class CalibrationScenarioTests
         Assert.Equal(2, jobs.Count);
         Assert.DoesNotContain(jobs, j => j.Dst.Contains("Angle_139.07", StringComparison.Ordinal) || j.Dst.Contains("CamB", StringComparison.Ordinal));
 
-        // Opening the date row lists its folders: the other target's light folder starts unticked.
-        session.ChosenIndex = Row(session, date).Index;
+        // Ticking the date row ticks its folders, but the other target's light folder stays unticked.
+        Row(session, date).IsIncluded = true;
         var camARow = Row(session, camA);
         Until(() => camARow.Children.Any(c => c.FolderName == "Target_Other"));
         var other = camARow.Children.Single(c => c.FolderName == "Target_Other");
@@ -294,20 +309,20 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(flat09, "e2.fits"), "FLAT", dateObs: "2025-10-10T11:30:00");
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        Assert.True(Is(night15, session.Chosen!.Level.Path));
+        Assert.True(Is(night15, LightsSource(session)));
         Scanned(session);
 
         Assert.StartsWith("Scanned T, 4 headers", session.ScanSentence, StringComparison.Ordinal);
         Assert.True(Is(target, session.Rows[session.ScannedLevelIndex].Level.Path));
         Assert.Equal(2, session.CalibrationRows.Count);
         var same = CalRow(session, flat15);
-        Assert.True(same.IsTicked);
-        Assert.Equal("2 of 2 files", same.CountText);
-        Assert.Equal("same night", same.Note);
+        Assert.True(same.IsIncluded);
+        Assert.Equal("2 of 2 files, " + MetricText.Bytes(2 * 2880), same.CalibrationText);
+        Assert.Equal("same night", same.NoteTag);
         var earlier = CalRow(session, flat09);
-        Assert.False(earlier.IsTicked);
-        Assert.Equal("not the nearest night", earlier.Note);
-        Assert.DoesNotContain(session.CalibrationRows, r => Is(r.Row.Folder, night14));
+        Assert.False(earlier.IsIncluded);
+        Assert.Equal("not the nearest night", earlier.NoteTag);
+        Assert.DoesNotContain(session.CalibrationRows, r => Is(r.Row!.Folder, night14));
         Assert.Empty(session.Warnings);
     }
 
@@ -330,7 +345,7 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(pile, "Flat_Ha_dark.fit"), "DARKFLAT", rotation: null);
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        Assert.True(Is(ic, session.Chosen!.Level.Path));
+        Assert.True(Is(ic, LightsSource(session)));
         Scanned(session);
         Until(() => session.LookHigherText is not null);
 
@@ -341,9 +356,9 @@ public class CalibrationScenarioTests
         Until(() => session.CalibrationRows.Count > 0 && session.ScanState == CalibrationScanState.Done);
 
         Assert.StartsWith("Scanned Plan, ", session.ScanSentence, StringComparison.Ordinal);
-        var row = CalRow(session, pile);
-        Assert.True(row.IsTicked);
-        Assert.Equal("4 of 6 files", row.CountText);
+        Assert.Same(Find(session, pile), CalRow(session, pile));
+        Assert.True(Find(session, pile)!.IsIncluded);
+        Assert.StartsWith("4 of 6 files, ", Find(session, pile)!.CalibrationText, StringComparison.Ordinal);
         Assert.Empty(session.Warnings);
 
         Stage(h);
@@ -379,9 +394,9 @@ public class CalibrationScenarioTests
         Scanned(session);
 
         var row = CalRow(session, flats);
-        Assert.True(row.IsTicked);
-        Assert.Equal("2 of 2 files", row.CountText);
-        Assert.Equal("same night", row.Note);
+        Assert.True(row.IsIncluded);
+        Assert.Equal("2 of 2 files, " + MetricText.Bytes(2 * 2880), row.CalibrationText);
+        Assert.Equal("same night", row.NoteTag);
         Assert.StartsWith("Light sets: ZWO ASI533MC Pro, no filter, ", Assert.Single(session.LightSetLines), StringComparison.Ordinal);
         Assert.Empty(session.Warnings);
     }
@@ -401,13 +416,13 @@ public class CalibrationScenarioTests
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
         var row = Row(session, ha);
-        Assert.True(Is(ha, session.Chosen!.Level.Path));
+        Assert.True(Is(ha, LightsSource(session)));
         Scanned(session);
         Until(() => row.FrameCountText == "3 of 5 files");
 
         Assert.True(row.IsIncluded);
         Assert.Equal(2, session.ForeignExcluded.Count);
-        Assert.True(CalRow(session, flats).IsTicked);
+        Assert.True(Find(session, flats)!.IsIncluded);
 
         Stage(h);
         Generate(h.Page);
@@ -423,7 +438,7 @@ public class CalibrationScenarioTests
     }
 
     [Fact]
-    public async Task DateFolderChosen_CopiesFlatsOnceUnderTheirOwnFolderName()
+    public async Task DateFolderTicked_CopiesMatchedFlatsInPlace_AndExcludesTheUnmatchedFolder()
     {
         using var t = new Tree();
         var date = t.P("2025-10-15");
@@ -438,30 +453,25 @@ public class CalibrationScenarioTests
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
         var dateRow = Row(session, date);
-        session.ChosenIndex = dateRow.Index;
+        dateRow.IsIncluded = true;
         Scanned(session);
-        Until(() => dateRow.Children.Any(c => c.FolderName == "FLAT"));
-        var flatRow = dateRow.Children.Single(c => c.FolderName == "FLAT");
-        Until(() => flatRow.IsOwnedByCalibration);
 
-        Assert.False(flatRow.IsVisible);
-        Assert.True(CalRow(session, flats).IsTicked);
-        Assert.False(CalRow(session, old).IsTicked);
+        Assert.True(Find(session, flats)!.IsIncluded);
+        Assert.False(Find(session, old)!.IsIncluded);
 
         Stage(h);
         Generate(h.Page);
         var jobs = Jobs(h.Page.ScriptText!);
-        var lightsJob = jobs.Single(j => Is(j.Src, date));
-        Assert.Contains(@"FLAT\", lightsJob.ExcludeDirs);
-        var flatJob = jobs.Single(j => Is(j.Src, flats));
-        Assert.Equal(lightsJob.Dst + @"\FLAT", flatJob.Dst);
-        Assert.Equal(2, jobs.Count);
+        var job = Assert.Single(jobs);
+        Assert.True(Is(date, job.Src));
+        Assert.Equal([@"FLAT\old\"], job.ExcludeDirs);
+        Assert.Empty(job.ExcludeFiles);
 
         var result = await Copy(h);
         Assert.Equal(StagingOutcome.Completed, result.Outcome);
         Assert.Empty(result.Skipped);
         Assert.Empty(result.Failed);
-        var entry = lightsJob.Dst;
+        var entry = job.Dst;
         Assert.Equal(
             new[]
             {
@@ -494,16 +504,18 @@ public class CalibrationScenarioTests
         Assert.Contains(garbage, session.IssuesTooltip, StringComparison.Ordinal);
         Assert.Contains(locked, session.IssuesTooltip, StringComparison.Ordinal);
         var row = CalRow(session, flats);
-        Assert.True(row.IsTicked);
-        Assert.Equal("2 of 2 files", row.CountText);
+        Assert.True(row.IsIncluded);
+        Assert.Equal("2 of 2 files, " + MetricText.Bytes(2 * 2880), row.CalibrationText);
 
+        // The flats folder is a source of its own and copies every file in it, the unreadable one
+        // included, which the walk typed Other.
         Stage(h);
         var result = await Copy(h);
         Assert.Equal(StagingOutcome.Completed, result.Outcome);
         Assert.Empty(result.Failed);
         Assert.Empty(result.Skipped);
-        Assert.Equal(3, result.Copied);
-        Assert.DoesNotContain(Staged(h), p => p.EndsWith("broken.fits", StringComparison.Ordinal));
+        Assert.Equal(4, result.Copied);
+        Assert.Contains(Staged(h), p => p.EndsWith("broken.fits", StringComparison.Ordinal));
     }
 
     [Fact]
@@ -551,15 +563,14 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(dir, "F_Ha_gain200.fits"), "FLAT", gain: 200);
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        Assert.True(Is(dir, session.Chosen!.Level.Path));
+        Assert.True(Is(dir, session.CopySources.Single().Level.Path));
         Scanned(session);
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
 
         // The catalogued lights are sized only; the four flats beside them are read.
         Assert.Contains(", 4 headers", session.ScanSentence, StringComparison.Ordinal);
-        var row = CalRow(session, dir);
-        Assert.True(row.IsTicked);
-        Assert.Equal("3 of 4 files", row.CountText);
+        Assert.True(Row(session, dir).IsIncluded);
+        Assert.Equal("3 of 4 files, " + MetricText.Bytes(3 * 2880), Row(session, dir).CalibrationText);
         Assert.Empty(session.Warnings);
 
         Stage(h);
@@ -595,13 +606,12 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(dir, "F139_2.fits"), "FLAT", rotation: 139.07);
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, dir).Index;
+        Row(session, dir).IsIncluded = true;
         Scanned(session);
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
 
-        var row = CalRow(session, dir);
-        Assert.True(row.IsTicked);
-        Assert.Equal("2 of 4 files", row.CountText);
+        Assert.True(Row(session, dir).IsIncluded);
+        Assert.Equal("2 of 4 files, " + MetricText.Bytes(2 * 2880), Row(session, dir).CalibrationText);
 
         Stage(h);
         Generate(h.Page);
@@ -642,11 +652,11 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(calibrated, "f2_c.fits"), "FLAT");
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
-        session.ChosenIndex = Row(session, date).Index;
+        Row(session, date).IsIncluded = true;
         Scanned(session);
         Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
 
-        Assert.Equal([flats], session.CalibrationRows.Select(r => r.Row.Folder));
+        Assert.Equal([flats], session.CalibrationRows.Select(r => r.Row!.Folder));
         Assert.Contains(", 2 headers", session.ScanSentence, StringComparison.Ordinal);
         Assert.Equal(2, session.CalibrationTotals().FlatCount);
         Assert.Equal(0, session.CalibrationTotals().OtherCount);

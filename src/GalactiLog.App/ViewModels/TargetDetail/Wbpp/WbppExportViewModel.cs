@@ -506,6 +506,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 _listSubfolders is null ? null : ListSubfolders)
             {
                 HasCalibrationBlock = _scanDriver is not null && levels.Unavailable is null,
+                TargetKey = _groupKey,
                 Catalogue = catalogue,
                 NightFrames = byNight.TryGetValue(levels.Night, out var nightFrames) ? nightFrames : [],
                 RescanRequested = Rescan,
@@ -617,6 +618,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private void OnScanPublished(SessionLevelViewModel session)
     {
         Rematch(session, force: true);
+
+        // A match can tick a shallower folder, which moves the bound of the foreign read.
+        ReadForeignLights(session);
         WithdrawScript();
         RefreshFooter();
     }
@@ -640,34 +644,32 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         session.ApplyMatch(CalibrationMatcher.Match(sets, session.Night, session.ScannedFrames));
     }
 
-    // The night's light sets: the keys of its catalogued lights under the chosen level, less the
-    // quality-excluded frames and those under skipped folders.
+    // The night's light sets: the keys of its catalogued lights the copy takes, less the
+    // quality-excluded frames.
     private IReadOnlyList<LightSet> LightSetsFor(SessionLevelViewModel session)
     {
-        if (session.Chosen is not { } chosen || _keys is not { } keys
+        var sources = session.CopySources;
+        if (sources.Count == 0 || _keys is not { } keys
             || !_framesByNight.TryGetValue(session.Night, out var frames))
         {
             return [];
         }
 
         return CalibrationMatcher.LightSets(frames
-            .Where(frame => !_excludedImageIds.Contains(frame.ImageId)
-                && PathConfinement.IsUnderOrEqual(chosen.Level.Path, frame.FilePath)
-                && !(chosen.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)))
+            .Where(frame => !_excludedImageIds.Contains(frame.ImageId) && FolderLevels.Covers(sources, frame.FilePath))
             .Select(frame => keys.GetValueOrDefault(frame.ImageId))
             .OfType<FrameKeys>());
     }
 
-    // The lights source of every chosen level in page order, then every night's calibration
-    // sources. StagingLayout.Plan names them all at once, so nothing here derives an entry name.
-    private IReadOnlyList<CopySource> PlanSources() =>
-    [
-        .. FolderLevels.CopySources(
-            ChosenLevels(),
-            [.. Sessions.Where(session => session.Chosen is not null).Select(session => session.ScanRoot)],
-            PlanExcludes()),
-        .. Sessions.SelectMany(session => session.CalibrationSources()),
-    ];
+    // Every night's copy sources in page order, lights and calibration folders alike, each with
+    // its night's scan root. StagingLayout.Plan names them all at once, so nothing here derives an
+    // entry name.
+    private IReadOnlyList<CopySource> PlanSources()
+    {
+        var sources = Sessions.SelectMany(session => session.CopySources.Select(source => (Source: source, session.ScanRoot))).ToList();
+        return FolderLevels.CopySources(
+            [.. sources.Select(pair => pair.Source)], [.. sources.Select(pair => pair.ScanRoot)], PlanExcludes());
+    }
 
     private StagingPlan PlanStaging() => StagingLayout.Plan(PlanSources());
 
@@ -723,7 +725,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 {
                     row.SetChildren(result);
                     session.CountForeign(row);
-                    session.MarkOwned(row);
                 }
             });
         });
@@ -785,20 +786,21 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         });
     }
 
-    // Each night's per-file excludes for the copy plan: its own filtered frames under its chosen
-    // level, then its foreign files, keyed by night so CopySources never hands one night's
-    // excludes to another night's operation on the same folder.
+    // Each night's per-file excludes for the copy plan: its own filtered frames under its
+    // sources, its foreign files, then the unselected frames of its ticked calibration rows, keyed
+    // by night so CopySources never hands one night's excludes to another night's operation on
+    // the same folder.
     private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> PlanExcludes()
     {
         var excludedByNight = ExcludedByNight();
         var plan = new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>>();
         foreach (var session in Sessions)
         {
-            if (session.Chosen is { } chosen)
+            if (session.CopySources is { Count: > 0 } sources)
             {
                 plan[session.Night] =
                 [
-                    .. FolderLevels.ExcludedUnderLevels([chosen], excludedByNight),
+                    .. FolderLevels.ExcludedUnderLevels(sources, excludedByNight),
                     .. session.ForeignExcluded,
                     .. session.CalibrationInPlaceExcludes(),
                 ];
@@ -811,8 +813,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     // Every night's foreign files the copy leaves out one by one.
     private IReadOnlyList<WbppFramePath> ForeignExcluded() => [.. Sessions.SelectMany(session => session.ForeignExcluded)];
 
-    private IReadOnlyList<ChosenLevel> ChosenLevels() =>
-        [.. Sessions.Select(session => session.Chosen).OfType<ChosenLevel>()];
+    private IReadOnlyList<ChosenLevel> ChosenLevels() => [.. Sessions.SelectMany(session => session.CopySources)];
 
     private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> ExcludedByNight()
     {
@@ -934,9 +935,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         FrameCountText = extraFiles == 0
             ? WbppPathText.Frames(totals.FrameCount)
             : string.Create(CultureInfo.InvariantCulture, $"{totals.FrameCount + extraFiles:N0} files");
-        FolderCountText = totals.FolderCount == 1
+        // The operations the copy runs, after the plan's dedupe: a folder ticked by two nights,
+        // or nested in another night's source, is one folder.
+        FolderCountText = plan.Operations.Count == 1
             ? "1 folder"
-            : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
+            : string.Create(CultureInfo.InvariantCulture, $"{plan.Operations.Count:N0} folders");
         var size = totals.SizeBytes is long lights ? lights + calibration.Sum(c => c.Bytes) : (long?)null;
         TotalSizeBytes = size;
         SizeText = WbppPathText.Bytes(size)
@@ -959,11 +962,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         // line and the footer cannot disagree.
         foreach (var session in Sessions)
         {
-            if (session.Chosen is { } night)
+            if (session.CopySources is { Count: > 0 } night)
             {
                 session.SetSummary(
                     FolderLevels.Totals(
-                        [night], FolderLevels.ExcludedUnderLevels([night], excludedByNight), session.ForeignExcluded),
+                        night, FolderLevels.ExcludedUnderLevels(night, excludedByNight), session.ForeignExcluded),
                     session.SkippedCount,
                     session.CalibrationTotals());
             }
@@ -972,10 +975,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         // Spec 12.13: the filter is blamed only when the filter is what emptied the export. A
         // selection whose levels hold no frames at all says so instead, because telling a user to
         // loosen a filter that excluded nothing sends them to the wrong control.
-        // The skips are blamed on the same rule: only when the levels held frames and the skips
+        // The ticks are blamed on the same rule: only when the nights held frames and the ticks
         // alone took every one of them.
-        var held = chosen.Sum(level => level.Level.FrameCount);
-        var afterSkips = held - chosen.Sum(level => (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount));
+        var held = Sessions.Where(session => session.HasLevels).Sum(session => session.Levels.TotalFrameCount);
+        var afterSkips = chosen.Sum(level => level.Level.FrameCount - (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount));
         EmptyExportText = held <= 0 ? NoFramesAtAllWarning
             : afterSkips <= 0 ? SkipsEmptyWarning
             : totals.FrameCount <= 0 ? EmptyExportWarning

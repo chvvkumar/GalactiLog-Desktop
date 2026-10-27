@@ -322,7 +322,7 @@ public class WbppExportGenerateTests
         harness.Destination = harness.ScriptPath("wbpp.ps1");
         Generate(harness.Page, WbppScriptType.PowerShell);
 
-        harness.Page.Sessions[0].Rows[0].IsChosen = true;
+        harness.Page.Sessions[0].Rows[0].IsIncluded = true;
 
         Assert.False(harness.Page.HasScript);
         Assert.True(File.Exists(harness.Destination));
@@ -552,7 +552,7 @@ public class WbppExportGenerateTests
         // generator throws its own type on the same input.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         harness.SetScanRoots(@"C:\p16other");
-        var source = harness.Page.Sessions[0].Chosen!.Level.Path;
+        var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         var inside = Path.Combine(source, "staged");
 
         harness.Page.StagingPath = inside;
