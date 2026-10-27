@@ -100,9 +100,15 @@ public class WorkflowFileTests
     public void BuildTest_TestStepHasNoTrxLoggerAndNoArtifactUpload()
     {
         // CI review 2026-09-25 item 9: nothing read the trx, and a failed test's name is already
-        // in the job log. The test line is asserted to its end so a re-added logger flag fails.
+        // in the job log. The whole test line is checked so a re-added logger flag fails; other
+        // flags (the blame-hang guard) are allowed.
         var content = ReadNormalized(BuildTestFile);
-        Assert.Contains("- run: dotnet test --no-build -c Release\n", content);
+        var testLine = Assert.Single(
+            content.Split('\n').Select(l => l.Trim()),
+            l => l.StartsWith("- run: dotnet test", StringComparison.Ordinal));
+        Assert.StartsWith("- run: dotnet test --no-build -c Release", testLine);
+        Assert.DoesNotContain("--logger", testLine);
+        Assert.DoesNotContain("trx", testLine);
         Assert.DoesNotContain("--logger trx", content);
         Assert.DoesNotContain("actions/upload-artifact", content);
     }
