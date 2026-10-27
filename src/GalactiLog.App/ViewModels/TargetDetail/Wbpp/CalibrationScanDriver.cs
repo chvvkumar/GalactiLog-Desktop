@@ -47,7 +47,8 @@ internal sealed class CalibrationScanDriver(
 
     /// <summary>After a pick change: when the chosen level lies above every root the night's scan
     /// covers, scans it as one more climb step over the folders it newly exposes (a fresh scan
-    /// when the last one did not finish), after which the block owns them under the edge rule.
+    /// when the last one did not finish), after which the match places their calibration in the
+    /// tree.
     /// </summary>
     public void Follow(SessionLevelViewModel session)
     {

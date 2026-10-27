@@ -467,13 +467,13 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     // ------------------------------------------------------------------ the calibration block
 
-    /// <summary>Whether the night shows the Calibration found block: the page has a walker and the
+    /// <summary>Whether the night shows its calibration scan lines: the page has a walker and the
     /// night has levels to scan.
     /// </summary>
     public bool HasCalibrationBlock { get; init; }
 
-    /// <summary>The catalogue, for the size of a folder the block owns. Null reads the scanned
-    /// size instead.</summary>
+    /// <summary>The catalogue, for the figures of a row created for a matched calibration folder.
+    /// Null reads the scanned size instead.</summary>
     internal ContaminationIndex? Catalogue { get; init; }
 
     /// <summary>This night's own catalogued LIGHT files.</summary>

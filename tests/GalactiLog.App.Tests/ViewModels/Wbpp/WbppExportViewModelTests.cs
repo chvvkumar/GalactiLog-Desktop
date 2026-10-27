@@ -923,8 +923,8 @@ public class WbppExportViewModelTests
 
         Assert.Equal(
             "Frames counts this target's light frames. The size counts every catalogued file in "
-            + "the chosen folders; sidecars and files GalactiLog never read are copied too and are "
-            + "not counted.",
+            + "the ticked folders; sidecars and other files are copied too and are counted once the "
+            + "calibration scan has read them.",
             harness.Page.FooterNoteText);
     }
 

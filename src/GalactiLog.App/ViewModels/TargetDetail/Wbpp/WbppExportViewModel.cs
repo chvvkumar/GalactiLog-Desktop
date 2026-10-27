@@ -69,8 +69,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// skipped folders take every one of them. Neither the filter nor the levels emptied it, so
     /// neither is blamed.</summary>
     public const string SkipsEmptyWarning =
-        "The skipped folders leave no frames in the chosen folders, so this export would copy "
-        + "nothing. Tick a folder again to copy it.";
+        "The ticked folders hold none of these nights' light frames, so this export would copy no "
+        + "lights. Tick a folder to copy it.";
 
     /// <summary>Spec 12.13's refusal for an exclusion pattern carrying a character a quoted
     /// literal cannot carry safely.</summary>
@@ -96,7 +96,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// and the panel's tally describe different sets.</summary>
     public const string FooterNote =
         "Frames counts this target's light frames. The size counts every catalogued file in the "
-        + "chosen folders; sidecars and files GalactiLog never read are copied too and are not counted.";
+        + "ticked folders; sidecars and other files are copied too and are counted once the "
+        + "calibration scan has read them.";
 
     /// <summary>Where spec 12.13's long-path warning starts. Windows refuses a path at or past
     /// this length unless long paths are enabled.</summary>
@@ -122,7 +123,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
     private readonly Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? _readForeignLights;
 
-    // Null without a walker: no night shows the Calibration found block.
+    // Null without a walker: no night scans for calibration.
     private readonly CalibrationScanDriver? _scanDriver;
 
     // Each catalogued light's match keys, by image id, for the light sets. Null reads as none.
@@ -188,7 +189,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// per available night after load. Null reads nothing.</param>
     /// <param name="walk">Normally <c>CalibrationWalk.OnDisk</c>: every file under a folder, sized,
     /// with the headers worth reading. Called off the UI thread, per night after load and on Rescan.
-    /// Null hides the Calibration found block and copies lights alone.</param>
+    /// Null scans nothing and copies lights alone.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
