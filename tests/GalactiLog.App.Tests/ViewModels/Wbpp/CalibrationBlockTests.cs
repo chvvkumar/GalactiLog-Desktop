@@ -286,7 +286,17 @@ public class CalibrationBlockTests
         var session = h.Page.Sessions[0];
         Scanned(session);
         var flats = Find(session, Flats)!;
-        Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
+
+        // The match opened the path to the flats without listing it; the user's presses list it.
+        void Press(string path)
+        {
+            h.OnUi(() => Find(session, path)!.ToggleExpandCommand.Execute(null));
+            Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
+        }
+
+        Press(Date18);
+        Press(Flat);
+        Press(FlatCam);
 
         var date = Row(session, Date18);
         Assert.Equal(1, date.Children.Count(c => Is(c.Level.Path, Flat)));

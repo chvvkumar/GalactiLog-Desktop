@@ -99,6 +99,8 @@ public class FolderTreeTests
             : []);
         var session = h.Page.Sessions[0];
         Settle(session);
+        h.OnUi(() => Row(session, Date18).ToggleExpandCommand.Execute(null));
+        Settle(session);
         Assert.False(Child(Row(session, Date18), "FLAT").IsIncluded);   // listed under an unticked parent
 
         Row(session, Date18).IsIncluded = true;
@@ -167,6 +169,8 @@ public class FolderTreeTests
                 : []);
         var session = h.Page.Sessions[0];
         Settle(session);
+        h.OnUi(() => Row(session, Year).ToggleExpandCommand.Execute(null));
+        Settle(session);
 
         Child(Row(session, Year), "Date_2026-10-15").IsIncluded = true;
 
@@ -207,7 +211,7 @@ public class FolderTreeTests
     }
 
     [Fact]
-    public void OnLoad_EveryExpandedRowListsOnce_AndCollapsingOrTickingReadsNothingMore()
+    public void OnLoad_OnlyTheCopiedRowLists_AndEveryRowListsOnce()
     {
         var calls = new List<string>();
         using var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder =>
@@ -223,32 +227,123 @@ public class FolderTreeTests
         Settle(session);
         lock (calls)
         {
-            Assert.Equal([Year, Date18, Pleiades.Light, LightCam, Target, Lights], calls.Order(StringComparer.OrdinalIgnoreCase));
+            Assert.Equal([Lights], calls);   // the path above the ticked lights folder lists nothing
         }
 
-        // FLAT was listed under an unticked parent: it is drawn, unticked, with no tag.
-        var flat = Child(Row(session, Date18), "FLAT");
+        // The user's press lists the date row. FLAT is listed under an unticked parent: it is
+        // drawn, unticked, with no tag.
+        var date = Row(session, Date18);
+        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+        Settle(session);
+        var flat = Child(date, "FLAT");
         Assert.False(flat.IsIncluded);
         Assert.Equal("", flat.RowTag);
 
-        Row(session, Date18).IsExpanded = false;
-        Row(session, Date18).IsExpanded = true;
-        Row(session, Date18).IsIncluded = true;
-        Row(session, Date18).IsIncluded = false;
+        // Collapsing and reopening reads nothing; ticking lists the open rows it brings into the
+        // copied area, once.
+        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+        h.OnUi(() => date.IsIncluded = true);
+        Settle(session);
+        h.OnUi(() => date.IsIncluded = false);
+        h.OnUi(() => date.IsIncluded = true);
         Settle(session);
         lock (calls)
         {
-            Assert.Equal(6, calls.Count);
+            Assert.Equal([Date18, Pleiades.Light, LightCam, Target, Lights], calls.Order(StringComparer.OrdinalIgnoreCase));
         }
 
-        // And lists on its own first expand only.
+        // And FLAT, which a tick reached closed, lists on its own first expand only.
         flat.IsExpanded = true;
         Settle(flat);
         lock (calls)
         {
-            Assert.Equal(7, calls.Count);
+            Assert.Equal(6, calls.Count);
             Assert.Equal(Pleiades.Flat, calls[^1]);
         }
+    }
+
+    private static (ExportHarness Harness, List<string> Calls) YearHarness()
+    {
+        var calls = new List<string>();
+        var h = ExportHarness.Create(Catalogue(), [N18], listSubfolders: folder =>
+        {
+            lock (calls)
+            {
+                calls.Add(folder);
+            }
+
+            return Is(folder, Year) ? [Date15, Date18] : [];
+        });
+        Settle(h.Page.Sessions[0]);
+        return (h, calls);
+    }
+
+    private static int CallsFor(List<string> calls, string folder)
+    {
+        lock (calls)
+        {
+            return calls.Count(c => Is(c, folder));
+        }
+    }
+
+    [Fact]
+    public void TheYearRowOnThePath_StartsOpen_AndShowsOnlyItsChainChild()
+    {
+        var (h, calls) = YearHarness();
+        using var _ = h;
+        var year = Row(h.Page.Sessions[0], Year);
+
+        Assert.True(year.IsExpanded);
+        Assert.Equal([Date18], year.Children.Select(c => c.Level.Path));
+        Assert.Equal(0, CallsFor(calls, Year));
+        Assert.Equal("+", year.ExpandLabel);   // a press lists
+    }
+
+    [Fact]
+    public void PressingTheYearRowsExpander_ListsIt_AndKeepsItOpen()
+    {
+        var (h, calls) = YearHarness();
+        using var _ = h;
+        var session = h.Page.Sessions[0];
+        var year = Row(session, Year);
+
+        h.OnUi(() => year.ToggleExpandCommand.Execute(null));
+        Settle(session);
+
+        Assert.True(year.IsExpanded);
+        Assert.Equal(["Date_2026-10-15", "Date_2026-10-18"], year.Children.Select(c => c.FolderName));
+        Assert.Same(Row(session, Date18), Child(year, "Date_2026-10-18"));
+        Assert.Equal(1, CallsFor(calls, Year));
+        Assert.Equal("-", year.ExpandLabel);
+    }
+
+    [Fact]
+    public void TickingANeverListedRow_ListsIt()
+    {
+        var (h, calls) = YearHarness();
+        using var _ = h;
+        var session = h.Page.Sessions[0];
+        var year = Row(session, Year);
+
+        h.OnUi(() => year.IsIncluded = true);
+        Settle(session);
+
+        Assert.Equal(1, CallsFor(calls, Year));
+        Assert.False(Child(year, "Date_2026-10-15").IsIncluded);   // the cascade read its facts
+        Assert.Equal([Date15], Skipped(session, Year));
+    }
+
+    [Fact]
+    public void TheDefaultTickedLightsFolder_StillListsOnLoad()
+    {
+        var (h, calls) = YearHarness();
+        using var _ = h;
+        var lights = Row(h.Page.Sessions[0], Lights);
+
+        Assert.Equal(1, CallsFor(calls, Lights));
+        Assert.True(lights.IsLeaf);   // listed, nothing inside
+        Assert.False(lights.ShowsExpander);
     }
 
     private static void Generate(WbppExportViewModel page)
@@ -262,6 +357,7 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
+            h.OnUi(() => date.ToggleExpandCommand.Execute(null));
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha", "OIII"], date.Children.Select(c => c.FolderName));
@@ -274,6 +370,7 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
+            h.OnUi(() => date.ToggleExpandCommand.Execute(null));
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha"], date.Children.Select(c => c.FolderName));
@@ -401,6 +498,7 @@ public class FolderTreeTests
         var session = h.Page.Sessions[0];
         var date = Row(session, Date);
         var ha = Row(session, HaFolder);
+        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
         Settle(session);
 
         Assert.Equal(FolderNodeViewModel.UnreadableText, date.ChildrenText);

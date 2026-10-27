@@ -137,12 +137,13 @@ public class WbppExportWindowTests
         Assert.Equal("Collapse", InStep<Button>(window, "TreeToggleButton").Content);
         Assert.Empty(window.GetVisualDescendants().OfType<RadioButton>());
         var ticks = Visible<CheckBox>(window, "TickBox");
-        Assert.Equal(4, ticks.Count);   // M31, date, then FLAT and Ha in the date row's listing order
+        Assert.Equal(3, ticks.Count);   // M31, date, Ha: the date row is path and does not list
         Assert.Equal(2, session.ChosenIndex);
-        Assert.Equal([false, false, false, true], ticks.Select(t => t.IsChecked == true));
+        Assert.Equal([false, false, true], ticks.Select(t => t.IsChecked == true));
 
-        session.Rows[1].IsIncluded = true;   // the date row
-        Dispatcher.UIThread.RunJobs();
+        session.Rows[1].IsIncluded = true;   // the date row, which lists now it is copied
+        Until(() => session.Rows[1].Children.Count == 2 && !session.Rows[1].IsListing);
+        Assert.Equal(["FLAT", "Ha"], session.Rows[1].Children.Select(c => c.FolderName));
         Assert.Equal([false, true, true, true], Visible<CheckBox>(window, "TickBox").Select(t => t.IsChecked == true));
 
         session.Rows[1].Children.Single(c => c.FolderName == "FLAT").IsIncluded = false;
