@@ -36,6 +36,14 @@ public class FolderTreeTests
 
     private static bool Is(string a, string b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
 
+    // A row the page opened shows "-": the user's first press closes it with no read, and the
+    // second opens it, which lists it.
+    private static void Reopen(ExportHarness h, FolderNodeViewModel row) => h.OnUi(() =>
+    {
+        row.ToggleExpandCommand.Execute(null);
+        row.ToggleExpandCommand.Execute(null);
+    });
+
     // The page lists on Task.Run and the harness posts inline, so the results land off-thread.
     // The wait lives out of a test body, because xUnit1031 is an error here.
     private static void Settle(SessionLevelViewModel session)
@@ -99,7 +107,7 @@ public class FolderTreeTests
             : []);
         var session = h.Page.Sessions[0];
         Settle(session);
-        h.OnUi(() => Row(session, Date18).ToggleExpandCommand.Execute(null));
+        Reopen(h, Row(session, Date18));
         Settle(session);
         Assert.False(Child(Row(session, Date18), "FLAT").IsIncluded);   // listed under an unticked parent
 
@@ -169,7 +177,7 @@ public class FolderTreeTests
                 : []);
         var session = h.Page.Sessions[0];
         Settle(session);
-        h.OnUi(() => Row(session, Year).ToggleExpandCommand.Execute(null));
+        Reopen(h, Row(session, Year));
         Settle(session);
 
         Child(Row(session, Year), "Date_2026-10-15").IsIncluded = true;
@@ -230,10 +238,10 @@ public class FolderTreeTests
             Assert.Equal([Lights], calls);   // the path above the ticked lights folder lists nothing
         }
 
-        // The user's press lists the date row. FLAT is listed under an unticked parent: it is
+        // The user's reopening lists the date row. FLAT is listed under an unticked parent: it is
         // drawn, unticked, with no tag.
         var date = Row(session, Date18);
-        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+        Reopen(h, date);
         Settle(session);
         var flat = Child(date, "FLAT");
         Assert.False(flat.IsIncluded);
@@ -297,16 +305,22 @@ public class FolderTreeTests
         Assert.True(year.IsExpanded);
         Assert.Equal([Date18], year.Children.Select(c => c.Level.Path));
         Assert.Equal(0, CallsFor(calls, Year));
-        Assert.Equal("+", year.ExpandLabel);   // a press lists
+        Assert.Equal("-", year.ExpandLabel);   // open, so a press closes it
     }
 
     [Fact]
-    public void PressingTheYearRowsExpander_ListsIt_AndKeepsItOpen()
+    public void PressingTheOpenYearRow_ClosesItWithNoRead_AndTheNextPressListsIt()
     {
         var (h, calls) = YearHarness();
         using var _ = h;
         var session = h.Page.Sessions[0];
         var year = Row(session, Year);
+
+        h.OnUi(() => year.ToggleExpandCommand.Execute(null));
+
+        Assert.False(year.IsExpanded);
+        Assert.Equal("+", year.ExpandLabel);
+        Assert.Equal(0, CallsFor(calls, Year));
 
         h.OnUi(() => year.ToggleExpandCommand.Execute(null));
         Settle(session);
@@ -357,7 +371,7 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
-            h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+            Reopen(h, date);
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha", "OIII"], date.Children.Select(c => c.FolderName));
@@ -370,7 +384,7 @@ public class FolderTreeTests
         {
             var session = h.Page.Sessions[0];
             var date = Row(session, Date);
-            h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+            Reopen(h, date);
             Settle(session);
 
             Assert.Equal(["FLAT", "Ha"], date.Children.Select(c => c.FolderName));
@@ -498,7 +512,7 @@ public class FolderTreeTests
         var session = h.Page.Sessions[0];
         var date = Row(session, Date);
         var ha = Row(session, HaFolder);
-        h.OnUi(() => date.ToggleExpandCommand.Execute(null));
+        Reopen(h, date);
         Settle(session);
 
         Assert.Equal(FolderNodeViewModel.UnreadableText, date.ChildrenText);

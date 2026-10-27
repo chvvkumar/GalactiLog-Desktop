@@ -298,9 +298,11 @@ public class CalibrationBlockTests
         Scanned(session);
         var flats = Find(session, Flats)!;
 
-        // The match opened the path to the flats without listing it; the user's presses list it.
+        // The match opened the path to the flats without listing it. Each row shows "-"; the
+        // user closes it and reopens it, and the reopening lists it.
         void Press(string path)
         {
+            h.OnUi(() => Find(session, path)!.ToggleExpandCommand.Execute(null));
             h.OnUi(() => Find(session, path)!.ToggleExpandCommand.Execute(null));
             Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
         }

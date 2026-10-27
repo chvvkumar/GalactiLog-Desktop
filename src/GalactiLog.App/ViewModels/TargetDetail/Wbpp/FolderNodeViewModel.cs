@@ -28,7 +28,7 @@ namespace GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 /// <para>
 /// The tree is lazy. A row lists its directory once, and never again, so collapsing,
 /// re-expanding, unticking or re-ticking reads nothing and loses no nested tick. It lists when the
-/// user presses its expander, or when it is open and copied: ticked, or under a ticked row. An
+/// user opens it with its expander, or when it is open and copied: ticked, or under a ticked row. An
 /// opening the page performs on a row outside the copied area, the path to the night's lights or
 /// to a matched calibration folder, shows only the rows already added beneath it, so a year
 /// folder above the night does not list every other night.
@@ -291,9 +291,10 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(ShowsChildren))]
     private bool _isExpanded;
 
-    /// <summary>The expander's glyph: <c>-</c> while open and listed, else <c>+</c>, which a press
-    /// answers by listing the folders inside.</summary>
-    public string ExpandLabel => IsExpanded && _listRequested ? "-" : "+";
+    /// <summary>The expander's glyph, which follows the opening alone: <c>-</c> while open, which a
+    /// press closes with no read, else <c>+</c>, which a press opens, listing the folders inside the
+    /// first time.</summary>
+    public string ExpandLabel => IsExpanded ? "-" : "+";
 
     /// <summary>Whether the children are on screen: while open, whatever the ticks, except on a
     /// leaf, which has none.</summary>
@@ -354,17 +355,11 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// row on the path to a ticked one is path, not a decision, and is not dimmed.</summary>
     public double RowOpacity => IsIncluded || HasTickedDescendant ? 1.0 : 0.55;
 
-    /// <summary>The user's expander: lists an open row not yet listed, else opens and closes it,
-    /// listing on the first opening whatever the ticks.</summary>
+    /// <summary>The user's expander: closes an open row, and opens a closed one, listing on the
+    /// first such opening whatever the ticks.</summary>
     [RelayCommand]
     private void ToggleExpand()
     {
-        if (IsExpanded && !_listRequested)
-        {
-            RequestList();
-            return;
-        }
-
         IsExpanded = !IsExpanded;
         if (IsExpanded)
         {
@@ -525,7 +520,6 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         }
 
         _listRequested = true;
-        OnPropertyChanged(nameof(ExpandLabel));
         IsListing = true;
         _list(this);
     }
