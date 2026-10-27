@@ -48,8 +48,7 @@ public class WbppExportStagingTests
         var raised = new List<string?>();
         harness.Page.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
 
-        harness.Page.StagingPath = Outside;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, Outside);
 
         // Null, not empty: the reason is bound to ToolTip.Tip as well as to the footer line, and
         // Avalonia shows a tooltip for any non-null Tip, so an empty string pops an empty box over
@@ -57,8 +56,13 @@ public class WbppExportStagingTests
         // in TargetDetailViewModel.NoNightCheckedHint.
         Assert.Null(harness.Page.GenerateDisabledReason);
         Assert.True(harness.Page.IsGenerateAvailable);
-        Assert.Contains(nameof(WbppExportViewModel.GenerateDisabledReason), raised);
-        Assert.Contains(nameof(WbppExportViewModel.IsGenerateAvailable), raised);
+
+        // A posted footer refresh also raises into the list, so it is read under the post gate.
+        harness.OnUi(() =>
+        {
+            Assert.Contains(nameof(WbppExportViewModel.GenerateDisabledReason), raised);
+            Assert.Contains(nameof(WbppExportViewModel.IsGenerateAvailable), raised);
+        });
     }
 
     [Fact]
@@ -89,7 +93,7 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         harness.PickedFolder = Outside;
 
-        harness.Page.PickStagingFolderCommand.Execute(null);
+        harness.OnUi(() => harness.Page.PickStagingFolderCommand.Execute(null));
 
         // Without Save as defaults being pressed at all.
         Assert.Equal(1, harness.MutateCalls);
@@ -103,8 +107,7 @@ public class WbppExportStagingTests
     {
         using var harness = ExportHarness.Create(OneNight(), [N1]);
 
-        harness.Page.StagingPath = Outside;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, Outside);
 
         Assert.Equal(1, harness.MutateCalls);
         Assert.Equal(Outside, WbppSettingsRead.StagingPath(harness.General.WbppStagingPathDocument));
@@ -115,8 +118,8 @@ public class WbppExportStagingTests
     {
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: Outside);
 
-        harness.Page.CommitStagingCommand.Execute(null);
-        harness.Page.CommitStagingCommand.Execute(null);
+        harness.OnUi(() => harness.Page.CommitStagingCommand.Execute(null));
+        harness.OnUi(() => harness.Page.CommitStagingCommand.Execute(null));
 
         Assert.Equal(0, harness.MutateCalls);
     }
@@ -131,8 +134,7 @@ public class WbppExportStagingTests
         // settings-changed event for nothing.
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: Outside);
 
-        harness.Page.StagingPath = respelled;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, respelled);
 
         Assert.Equal(0, harness.MutateCalls);
         Assert.Equal("", harness.Page.StagingError);
@@ -145,7 +147,7 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: Outside);
         harness.PickedFolder = null;
 
-        harness.Page.PickStagingFolderCommand.Execute(null);
+        harness.OnUi(() => harness.Page.PickStagingFolderCommand.Execute(null));
 
         Assert.Equal(0, harness.MutateCalls);
         Assert.Equal(Outside, harness.Page.StagingPath);
@@ -158,7 +160,7 @@ public class WbppExportStagingTests
 
         // RelayCommand.Execute ignores CanExecute, so the guard is in the body as well.
         Assert.False(harness.Page.PickStagingFolderCommand.CanExecute(null));
-        harness.Page.PickStagingFolderCommand.Execute(null);
+        harness.OnUi(() => harness.Page.PickStagingFolderCommand.Execute(null));
         Assert.Equal(0, harness.MutateCalls);
     }
 
@@ -184,8 +186,7 @@ public class WbppExportStagingTests
         // is stored, and the generator's own guard then compares the same spelling.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
 
-        harness.Page.StagingPath = folder;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, folder);
 
         Assert.Equal(WbppExportViewModel.ScanRootRefusal, harness.Page.StagingError);
         Assert.Equal(0, harness.MutateCalls);
@@ -204,8 +205,7 @@ public class WbppExportStagingTests
         // component boundary, which is PathConfinement's own rule and never a bare StartsWith.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
 
-        harness.Page.StagingPath = folder;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, folder);
 
         Assert.Equal("", harness.Page.StagingError);
         Assert.True(harness.Page.GenerateCommand.CanExecute(WbppScriptType.PowerShell));
@@ -219,12 +219,11 @@ public class WbppExportStagingTests
         // captured when the page opened: a root added while the page is open is tested against.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
 
-        harness.Page.StagingPath = Outside;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, Outside);
         Assert.Equal("", harness.Page.StagingError);
 
         harness.SetScanRoots(Library.Root, Outside);
-        harness.Page.CommitStagingCommand.Execute(null);
+        harness.OnUi(() => harness.Page.CommitStagingCommand.Execute(null));
 
         Assert.Equal(WbppExportViewModel.ScanRootRefusal, harness.Page.StagingError);
     }
@@ -245,8 +244,7 @@ public class WbppExportStagingTests
         // current root covers.
         harness.SetScanRoots(@"C:\p16other");
 
-        harness.Page.StagingPath = Path.Combine(source, "staged");
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, Path.Combine(source, "staged"));
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
         Assert.Equal(0, harness.MutateCalls);
@@ -262,8 +260,7 @@ public class WbppExportStagingTests
         var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         harness.SetScanRoots(@"C:\p16other");
 
-        harness.Page.StagingPath = Path.Combine(source, "staged").Replace('\\', '/');
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, Path.Combine(source, "staged").Replace('\\', '/'));
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
         Assert.Equal(0, harness.MutateCalls);
@@ -276,8 +273,7 @@ public class WbppExportStagingTests
         var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         harness.SetScanRoots(@"C:\p16other");
 
-        harness.Page.StagingPath = source;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, source);
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
     }
@@ -288,8 +284,7 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         harness.SetScanRoots(@"C:\p16other");
 
-        harness.Page.StagingPath = @"C:\p16lib\M31";
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, @"C:\p16lib\M31");
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
     }
@@ -323,15 +318,14 @@ public class WbppExportStagingTests
 
         // Legal under the default pick, which is the Ha leaf: the folder is its sibling.
         var staging = Path.Combine(Library.Root, "M31", "2025-03-20", "OIII", "staged");
-        harness.Page.StagingPath = staging;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, staging);
         Assert.Equal("", harness.Page.StagingError);
         Assert.True(harness.Page.GenerateCommand.CanExecute(WbppScriptType.PowerShell));
 
         var writesBefore = harness.MutateCalls;
 
         // Moving the pick up to the date folder puts the staging folder inside the source.
-        harness.Page.Sessions[0].Rows.Single(row => row.FolderName == "2025-03-20").IsIncluded = true;
+        harness.OnUi(() => harness.Page.Sessions[0].Rows.Single(row => row.FolderName == "2025-03-20").IsIncluded = true);
 
         Assert.Equal(WbppExportViewModel.SourceRefusal, harness.Page.StagingError);
         Assert.False(harness.Page.GenerateCommand.CanExecute(WbppScriptType.PowerShell));
@@ -349,7 +343,7 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         var before = harness.Page.ExclusionsText;
 
-        harness.Page.ExclusionsText = before + Environment.NewLine + "bad$name";
+        harness.OnUi(() => harness.Page.ExclusionsText = before + Environment.NewLine + "bad$name");
 
         Assert.Equal(
             "A folder pattern cannot contain a quote, a dollar sign, a backtick or a line break",
@@ -374,7 +368,7 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         var before = harness.Page.ExclusionsText;
 
-        harness.Page.ExclusionsText = pattern;
+        harness.OnUi(() => harness.Page.ExclusionsText = pattern);
 
         Assert.True(harness.Page.HasExclusionError);
         Assert.Equal(before, harness.Page.ExclusionsText);
@@ -388,7 +382,7 @@ public class WbppExportStagingTests
         // multi-line list, which is every list.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
 
-        harness.Page.ExclusionsText = "WBPP" + Environment.NewLine + "finals";
+        harness.OnUi(() => harness.Page.ExclusionsText = "WBPP" + Environment.NewLine + "finals");
 
         Assert.False(harness.Page.HasExclusionError);
         Assert.Equal(new[] { "WBPP", "finals" }, harness.Page.Exclusions);
@@ -407,7 +401,7 @@ public class WbppExportStagingTests
     {
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: Outside);
         harness.Page.SavedConfirmationDuration = TimeSpan.Zero;
-        harness.Page.ExclusionsText = "WBPP" + Environment.NewLine + "finals";
+        harness.OnUi(() => harness.Page.ExclusionsText = "WBPP" + Environment.NewLine + "finals");
 
         SaveDefaults(harness.Page);
 
@@ -434,11 +428,10 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: Outside);
         harness.Page.SavedConfirmationDuration = TimeSpan.Zero;
 
-        harness.Page.StagingPath = typed;
-        harness.Page.CommitStagingCommand.Execute(null);
+        Commit(harness, typed);
         Assert.False(harness.Page.IsGenerateAvailable);
 
-        harness.Page.ExclusionsText = "WBPP";
+        harness.OnUi(() => harness.Page.ExclusionsText = "WBPP");
         SaveDefaults(harness.Page);
 
         Assert.Equal(Outside, WbppSettingsRead.StagingPath(harness.General.WbppStagingPathDocument));
@@ -466,23 +459,31 @@ public class WbppExportStagingTests
 
         // The figure is Task 2's member. This case pads the staging root until the page's own
         // measurement reaches the boundary rather than recomputing a destination length here.
+        // A posted footer refresh zeroes the figure and recomputes it, so every write and read
+        // below runs under the post gate, as the UI thread would, and every wait is on state.
         PadStagingTo(harness, 259);
-        Assert.Equal(259, harness.Page.LongestDestinationLength);
-        Assert.False(harness.Page.HasLongPathWarning);
-        Assert.Equal("", harness.Page.LongPathText);
+        Until(harness, () => harness.Page.LongestDestinationLength == 259);
+        harness.OnUi(() =>
+        {
+            Assert.False(harness.Page.HasLongPathWarning);
+            Assert.Equal("", harness.Page.LongPathText);
+        });
 
         PadStagingTo(harness, 260);
-        Assert.Equal(260, harness.Page.LongestDestinationLength);
-        Assert.True(harness.Page.HasLongPathWarning);
-        Assert.StartsWith(
-            "The longest file this copy would create is 260 characters. Windows refuses a path of "
-            + "260 characters or more unless long paths are enabled",
-            harness.Page.LongPathText,
-            StringComparison.Ordinal);
-        Assert.EndsWith(
-            "partial copy. Choose a shorter staging folder.",
-            harness.Page.LongPathText,
-            StringComparison.Ordinal);
+        Until(harness, () => harness.Page.LongestDestinationLength == 260);
+        harness.OnUi(() =>
+        {
+            Assert.True(harness.Page.HasLongPathWarning);
+            Assert.StartsWith(
+                "The longest file this copy would create is 260 characters. Windows refuses a path of "
+                + "260 characters or more unless long paths are enabled",
+                harness.Page.LongPathText,
+                StringComparison.Ordinal);
+            Assert.EndsWith(
+                "partial copy. Choose a shorter staging folder.",
+                harness.Page.LongPathText,
+                StringComparison.Ordinal);
+        });
 
         // It never disables Generate: the ceiling depends on a machine setting this application
         // cannot read from here, and a user who has enabled long paths is entitled to proceed.
@@ -497,10 +498,10 @@ public class WbppExportStagingTests
         using var harness = ExportHarness.Create(OneNight(), [N1], storedStaging: ShortStaging);
 
         PadStagingTo(harness, 200);
-        Assert.False(harness.Page.HasLongPathWarning);
+        Until(harness, () => harness.Page.LongestDestinationLength == 200 && !harness.Page.HasLongPathWarning);
 
         PadStagingTo(harness, 300);
-        Assert.True(harness.Page.HasLongPathWarning);
+        Until(harness, () => harness.Page.LongestDestinationLength == 300 && harness.Page.HasLongPathWarning);
     }
 
     [Fact]
@@ -512,25 +513,48 @@ public class WbppExportStagingTests
         var shallow = session.Rows.Single(row => row.FolderName == "M31");
         var deepest = session.Rows[^1];
 
-        deepest.IsIncluded = true;
-        foreach (var row in session.Rows.Where(r => !ReferenceEquals(r, deepest)))
+        var deepFigure = 0;
+        harness.OnUi(() =>
         {
-            row.IsIncluded = false;
-        }
+            deepest.IsIncluded = true;
+            foreach (var row in session.Rows.Where(r => !ReferenceEquals(r, deepest)))
+            {
+                row.IsIncluded = false;
+            }
 
-        var deepFigure = harness.Page.LongestDestinationLength;
-        shallow.IsIncluded = true;
+            deepFigure = harness.Page.LongestDestinationLength;
+        });
+        Assert.True(deepFigure > 0);
 
-        Assert.Equal(deepFigure, harness.Page.LongestDestinationLength);
+        harness.OnUi(() => shallow.IsIncluded = true);
+
+        Until(harness, () => harness.Page.LongestDestinationLength == deepFigure);
     }
 
     // Pads the staging root until the page's own measured longest destination equals
     // <paramref name="total"/>. The arithmetic stays Task 2's: this reads the figure back and adds
     // the difference rather than composing a destination path or taking its length.
-    private static void PadStagingTo(ExportHarness harness, int total)
+    // The read and the write run under the post gate together, so a posted refresh never lands
+    // between them.
+    private static void PadStagingTo(ExportHarness harness, int total) => harness.OnUi(() =>
+        Commit(harness, harness.Page.StagingPath
+            + new string('x', Math.Max(0, total - harness.Page.LongestDestinationLength))));
+
+    // A typed value and its focus-loss commit, as the UI thread runs them: under the post gate.
+    private static void Commit(ExportHarness harness, string value) => harness.OnUi(() =>
     {
-        harness.Page.StagingPath = harness.Page.StagingPath
-            + new string('x', Math.Max(0, total - harness.Page.LongestDestinationLength));
+        harness.Page.StagingPath = value;
         harness.Page.CommitStagingCommand.Execute(null);
-    }
+    });
+
+    // Reads the condition under the harness's post gate, so a posted write never lands mid-read.
+    private static void Until(ExportHarness harness, Func<bool> condition)
+        => Assert.True(SpinWait.SpinUntil(
+            () =>
+            {
+                var met = false;
+                harness.OnUi(() => met = condition());
+                return met;
+            },
+            TimeSpan.FromSeconds(10)));
 }
