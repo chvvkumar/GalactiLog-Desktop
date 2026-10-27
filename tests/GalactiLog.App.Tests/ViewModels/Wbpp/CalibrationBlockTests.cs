@@ -32,6 +32,14 @@ public class CalibrationBlockTests
     private static void Until(Func<bool> condition)
         => Assert.True(SpinWait.SpinUntil(condition, TimeSpan.FromSeconds(10)));
 
+    // Reads the condition under the harness's post gate, so a posted write never lands mid-read.
+    private static void Until(ExportHarness h, Func<bool> condition) => Until(() =>
+    {
+        var met = false;
+        h.OnUi(() => met = condition());
+        return met;
+    });
+
     private static void Scanned(SessionLevelViewModel session)
         => Until(() => session.ScanState == CalibrationScanState.Done);
 
@@ -398,6 +406,33 @@ public class CalibrationBlockTests
         Assert.Equal(["Angle_45.18", "Angle_96.26"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
         Assert.True(Find(session, Flat)!.IsIncluded);
         Assert.Equal([Date18], Sources(session));
+    }
+
+    [Fact]
+    public void WhileTheScanRuns_TheProgressTextStatesTheHeadersAndTheFolder_ThenClears()
+    {
+        var disk = Disk();
+        disk.Gate = new ManualResetEventSlim(false);
+        try
+        {
+            using var h = ExportHarness.Create(Catalogue(), [N18], walk: disk.Walker);
+            var session = h.Page.Sessions[0];
+            Until(h, () => session.ScanState == CalibrationScanState.Scanning);
+            h.OnUi(() =>
+            {
+                Assert.StartsWith("Scanning files: reading ", session.ProgressText, StringComparison.Ordinal);
+                session.ReportProgress(390, Date18);
+                Assert.Equal("Scanning files: reading 390 headers under Date_2026-10-18", session.ProgressText);
+            });
+
+            disk.Gate.Set();
+            Until(h, () => session.ScanState == CalibrationScanState.Done);
+            h.OnUi(() => Assert.Equal("", session.ProgressText));
+        }
+        finally
+        {
+            disk.Gate.Set();
+        }
     }
 
     [Fact]

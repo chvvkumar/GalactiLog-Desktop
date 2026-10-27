@@ -591,6 +591,42 @@ public class WbppExportWindowTests
         }
     }
 
+    // A failure here is a running scan that shows only in the strip, a screen below the night's
+    // header on a long tree.
+    [AvaloniaFact]
+    public void NightHeader_ShowsTheRunningScan_AndDropsItWhenTheScanCompletes()
+    {
+        var disk = CalibrationDisk();
+        disk.Gate = new ManualResetEventSlim(false);
+        try
+        {
+            using var harness = Harness(walk: disk.Walker);
+            using var wizard = Wizard(harness);
+            var window = Show(wizard);
+            var session = harness.Page.Sessions[0];
+
+            Assert.Equal(CalibrationScanState.Scanning, session.ScanState);
+            var line = Visible<TextBlock>(window, "HeaderScanLine").Single();
+            Assert.Equal(session.ProgressText, line.Text);
+            Assert.StartsWith("Scanning files: reading ", line.Text, StringComparison.Ordinal);
+            Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "ScanProgressLine").Single().Text);
+
+            disk.Gate.Set();
+            Until(() => session.ScanState == CalibrationScanState.Done);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Empty(Visible<TextBlock>(window, "HeaderScanLine"));
+            Assert.Empty(Visible<TextBlock>(window, "ScanProgressLine"));
+
+            harness.Dispose();
+            window.Close();
+        }
+        finally
+        {
+            disk.Gate.Set();
+        }
+    }
+
     // A failure here is a review step that states the size without saying what it is made of.
     [AvaloniaFact]
     public async Task Review_ShowsBreakdown()
@@ -654,7 +690,7 @@ public class WbppExportWindowTests
 
         foreach (var name in new[]
         {
-            "CalibrationBlock", "ScanProgressLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
+            "CalibrationBlock", "ScanProgressLine", "HeaderScanLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
             "CalibrationWarnings", "NoCalibrationLine", "RescanButton", "LookHigherButton",
             "FooterBreakdown", "ReviewBreakdown", "ExpandButton", "TickBox", "CalibrationText", "NoteTag", "RowTag",
         })
@@ -674,6 +710,7 @@ public class WbppExportWindowTests
         Assert.Contains(@"ToolTip.Tip=""{Binding IssuesTooltip}""", markup, StringComparison.Ordinal);
         Assert.Matches(new Regex(@"x:Name=""ExpandButton""\s+[^>]*IsVisible=""\{Binding ShowsExpander\}"""), markup);
         Assert.Matches(new Regex(@"x:Name=""NoteTag""[^>]*ColorTextSecondary"), markup);
+        Assert.Matches(new Regex(@"x:Name=""HeaderScanLine""[^>]*ColorAccent"), markup);
         Assert.Matches(new Regex(@"x:Name=""RowTag""[^>]*ColorWarning"), markup);
         Assert.Matches(new Regex(@"x:Name=""CalibrationText""[^>]*ColorTextSecondary"), markup);
         Assert.Matches(new Regex(@"x:Name=""RescanButton""\s+[^>]*Classes=""quiet sm"""), markup);

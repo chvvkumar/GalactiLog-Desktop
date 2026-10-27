@@ -489,8 +489,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     [ObservableProperty]
     private CalibrationScanState _scanState;
 
-    /// <summary>"Reading 916 headers under Date_2025-10-15" while the scan runs, else empty.
-    /// </summary>
+    /// <summary>"Scanning files: reading 916 headers under Date_2025-10-15" while the scan runs,
+    /// else empty. The night's header row and the calibration strip both draw it.</summary>
     [ObservableProperty]
     private string _progressText = "";
 
@@ -610,7 +610,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>States the running header count.</summary>
     internal void ReportProgress(int headers, string folder)
-        => ProgressText = string.Create(CultureInfo.InvariantCulture, $"Reading {headers:N0} headers under {WbppPathText.OwnName(folder)}");
+        => ProgressText = string.Create(CultureInfo.InvariantCulture, $"Scanning files: reading {headers:N0} headers under {WbppPathText.OwnName(folder)}");
 
     /// <summary>Takes a finished scan. The page matches it next.</summary>
     internal void CompleteScan(

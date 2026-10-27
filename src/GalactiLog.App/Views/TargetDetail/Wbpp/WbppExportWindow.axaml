@@ -158,11 +158,22 @@
                                    FontWeight="SemiBold"
                                    Foreground="{DynamicResource ColorTextPrimary}" />
     
-                        <TextBlock Grid.Column="1"
-                                   Margin="12,0,0,0"
-                                   Text="{Binding FrameCountText}"
-                                   VerticalAlignment="Center"
-                                   Foreground="{DynamicResource ColorTextSecondary}" />
+                        <!-- The running scan stands beside the frame count, at the top of the night,
+                             so it shows without scrolling to the strip under a long tree. -->
+                        <StackPanel Grid.Column="1"
+                                    Margin="12,0,0,0"
+                                    Orientation="Horizontal"
+                                    Spacing="12"
+                                    VerticalAlignment="Center">
+                          <TextBlock Text="{Binding FrameCountText}"
+                                     VerticalAlignment="Center"
+                                     Foreground="{DynamicResource ColorTextSecondary}" />
+                          <TextBlock x:Name="HeaderScanLine"
+                                     Text="{Binding ProgressText}"
+                                     IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                     VerticalAlignment="Center"
+                                     Foreground="{DynamicResource ColorAccent}" />
+                        </StackPanel>
     
                         <!-- The two inks live in a Grid whose leading-path column is starred, not in a
                              horizontal StackPanel: a StackPanel measures its children at infinite
