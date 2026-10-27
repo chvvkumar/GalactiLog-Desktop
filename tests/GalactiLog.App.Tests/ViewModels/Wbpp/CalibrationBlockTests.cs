@@ -415,6 +415,7 @@ public class CalibrationBlockTests
             Assert.Equal(["Angle_45.18", "Angle_96.26"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
             Assert.True(Find(session, Flat)!.IsIncluded);
             Assert.Equal([Date18], Sources(session));
+            Assert.Equal("", session.ProgressText);   // the header's scan line is gone
         });
     }
 
@@ -766,6 +767,7 @@ public class CalibrationBlockTests
         Scanned(session);
 
         Assert.StartsWith("Could not scan", session.ScanSentence, StringComparison.Ordinal);
+        Assert.Equal("", session.ProgressText);   // the header's scan line is gone
         Assert.Empty(session.CalibrationRows);
         Assert.Equal(MetricText.Bytes(2_000), h.Page.SizeText);
 

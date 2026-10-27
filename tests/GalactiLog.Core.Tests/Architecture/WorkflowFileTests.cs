@@ -100,13 +100,15 @@ public class WorkflowFileTests
     public void BuildTest_TestStepHasNoTrxLoggerAndNoArtifactUpload()
     {
         // CI review 2026-09-25 item 9: nothing read the trx, and a failed test's name is already
-        // in the job log. The whole test line is checked so a re-added logger flag fails; other
-        // flags (the blame-hang guard) are allowed.
+        // in the job log. The whole test line is checked so a re-added logger flag fails; the
+        // blame-hang guard is required, so a hung test host fails the job instead of holding the
+        // runner.
         var content = ReadNormalized(BuildTestFile);
         var testLine = Assert.Single(
             content.Split('\n').Select(l => l.Trim()),
             l => l.StartsWith("- run: dotnet test", StringComparison.Ordinal));
         Assert.StartsWith("- run: dotnet test --no-build -c Release", testLine);
+        Assert.Contains("--blame-hang-timeout", testLine);
         Assert.DoesNotContain("--logger", testLine);
         Assert.DoesNotContain("trx", testLine);
         Assert.DoesNotContain("--logger trx", content);
@@ -197,6 +199,18 @@ public class WorkflowFileTests
         Assert.Contains("vpk download github", block);
         Assert.Contains("--channel \"${{ steps.version.outputs.channel }}\"", block);
         Assert.Contains("$PRE_FLAG", block);
+    }
+
+    [Fact]
+    public void Release_TestStepCarriesTheBlameHangGuard()
+    {
+        // The same guard as build-test.yml: a hung test host fails the release job after the
+        // timeout instead of holding the runner.
+        var content = ReadNormalized(ReleaseFile);
+        var testLine = Assert.Single(
+            content.Split('\n').Select(l => l.Trim()),
+            l => l.StartsWith("run: dotnet test", StringComparison.Ordinal));
+        Assert.Contains("--blame-hang-timeout", testLine);
     }
 
     [Fact]

@@ -127,7 +127,7 @@ public class WbppExportWindowTests
     public void TheTreeIsOpenOnLoad_EveryRowCarriesATick_AndTickingAShallowerRowCascades()
     {
         var date = Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        var harness = Harness(listSubfolders: folder =>
+        using var harness = Harness(listSubfolders: folder =>
             string.Equals(folder, date, StringComparison.OrdinalIgnoreCase) ? [Path.Combine(date, "FLAT"), Path.Combine(date, "Ha")] : []);
         var wizard = Wizard(harness);
         var window = Show(wizard);

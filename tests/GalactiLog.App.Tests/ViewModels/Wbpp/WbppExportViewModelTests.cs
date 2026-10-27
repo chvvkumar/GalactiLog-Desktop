@@ -164,6 +164,30 @@ internal sealed class ExportHarness : IDisposable
 
     private int _postCount;
 
+    /// <summary>Waits until no background post is pending: the page's pool work has drained and
+    /// the post count holds across a quiet interval. The wait lives here rather than in a test body,
+    /// because xUnit1031 is an error in this solution.</summary>
+    public void WaitForQuiet()
+    {
+        var last = -1;
+        Assert.True(
+            SpinWait.SpinUntil(
+                () =>
+                {
+                    var now = PostCount;
+                    if (now == last && Volatile.Read(ref _inFlight) == 0)
+                    {
+                        return true;
+                    }
+
+                    last = now;
+                    Thread.Sleep(100);
+                    return false;
+                },
+                TimeSpan.FromSeconds(10)),
+            "The page's background posts did not settle within 10 s.");
+    }
+
     private readonly Lock _postGate = new();
 
     // The delegates the page runs on pool threads that are still running; Dispose waits for none.

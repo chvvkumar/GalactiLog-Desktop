@@ -527,8 +527,9 @@ public class WbppExportStagingTests
         Assert.True(deepFigure > 0);
 
         harness.OnUi(() => shallow.IsIncluded = true);
+        harness.WaitForQuiet();
 
-        Until(harness, () => harness.Page.LongestDestinationLength == deepFigure);
+        harness.OnUi(() => Assert.Equal(deepFigure, harness.Page.LongestDestinationLength));
     }
 
     // Pads the staging root until the page's own measured longest destination equals
