@@ -38,4 +38,4 @@ jobs:
       - run: dotnet build --no-restore -c Release
       # No trx logger and no artifact upload: nothing read the trx, and a failed test's name
       # is already in the job log (CI review 2026-09-25).
-      - run: dotnet test --no-build -c Release
+      - run: dotnet test --no-build -c Release --blame-hang-timeout 10m --blame-hang-dump-type mini

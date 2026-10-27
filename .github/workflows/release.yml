@@ -51,7 +51,7 @@ jobs:
 
       - name: Test
         shell: bash
-        run: dotnet test -c Release
+        run: dotnet test -c Release --blame-hang-timeout 10m --blame-hang-dump-type mini
 
       - name: Publish
         shell: bash
