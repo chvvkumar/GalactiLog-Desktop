@@ -1,3 +1,4 @@
+using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.Core.Io;
 using GalactiLog.Data;
 using Microsoft.Data.Sqlite;
@@ -89,6 +90,15 @@ public sealed class AppDataRootStartupTests : IDisposable
         var path = Path.Combine(_scratch, name);
         Directory.CreateDirectory(path);
         return path;
+    }
+
+    // The setup start that "creates the library" in the relocation cases: the default root gets
+    // the seeded template, so that start skips catalogue seeding. The case under test is the
+    // start after it, which finds the same database either way.
+    private void SeedDefaultRoot()
+    {
+        Directory.CreateDirectory(_folders.DefaultRoot);
+        SeededAppData.CopyInto(_folders.DefaultRoot);
     }
 
     private DataRootPointer Pointer()
@@ -192,6 +202,7 @@ public sealed class AppDataRootStartupTests : IDisposable
         using var environment = new EnvironmentScope(null);
 
         // The start that creates the library.
+        SeedDefaultRoot();
         using (var first = Build())
         {
             Assert.Equal(
@@ -230,6 +241,7 @@ public sealed class AppDataRootStartupTests : IDisposable
     {
         using var environment = new EnvironmentScope(null);
 
+        SeedDefaultRoot();
         using (var first = Build())
         {
             Assert.NotNull(first.Services.GetRequiredService<AppWriter>());
@@ -270,6 +282,7 @@ public sealed class AppDataRootStartupTests : IDisposable
         // no pointer, so the adoption below runs with no pointer present exactly as a first start
         // after the update does.
         Directory.CreateDirectory(_folders.LegacyRoot);
+        SeededAppData.CopyInto(_folders.LegacyRoot);
         using (var legacy = Build(_folders.LegacyRoot))
         {
             Assert.Equal(
@@ -332,6 +345,7 @@ public sealed class AppDataRootStartupTests : IDisposable
     {
         using var environment = new EnvironmentScope(null);
 
+        SeedDefaultRoot();
         using (var first = Build())
         {
             Assert.NotNull(first.Services.GetRequiredService<AppWriter>());
@@ -395,6 +409,7 @@ public sealed class AppDataRootStartupTests : IDisposable
     {
         using var environment = new EnvironmentScope(null);
 
+        SeedDefaultRoot();
         using (var first = Build())
         {
             Assert.NotNull(first.Services.GetRequiredService<AppWriter>());

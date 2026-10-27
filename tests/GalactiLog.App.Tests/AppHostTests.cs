@@ -53,11 +53,18 @@ public sealed class AppHostTests
         // delete it.
         private readonly bool _ownsRoot;
 
-        public AppHostFixture(bool cliMode = false, string? root = null)
+        // `fresh` builds over an empty root, the first-start path that migrates and seeds. Every
+        // other fixture that creates its root starts from SeededAppData's copy instead, which
+        // takes about half a second of catalogue seeding off each case.
+        public AppHostFixture(bool cliMode = false, string? root = null, bool fresh = false)
         {
             _ownsRoot = root is null;
             Root = root ?? Path.Combine(Path.GetTempPath(), "GalactiLogAppHostTests_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
+            if (_ownsRoot && !fresh)
+            {
+                SeededAppData.CopyInto(Root);
+            }
 
             // Serilog's Log.Logger is process-global and Build() overwrites it, so a previous
             // fixture's file sink would otherwise keep its galactilog-<date>.log open with no
@@ -355,7 +362,7 @@ public sealed class AppHostTests
     [Fact]
     public void Build_MigratesDatabase()
     {
-        using var fixture = new AppHostFixture();
+        using var fixture = new AppHostFixture(fresh: true);
 
         var connectionString = DatabasePaths.BuildConnectionString(
             Path.Combine(Path.GetFullPath(fixture.Root), DatabasePaths.DatabaseFileName));
@@ -541,6 +548,7 @@ public sealed class AppHostTests
     {
         var root = Path.Combine(Path.GetTempPath(), "GalactiLogAppHostTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        SeededAppData.CopyInto(root);
         AliasMapCache cache;
         try
         {
@@ -594,7 +602,7 @@ public sealed class AppHostTests
     [Fact]
     public void Build_SeedsCatalogsOnFreshOverrideRoot()
     {
-        using var fixture = new AppHostFixture();
+        using var fixture = new AppHostFixture(fresh: true);
 
         using var context = new GalactiLogContext(GalactiLogContextOptions.Create(
             DatabasePaths.BuildConnectionString(Path.Combine(Path.GetFullPath(fixture.Root), DatabasePaths.DatabaseFileName))));
@@ -612,6 +620,7 @@ public sealed class AppHostTests
     {
         var root = Path.Combine(Path.GetTempPath(), "GalactiLogAppHostEnvVarTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        SeededAppData.CopyInto(root);
         var previous = Environment.GetEnvironmentVariable("GALACTILOG_APPDATA");
         try
         {
@@ -647,6 +656,7 @@ public sealed class AppHostTests
         var explicitRoot = Path.Combine(Path.GetTempPath(), "GalactiLogAppHostExplicitTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(envRoot);
         Directory.CreateDirectory(explicitRoot);
+        SeededAppData.CopyInto(explicitRoot);
         var previous = Environment.GetEnvironmentVariable("GALACTILOG_APPDATA");
         try
         {
@@ -691,7 +701,7 @@ public sealed class AppHostTests
     [Fact]
     public void Build_SeedingIsNoOpOnASecondBuildAgainstTheSameRoot()
     {
-        using var fixture = new AppHostFixture();
+        using var fixture = new AppHostFixture(fresh: true);
 
         int CountOpenNgcRows()
         {
@@ -1001,7 +1011,7 @@ public sealed class AppHostTests
         // sink's pre-migration read: that read runs before Migrate() creates the file. This must
         // never be the reason startup logging goes dark; constructing without throwing, over a
         // brand new temp root with no pointer, no database and no prior state, is the assertion.
-        using var fixture = new AppHostFixture();
+        using var fixture = new AppHostFixture(fresh: true);
 
         Assert.NotNull(fixture.Host);
     }
@@ -1056,6 +1066,7 @@ public sealed class AppHostTests
     {
         var root = Path.Combine(Path.GetTempPath(), "GalactiLogAppHostTests_" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        SeededAppData.CopyInto(root);
         IntegrationHttpClient holder;
         try
         {
