@@ -11,6 +11,7 @@ using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels.Wbpp;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.App.Views;
 using GalactiLog.App.Views.TargetDetail.Wbpp;
@@ -504,11 +505,11 @@ public class WbppExportWindowTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Single(Visible<StackPanel>(window, "CalibrationBlock"));
-        Assert.Equal("Calibration found", Visible<TextBlock>(window, "CalibrationHeading").Single().Text);
         Assert.Empty(Visible<TextBlock>(window, "ScanProgressLine"));
         var sentence = Visible<TextBlock>(window, "ScanSentenceLine").Single();
         Assert.Equal(session.ScanSentence, sentence.Text);
         Assert.StartsWith("Scanned ", sentence.Text, StringComparison.Ordinal);
+        Assert.Equal(session.CalibrationTally, Visible<TextBlock>(window, "CalibrationTally").Single().Text);
         Assert.Single(Visible<ItemsControl>(window, "LightSetLines"));
         Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == session.LightSetLines[0] && t.IsEffectivelyVisible);
         Assert.Single(Visible<Button>(window, "RescanButton"));
@@ -581,31 +582,71 @@ public class WbppExportWindowTests
         window.Close();
     }
 
+    // A failure here is a calibration folder drawn as a plain row: no figures, no note, or the
+    // expander shown on a leaf.
+    [AvaloniaFact]
+    public void CalibrationRows_AreDrawnInTheTree_WithTicksFiguresNotesAndNoExpanderOnLeaves()
+    {
+        using var harness = ExportHarness.Create(Pleiades.Catalogue(), [Pleiades.N18], walk: Pleiades.Disk().Walker);
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var session = harness.Page.Sessions[0];
+        Until(() => session.ScanState == CalibrationScanState.Done && session.CalibrationRows.Count == 2);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(10, Visible<CheckBox>(window, "TickBox").Count);   // six chain rows, FLAT, its camera row, two angle rows
+        Assert.Equal(["2 of 2 files, " + MetricText.Bytes(200), "1 file, " + MetricText.Bytes(100)],
+            Visible<TextBlock>(window, "CalibrationText").Where(t => t.DataContext is FolderNodeViewModel { Row: not null }).Select(t => t.Text));
+        Assert.Equal(["same night", "rotation 96.26"], Visible<TextBlock>(window, "NoteTag").Select(t => t.Text));
+        Assert.Empty(Visible<TextBlock>(window, "RowTag"));
+        Assert.Equal("1 of 2 calibration folders ticked", Visible<TextBlock>(window, "CalibrationTally").Single().Text);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Calibration found");
+        Assert.DoesNotContain(Visible<Button>(window, "ExpandButton"), b => b.DataContext is FolderNodeViewModel { IsLeaf: true });
+        Assert.Contains(Visible<Button>(window, "ExpandButton"), b => b.DataContext is FolderNodeViewModel { FolderName: "FLAT" });
+
+        // Two way: the box writes the row's tick, and the tally follows.
+        var rejected = Visible<CheckBox>(window, "TickBox").Single(c => c.DataContext is FolderNodeViewModel { FolderName: "Angle_96.26" });
+        rejected.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(session.CalibrationRows.Single(r => r.FolderName == "Angle_96.26").IsIncluded);
+        Assert.Equal("2 of 2 calibration folders ticked", Visible<TextBlock>(window, "CalibrationTally").Single().Text);
+
+        window.Close();
+    }
+
     [Fact]
-    public void Markup_NamesTheBlockElements()
+    public void Markup_NamesTheStripAndRowElements()
     {
         var markup = Markup();
 
         foreach (var name in new[]
         {
-            "CalibrationBlock", "CalibrationHeading", "ScanProgressLine", "ScanSentenceLine", "LightSetLines",
+            "CalibrationBlock", "ScanProgressLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
             "CalibrationWarnings", "NoCalibrationLine", "RescanButton", "LookHigherButton",
-            "FooterBreakdown", "ReviewBreakdown",
+            "FooterBreakdown", "ReviewBreakdown", "ExpandButton", "TickBox", "CalibrationText", "NoteTag", "RowTag",
         })
         {
             Assert.Contains(@"x:Name=""" + name + @"""", markup, StringComparison.Ordinal);
         }
 
+        foreach (var gone in new[] { "CalibrationHeading", @"Text=""Calibration found""", "ChainRadio", "ChosenPill", "CalibrationRows", "CopiesFromHereText", "IsChosenZone", "ShowsRadio", "ShowsTick" })
+        {
+            Assert.DoesNotContain(gone, markup, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            @"Text=""Tick: copy this folder and everything inside it. Untick inside it to leave something out. +: list the folders inside.""",
+            markup, StringComparison.Ordinal);
         Assert.Contains(@"IsVisible=""{Binding HasCalibrationBlock}""", markup, StringComparison.Ordinal);
-        Assert.Contains(@"Text=""Calibration found""", markup, StringComparison.Ordinal);
         Assert.Contains(@"ToolTip.Tip=""{Binding IssuesTooltip}""", markup, StringComparison.Ordinal);
-        Assert.Contains(@"Classes=""callout warn inline""", markup, StringComparison.Ordinal);
+        Assert.Matches(new Regex(@"x:Name=""ExpandButton""\s+[^>]*IsVisible=""\{Binding ShowsExpander\}"""), markup);
+        Assert.Matches(new Regex(@"x:Name=""NoteTag""[^>]*ColorTextSecondary"), markup);
+        Assert.Matches(new Regex(@"x:Name=""RowTag""[^>]*ColorWarning"), markup);
+        Assert.Matches(new Regex(@"x:Name=""CalibrationText""[^>]*ColorTextSecondary"), markup);
         Assert.Matches(new Regex(@"x:Name=""RescanButton""\s+[^>]*Classes=""quiet sm"""), markup);
-        Assert.Matches(new Regex(@"x:Name=""LookHigherButton""\s+[^>]*Classes=""quiet sm"""), markup);
-        Assert.Matches(new Regex(@"x:Name=""FooterBreakdown""[^>]*ColorTextSecondary"), markup);
-        Assert.True(markup.IndexOf(@"x:Name=""FooterSize""", StringComparison.Ordinal)
-            < markup.IndexOf(@"x:Name=""FooterBreakdown""", StringComparison.Ordinal));
         Assert.True(markup.IndexOf(@"x:Name=""NightSummary""", StringComparison.Ordinal)
             < markup.IndexOf(@"x:Name=""CalibrationBlock""", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf(@"x:Name=""FooterSize""", StringComparison.Ordinal)
+            < markup.IndexOf(@"x:Name=""FooterBreakdown""", StringComparison.Ordinal));
     }
 }

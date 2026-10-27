@@ -19,15 +19,18 @@
 
   <Window.DataTemplates>
 
-    <!-- One folder in a night's tree: its tick, the name and counts, and its own children below it
-         in a left-bordered panel. Nested rows resolve through this same template. -->
+    <!-- One folder in a night's tree. Every row has a tick; a calibration row reads its match: the
+         files and bytes it copies and the matcher's note as a tag. Its own children sit below it in
+         a left-bordered panel, and nested rows resolve through this same template. -->
     <DataTemplate DataType="wbpp:FolderNodeViewModel" x:DataType="wbpp:FolderNodeViewModel">
       <StackPanel Spacing="2">
         <Grid>
           <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto,Auto"
                 MinHeight="28"
                 Opacity="{Binding RowOpacity}">
-            <Button Grid.Column="0"
+            <Button x:Name="ExpandButton"
+                    Grid.Column="0"
+                    IsVisible="{Binding ShowsExpander}"
                     Classes="quiet sm"
                     Content="{Binding ExpandLabel}"
                     Command="{Binding ToggleExpandCommand}"
@@ -49,16 +52,31 @@
                          TextTrimming="CharacterEllipsis"
                          ToolTip.Tip="{Binding Level.Path}"
                          Foreground="{DynamicResource ColorTextPrimary}" />
-              <TextBlock Text="{Binding RowTag}"
+              <TextBlock x:Name="NoteTag"
+                         Text="{Binding NoteTag}"
+                         IsVisible="{Binding HasNoteTag}"
+                         Classes="t-caption"
+                         VerticalAlignment="Center"
+                         Foreground="{DynamicResource ColorTextSecondary}" />
+              <TextBlock x:Name="RowTag"
+                         Text="{Binding RowTag}"
                          IsVisible="{Binding IsSkipped}"
                          Foreground="{DynamicResource ColorWarning}" />
             </StackPanel>
 
-            <TextBlock Grid.Column="4"
-                       Margin="0,0,10,0"
-                       Text="{Binding FrameCountText}"
-                       VerticalAlignment="Center"
-                       Foreground="{DynamicResource ColorTextSecondary}" />
+            <!-- Both counts in one cell, so a row holding lights and calibration reads both. -->
+            <StackPanel Grid.Column="4"
+                        Margin="0,0,10,0"
+                        Orientation="Horizontal"
+                        Spacing="8"
+                        VerticalAlignment="Center">
+              <TextBlock Text="{Binding FrameCountText}"
+                         Foreground="{DynamicResource ColorTextSecondary}" />
+              <TextBlock x:Name="CalibrationText"
+                         Text="{Binding CalibrationText}"
+                         IsVisible="{Binding HasCalibration}"
+                         Foreground="{DynamicResource ColorTextSecondary}" />
+            </StackPanel>
 
             <!-- Spec 12.13's cost badges, with the names themselves on the tooltip. A contaminated
                  level is selectable: the cost is advisory, and choosing one is how a user
@@ -232,7 +250,7 @@
                            makes the rows below read as steps into it, the chain roots drawn by the
                            FolderNodeViewModel template, and the night's own copy figures. -->
                       <StackPanel Spacing="6" IsVisible="{Binding IsExpanded}">
-                        <TextBlock Text="Radio: copy from this folder.  Tick: inside it, copied unless unticked.  +: list the folders inside."
+                        <TextBlock Text="Tick: copy this folder and everything inside it. Untick inside it to leave something out. +: list the folders inside."
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource ColorTextTertiary}" />
 
@@ -255,46 +273,59 @@
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource ColorTextSecondary}" />
 
-                        <!-- Spec 12.13's Calibration found block: the scan of the night's hierarchy and
-                             the calibration folders it matched, ticked when they fit the lights. Only
-                             on a page with a walker, and inside the tree so it collapses with it. -->
+                        <!-- The status strip: the scan of the night's hierarchy in one line with the
+                             tally of ticked calibration folders, Look in and Rescan docked right, then
+                             the light-set lines and the warnings. Only on a page with a walker, and
+                             inside the tree so it collapses with it. -->
                         <StackPanel x:Name="CalibrationBlock"
                                     Spacing="4"
                                     Margin="0,6,0,0"
                                     IsVisible="{Binding HasCalibrationBlock}">
-                          <!-- Docked rather than a Grid: the buttons sit right, the heading fills. -->
+                          <!-- Docked rather than a Grid: the buttons sit right, the scan lines fill. -->
                           <DockPanel>
                             <Button x:Name="RescanButton"
                                     DockPanel.Dock="Right"
                                     Classes="quiet sm"
+                                    VerticalAlignment="Top"
                                     Content="Rescan"
                                     Command="{Binding RescanCommand}" />
                             <Button x:Name="LookHigherButton"
                                     DockPanel.Dock="Right"
                                     Classes="quiet sm"
+                                    VerticalAlignment="Top"
                                     Margin="0,0,6,0"
                                     Content="{Binding LookHigherText}"
                                     IsVisible="{Binding LookHigherText, Converter={x:Static ObjectConverters.IsNotNull}}"
                                     Command="{Binding LookHigherCommand}" />
-                            <TextBlock x:Name="CalibrationHeading"
-                                       Text="Calibration found"
-                                       VerticalAlignment="Center"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource ColorTextPrimary}" />
+                            <StackPanel Spacing="4" VerticalAlignment="Center">
+                              <WrapPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ScanProgressLine"
+                                           Margin="0,0,12,0"
+                                           Text="{Binding ProgressText}"
+                                           IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+
+                                <!-- The unreadable files, one path per line, on the sentence's tooltip. -->
+                                <TextBlock x:Name="ScanSentenceLine"
+                                           Margin="0,0,12,0"
+                                           Text="{Binding ScanSentence}"
+                                           IsVisible="{Binding ScanSentence, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           ToolTip.Tip="{Binding IssuesTooltip}"
+                                           TextWrapping="Wrap"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+
+                                <TextBlock x:Name="CalibrationTally"
+                                           Text="{Binding CalibrationTally}"
+                                           IsVisible="{Binding CalibrationTally, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                           Foreground="{DynamicResource ColorTextSecondary}" />
+                              </WrapPanel>
+
+                              <TextBlock x:Name="NoCalibrationLine"
+                                         Text="{Binding NoCalibrationText}"
+                                         IsVisible="{Binding NoCalibrationText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                         Foreground="{DynamicResource ColorTextSecondary}" />
+                            </StackPanel>
                           </DockPanel>
-
-                          <TextBlock x:Name="ScanProgressLine"
-                                     Text="{Binding ProgressText}"
-                                     IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                     Foreground="{DynamicResource ColorTextSecondary}" />
-
-                          <!-- The unreadable files, one path per line, on the sentence's tooltip. -->
-                          <TextBlock x:Name="ScanSentenceLine"
-                                     Text="{Binding ScanSentence}"
-                                     IsVisible="{Binding ScanSentence, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                     ToolTip.Tip="{Binding IssuesTooltip}"
-                                     TextWrapping="Wrap"
-                                     Foreground="{DynamicResource ColorTextSecondary}" />
 
                           <ItemsControl x:Name="LightSetLines" ItemsSource="{Binding LightSetLines}">
                             <ItemsControl.ItemTemplate>
@@ -315,11 +346,6 @@
                               </DataTemplate>
                             </ItemsControl.ItemTemplate>
                           </ItemsControl>
-
-                          <TextBlock x:Name="NoCalibrationLine"
-                                     Text="{Binding NoCalibrationText}"
-                                     IsVisible="{Binding NoCalibrationText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                     Foreground="{DynamicResource ColorTextSecondary}" />
                         </StackPanel>
                       </StackPanel>
                     </StackPanel>
