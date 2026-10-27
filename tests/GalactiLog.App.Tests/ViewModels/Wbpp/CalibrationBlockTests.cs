@@ -40,6 +40,9 @@ public class CalibrationBlockTests
         return met;
     });
 
+    private static bool Settled(SessionLevelViewModel session)
+        => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing);
+
     private static void Scanned(SessionLevelViewModel session)
         => Until(() => session.ScanState == CalibrationScanState.Done);
 
@@ -393,19 +396,24 @@ public class CalibrationBlockTests
             },
             walk: walk);
         var session = h.Page.Sessions[0];
-        Row(session, Date18).IsIncluded = true;
-        Scanned(session);
-        Assert.NotNull(Find(session, Flats96));
+
+        // Every write and read below runs under the post gate, as the UI thread would, and every
+        // wait is on state.
+        h.OnUi(() => Row(session, Date18).IsIncluded = true);
+        Until(h, () => session.ScanState == CalibrationScanState.Done && Find(session, Flats96) is not null);
         release.Set();
-        Until(() => session.Rows.Concat(session.Rows.SelectMany(r => r.Descendants())).All(r => !r.IsListing));
+        Until(h, () => Settled(session) && Find(session, FlatCam)!.Children.Count == 2);
 
-        session.RescanCommand.Execute(null);
-        Scanned(session);
+        h.OnUi(() => session.RescanCommand.Execute(null));
+        Until(h, () => session.ScanState == CalibrationScanState.Done
+            && session.ScanSentence.StartsWith("Could not scan", StringComparison.Ordinal));
 
-        Assert.StartsWith("Could not scan", session.ScanSentence, StringComparison.Ordinal);
-        Assert.Equal(["Angle_45.18", "Angle_96.26"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
-        Assert.True(Find(session, Flat)!.IsIncluded);
-        Assert.Equal([Date18], Sources(session));
+        h.OnUi(() =>
+        {
+            Assert.Equal(["Angle_45.18", "Angle_96.26"], Find(session, FlatCam)!.Children.Select(c => c.FolderName));
+            Assert.True(Find(session, Flat)!.IsIncluded);
+            Assert.Equal([Date18], Sources(session));
+        });
     }
 
     [Fact]
