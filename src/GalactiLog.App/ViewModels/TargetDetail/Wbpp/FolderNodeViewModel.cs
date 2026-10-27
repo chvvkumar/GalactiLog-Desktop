@@ -132,8 +132,10 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     public string RowTag => IsIncluded ? "" : ReasonTag ?? (IsSkipped ? SkippedText : "");
 
     /// <summary>The tick this row takes when an ancestor is ticked: its calibration row's default
-    /// when it carries one, else its catalogue facts.</summary>
-    public bool DefaultTick => Row is { } row ? row.DefaultTicked : StartsTicked(Level);
+    /// when it carries one and holds none of this night's lights, else its catalogue facts. A
+    /// folder holding the night's lights is ticked for them whatever the matcher made of the
+    /// calibration beside them; that decision is the session's, per file.</summary>
+    public bool DefaultTick => Row is { } row && Level.FrameCount == 0 ? row.DefaultTicked : StartsTicked(Level);
 
     // Other targets' and other nights' LIGHT files under this folder, as the page read them.
     private int _foreignCount;
@@ -447,15 +449,15 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         ReasonTag = ticked || StartsTicked(Level) ? null : ReasonFor(Level);
     }
 
-    /// <summary>Seeds every row beneath this one, depth first: a row carrying a calibration row by
-    /// its default wherever it sits; any other row by its own facts while its parent is ticked,
+    /// <summary>Seeds every row beneath this one, depth first: a row whose calibration row the
+    /// matcher ticks, wherever it sits; any row by its <see cref="DefaultTick"/> while its parent is ticked,
     /// else unticked, so the rows under a folder the foreign-lights rule unticks are not drawn
     /// ticked.</summary>
     internal void SeedBeneath()
     {
         foreach (var child in Children)
         {
-            child.Seed((IsIncluded || child.Row is not null) && child.DefaultTick);
+            child.Seed((IsIncluded || child.Row is { DefaultTicked: true }) && child.DefaultTick);
             child.SeedBeneath();
         }
     }

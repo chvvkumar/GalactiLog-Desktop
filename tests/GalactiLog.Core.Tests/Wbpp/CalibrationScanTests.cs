@@ -44,7 +44,11 @@ public class CalibrationScanTests
 
         // h1 is trimmed inside the date source, b2 inside the borrowed source; the rejected row lies under an excluded directory and is not covered.
         Assert.Equal([Flats + @"\h1.fits", Borrowed + @"\b2.fits"], excluded);
-        Assert.Empty(CalibrationScan.InPlaceExcludes(sources, [(flats, false)]));
+        // A covered row whose decision is unticked (a lights folder's rejected calibration) leaves
+        // every calibration frame behind.
+        Assert.Equal(
+            [Flats + @"\f1.fits", Flats + @"\f2.fits", Flats + @"\h1.fits"],
+            CalibrationScan.InPlaceExcludes(sources, [(flats, false)]).Select(f => f.FilePath));
         Assert.Empty(CalibrationScan.InPlaceExcludes(sources, [(Row(Flats, M(Flats + @"\f1.fits", CalibrationType.Flat, false)), true)]));
     }
 

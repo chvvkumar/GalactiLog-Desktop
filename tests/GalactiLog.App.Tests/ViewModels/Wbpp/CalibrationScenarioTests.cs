@@ -681,6 +681,51 @@ public class CalibrationScenarioTests
     }
 
     [Fact]
+    public async Task LightsFolderHoldingDarks_CopiesTheLights_AndLeavesTheDarksFileByFile()
+    {
+        using var t = new Tree();
+        var date = t.P("T", "2025-10-15");
+        var lights = t.P("T", "2025-10-15", "LIGHT");
+        t.Light(N, Path.Combine(lights, "L1.fits"))
+            .Light(N, Path.Combine(lights, "L2.fits"))
+            .Cal(Path.Combine(lights, "D1.fits"), "DARK", exposure: 300)
+            .Cal(Path.Combine(lights, "D2.fits"), "DARK", exposure: 300);
+        using var h = t.Open(N);
+        var session = h.Page.Sessions[0];
+        Assert.True(Is(lights, LightsSource(session)));
+        Scanned(session);
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        // The folder stays ticked for its lights; its darks are the matcher's to decide, and it
+        // did not select them.
+        var row = CalRow(session, lights);
+        Assert.True(row.IsIncluded);
+        Assert.False(row.Row!.DefaultTicked);
+        Assert.Equal("0 of 1 calibration folder ticked", session.CalibrationTally);
+        Assert.Equal(0, session.CalibrationTotals().DarkCount);
+
+        Stage(h);
+        Generate(h.Page);
+        var job = Jobs(h.Page.ScriptText!).Single(j => Is(j.Src, lights));
+        Assert.Equal(["D1.fits", "D2.fits"], job.ExcludeFiles.Order(StringComparer.OrdinalIgnoreCase));
+
+        var footerBytes = h.Page.TotalSizeBytes;
+        var result = await Copy(h);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Empty(result.Failed);
+        Assert.Equal([Path.Combine(job.Dst, "L1.fits"), Path.Combine(job.Dst, "L2.fits")], Staged(h));
+        Assert.Equal(footerBytes, result.BytesCopied);
+        Assert.Equal(2, result.Copied);
+
+        // Ticking the date above keeps the lights folder ticked, and its darks still stay behind.
+        Row(session, date).IsIncluded = true;
+        Assert.True(row.IsIncluded);
+        Assert.Equal(
+            ["D1.fits", "D2.fits"],
+            session.CalibrationInPlaceExcludes().Select(f => Path.GetFileName(f.FilePath)).Order(StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
     public async Task AWbppOutputFolderInsideTheNight_SuppliesNoFlats_AndIsNotCounted()
     {
         using var t = new Tree();

@@ -521,9 +521,9 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     public string CalibrationTally => CalibrationRows.Count switch
     {
         0 => "",
-        1 => string.Create(CultureInfo.InvariantCulture, $"{CalibrationRows.Count(row => row.IsIncluded):N0} of 1 calibration folder ticked"),
+        1 => string.Create(CultureInfo.InvariantCulture, $"{CalibrationRows.Count(Copies):N0} of 1 calibration folder ticked"),
         var count => string.Create(
-            CultureInfo.InvariantCulture, $"{CalibrationRows.Count(row => row.IsIncluded):N0} of {count:N0} calibration folders ticked"),
+            CultureInfo.InvariantCulture, $"{CalibrationRows.Count(Copies):N0} of {count:N0} calibration folders ticked"),
     };
 
     /// <summary>"No calibration frames under Date_2025-10-15" after a scan that found none, else
@@ -733,7 +733,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
                 }
                 else if (node.Level.FrameCount == 0)
                 {
-                    // A folder holding this night's lights keeps its tick.
+                    // A folder holding this night's lights keeps its tick for them; its
+                    // calibration follows the row's own decision (Copies).
                     node.Seed(false);
                 }
 
@@ -813,7 +814,8 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     public int LongestScannedRelative(string folder) => CalibrationScan.LongestRelative(folder, ScannedFrames);
 
     /// <summary>The calibration frames the copy skips one by one: the unselected frames of every
-    /// ticked calibration row it copies. Their selected siblings are counted once, in
+    /// ticked calibration row it copies, and every calibration frame of a row the lights copy
+    /// takes whose own decision is unticked. Their selected siblings are counted once, in
     /// <see cref="CalibrationTotals"/>; the lights total counts catalogued lights only.</summary>
     public IReadOnlyList<WbppFramePath> CalibrationInPlaceExcludes()
         => Match is null
@@ -847,7 +849,16 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     }
 
     private List<(CalibrationRow Row, bool Ticked)> TickedRows()
-        => [.. CalibrationRows.Select(node => (node.Row!, node.IsIncluded))];
+        => [.. CalibrationRows.Select(node => (node.Row!, Copies(node)))];
+
+    // Whether a calibration row's own frames are copied. A folder holding none of this night's
+    // lights copies them when ticked. A folder holding the night's lights stays ticked for them, so
+    // its calibration follows its own decision: the user's tick when one is recorded, else the
+    // matcher's default, and a rejected row's frames stay behind file by file.
+    private bool Copies(FolderNodeViewModel node)
+        => node.IsIncluded
+            && (node.Level.FrameCount == 0
+                || (_userTicks.TryGetValue(node.Level.Path, out var ticked) ? ticked : node.Row!.DefaultTicked));
 
     private void ClearResult()
     {

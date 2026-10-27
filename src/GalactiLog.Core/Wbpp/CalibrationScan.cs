@@ -18,14 +18,15 @@ public static class CalibrationScan
             .Max();
 
     /// <summary>The calibration frames the lights copy must skip in rows it copies in place over
-    /// several sources: the unselected frames of every ticked row whose folder
-    /// <see cref="FolderLevels.Covers"/> says is copied, none when the row selects nothing (which
-    /// copies them all). An unticked row contributes nothing: under the tree model it is never
-    /// covered.</summary>
+    /// several sources, for every row whose folder <see cref="FolderLevels.Covers"/> says is
+    /// copied: every calibration frame of a row whose decision is unticked (a folder that holds
+    /// the night's lights is copied for them, and its rejected calibration stays behind), and the
+    /// unselected frames of a ticked row that selects some (one that selects none copies them
+    /// all).</summary>
     public static IReadOnlyList<ScannedFrame> InPlaceExcludes(
         IReadOnlyList<ChosenLevel> sources, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows)
-        => [.. rows.Where(r => r.Ticked && r.Row.SelectedCount > 0 && FolderLevels.Covers(sources, r.Row.Folder))
-            .SelectMany(r => r.Row.Frames.Where(f => !f.Selected))
+        => [.. rows.Where(r => FolderLevels.Covers(sources, r.Row.Folder))
+            .SelectMany(r => r.Ticked ? r.Row.Frames.Where(f => !f.Selected && r.Row.SelectedCount > 0) : r.Row.Frames)
             .Select(f => f.Frame)
             .Where(f => CalibrationTypes.Contains(f.Type))];
 
