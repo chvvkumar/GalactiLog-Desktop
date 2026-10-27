@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Text.RegularExpressions;
 using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
@@ -174,58 +173,38 @@ public class CalibrationScenarioTests
                 .Where(l => PathConfinement.IsUnderOrEqual(folder, l.Path) && !(l.Key == key && l.Night == night))
                 .Select(l => new WbppFramePath(Library.Ids.TryGetValue(l.Path, out var id) ? id : Guid.NewGuid(), l.Path, l.Size))];
 
-        /// <summary>Denies the current user the right to list <paramref name="dir"/>. Returns false,
-        /// leaving no ACL behind, when the environment does not honour the deny (an account icacls
-        /// cannot map, or an elevated or SYSTEM test process that bypasses it).</summary>
-        public bool Lock(string dir)
+        /// <summary>Makes <paramref name="dir"/> unreadable to the walk: its enumeration throws
+        /// <see cref="UnauthorizedAccessException"/>, as a folder the user may not list does. The
+        /// denial is simulated at the walk's enumerate seam rather than with a real ACL, so the case
+        /// does not depend on the account the tests run under.</summary>
+        public void Lock(string dir)
         {
             Directory.CreateDirectory(dir);
             File.WriteAllBytes(Path.Combine(dir, "inside.txt"), [1]);
-            if (Icacls(dir, "/deny", CurrentUser + ":(RD)") != 0) return false;
-            try { Directory.EnumerateFileSystemEntries(dir).ToList(); }
-            catch (UnauthorizedAccessException)
-            {
-                _locked.Add(dir);
-                return true;
-            }
-            Icacls(dir, "/remove:d", CurrentUser);
-            return false;
+            _locked.Add(dir);
         }
 
-        private static string CurrentUser => Environment.UserDomainName + "\\" + Environment.UserName;
-
-        private static int Icacls(params string[] args)
-        {
-            var start = new ProcessStartInfo("icacls") { RedirectStandardOutput = true, RedirectStandardError = true };
-            foreach (var arg in args) start.ArgumentList.Add(arg);
-            using var process = Process.Start(start)!;
-            Assert.True(process.WaitForExit(15_000), "icacls did not exit");
-            return process.ExitCode;
-        }
+        private WalkResult Walk(string root, Func<string, bool> skipHeaderRead, NightRule nightRule,
+            IProgress<int>? progress, CancellationToken ct)
+            => CalibrationWalk.Scan(root, skipHeaderRead, nightRule,
+                dir => _locked.Any(l => Is(l, dir))
+                    ? throw new UnauthorizedAccessException("denied")
+                    : UserFiles.EnumerateFileSystemEntries(dir),
+                path => CalibrationWalk.ReadFrame(path, 0, nightRule), progress, ct);
 
         public ExportHarness Open(params DateOnly[] nights) => ExportHarness.Create(
             Library,
             nights,
             listSubfolders: SourceSubfolders.OnDisk,
             readForeignLights: ReadForeign,
-            walk: CalibrationWalk.OnDisk,
+            walk: Walk,
             general: g => g with { UseImagingNight = true, ObserverLongitude = -97.5 });
 
         public void Dispose()
         {
-            try
+            if (Directory.Exists(Root))
             {
-                foreach (var dir in _locked)
-                {
-                    Icacls(dir, "/remove:d", CurrentUser);
-                }
-            }
-            finally
-            {
-                if (Directory.Exists(Root))
-                {
-                    Directory.Delete(Root, recursive: true);
-                }
+                Directory.Delete(Root, recursive: true);
             }
         }
     }
@@ -495,7 +474,7 @@ public class CalibrationScenarioTests
             .Cal(Path.Combine(flats, "f1.fits"), "FLAT")
             .Cal(Path.Combine(flats, "f2.fits"), "FLAT");
         Tree.Write(garbage, [.. Enumerable.Range(0, 4000).Select(i => (byte)(i * 7))]);
-        if (!t.Lock(locked)) return;
+        t.Lock(locked);
         using var h = t.Open(N);
         var session = h.Page.Sessions[0];
         Scanned(session);
