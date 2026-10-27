@@ -39,9 +39,9 @@ public enum FolderZone
 /// <see cref="FolderZone.Chosen"/> or <see cref="FolderZone.Copied"/> zone, and never again, so
 /// collapsing, re-expanding, unticking or re-ticking reads nothing and loses no nested tick. The
 /// read is the page's, reached through the <c>list</c> callback, because this file may not touch
-/// the disk and the answer has to come back on the UI thread. A chain row's chain children are
-/// merged into its listing in place, so a folder never appears twice, and are kept when the disk
-/// does not name them.
+/// the disk and the answer has to come back on the UI thread. The rows already added under a row,
+/// its chain children and any folder created for calibration, are merged into its listing in
+/// place, so a folder never appears twice, and are kept when the disk does not name them.
 /// </para>
 /// <para>
 /// Every row under the chosen row carries a tick, chain rows included; the chosen row and the rows
@@ -54,10 +54,6 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <summary>What a folder the catalogue holds no file under reads in place of its figures.
     /// </summary>
     public const string NotCataloguedText = "not catalogued";
-
-    /// <summary>What a listed folder with no folder inside it states where its children would be.
-    /// </summary>
-    public const string NoFoldersText = "No folders inside";
 
     /// <summary>What a folder whose children could not be read states where they would be.
     /// </summary>
@@ -83,6 +79,7 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     private readonly List<FolderNodeViewModel> _chainChildren = [];
     private FolderNodeViewModel? _zonedAgainst;
     private bool _listRequested;
+    private bool _listedEmpty;
 
     /// <param name="folder">The folder and its figures, as <c>FolderLevels.ForSession</c> or
     /// <c>FolderLevels.Subfolders</c> described it.</param>
@@ -201,9 +198,10 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <summary>The row this one sits inside, or null for a root.</summary>
     public FolderNodeViewModel? Parent { get; }
 
-    /// <summary>The night's own LIGHT frames under this folder, or <see cref="NotCataloguedText"/>.
-    /// </summary>
-    public string FrameCountText => !IsCatalogued ? NotCataloguedText
+    /// <summary>The night's own LIGHT frames under this folder, or <see cref="NotCataloguedText"/>;
+    /// empty for a folder the catalogue does not know that carries calibration, because
+    /// <see cref="CalibrationText"/> stands in its place.</summary>
+    public string FrameCountText => !IsCatalogued ? (HasCalibration ? "" : NotCataloguedText)
         : _foreignCount > 0 ? string.Create(
             CultureInfo.InvariantCulture, $"{Level.FrameCount:N0} of {Level.FrameCount + _foreignCount:N0} files")
         : WbppPathText.Frames(Level.FrameCount);
@@ -212,6 +210,67 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <c>unknown</c> when any one contributing size is null, never a partial sum. Empty when the
     /// catalogue does not know the folder, because the frame count already says so.</summary>
     public string BytesText => IsCatalogued ? WbppPathText.Bytes(Level.SubtreeBytes) : "";
+
+    /// <summary>The matcher's row for this folder, or null when it holds no calibration file the
+    /// matcher saw.</summary>
+    public CalibrationRow? Row { get; private set; }
+
+    /// <summary>Sets or clears this folder's calibration row.</summary>
+    public void SetCalibrationRow(CalibrationRow? row)
+    {
+        Row = row;
+        OnPropertyChanged(nameof(Row));
+        OnPropertyChanged(nameof(NoteTag));
+        OnPropertyChanged(nameof(HasNoteTag));
+        RefreshCalibrationText();
+    }
+
+    /// <summary>Raises the calibration figures again, for an interior row once the rows beneath it
+    /// have changed.</summary>
+    internal void RefreshCalibrationText()
+    {
+        OnPropertyChanged(nameof(CalibrationText));
+        OnPropertyChanged(nameof(HasCalibration));
+        OnPropertyChanged(nameof(FrameCountText));
+    }
+
+    /// <summary>The calibration this row copies, read off its <see cref="CalibrationRow"/>: "k of
+    /// n files" and the selected bytes when the matcher selected some of its files, else every
+    /// file and its bytes. A row without a calibration row of its own sums the rows beneath it,
+    /// each by its selection when it has one, else by its totals. Empty when there is no
+    /// calibration here.</summary>
+    public string CalibrationText
+    {
+        get
+        {
+            if (Row is { } row)
+            {
+                return row.SelectedCount > 0
+                    ? string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"{row.SelectedCount:N0} of {row.TotalCount:N0} files, {WbppPathText.Bytes(row.SelectedBytes)}")
+                    : Files(row.TotalCount, row.TotalBytes);
+            }
+
+            var rows = Descendants().Select(node => node.Row).OfType<CalibrationRow>().ToList();
+            return rows.Count == 0 ? "" : Files(
+                rows.Sum(r => r.SelectedCount > 0 ? r.SelectedCount : r.TotalCount),
+                rows.Sum(r => r.SelectedCount > 0 ? r.SelectedBytes : r.TotalBytes));
+        }
+    }
+
+    /// <summary>Whether this row states calibration.</summary>
+    public bool HasCalibration => CalibrationText.Length > 0;
+
+    /// <summary>The matcher's note on this folder's calibration row, drawn as a tag.</summary>
+    public string NoteTag => Row?.Note ?? "";
+
+    /// <summary>Whether this row carries the match note.</summary>
+    public bool HasNoteTag => Row is not null;
+
+    private static string Files(int count, long bytes) => count == 1
+        ? "1 file, " + WbppPathText.Bytes(bytes)
+        : string.Create(CultureInfo.InvariantCulture, $"{count:N0} files, {WbppPathText.Bytes(bytes)}");
 
     /// <summary>Whether this folder holds another night's frames.</summary>
     public bool HasOtherNights => Level.OtherNights.Count > 0;
@@ -265,15 +324,22 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     public string ExpandLabel => IsExpanded ? "-" : "+";
 
     /// <summary>Whether the children are on screen: while open, except under a tick that is
-    /// cleared and applies, because the folders under a skipped one are left out with it.
-    /// </summary>
-    public bool ShowsChildren => IsExpanded && (IsIncluded || Zone != FolderZone.Copied);
+    /// cleared and applies, because the folders under a skipped one are left out with it, and
+    /// except on a leaf, which has none.</summary>
+    public bool ShowsChildren => IsExpanded && (IsIncluded || Zone != FolderZone.Copied) && !IsLeaf;
+
+    /// <summary>Whether this folder was listed and holds no folder, with no row added beneath it
+    /// since.</summary>
+    public bool IsLeaf => _listedEmpty && Children.Count == 0;
+
+    /// <summary>Whether this row draws its expander: every row but a leaf.</summary>
+    public bool ShowsExpander => !IsLeaf;
 
     /// <summary>Whether this row's directory is being read.</summary>
     [ObservableProperty]
     private bool _isListing;
 
-    /// <summary><see cref="NoFoldersText"/>, <see cref="UnreadableText"/>, or empty.</summary>
+    /// <summary><see cref="UnreadableText"/>, or empty.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasChildrenText))]
     private string _childrenText = "";
@@ -281,10 +347,30 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     /// <summary>Whether a sentence stands where the children would be.</summary>
     public bool HasChildrenText => ChildrenText.Length > 0;
 
-    /// <summary>The folders inside this one: the chain children until listed, then the listing in
-    /// the lister's order with the chain children merged in place.</summary>
+    /// <summary>The folders inside this one: the rows added through <see cref="AddChild"/> until
+    /// listed, then the listing in the lister's order with those rows merged in place.</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(IsLeaf))]
+    [NotifyPropertyChangedFor(nameof(ShowsExpander))]
+    [NotifyPropertyChangedFor(nameof(ShowsChildren))]
+    [NotifyPropertyChangedFor(nameof(RowOpacity))]
     private IReadOnlyList<FolderNodeViewModel> _children = [];
+
+    /// <summary>Every row under this one, depth first.</summary>
+    public IEnumerable<FolderNodeViewModel> Descendants()
+    {
+        foreach (var child in Children)
+        {
+            yield return child;
+            foreach (var node in child.Descendants())
+            {
+                yield return node;
+            }
+        }
+    }
+
+    /// <summary>Whether any row under this one is ticked.</summary>
+    public bool HasTickedDescendant => Descendants().Any(node => node.IsIncluded);
 
     /// <summary>The levels directly inside this one.</summary>
     public IReadOnlyList<FolderNodeViewModel> ChainChildren => _chainChildren;
@@ -325,19 +411,31 @@ public sealed partial class FolderNodeViewModel : ObservableObject
     [RelayCommand]
     private void ToggleExpand() => IsExpanded = !IsExpanded;
 
-    /// <summary>Adds a level directly inside this one, while the session builds the chain.
-    /// </summary>
-    internal void AddChainChild(FolderNodeViewModel child)
+    /// <summary>Adds a row directly inside this one: a level while the session builds the chain,
+    /// or a folder created for calibration. A later listing merges it in place.</summary>
+    internal void AddChild(FolderNodeViewModel child)
     {
-        _chainChildren.Add(child);
-        Children = [.. _chainChildren];
+        if (child.IsChain)
+        {
+            _chainChildren.Add(child);
+        }
+
+        Children = [.. Children, child];
+    }
+
+    /// <summary>Drops a row directly inside this one.</summary>
+    internal void RemoveChild(FolderNodeViewModel child)
+    {
+        _chainChildren.Remove(child);
+        Children = [.. Children.Where(node => !ReferenceEquals(node, child))];
     }
 
     /// <summary>Takes the page's answer to the listing. Called on the UI thread.</summary>
     /// <param name="listed">The folders inside, or null when they could not be read.</param>
-    /// <remarks>A listed folder that is a chain child is that chain child, never a second row; a
-    /// chain child the listing did not name follows the listing. An unreadable directory keeps its
-    /// chain children, so the night's levels always show.</remarks>
+    /// <remarks>A listed folder that is already a child, by path ignoring case, is that child, never
+    /// a second row; a child the listing did not name follows the listing. An unreadable directory
+    /// keeps its children, so the night's levels always show. An empty listing over no child makes
+    /// this row a leaf.</remarks>
     public void SetChildren(IReadOnlyList<SubfolderLevel>? listed)
     {
         if (listed is null)
@@ -347,16 +445,24 @@ public sealed partial class FolderNodeViewModel : ObservableObject
             return;
         }
 
-        var rows = new List<FolderNodeViewModel>(listed.Count + _chainChildren.Count);
+        var rows = new List<FolderNodeViewModel>(listed.Count + Children.Count);
+        var built = new List<FolderNodeViewModel>(listed.Count);
         foreach (var folder in listed)
         {
-            var chain = _chainChildren.FirstOrDefault(child =>
+            var existing = Children.FirstOrDefault(child =>
                 string.Equals(child.Level.Path, folder.Level.Path, StringComparison.OrdinalIgnoreCase));
-            rows.Add(chain ?? new FolderNodeViewModel(
-                folder, false, -1, GroupName, _ownTargetName, this, _list, _changed));
+            if (existing is null)
+            {
+                existing = new FolderNodeViewModel(
+                    folder, false, -1, GroupName, _ownTargetName, this, _list, _changed);
+                built.Add(existing);
+            }
+
+            rows.Add(existing);
         }
 
-        rows.AddRange(_chainChildren.Where(child => !rows.Contains(child)));
+        rows.AddRange(Children.Where(child => !rows.Contains(child)));
+        _listedEmpty = listed.Count == 0 && Children.Count == 0;
 
         // Zoned before they are bound, so no row is ever drawn in a zone it does not hold.
         if (_zonedAgainst is { } chosen)
@@ -368,11 +474,11 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         }
 
         Children = rows;
-        ChildrenText = rows.Count == 0 ? NoFoldersText : "";
+        ChildrenText = "";
         IsListing = false;
 
         // A listed row seeded unticked is a skip the session has not heard of yet.
-        if (rows.FirstOrDefault(row => !row.IsChain && !row.IsIncluded) is { } unticked)
+        if (built.FirstOrDefault(row => !row.IsIncluded) is { } unticked)
         {
             _changed(unticked);
         }
@@ -487,6 +593,12 @@ public sealed partial class FolderNodeViewModel : ObservableObject
         if (value)
         {
             ReasonTag = null;
+        }
+
+        for (var node = Parent; node is not null; node = node.Parent)
+        {
+            node.OnPropertyChanged(nameof(HasTickedDescendant));
+            node.OnPropertyChanged(nameof(RowOpacity));
         }
 
         _changed(this);

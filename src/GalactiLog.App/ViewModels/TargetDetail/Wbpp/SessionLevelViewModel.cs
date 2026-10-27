@@ -119,7 +119,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
                 .MaxBy(row => row.Level.Path.Length);
             var row = new FolderNodeViewModel(
                 new SubfolderLevel(level, true), true, index, GroupName, ownTargetName, parent, list, OnRowChanged);
-            parent?.AddChainChild(row);
+            parent?.AddChild(row);
             rows.Add(row);
         }
 

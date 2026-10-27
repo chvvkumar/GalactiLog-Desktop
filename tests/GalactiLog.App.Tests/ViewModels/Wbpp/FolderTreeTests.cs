@@ -5,6 +5,8 @@ using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.Core.Io;
 using GalactiLog.Core.Wbpp;
 using Xunit;
+using static GalactiLog.App.Tests.ViewModels.Wbpp.CalibrationFixtures;
+using static GalactiLog.App.Tests.ViewModels.Wbpp.Pleiades;
 
 namespace GalactiLog.App.Tests.ViewModels.Wbpp;
 
@@ -297,7 +299,8 @@ public class FolderTreeTests
         Assert.Equal(FolderNodeViewModel.UnreadableText, date.ChildrenText);
         Assert.True(date.HasChildrenText);
         Assert.Equal(["Ha"], date.Children.Select(c => c.FolderName));
-        Assert.Equal(FolderNodeViewModel.NoFoldersText, ha.ChildrenText);
+        Assert.True(ha.IsLeaf);
+        Assert.False(ha.ShowsExpander);
     }
 
     [Fact]
@@ -807,5 +810,139 @@ public class FolderTreeTests
     public void QuotingRefusal_NamesASkippedFolder()
     {
         Assert.Contains("one of the skipped folders", WbppExportViewModel.QuotingRefusal("excluded folder", "x"), StringComparison.Ordinal);
+    }
+
+    // ------------------------------------------------------------------ calibration on a row
+
+    private static FolderNodeViewModel Node(string path, FolderNodeViewModel? parent = null, bool catalogued = false, int frames = 0, int depth = 1)
+        => new(new SubfolderLevel(new FolderLevel(path, depth, frames, [], [], frames * 1_000L), catalogued), false, -1, "g", "M 45", parent, _ => { }, _ => { });
+
+    private static CalibrationRow Matched(string folder, int selected, int unselected, string note)
+        => new(folder,
+            [.. Enumerable.Range(0, selected).Select(i => new FrameMatch(F(Path.Combine(folder, $"f{i}.fits"), CalibrationType.Flat, P(), night: N18), true, note))
+                .Concat(Enumerable.Range(0, unselected).Select(i => new FrameMatch(F(Path.Combine(folder, $"h{i}.fits"), CalibrationType.Flat, P(rot: 96.26), night: N18), false, "rotation 96.26")))],
+            selected > 0, note);
+
+    [Fact]
+    public void ACalibrationRow_ReadsItsFiguresAndNote_InPlaceOfTheCatalogueText()
+    {
+        var node = Node(Flats);
+        Assert.Equal(FolderNodeViewModel.NotCataloguedText, node.FrameCountText);
+        Assert.Equal("", node.CalibrationText);
+        Assert.False(node.HasNoteTag);
+
+        node.SetCalibrationRow(Matched(Flats, 2, 1, "same night"));
+
+        Assert.Equal("2 of 3 files, " + MetricText.Bytes(200), node.CalibrationText);
+        Assert.True(node.HasCalibration);
+        Assert.Equal("same night", node.NoteTag);
+        Assert.True(node.HasNoteTag);
+        Assert.Equal("", node.FrameCountText);
+        Assert.Equal("", node.BytesText);
+
+        node.SetCalibrationRow(Matched(Flats96, 0, 1, "rotation 96.26"));
+        Assert.Equal("1 file, " + MetricText.Bytes(100), node.CalibrationText);
+
+        node.SetCalibrationRow(null);
+        Assert.Equal(FolderNodeViewModel.NotCataloguedText, node.FrameCountText);
+        Assert.False(node.HasNoteTag);
+    }
+
+    [Fact]
+    public void ARowHoldingLightsAndFlatsTogether_KeepsItsLightCount_AndAddsTheCalibrationText()
+    {
+        var node = Node(Lights, catalogued: true, frames: 3);
+        node.SetCalibrationRow(Matched(Lights, 3, 1, "same night"));
+
+        Assert.Equal("3 light frames", node.FrameCountText);
+        Assert.Equal(MetricText.Bytes(3_000), node.BytesText);
+        Assert.Equal("3 of 4 files, " + MetricText.Bytes(300), node.CalibrationText);
+    }
+
+    [Fact]
+    public void AnInteriorRow_SumsTheCalibrationBeneathIt()
+    {
+        var flat = Node(Pleiades.Flat);
+        var cam = Node(FlatCam, flat);
+        flat.AddChild(cam);
+        var flats = Node(Flats, cam);
+        var flats96 = Node(Flats96, cam);
+        cam.AddChild(flats);
+        cam.AddChild(flats96);
+        flats.SetCalibrationRow(Matched(Flats, 2, 1, "same night"));
+        flats96.SetCalibrationRow(Matched(Flats96, 0, 1, "rotation 96.26"));
+        flat.RefreshCalibrationText();
+        cam.RefreshCalibrationText();
+
+        // 2 selected of the matched row plus every file of the row with no selection.
+        Assert.Equal("3 files, " + MetricText.Bytes(300), cam.CalibrationText);
+        Assert.Equal("3 files, " + MetricText.Bytes(300), flat.CalibrationText);
+        Assert.Equal("", flat.FrameCountText);
+        Assert.Equal("", flat.NoteTag);
+    }
+
+    [Fact]
+    public void AListingMergesACreatedChildInPlace_WhateverItsCase_AndKeepsOneTheListingDidNotName()
+    {
+        var date = Node(Date18);
+        var flat = Node(Pleiades.Flat, date);
+        date.AddChild(flat);
+
+        date.SetChildren([
+            new SubfolderLevel(new FolderLevel(Path.Combine(Date18, "flat"), 3, 0, [], [], 0), false),
+            new SubfolderLevel(new FolderLevel(Pleiades.Light, 3, 3, [], [], 3_000), true)]);
+
+        Assert.Equal(["FLAT", "LIGHT"], date.Children.Select(c => c.FolderName));
+        Assert.Same(flat, date.Children[0]);
+        Assert.Equal(1, date.Children.Count(c => string.Equals(c.Level.Path, Pleiades.Flat, StringComparison.OrdinalIgnoreCase)));
+
+        var other = Node(Date15);
+        var borrowed = Node(Path.Combine(Date15, "FLAT"), other);
+        other.AddChild(borrowed);
+        other.SetChildren([new SubfolderLevel(new FolderLevel(Path.Combine(Date15, "LIGHT"), 3, 0, [], [], 0), false)]);
+        Assert.Equal(["LIGHT", "FLAT"], other.Children.Select(c => c.FolderName));
+    }
+
+    [Fact]
+    public void AnEmptyListing_MakesALeaf_AndAChildAddedLater_ReopensIt()
+    {
+        var flats = Node(Flats);
+        flats.IsExpanded = true;
+        flats.SetChildren([]);
+
+        Assert.True(flats.IsLeaf);
+        Assert.False(flats.ShowsExpander);
+        Assert.False(flats.ShowsChildren);
+        Assert.Equal("", flats.ChildrenText);
+
+        var child = Node(Path.Combine(Flats, "old"), flats);
+        flats.AddChild(child);
+
+        Assert.False(flats.IsLeaf);
+        Assert.True(flats.ShowsExpander);
+        Assert.True(flats.ShowsChildren);
+
+        flats.RemoveChild(child);
+        Assert.Empty(flats.Children);
+        Assert.True(flats.IsLeaf);
+    }
+
+    [Fact]
+    public void HasTickedDescendant_FollowsTheTicksBeneath_AndRaisesTheAncestorsOpacity()
+    {
+        var cam = Node(FlatCam);
+        var flats = Node(Flats, cam);
+        cam.AddChild(flats);
+        cam.IsIncluded = false;
+        flats.IsIncluded = false;
+        Assert.False(cam.HasTickedDescendant);
+
+        var raised = new List<string?>();
+        cam.PropertyChanged += (_, e) => raised.Add(e.PropertyName);
+        flats.IsIncluded = true;
+
+        Assert.True(cam.HasTickedDescendant);
+        Assert.Contains(nameof(FolderNodeViewModel.RowOpacity), raised);
+        Assert.Equal([flats], cam.Descendants());
     }
 }
