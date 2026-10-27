@@ -919,4 +919,18 @@ public class FolderLevelsTests
         }
         return dir?.FullName ?? throw new DirectoryNotFoundException("GalactiLog.sln not found above test output directory.");
     }
+
+    [Fact]
+    public void Covers_IsTrueUnderASource_OutsideItsExcludedDirectories()
+    {
+        const string date = @"W:\Astro\Incoming\2026\Date_2026-10-18";
+        const string flat = date + @"\FLAT";
+        var source = new ChosenLevel(new DateOnly(2026, 10, 18), new FolderLevel(date, 2, 3, [], [], 3_000), [new FolderLevel(flat, 3, 0, [], [], 0)]);
+
+        Assert.True(FolderLevels.Covers([source], date + @"\LIGHT\ZWO ASI533MM Pro\Target_Pleiades\Angle_45.18\L1.fits"));
+        Assert.True(FolderLevels.Covers([source], date));
+        Assert.False(FolderLevels.Covers([source], flat + @"\ZWO ASI533MM Pro\Angle_45.18\f1.fits"));
+        Assert.False(FolderLevels.Covers([source], @"W:\Astro\Incoming\2026\Date_2026-10-15\FLAT\f.fits"));
+        Assert.False(FolderLevels.Covers([], date));
+    }
 }

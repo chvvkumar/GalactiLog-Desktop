@@ -74,6 +74,18 @@ public static class CalibrationScan
             .Select(f => f.Frame)
             .Where(f => CalibrationTypes.Contains(f.Type))];
 
+    /// <summary>The calibration frames the lights copy must skip in rows it copies in place over
+    /// several sources: the unselected frames of every ticked row whose folder
+    /// <see cref="FolderLevels.Covers"/> says is copied, none when the row selects nothing (which
+    /// copies them all). An unticked row contributes nothing: under the tree model it is never
+    /// covered.</summary>
+    public static IReadOnlyList<ScannedFrame> InPlaceExcludes(
+        IReadOnlyList<ChosenLevel> sources, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows)
+        => [.. rows.Where(r => r.Ticked && r.Row.SelectedCount > 0 && FolderLevels.Covers(sources, r.Row.Folder))
+            .SelectMany(r => r.Row.Frames.Where(f => !f.Selected))
+            .Select(f => f.Frame)
+            .Where(f => CalibrationTypes.Contains(f.Type))];
+
     /// <summary>Rows strictly under the chosen level: the edge rule's directory-exclude list.</summary>
     public static IReadOnlyList<FolderLevel> OwnedFolders(string chosenLevelPath, IReadOnlyList<CalibrationRow> rows) =>
         rows.Where(r => PathConfinement.IsUnderOrEqual(chosenLevelPath, r.Folder)
@@ -86,17 +98,22 @@ public static class CalibrationScan
         string chosenLevelPath, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
         IReadOnlyList<ScannedFrame> allFrames, IReadOnlyList<string> skippedFolders)
     {
+        // A LIGHT the caller does not know as catalogued is uncatalogued, and the lights
+        // operation copies it like any other file.
+        var other = allFrames
+            .Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
+                        && PathConfinement.IsUnderOrEqual(chosenLevelPath, f.FilePath)
+                        && !skippedFolders.Any(s => PathConfinement.IsUnderOrEqual(s, f.FilePath)))
+            .ToList();
+        return Tally(rows, other);
+    }
+
+    private static CalibrationTotals Tally(IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyList<ScannedFrame> other)
+    {
         var counted = rows.Where(r => r.Ticked)
             .SelectMany(r => r.Row.SelectedCount > 0 ? r.Row.Frames.Where(f => f.Selected) : r.Row.Frames)
             .Select(f => f.Frame)
             .Where(f => f.Type != CalibrationType.Light && f.Type != CalibrationType.Other)
-            .ToList();
-        var other = allFrames
-            // A LIGHT the caller does not know as catalogued is uncatalogued, and the lights
-            // operation copies it like any other file.
-            .Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
-                        && PathConfinement.IsUnderOrEqual(chosenLevelPath, f.FilePath)
-                        && !skippedFolders.Any(s => PathConfinement.IsUnderOrEqual(s, f.FilePath)))
             .ToList();
 
         (int, long) Sum(CalibrationType t) => (counted.Count(f => f.Type == t), counted.Where(f => f.Type == t).Sum(f => f.Size));
@@ -106,4 +123,14 @@ public static class CalibrationScan
         var (bc, bb) = Sum(CalibrationType.Bias);
         return new CalibrationTotals(fc, fb, dfc, dfb, dc, db, bc, bb, other.Count, other.Sum(f => f.Size));
     }
+
+    /// <summary>The totals over several sources: per type, the ticked rows' selected frames (all
+    /// their frames when none is selected), counted once; <c>Other</c> is every Other or Light
+    /// frame in <paramref name="allFrames"/> that <see cref="FolderLevels.Covers"/> says is
+    /// copied.</summary>
+    public static CalibrationTotals Totals(
+        IReadOnlyList<ChosenLevel> sources, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
+        IReadOnlyList<ScannedFrame> allFrames)
+        => Tally(rows, [.. allFrames.Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
+                                                && FolderLevels.Covers(sources, f.FilePath))]);
 }

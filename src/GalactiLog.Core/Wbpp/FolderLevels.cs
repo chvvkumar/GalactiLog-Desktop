@@ -485,13 +485,20 @@ public static class FolderLevels
             }
 
             under.AddRange(
-                excluded.Where(frame =>
-                    PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)
-                    && !(level.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath))));
+                excluded.Where(frame => Covers([level], frame.FilePath)));
         }
 
         return under;
     }
+
+    /// <summary>
+    /// True when some source's level contains or equals <paramref name="path"/> and none of that
+    /// source's skipped folders does. The one predicate the session, the in-place calibration
+    /// excludes and the calibration totals share for "the lights copy takes this path".
+    /// </summary>
+    public static bool Covers(IReadOnlyList<ChosenLevel> sources, string path)
+        => sources.Any(source => PathConfinement.IsUnderOrEqual(source.Level.Path, path)
+            && !(source.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, path)));
 
     /// <summary>
     /// One copy source per chosen level, in the order given; <paramref name="scanRoots"/>[i] is
@@ -582,9 +589,7 @@ public static class FolderLevels
 
         foreach (var frame in foreignExcluded)
         {
-            var counted = chosen.Any(level => PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)
-                && !(level.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath)));
-            if (counted)
+            if (Covers(chosen, frame.FilePath))
             {
                 size = frame.FileSize is long bytes && size is long running ? running - bytes : null;
             }
