@@ -823,11 +823,15 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>What the night's selected calibration and its uncatalogued files add to the copy.
     /// </summary>
-    public CalibrationTotals CalibrationTotals()
+    public CalibrationTotals CalibrationTotals() => CalibrationScan.Tally(CalibrationCounted());
+
+    /// <summary>The files <see cref="CalibrationTotals"/> counts, for a page that tallies several
+    /// nights at once and counts a folder they share once.</summary>
+    public IReadOnlyList<ScannedFrame> CalibrationCounted()
     {
         if (Match is null)
         {
-            return new CalibrationTotals(0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+            return [];
         }
 
         // The lights figure already counts catalogued files, so the scan's size-only light files
@@ -836,7 +840,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
         // light folder would be counted twice. A per-file catalogue lookup closes it.
         var known = new HashSet<string>(
             NightFrames.Concat(_foreign).Select(frame => frame.FilePath), StringComparer.OrdinalIgnoreCase);
-        return CalibrationScan.Totals(
+        return CalibrationScan.Counted(
             CopySources,
             TickedRows(),
             [.. ScannedFrames.Where(frame => !known.Contains(frame.FilePath))]);

@@ -29,29 +29,43 @@ public static class CalibrationScan
             .Select(f => f.Frame)
             .Where(f => CalibrationTypes.Contains(f.Type))];
 
-    private static CalibrationTotals Tally(IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows, IReadOnlyList<ScannedFrame> other)
-    {
-        var counted = rows.Where(r => r.Ticked)
-            .SelectMany(r => r.Row.SelectedCount > 0 ? r.Row.Frames.Where(f => f.Selected) : r.Row.Frames)
-            .Select(f => f.Frame)
-            .Where(f => f.Type != CalibrationType.Light && f.Type != CalibrationType.Other)
-            .ToList();
+    /// <summary>The files the totals count over several sources: per ticked row its selected
+    /// calibration frames (all of them when none is selected), then every Other or Light frame in
+    /// <paramref name="allFrames"/> that <see cref="FolderLevels.Covers"/> says is copied.
+    /// <see cref="Tally"/> sums them; a page hands it several nights' lists at once.</summary>
+    public static IReadOnlyList<ScannedFrame> Counted(
+        IReadOnlyList<ChosenLevel> sources, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
+        IReadOnlyList<ScannedFrame> allFrames)
+        =>
+        [
+            .. rows.Where(r => r.Ticked)
+                .SelectMany(r => r.Row.SelectedCount > 0 ? r.Row.Frames.Where(f => f.Selected) : r.Row.Frames)
+                .Select(f => f.Frame)
+                .Where(f => CalibrationTypes.Contains(f.Type)),
+            .. allFrames.Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
+                                    && FolderLevels.Covers(sources, f.FilePath)),
+        ];
 
-        (int, long) Sum(CalibrationType t) => (counted.Count(f => f.Type == t), counted.Where(f => f.Type == t).Sum(f => f.Size));
-        var (fc, fb) = Sum(CalibrationType.Flat);
-        var (dfc, dfb) = Sum(CalibrationType.DarkFlat);
-        var (dc, db) = Sum(CalibrationType.Dark);
-        var (bc, bb) = Sum(CalibrationType.Bias);
-        return new CalibrationTotals(fc, fb, dfc, dfb, dc, db, bc, bb, other.Count, other.Sum(f => f.Size));
+    /// <summary>The totals over <see cref="Counted"/> files, each file counted once by path
+    /// (ignoring case), so a folder two nights share is counted once: per calibration type, and
+    /// every Other or Light file as other.</summary>
+    public static CalibrationTotals Tally(IEnumerable<ScannedFrame> counted)
+    {
+        var files = counted.DistinctBy(f => f.FilePath, StringComparer.OrdinalIgnoreCase).ToList();
+        (int, long) Sum(Func<CalibrationType, bool> type)
+            => (files.Count(f => type(f.Type)), files.Where(f => type(f.Type)).Sum(f => f.Size));
+        var (fc, fb) = Sum(t => t == CalibrationType.Flat);
+        var (dfc, dfb) = Sum(t => t == CalibrationType.DarkFlat);
+        var (dc, db) = Sum(t => t == CalibrationType.Dark);
+        var (bc, bb) = Sum(t => t == CalibrationType.Bias);
+        var (oc, ob) = Sum(t => t is CalibrationType.Other or CalibrationType.Light);
+        return new CalibrationTotals(fc, fb, dfc, dfb, dc, db, bc, bb, oc, ob);
     }
 
-    /// <summary>The totals over several sources: per type, the ticked rows' selected frames (all
-    /// their frames when none is selected), counted once; <c>Other</c> is every Other or Light
-    /// frame in <paramref name="allFrames"/> that <see cref="FolderLevels.Covers"/> says is
-    /// copied.</summary>
+    /// <summary>The totals over several sources: <see cref="Tally"/> of <see cref="Counted"/>.
+    /// </summary>
     public static CalibrationTotals Totals(
         IReadOnlyList<ChosenLevel> sources, IReadOnlyList<(CalibrationRow Row, bool Ticked)> rows,
         IReadOnlyList<ScannedFrame> allFrames)
-        => Tally(rows, [.. allFrames.Where(f => f.Type is CalibrationType.Other or CalibrationType.Light
-                                                && FolderLevels.Covers(sources, f.FilePath))]);
+        => Tally(Counted(sources, rows, allFrames));
 }

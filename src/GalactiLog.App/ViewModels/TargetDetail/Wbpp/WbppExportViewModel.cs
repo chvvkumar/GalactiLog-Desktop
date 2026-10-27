@@ -919,18 +919,22 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             : "";
         var excludedByNight = ExcludedByNight();
         var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, excludedByNight);
-        var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded());
+        // The folder count is the plan's, after its dedupe, so the review step's Copy label and
+        // the footer name the same number.
+        var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded()) with { FolderCount = plan.Operations.Count };
         Totals = totals;
 
-        var calibration = Sessions.Select(session => session.CalibrationTotals()).ToList();
-        var flats = (Count: calibration.Sum(c => c.FlatCount), Bytes: calibration.Sum(c => c.FlatBytes));
-        var darkFlats = (Count: calibration.Sum(c => c.DarkFlatCount), Bytes: calibration.Sum(c => c.DarkFlatBytes));
-        var darks = (Count: calibration.Sum(c => c.DarkCount), Bytes: calibration.Sum(c => c.DarkBytes));
-        var bias = (Count: calibration.Sum(c => c.BiasCount), Bytes: calibration.Sum(c => c.BiasBytes));
-        var other = calibration.Sum(c => c.OtherBytes);
+        // One tally over every night's counted files, each file once, as the plan copies a folder
+        // two nights share once.
+        var calibration = CalibrationScan.Tally(Sessions.SelectMany(session => session.CalibrationCounted()));
+        var flats = (Count: calibration.FlatCount, Bytes: calibration.FlatBytes);
+        var darkFlats = (Count: calibration.DarkFlatCount, Bytes: calibration.DarkFlatBytes);
+        var darks = (Count: calibration.DarkCount, Bytes: calibration.DarkBytes);
+        var bias = (Count: calibration.BiasCount, Bytes: calibration.BiasBytes);
+        var other = calibration.OtherBytes;
         // Every file the copier will copy beyond the lights: calibration frames and uncatalogued
-        // files under the chosen folder, so the count agrees with the copier's.
-        var extraFiles = calibration.Sum(c => c.Count);
+        // files under the ticked folders, so the count agrees with the copier's.
+        var extraFiles = calibration.Count;
 
         FrameCountText = extraFiles == 0
             ? WbppPathText.Frames(totals.FrameCount)
@@ -940,7 +944,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         FolderCountText = plan.Operations.Count == 1
             ? "1 folder"
             : string.Create(CultureInfo.InvariantCulture, $"{plan.Operations.Count:N0} folders");
-        var size = totals.SizeBytes is long lights ? lights + calibration.Sum(c => c.Bytes) : (long?)null;
+        var size = totals.SizeBytes is long lights ? lights + calibration.Bytes : (long?)null;
         TotalSizeBytes = size;
         SizeText = WbppPathText.Bytes(size)
             + (Sessions.Any(session => session.IsScanning) ? ", sizing" : "");

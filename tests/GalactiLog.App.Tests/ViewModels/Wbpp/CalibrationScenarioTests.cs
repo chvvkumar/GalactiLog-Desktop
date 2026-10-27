@@ -638,6 +638,49 @@ public class CalibrationScenarioTests
     }
 
     [Fact]
+    public async Task TwoNightsSharingOneFlatsFolder_CountItOnce_AsTheCopyWritesIt()
+    {
+        using var t = new Tree();
+        var lights14 = t.P("T", "LIGHT", "2025-10-14");
+        var lights15 = t.P("T", "LIGHT", "2025-10-15");
+        var flats = t.P("T", "FLAT", "2025-10-15");
+        t.Light(N14, Path.Combine(lights14, "a.fits"), dateObs: "2025-10-15T03:00:00")
+            .Light(N, Path.Combine(lights15, "b.fits"))
+            .Cal(Path.Combine(flats, "f1.fits"), "FLAT")
+            .Cal(Path.Combine(flats, "f2.fits"), "FLAT");
+        using var h = t.Open(N14, N);
+        foreach (var session in h.Page.Sessions)
+        {
+            Scanned(session);
+        }
+
+        Until(() => !h.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        // Both nights tick the one flats folder, and each night's own line still counts it.
+        foreach (var session in h.Page.Sessions)
+        {
+            Assert.True(CalRow(session, flats).IsIncluded);
+            Assert.Equal(2, session.CalibrationTotals().FlatCount);
+        }
+
+        // The footer counts it once, and the review step's folder count is the plan's.
+        Assert.Equal("4 files", h.Page.FrameCountText);
+        Assert.Contains(", flats " + MetricText.Bytes(2 * 2880) + " (2)", h.Page.BreakdownText, StringComparison.Ordinal);
+        Assert.Equal("3 folders", h.Page.FolderCountText);
+        Assert.Equal(3, h.Page.Totals!.FolderCount);
+        var footerBytes = h.Page.TotalSizeBytes;
+        Assert.NotNull(footerBytes);
+
+        Stage(h);
+        var result = await Copy(h);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Empty(result.Failed);
+        Assert.Equal(4, result.Copied);
+        Assert.Equal(2, Staged(h).Count(p => p.EndsWith(".fits", StringComparison.Ordinal) && p.Contains("FLAT", StringComparison.Ordinal)));
+        Assert.Equal(footerBytes, result.BytesCopied);
+    }
+
+    [Fact]
     public async Task AWbppOutputFolderInsideTheNight_SuppliesNoFlats_AndIsNotCounted()
     {
         using var t = new Tree();

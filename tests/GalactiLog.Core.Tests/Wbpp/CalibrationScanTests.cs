@@ -70,5 +70,9 @@ public class CalibrationScanTests
         Assert.Equal(0, totals.DarkFlatCount);
         Assert.Equal(2, totals.OtherCount);
         Assert.Equal(59, totals.OtherBytes);
+
+        // Two nights handing the same files to one tally count them once.
+        var counted = CalibrationScan.Counted([Source(Date18, Flats96), Source(Borrowed)], [(flats, true), (rejected, false), (borrowed, true)], all);
+        Assert.Equal(totals, CalibrationScan.Tally([.. counted, .. counted.Select(f => f with { FilePath = f.FilePath.ToUpperInvariant() })]));
     }
 }
