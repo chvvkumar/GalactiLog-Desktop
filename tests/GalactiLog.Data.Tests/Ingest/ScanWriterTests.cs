@@ -30,7 +30,9 @@ public class ScanWriterTests : IDisposable
         _output = output;
         _db = TestDatabaseFactory.CreateSeededDatabase();
         _catalogsDirectory = StaticCatalogLoader.ResolveCatalogsDirectory();
-        _cache = new CatalogCacheRepository(_db.ConnectionString);
+        // The retry backoff (1 s then 2 s per source) returns at once: the circuit breaker cases
+        // assert the call count, not the wall clock, and CatalogCacheRepositoryTests owns the schedule.
+        _cache = new CatalogCacheRepository(_db.ConnectionString, wait: (_, _) => { });
     }
 
     public void Dispose() => _db.Dispose();
