@@ -304,9 +304,11 @@ public class ClearLogTests
     /// clearing <c>IsLoading</c>. That is a property of this harness under a real dispatcher rather
     /// than of the page, which is why the wait is here and not in the fixture.
     /// </remarks>
-    private static async Task PumpUntil(Func<bool> reached, string what, OffThreadWrites writes)
+    private static async Task PumpUntil(LogViewerViewModel page, Func<bool> reached, string what, OffThreadWrites writes)
     {
-        for (var round = 0; round < 400; round++)
+        // Each round either drains a queued post or joins the read it started, so the bound counts
+        // steps of progress rather than wall-clock time.
+        for (var round = 0; round < 50; round++)
         {
             Dispatcher.UIThread.RunJobs();
             if (reached())
@@ -315,7 +317,14 @@ public class ClearLogTests
                 return;
             }
 
-            await Task.Delay(5);
+            if (page.PendingLoad is { IsCompleted: false } load)
+            {
+                await Task.WhenAny(load);
+            }
+            else
+            {
+                await Task.Yield();
+            }
         }
 
         Assert.Fail($"Timed out waiting for {what}. Off-dispatcher writes seen: {writes}.");
@@ -333,6 +342,7 @@ public class ClearLogTests
         var writes = new OffThreadWrites();
         var page = fixture.Build(post: action => Dispatcher.UIThread.Post(action));
         await PumpUntil(
+            page,
             () => page.PendingLoad is { IsCompleted: true } && !page.IsLoading,
             "the constructor's own first load to publish",
             writes);
@@ -342,7 +352,7 @@ public class ClearLogTests
         writes.Watch(page);
 
         await page.ClearLogCommand.ExecuteAsync(null);
-        await PumpUntil(() => !page.IsLoading, "the reload after Clear log to publish", writes);
+        await PumpUntil(page, () => !page.IsLoading, "the reload after Clear log to publish", writes);
 
         Assert.True(writes.Count == 0, $"PropertyChanged arrived off the dispatcher: {writes}.");
         Assert.False(page.IsLoading);
@@ -360,6 +370,7 @@ public class ClearLogTests
         var writes = new OffThreadWrites();
         var page = fixture.Build(post: action => Dispatcher.UIThread.Post(action));
         await PumpUntil(
+            page,
             () => page.PendingLoad is { IsCompleted: true } && !page.IsLoading,
             "the constructor's own first load to publish",
             writes);
@@ -369,7 +380,7 @@ public class ClearLogTests
         try
         {
             await page.SaveLogAsCommand.ExecuteAsync(null);
-            await PumpUntil(() => !page.IsLoading, "the page to be idle after Save log as", writes);
+            await PumpUntil(page, () => !page.IsLoading, "the page to be idle after Save log as", writes);
 
             Assert.True(writes.Count == 0, $"PropertyChanged arrived off the dispatcher: {writes}.");
             Assert.False(page.IsLoading);

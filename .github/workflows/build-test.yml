@@ -20,6 +20,10 @@ concurrency:
 
 jobs:
   build-test:
+    # A PR from snd or dev has a head that release.yml already tested when it was pushed, and the
+    # branch policy admits no other source into dev or main. A skipped job reports success, so a
+    # required check is still satisfied. PRs from any other branch still run the suite.
+    if: github.head_ref != 'snd' && github.head_ref != 'dev'
     runs-on: [self-hosted, Windows, X64]
     # cmd, not powershell: the runner account's execution policy is Restricted, so a powershell
     # step cannot load the script GitHub writes for it. cmd needs no Git Bash path step.

@@ -167,6 +167,7 @@ public class DiagnosticsQueryTests
     public void Database_WalBytes_IsZero_WhenNoWalFileExists()
     {
         using var database = TestDatabaseFactory.CreateMigratedDatabase();
+        database.CloseHeldConnection();
 
         // Checked BEFORE the read, not after. Pooling is off for a test database, so the
         // migration's connection released its handle and SQLite removed the WAL; the diagnostics
@@ -582,6 +583,7 @@ public class DiagnosticsQueryTests
         using var database = TestDatabaseFactory.CreateMigratedDatabase();
         var query = Query(database);
         var path = DatabasePaths.DataSourceOf(database.ConnectionString);
+        database.CloseHeldConnection();
 
         // The database is gone: an unplugged drive, or a user who deleted it between the window
         // opening and the Diagnostics page refreshing.

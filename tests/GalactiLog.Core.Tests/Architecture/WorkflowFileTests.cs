@@ -44,6 +44,17 @@ public class WorkflowFileTests
     }
 
     [Fact]
+    public void BuildTest_SkipsPullRequestsFromSndAndDev_AtJobLevel()
+    {
+        // CI audit 2026-10-27: a snd or dev head was already tested by release.yml on push, so the
+        // PR run was the second suite run of one SHA on the one runner. Job level, not a workflow
+        // trigger filter: a skipped job reports success, a workflow that never starts leaves a
+        // required check pending.
+        var content = ReadNormalized(BuildTestFile);
+        Assert.Contains("\n if: github.head_ref != 'snd' && github.head_ref != 'dev'\n runs-on:", content);
+    }
+
+    [Fact]
     public void BuildTest_IgnoresMarkdownDocsAndLicensePaths()
     {
         var content = ReadNormalized(BuildTestFile);

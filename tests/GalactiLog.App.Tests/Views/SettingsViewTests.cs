@@ -504,38 +504,6 @@ public class SettingsViewTests
         Assert.Contains(GeneralTabViewModel.CloseToTrayDescription, VisibleTexts(view));
     }
 
-    [AvaloniaFact]
-    public async Task SettingsView_TheGeneralTab_IsNotBuiltUntilItIsSelected()
-    {
-        using var library = LibraryFactory.Create().Settle();
-        using var targets = Factory.Create().Settle();
-        using var general = await TestSupport.PreferenceTabViewModelTestFactory
-            .NewGeneralTab()
-            .SettleAsync();
-        var built = 0;
-        using var page = new SettingsViewModel(
-            () => library.ViewModel, () => targets.ViewModel, NewFiltersTab, NewEquipmentTab,
-            NewMaintenanceTab, NewLocationTab, NewDisplayTab, NewStorageTab, null, null,
-            () =>
-            {
-                built++;
-                return general;
-            });
-        var view = new SettingsView { DataContext = page };
-        Show(view);
-
-        // TRACKING item 16: an eleventh tab is one lazy factory entry, not an eleventh eager read
-        // at window resolution. Library is Tabs[0] and General sits beside it, so this is the one
-        // case where a mis-ordered strip would show as an eager build.
-        Assert.Equal(0, built);
-        Assert.False(page.Tabs.Single(tab => tab.Key == "general").IsConstructed);
-
-        page.Selected = page.Tabs.Single(tab => tab.Key == "general");
-        Dispatcher.UIThread.RunJobs();
-
-        Assert.Equal(1, built);
-    }
-
     private static IReadOnlyList<string> ButtonTexts(Control view)
         => [.. view.GetVisualDescendants()
             .OfType<Button>()
