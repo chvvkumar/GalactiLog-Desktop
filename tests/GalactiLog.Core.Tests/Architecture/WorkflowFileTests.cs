@@ -44,6 +44,17 @@ public class WorkflowFileTests
     }
 
     [Fact]
+    public void BuildTest_SkipsPullRequestsFromSndAndDev_AtJobLevel()
+    {
+        // CI audit 2026-10-27: a snd or dev head was already tested by release.yml on push, so the
+        // PR run was the second suite run of one SHA on the one runner. Job level, not a workflow
+        // trigger filter: a skipped job reports success, a workflow that never starts leaves a
+        // required check pending.
+        var content = ReadNormalized(BuildTestFile);
+        Assert.Contains("\n if: github.head_ref != 'snd' && github.head_ref != 'dev'\n runs-on:", content);
+    }
+
+    [Fact]
     public void BuildTest_IgnoresMarkdownDocsAndLicensePaths()
     {
         var content = ReadNormalized(BuildTestFile);
@@ -100,9 +111,17 @@ public class WorkflowFileTests
     public void BuildTest_TestStepHasNoTrxLoggerAndNoArtifactUpload()
     {
         // CI review 2026-09-25 item 9: nothing read the trx, and a failed test's name is already
-        // in the job log. The test line is asserted to its end so a re-added logger flag fails.
+        // in the job log. The whole test line is checked so a re-added logger flag fails; the
+        // blame-hang guard is required, so a hung test host fails the job instead of holding the
+        // runner.
         var content = ReadNormalized(BuildTestFile);
-        Assert.Contains("- run: dotnet test --no-build -c Release\n", content);
+        var testLine = Assert.Single(
+            content.Split('\n').Select(l => l.Trim()),
+            l => l.StartsWith("- run: dotnet test", StringComparison.Ordinal));
+        Assert.StartsWith("- run: dotnet test --no-build -c Release", testLine);
+        Assert.Contains("--blame-hang-timeout", testLine);
+        Assert.DoesNotContain("--logger", testLine);
+        Assert.DoesNotContain("trx", testLine);
         Assert.DoesNotContain("--logger trx", content);
         Assert.DoesNotContain("actions/upload-artifact", content);
     }
@@ -191,6 +210,18 @@ public class WorkflowFileTests
         Assert.Contains("vpk download github", block);
         Assert.Contains("--channel \"${{ steps.version.outputs.channel }}\"", block);
         Assert.Contains("$PRE_FLAG", block);
+    }
+
+    [Fact]
+    public void Release_TestStepCarriesTheBlameHangGuard()
+    {
+        // The same guard as build-test.yml: a hung test host fails the release job after the
+        // timeout instead of holding the runner.
+        var content = ReadNormalized(ReleaseFile);
+        var testLine = Assert.Single(
+            content.Split('\n').Select(l => l.Trim()),
+            l => l.StartsWith("run: dotnet test", StringComparison.Ordinal));
+        Assert.Contains("--blame-hang-timeout", testLine);
     }
 
     [Fact]

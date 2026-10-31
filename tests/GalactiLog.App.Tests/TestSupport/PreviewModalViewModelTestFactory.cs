@@ -178,7 +178,13 @@ internal static class PreviewModalViewModelTestFactory
                 Shell,
                 getHeaders: id =>
                 {
-                    HeaderQueries.Add(id);
+                    // RawHeaderPanelViewModel.Load calls this on a pool thread, so two panels in
+                    // flight write here concurrently. List.Add is not thread-safe.
+                    lock (HeaderQueries)
+                    {
+                        HeaderQueries.Add(id);
+                    }
+
                     return headers?.Invoke(id);
                 },
                 isWindows: isWindows is null ? null : () => isWindows.Value,

@@ -11,6 +11,7 @@ using Avalonia.VisualTree;
 using GalactiLog.App.Controls;
 using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.App.Tests.ViewModels.Wbpp;
+using GalactiLog.App.ViewModels.TargetDetail;
 using GalactiLog.App.ViewModels.TargetDetail.Wbpp;
 using GalactiLog.App.Views;
 using GalactiLog.App.Views.TargetDetail.Wbpp;
@@ -41,10 +42,24 @@ public class WbppExportWindowTests
         SourceScan.SrcRoot(), "GalactiLog.App", "Views", "TargetDetail", "Wbpp", "WbppExportWindow.axaml"));
 
     private static ExportHarness Harness(Library? library = null, bool installPickers = true, bool parked = false,
-        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
-        => ExportHarness.Create(
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null, CalibrationWalk.Walker? walk = null)
+        => OnUi(ExportHarness.Create(
             library ?? new Library().Frame(N1, Ha("a.fits")), [N1], installPickers: installPickers, parked: parked,
-            listSubfolders: listSubfolders);
+            listSubfolders: listSubfolders, walk: walk, post: UiThreadPost), parked);
+
+    // A window binds the page, so every post lands on the UI thread, pumped by RunJobs and Until,
+    // rather than writing a bound view-model from a pool thread.
+    private static readonly Action<Action> UiThreadPost = action => Dispatcher.UIThread.Post(action);
+
+    private static ExportHarness OnUi(ExportHarness harness, bool parked = false)
+    {
+        if (!parked)
+        {
+            Dispatcher.UIThread.RunJobs();   // the load's posted publish
+        }
+
+        return harness;
+    }
 
     // A step template's elements sit in the template's own scope under StepHost, so they are
     // found in the visual tree, the way SetupWizardWindowTests finds them.
@@ -106,47 +121,37 @@ public class WbppExportWindowTests
             _ => { },
             _ => new MemoryStream());
 
-    // A failure here is the tree drawn without its two kinds of row: radios on the chain, ticks
-    // only under the chosen row, and the session row and summary not following a tick.
+    // A failure here is the tree drawn without a tick on every row, or a tick on a shallower row
+    // not cascading to the rows beneath it, or the session row and summary not following a tick.
     [AvaloniaFact]
-    public void TheTreeIsOpenOnLoad_ChainRowsHaveRadios_DiskRowsHaveTicks_AndAPickRezones()
+    public void TheTreeIsOpenOnLoad_EveryRowCarriesATick_AndTickingAShallowerRowCascades()
     {
         var date = Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        var harness = Harness(listSubfolders: folder =>
+        using var harness = Harness(listSubfolders: folder =>
             string.Equals(folder, date, StringComparison.OrdinalIgnoreCase) ? [Path.Combine(date, "FLAT"), Path.Combine(date, "Ha")] : []);
         var wizard = Wizard(harness);
         var window = Show(wizard);
         var session = harness.Page.Sessions[0];
-        SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10));
-        Dispatcher.UIThread.RunJobs();
+        Until(() => session.Rows.All(r => !r.IsListing));
 
         Assert.Equal("Collapse", InStep<Button>(window, "TreeToggleButton").Content);
-        var radios = window.GetVisualDescendants().OfType<RadioButton>().Where(r => r.Name == "ChainRadio" && r.IsEffectivelyVisible).ToList();
-        Assert.Equal(3, radios.Count);   // M31, date, Ha
-
-        // The default pick is Ha, the deepest folder holding the frame: nothing sits under it, and
-        // FLAT, a disk row outside it, is not drawn, so no row carries a tick.
+        Assert.Empty(window.GetVisualDescendants().OfType<RadioButton>());
+        var ticks = Visible<CheckBox>(window, "TickBox");
+        Assert.Equal(3, ticks.Count);   // M31, date, Ha: the date row is path and does not list
         Assert.Equal(2, session.ChosenIndex);
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
+        Assert.Equal([false, false, true], ticks.Select(t => t.IsChecked == true));
 
-        session.Rows[1].IsChosen = true;   // the date row
-        Assert.True(SpinWait.SpinUntil(() => session.Rows.All(r => !r.IsListing), TimeSpan.FromSeconds(10)));
-        Dispatcher.UIThread.RunJobs();
-        var ticks = window.GetVisualDescendants().OfType<CheckBox>().Where(c => c.Name == "TickBox" && c.IsEffectivelyVisible).ToList();
-        Assert.Equal(2, ticks.Count);    // FLAT and Ha, both under the chosen date row
-        Assert.All(ticks, t => Assert.True(t.IsChecked));
-        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ChosenPill" && t.IsEffectivelyVisible);
+        session.Rows[1].IsIncluded = true;   // the date row, which lists now it is copied
+        Until(() => session.Rows[1].Children.Count == 2 && !session.Rows[1].IsListing);
+        Assert.Equal(["FLAT", "Ha"], session.Rows[1].Children.Select(c => c.FolderName));
+        Assert.Equal([false, true, true, true], Visible<CheckBox>(window, "TickBox").Select(t => t.IsChecked == true));
 
-        session.Rows.Single(r => r.FolderName == "Ha").IsChosen = true;
-        Dispatcher.UIThread.RunJobs();
-        Assert.DoesNotContain(window.GetVisualDescendants().OfType<CheckBox>(), c => c.Name == "TickBox" && c.IsEffectivelyVisible);
-
-        session.ChosenIndex = 1;   // back to the date row
-        Dispatcher.UIThread.RunJobs();
         session.Rows[1].Children.Single(c => c.FolderName == "FLAT").IsIncluded = false;
         Dispatcher.UIThread.RunJobs();
         Assert.Equal("1 folder skipped", InStep<TextBlock>(window, "SkippedChip").Text);
         Assert.Contains("after skipping 1 folder", InStep<TextBlock>(window, "NightSummary").Text, StringComparison.Ordinal);
+        Assert.Single(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == FolderNodeViewModel.SkippedText && t.IsEffectivelyVisible);
+        harness.Dispose();
         window.Close();
     }
 
@@ -166,6 +171,7 @@ public class WbppExportWindowTests
         Assert.IsAssignableFrom<ModalPageWindow<WbppExportWizardViewModel>>(window);
         Assert.Equal(WindowStartupLocation.CenterOwner, window.WindowStartupLocation);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -193,6 +199,7 @@ public class WbppExportWindowTests
         Assert.NotNull(InStep<ContentControl>(window, "QualityPanelRegion"));
         Assert.Null(InStepOrNull<ItemsControl>(window, "SessionRows"));
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -208,8 +215,9 @@ public class WbppExportWindowTests
         Assert.Equal("", InStep<TextBlock>(window, "FooterFrameCount").Text);
         Assert.False(window.Named<Button>("NextButton").IsEffectivelyEnabled);
 
-        // Not released: the harness posts inline, so a release would publish off the UI thread. The
-        // settled state is pinned by WbppExportWizardTests and by the other cases here.
+        // Not released: the case pins the loading state only. The settled state is pinned by
+        // WbppExportWizardTests and by the other cases here.
+        harness.Dispose();
         window.Close();
     }
 
@@ -228,6 +236,7 @@ public class WbppExportWindowTests
         Assert.True(badge.IsVisible);
         Assert.Equal("+1 other night", badge.Text);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -250,6 +259,7 @@ public class WbppExportWindowTests
         var buttonLeft = toggle.TranslatePoint(default, window)!.Value.X;
         Assert.True(pathRight <= buttonLeft + 1, "the chosen path overruns the tree toggle button");
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -273,6 +283,7 @@ public class WbppExportWindowTests
         Assert.True(InStep<Button>(window, "StagingPickerButton").IsEffectivelyEnabled);
         Assert.True(InStep<CheckBox>(window, "SubfolderCheckBox").IsChecked);
 
+        harness.Dispose();
         window.Close();
         Dispatcher.UIThread.RunJobs();
 
@@ -300,6 +311,7 @@ public class WbppExportWindowTests
         Assert.False(window.Named<Button>("NextButton").IsEffectivelyEnabled);
         Assert.Equal(ReviewStep.FileSafetyText, InStep<TextBlock>(window, "FileSafetyText").Text);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -318,6 +330,7 @@ public class WbppExportWindowTests
 
         Assert.True(closed);
         Assert.False(window.IsVisible);
+        harness.Dispose();
     }
 
     // Blocks a copier pool thread until the case opens the gate; outside any test body, because
@@ -352,6 +365,7 @@ public class WbppExportWindowTests
         Assert.False(window.IsVisible);
         gate.Set();
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        harness.Dispose();
     }
 
     // A failure here is a result step that traps the user: committed and idle, Escape closes.
@@ -376,6 +390,7 @@ public class WbppExportWindowTests
 
         Assert.True(closed);
         Assert.False(window.IsVisible);
+        harness.Dispose();
     }
 
     // A failure here is a title bar that traps the user behind a running copy, or an idle wizard.
@@ -396,6 +411,7 @@ public class WbppExportWindowTests
         Assert.False(refusedDuringCopy);
         Assert.False(Refuses(window, WindowCloseReason.WindowClosing));
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -421,6 +437,7 @@ public class WbppExportWindowTests
 
         picked.SetResult(null);
         await commit.WaitAsync(TimeSpan.FromSeconds(30));
+        harness.Dispose();
         window.Close();
     }
 
@@ -438,6 +455,7 @@ public class WbppExportWindowTests
         Assert.Equal(ReviewStep.BackgroundCopyText, hint.Text);
         Assert.Contains(InStep<ProgressBar>(window, "CopyProgressBar"), ((Panel)hint.Parent!).Children);
 
+        harness.Dispose();
         window.Close();
     }
 
@@ -470,5 +488,245 @@ public class WbppExportWindowTests
         var report = WbppExportWindow.SaveOptions("copy_report_M_31.txt", null);
         Assert.Equal("txt", report.DefaultExtension);
         Assert.Equal(["*.txt"], report.FileTypeChoices![0].Patterns!);
+    }
+
+    // The night folder's calibration: a matched flat folder and one whose rotation differs.
+    private static string NightDir => Path.Combine(Library.Root, "M31", N1.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
+
+    private static FakeDisk CalibrationDisk() => new FakeDisk()
+        .Add(CalibrationFixtures.F(Ha("a.fits"), CalibrationType.Light, CalibrationFixtures.K(), night: N1, size: 1_000))
+        .Add(CalibrationFixtures.F(Path.Combine(NightDir, "FLAT", "f1.fits"), CalibrationType.Flat, CalibrationFixtures.K(), night: N1))
+        .Add(CalibrationFixtures.F(Path.Combine(NightDir, "FLAT139", "g1.fits"), CalibrationType.Flat,
+            CalibrationFixtures.K(rot: 139.07), night: N1));
+
+    private static void Until(Func<bool> condition)
+        => Assert.True(SpinWait.SpinUntil(
+            () =>
+            {
+                Dispatcher.UIThread.RunJobs();
+                return condition();
+            },
+            TimeSpan.FromSeconds(10)));
+
+    private static List<T> Visible<T>(Control window, string name)
+        where T : Control
+        => [.. window.GetVisualDescendants().OfType<T>().Where(c => c.Name == name && c.IsEffectivelyVisible)];
+
+    // A failure here is the strip not drawn from the session's scan state, or a strip shown on a
+    // page that has no walker.
+    [AvaloniaFact]
+    public void TheStrip_RendersTheScanState_AndHidesWithoutAWalker()
+    {
+        using (var bare = Harness())
+        {
+            using var bareWizard = Wizard(bare);
+            var bareWindow = Show(bareWizard);
+            Assert.Empty(Visible<StackPanel>(bareWindow, "CalibrationBlock"));
+            bare.Dispose();
+            bareWindow.Close();
+        }
+
+        using var harness = Harness(walk: CalibrationDisk().Walker);
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var session = harness.Page.Sessions[0];
+        Until(() => session.ScanState == CalibrationScanState.Done && session.CalibrationRows.Count == 2);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Single(Visible<StackPanel>(window, "CalibrationBlock"));
+        var sentence = Visible<TextBlock>(window, "ScanSentenceLine").Single();
+        Assert.Equal(session.ScanSentence, sentence.Text);
+        Assert.StartsWith("Scanned ", sentence.Text, StringComparison.Ordinal);
+        Assert.Equal(session.CalibrationTally, Visible<TextBlock>(window, "CalibrationTally").Single().Text);
+        Assert.Single(Visible<ItemsControl>(window, "LightSetLines"));
+        Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == session.LightSetLines[0] && t.IsEffectivelyVisible);
+        var rescan = Visible<Button>(window, "RescanButton").Single();
+        Assert.True(rescan.IsEffectivelyEnabled);
+        Assert.Equal("Rescan", rescan.Content);
+        Assert.Empty(Visible<Button>(window, "LookHigherButton"));
+        Assert.Empty(Visible<TextBlock>(window, "NoCalibrationLine"));
+
+        // It collapses with the tree.
+        session.IsExpanded = false;
+        Dispatcher.UIThread.RunJobs();
+        Assert.Empty(Visible<StackPanel>(window, "CalibrationBlock"));
+
+        harness.Dispose();
+        window.Close();
+    }
+
+    // A failure here is a footer that hides the scan's state: no sizing marker while the walk runs,
+    // or no breakdown once it lands.
+    [AvaloniaFact]
+    public void Footer_ShowsBreakdown_AndSizingWhileScanning()
+    {
+        var disk = CalibrationDisk();
+        disk.Gate = new ManualResetEventSlim(false);
+        try
+        {
+            using var harness = Harness(walk: disk.Walker);
+            using var wizard = Wizard(harness);
+            var window = Show(wizard);
+            var session = harness.Page.Sessions[0];
+
+            Assert.Equal(CalibrationScanState.Scanning, session.ScanState);
+            Assert.EndsWith(", sizing", InStep<TextBlock>(window, "FooterSize").Text, StringComparison.Ordinal);
+            Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "HeaderScanLine").Single().Text);
+
+            disk.Gate.Set();
+            Until(() => session.ScanState == CalibrationScanState.Done
+                && !harness.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Equal(harness.Page.SizeText, InStep<TextBlock>(window, "FooterSize").Text);
+            var breakdown = Visible<TextBlock>(window, "FooterBreakdown").Single();
+            Assert.Equal(harness.Page.BreakdownText, breakdown.Text);
+            Assert.StartsWith("lights ", breakdown.Text, StringComparison.Ordinal);
+
+            harness.Dispose();
+            window.Close();
+        }
+        finally
+        {
+            disk.Gate.Set();
+        }
+    }
+
+    // A failure here is a running scan with nothing moving beside the night's header, a strip that
+    // repeats the line a screen lower, or a Rescan button that reads as pressable mid-scan.
+    [AvaloniaFact]
+    public void NightHeader_ShowsTheRunningScan_AndDropsItWhenTheScanCompletes()
+    {
+        var disk = CalibrationDisk();
+        disk.Gate = new ManualResetEventSlim(false);
+        try
+        {
+            using var harness = Harness(walk: disk.Walker);
+            using var wizard = Wizard(harness);
+            var window = Show(wizard);
+            var session = harness.Page.Sessions[0];
+
+            Assert.Equal(CalibrationScanState.Scanning, session.ScanState);
+            var line = Visible<TextBlock>(window, "HeaderScanLine").Single();
+            Assert.Equal(session.ProgressText, line.Text);
+            Assert.StartsWith("Scanning files: reading ", line.Text, StringComparison.Ordinal);
+            var bar = Visible<ProgressBar>(window, "HeaderScanBar").Single();
+            Assert.True(bar.IsIndeterminate);
+            Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ScanProgressLine");
+            var rescan = Visible<Button>(window, "RescanButton").Single();
+            Assert.False(rescan.IsEffectivelyEnabled);
+            Assert.Equal("Scanning...", rescan.Content);
+
+            disk.Gate.Set();
+            Until(() => session.ScanState == CalibrationScanState.Done);
+            Dispatcher.UIThread.RunJobs();
+
+            Assert.Empty(Visible<TextBlock>(window, "HeaderScanLine"));
+            Assert.Empty(Visible<ProgressBar>(window, "HeaderScanBar"));
+            Assert.False(bar.IsIndeterminate);
+            Assert.True(rescan.IsEffectivelyEnabled);
+            Assert.Equal("Rescan", rescan.Content);
+
+            harness.Dispose();
+            window.Close();
+        }
+        finally
+        {
+            disk.Gate.Set();
+        }
+    }
+
+    // A failure here is a review step that states the size without saying what it is made of.
+    [AvaloniaFact]
+    public async Task Review_ShowsBreakdown()
+    {
+        using var harness = Harness(walk: CalibrationDisk().Walker);
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var session = harness.Page.Sessions[0];
+        Until(() => session.ScanState == CalibrationScanState.Done
+            && !harness.Page.SizeText.EndsWith(", sizing", StringComparison.Ordinal));
+
+        NoDisk(harness);
+        await ToReviewAsync(harness, wizard);
+
+        var breakdown = InStep<TextBlock>(window, "ReviewBreakdown");
+        Assert.True(breakdown.IsEffectivelyVisible);
+        Assert.Equal(harness.Page.BreakdownText, breakdown.Text);
+        Assert.StartsWith("lights ", breakdown.Text, StringComparison.Ordinal);
+
+        harness.Dispose();
+        window.Close();
+    }
+
+    // A failure here is a calibration folder drawn as a plain row: no figures, no note, or the
+    // expander shown on a leaf.
+    [AvaloniaFact]
+    public void CalibrationRows_AreDrawnInTheTree_WithTicksFiguresNotesAndNoExpanderOnLeaves()
+    {
+        using var harness = OnUi(ExportHarness.Create(Pleiades.Catalogue(), [Pleiades.N18], walk: Pleiades.Disk().Walker, post: UiThreadPost));
+        using var wizard = Wizard(harness);
+        var window = Show(wizard);
+        var session = harness.Page.Sessions[0];
+        Until(() => session.ScanState == CalibrationScanState.Done && session.CalibrationRows.Count == 2);
+        Dispatcher.UIThread.RunJobs();
+
+        Assert.Equal(10, Visible<CheckBox>(window, "TickBox").Count);   // six chain rows, FLAT, its camera row, two angle rows
+        Assert.Equal(["2 of 2 files, " + MetricText.Bytes(200), "1 file, " + MetricText.Bytes(100)],
+            Visible<TextBlock>(window, "CalibrationText").Where(t => t.DataContext is FolderNodeViewModel { Row: not null }).Select(t => t.Text));
+        Assert.Equal(["same night", "rotation 96.26"], Visible<TextBlock>(window, "NoteTag").Select(t => t.Text));
+        Assert.Empty(Visible<TextBlock>(window, "RowTag"));
+        Assert.Equal("1 of 2 calibration folders ticked", Visible<TextBlock>(window, "CalibrationTally").Single().Text);
+        Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == "Calibration found");
+        Assert.DoesNotContain(Visible<Button>(window, "ExpandButton"), b => b.DataContext is FolderNodeViewModel { IsLeaf: true });
+        Assert.Contains(Visible<Button>(window, "ExpandButton"), b => b.DataContext is FolderNodeViewModel { FolderName: "FLAT" });
+
+        // Two way: the box writes the row's tick, and the tally follows.
+        var rejected = Visible<CheckBox>(window, "TickBox").Single(c => c.DataContext is FolderNodeViewModel { FolderName: "Angle_96.26" });
+        rejected.IsChecked = true;
+        Dispatcher.UIThread.RunJobs();
+        Assert.True(session.CalibrationRows.Single(r => r.FolderName == "Angle_96.26").IsIncluded);
+        Assert.Equal("2 of 2 calibration folders ticked", Visible<TextBlock>(window, "CalibrationTally").Single().Text);
+
+        harness.Dispose();
+        window.Close();
+    }
+
+    [Fact]
+    public void Markup_NamesTheStripAndRowElements()
+    {
+        var markup = Markup();
+
+        foreach (var name in new[]
+        {
+            "CalibrationBlock", "HeaderScanBar", "HeaderScanLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
+            "CalibrationWarnings", "NoCalibrationLine", "RescanButton", "LookHigherButton",
+            "FooterBreakdown", "ReviewBreakdown", "ExpandButton", "TickBox", "CalibrationText", "NoteTag", "RowTag",
+        })
+        {
+            Assert.Contains(@"x:Name=""" + name + @"""", markup, StringComparison.Ordinal);
+        }
+
+        foreach (var gone in new[] { "ScanProgressLine", @"Content=""Rescan""", "CalibrationHeading", @"Text=""Calibration found""", "ChainRadio", "ChosenPill", "CalibrationRows", "CopiesFromHereText", "IsChosenZone", "ShowsRadio", "ShowsTick" })
+        {
+            Assert.DoesNotContain(gone, markup, StringComparison.Ordinal);
+        }
+
+        Assert.Contains(
+            @"Text=""Tick: copy this folder and everything inside it. Untick inside it to leave something out. +: list the folders inside.""",
+            markup, StringComparison.Ordinal);
+        Assert.Contains(@"IsVisible=""{Binding HasCalibrationBlock}""", markup, StringComparison.Ordinal);
+        Assert.Contains(@"ToolTip.Tip=""{Binding IssuesTooltip}""", markup, StringComparison.Ordinal);
+        Assert.Matches(new Regex(@"x:Name=""ExpandButton""\s+[^>]*IsVisible=""\{Binding ShowsExpander\}"""), markup);
+        Assert.Matches(new Regex(@"x:Name=""NoteTag""[^>]*ColorTextSecondary"), markup);
+        Assert.Matches(new Regex(@"x:Name=""HeaderScanLine""[^>]*ColorAccent"), markup);
+        Assert.Matches(new Regex(@"x:Name=""HeaderScanBar""[^>]*IsIndeterminate=""\{Binding IsScanning\}"""), markup);
+        Assert.Matches(new Regex(@"x:Name=""RowTag""[^>]*ColorWarning"), markup);
+        Assert.Matches(new Regex(@"x:Name=""CalibrationText""[^>]*ColorTextSecondary"), markup);
+        Assert.Matches(new Regex(@"x:Name=""RescanButton""\s+[^>]*Classes=""quiet sm"""), markup);
+        Assert.True(markup.IndexOf(@"x:Name=""NightSummary""", StringComparison.Ordinal)
+            < markup.IndexOf(@"x:Name=""CalibrationBlock""", StringComparison.Ordinal));
+        Assert.True(markup.IndexOf(@"x:Name=""FooterSize""", StringComparison.Ordinal)
+            < markup.IndexOf(@"x:Name=""FooterBreakdown""", StringComparison.Ordinal));
     }
 }

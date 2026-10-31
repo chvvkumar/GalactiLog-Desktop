@@ -689,9 +689,11 @@ public class PreviewModalViewModelTests
         // comparing; the content is the new frame's.
         Assert.True(harness.ViewModel.IsHeaderPanelVisible);
         Assert.NotSame(first, harness.ViewModel.Headers);
+        // Both loads run on pool threads with navigation in between, so their order is a race;
+        // the claim is that each frame was queried once, which order-free comparison proves.
         Assert.Equal(
-            [harness.ViewModel.Frames[0].ImageId, harness.ViewModel.Frames[1].ImageId],
-            harness.HeaderQueries);
+            new[] { harness.ViewModel.Frames[0].ImageId, harness.ViewModel.Frames[1].ImageId }.Order(),
+            harness.HeaderQueries.Order());
     }
 
     [Fact]

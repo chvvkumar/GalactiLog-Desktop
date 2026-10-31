@@ -461,9 +461,9 @@ public sealed class StagingCopierTests : IDisposable
     [InlineData(".")]
     [InlineData("..")]
     [InlineData("a:b")]
-    [InlineData(@"a\b")]
-    [InlineData("a/b")]
-    public async Task AnUnsafeEntryNameAbortsBeforeAnythingIsWritten(string entryName)
+    [InlineData(@"..\escaped")]
+    [InlineData(@"C:\elsewhere")]
+    public async Task AnUnsafeEntryAbortsBeforeAnythingIsWritten(string entryName)
     {
         SixFiles();
         using var writer = Writer();
@@ -472,8 +472,22 @@ public sealed class StagingCopierTests : IDisposable
         var result = await new StagingCopier(StagingIo.For(writer)).RunAsync(request, null, CancellationToken.None);
 
         Assert.Equal(StagingOutcome.Aborted, result.Outcome);
-        Assert.Contains("is not one plain folder name", result.AbortReason);
+        Assert.Contains("is not a relative folder path", result.AbortReason);
         Assert.False(Directory.Exists(_staging));
+    }
+
+    [Fact]
+    public async Task ARelativeEntryPathLandsEachFileUnderIt()
+    {
+        SixFiles();
+        using var writer = Writer();
+        var request = new StagingCopyRequest([new CopyOperation(new DateOnly(2026, 1, 1), _source, @"2026\Date_2026-01-01\LIGHT", [])], _staging, []);
+
+        var result = await new StagingCopier(StagingIo.For(writer)).RunAsync(request, null, CancellationToken.None);
+
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Equal(6, result.Copied);
+        Assert.True(File.Exists(Path.Combine(_staging, "2026", "Date_2026-01-01", "LIGHT", "frame1.fits")));
     }
 
     [Fact]
@@ -506,5 +520,44 @@ public sealed class StagingCopierTests : IDisposable
         Assert.Equal(kept, File.ReadAllBytes(Destination(@"Ha\a.fits")));
         Assert.False(Directory.Exists(Destination("OIII")));
         Assert.Empty(result.Skipped);
+    }
+
+    [Fact]
+    public async Task RunAsync_PlacesAnOperationUnderItsDestinationSubfolder()
+    {
+        var bytes = Source(@"Angle_128.85\flat1.fits", 4096);
+        var op = new CopyOperation(new(2026, 1, 1), _source, Entry, [], null, @"FLAT\ZWO ASI2600MM Pro");
+        var result = await new StagingCopier(StagingIo.For(Writer())).RunAsync(new([op], _staging, []), null, default);
+        Assert.Equal(StagingOutcome.Completed, result.Outcome);
+        Assert.Equal(bytes, File.ReadAllBytes(Destination(@"FLAT\ZWO ASI2600MM Pro\Angle_128.85\flat1.fits")));
+    }
+
+    [Fact]
+    public async Task RunAsync_TwoOperationsSharingAnEntryName_SkipExistingSameSizeFiles()
+    {
+        Source(@"light1.fits", 4096);
+        var lights = new CopyOperation(new(2026, 1, 1), _source, Entry, [@"Angle_128.85\flat1.fits"]);
+        var flats = new CopyOperation(new(2026, 1, 1), Path.Combine(_source, "Angle_128.85"), Entry, [], null, "FLAT");
+        Source(@"Angle_128.85\flat1.fits", 2048);
+        var copier = new StagingCopier(StagingIo.For(Writer()));
+        var first = await copier.RunAsync(new([lights, flats], _staging, []), null, default);
+        var second = await copier.RunAsync(new([lights, flats], _staging, []), null, default);
+        Assert.Equal(2, first.Copied);
+        Assert.Equal(0, second.Copied);
+        Assert.All(second.Skipped, s => Assert.Equal(StagingSkipReason.ExistsSameSize, s.Reason));
+        Assert.Empty(second.Failed);
+    }
+
+    [Theory]
+    [InlineData(@"C:\abs")]
+    [InlineData(@"FLAT\..\x")]
+    [InlineData("a:b")]
+    [InlineData("")]
+    public async Task RunAsync_RefusesAnUnsafeDestinationSubfolder(string subfolder)
+    {
+        var op = new CopyOperation(new(2026, 1, 1), _source, Entry, [], null, subfolder);
+        var result = await new StagingCopier(StagingIo.For(Writer())).RunAsync(new([op], _staging, []), null, default);
+        Assert.Equal(StagingOutcome.Aborted, result.Outcome);
+        Assert.Contains("subfolder", result.AbortReason, StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -69,8 +69,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// skipped folders take every one of them. Neither the filter nor the levels emptied it, so
     /// neither is blamed.</summary>
     public const string SkipsEmptyWarning =
-        "The skipped folders leave no frames in the chosen folders, so this export would copy "
-        + "nothing. Tick a folder again to copy it.";
+        "The ticked folders hold none of these nights' light frames, so this export would copy no "
+        + "lights. Tick a folder to copy it.";
 
     /// <summary>Spec 12.13's refusal for an exclusion pattern carrying a character a quoted
     /// literal cannot carry safely.</summary>
@@ -96,7 +96,8 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// and the panel's tally describe different sets.</summary>
     public const string FooterNote =
         "Frames counts this target's light frames. The size counts every catalogued file in the "
-        + "chosen folders; sidecars and files GalactiLog never read are copied too and are not counted.";
+        + "ticked folders; sidecars and other files are copied too and are counted once the "
+        + "calibration scan has read them.";
 
     /// <summary>Where spec 12.13's long-path warning starts. Windows refuses a path at or past
     /// this length unless long paths are enabled.</summary>
@@ -120,6 +121,16 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private readonly Action<Action> _post;
     private readonly ILogger _logger;
     private readonly Func<string, IReadOnlyList<string>?>? _listSubfolders;
+    private readonly Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? _readForeignLights;
+
+    // Null without a walker: no night scans for calibration.
+    private readonly CalibrationScanDriver? _scanDriver;
+
+    // Each catalogued light's match keys, by image id, for the light sets. Null reads as none.
+    private IReadOnlyDictionary<Guid, FrameKeys>? _keys;
+
+    // The folder each night's foreign lights were last read under. UI thread only.
+    private readonly Dictionary<DateOnly, string> _foreignFolder = [];
 
     // The night's frames as the query returned them, which is what an excluded image id is
     // resolved against. The catalogue itself is never held: the query returns the built index
@@ -173,6 +184,12 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// child directories as absolute paths, or null when it cannot be read. Called off the UI
     /// thread, once per folder tree row the first time it is expanded, which for the night's
     /// levels is on load. Null lists nothing: each tree shows its levels alone.</param>
+    /// <param name="readForeignLights">Normally <c>WbppPathsQuery.ForeignLightsUnder</c>: the LIGHT
+    /// files under a folder that are not this group's on this night. Called off the UI thread, once
+    /// per available night after load. Null reads nothing.</param>
+    /// <param name="walk">Normally <c>CalibrationWalk.OnDisk</c>: every file under a folder, sized,
+    /// with the headers worth reading. Called off the UI thread, per night after load and on Rescan.
+    /// Null scans nothing and copies lights alone.</param>
     public WbppExportViewModel(
         string groupKey,
         string targetName,
@@ -187,7 +204,9 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             Action<IReadOnlyCollection<Guid>>, object>? createQualityPanel = null,
         Action<Action>? post = null,
         ILogger? logger = null,
-        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null,
+        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
+        CalibrationWalk.Walker? walk = null)
     {
         ArgumentNullException.ThrowIfNull(nights);
         ArgumentNullException.ThrowIfNull(readPaths);
@@ -210,6 +229,27 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         _post = post ?? UiPost.Default;
         _logger = logger ?? NullLogger.Instance;
         _listSubfolders = listSubfolders;
+        _readForeignLights = readForeignLights;
+        _scanDriver = walk is null
+            ? null
+            : new CalibrationScanDriver(
+                walk,
+                (folder, night, ct) => readForeignLights is { } read ? read(folder, groupKey, night, ct) : [],
+                () =>
+                {
+                    var settings = _getGeneral();
+                    return new NightRule(
+                        settings.UseImagingNight,
+                        settings.ObserverLongitude,
+                        string.IsNullOrEmpty(settings.ObserverTimezone) ? null : settings.ObserverTimezone);
+                },
+                () => Exclusions,
+                LightSetsFor,
+                OnScanPublished,
+                _post,
+                () => _disposed,
+                _closing.Token,
+                _logger);
 
         var general = _getGeneral();
 
@@ -298,6 +338,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> byNight =
                 new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>>();
             ContaminationIndex? catalogue = null;
+            IReadOnlyDictionary<Guid, FrameKeys>? keys = null;
 
             try
             {
@@ -306,6 +347,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 var paths = _readPaths(groupKey, nights, scanRoots, token);
                 byNight = paths.Nights;
                 catalogue = paths.Catalogue;
+                keys = paths.Keys;
 
                 foreach (var night in nights)
                 {
@@ -365,7 +407,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            _post(() => Publish(sessions, byNight, catalogue, frames, gradings));
+            _post(() => Publish(sessions, byNight, catalogue, keys, frames, gradings));
         },
             token);
     }
@@ -437,6 +479,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         IReadOnlyList<SessionLevels> sessions,
         IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> byNight,
         ContaminationIndex? catalogue,
+        IReadOnlyDictionary<Guid, FrameKeys>? keys,
         IReadOnlyList<WbppFrame> frames,
         IReadOnlyDictionary<Guid, FrameGrading> gradings)
     {
@@ -447,6 +490,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         _framesByNight = byNight;
         _catalogue = catalogue;
+        _keys = keys;
         Frames = frames;
         Gradings = gradings;
 
@@ -460,12 +504,27 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 levels,
                 _targetName,
                 OnLevelChanged,
-                _listSubfolders is null ? null : ListSubfolders))];
+                _listSubfolders is null ? null : ListSubfolders)
+            {
+                HasCalibrationBlock = _scanDriver is not null && levels.Unavailable is null,
+                TargetKey = _groupKey,
+                Catalogue = catalogue,
+                NightFrames = byNight.TryGetValue(levels.Night, out var nightFrames) ? nightFrames : [],
+                RescanRequested = Rescan,
+                LookHigherRequested = LookHigher,
+            })];
         TotalFrameCount = sessions.Sum(levels => levels.TotalFrameCount);
         IsLoading = false;
 
-        RefreshStagingNames();
         RecheckStaging(StagingPath);
+        RefreshFooter();
+        foreach (var session in Sessions)
+        {
+            ReadForeignLights(session);
+            _scanDriver?.Start(session);
+        }
+
+        // The footer states "sizing" while the scans run.
         RefreshFooter();
 
         // The slot is filled last, so the panel is built over a page whose levels and rig key are
@@ -517,6 +576,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         }
 
         _excludedImageIds = next;
+        foreach (var session in Sessions)
+        {
+            Rematch(session, force: false);
+        }
+
         WithdrawScript();
         RefreshFooter();
     }
@@ -525,16 +589,94 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
     private void OnLevelChanged(SessionLevelViewModel session)
     {
-        _ = session;
-        RefreshStagingNames();
+        ReadForeignLights(session);
+        _scanDriver?.Follow(session);
 
         // A level change moves the source set the staging rule's second clause tests against, so
         // the check is re-run: a folder that was legal under one pick can become illegal under a
         // shallower one.
         RecheckStaging(StagingPath);
+        Rematch(session, force: false);
         WithdrawScript();
         RefreshFooter();
     }
+
+    // ------------------------------------------------------------------ the calibration scan
+
+    private void Rescan(SessionLevelViewModel session)
+    {
+        _scanDriver?.Start(session);
+        RefreshFooter();
+    }
+
+    private void LookHigher(SessionLevelViewModel session)
+    {
+        _scanDriver?.LookHigher(session);
+        RefreshFooter();
+    }
+
+    // A scan result landed (or failed): match it, withdraw a generated script, restate the totals.
+    private void OnScanPublished(SessionLevelViewModel session)
+    {
+        Rematch(session, force: true);
+        WithdrawScript();
+        RefreshFooter();
+    }
+
+    /// <summary>Matches a night's cached scan against its current light sets, without walking.
+    /// Unless forced, a match whose light sets are unchanged is kept, so a calibration row tick
+    /// (which reaches the page through the same path) does not rebuild the rows.</summary>
+    private void Rematch(SessionLevelViewModel session, bool force)
+    {
+        if (session.ScannedLevelIndex < 0 || session.IsScanning)
+        {
+            return;
+        }
+
+        var sets = LightSetsFor(session);
+        if (!force && session.Match is { } match && match.LightSets.SequenceEqual(sets))
+        {
+            return;
+        }
+
+        session.ApplyMatch(CalibrationMatcher.Match(sets, session.Night, session.ScannedFrames));
+
+        // A match can tick a shallower folder, which moves the bound of the foreign read; a no-op
+        // when the bound is unchanged.
+        ReadForeignLights(session);
+    }
+
+    // The night's light sets: the keys of its catalogued lights the copy takes, less the
+    // quality-excluded frames.
+    private IReadOnlyList<LightSet> LightSetsFor(SessionLevelViewModel session)
+    {
+        var sources = session.CopySources;
+        if (sources.Count == 0 || _keys is not { } keys
+            || !_framesByNight.TryGetValue(session.Night, out var frames))
+        {
+            return [];
+        }
+
+        return CalibrationMatcher.LightSets(frames
+            .Where(frame => !_excludedImageIds.Contains(frame.ImageId) && FolderLevels.Covers(sources, frame.FilePath))
+            .Select(frame => keys.GetValueOrDefault(frame.ImageId))
+            .OfType<FrameKeys>());
+    }
+
+    // Every night's copy sources in page order, lights and calibration folders alike, each with
+    // its night's scan root. StagingLayout.Plan names them all at once, so nothing here derives an
+    // entry name.
+    private IReadOnlyList<CopySource> PlanSources()
+    {
+        var sources = Sessions.SelectMany(session => session.CopySources.Select(source => (Source: source, session.ScanRoot))).ToList();
+        return FolderLevels.CopySources(
+            [.. sources.Select(pair => pair.Source)], [.. sources.Select(pair => pair.ScanRoot)], PlanExcludes());
+    }
+
+    private StagingPlan PlanStaging() => StagingLayout.Plan(PlanSources());
+
+    // Generate and the copy both call this, so the script and the figures read one plan.
+    private IReadOnlyList<CopyOperation> PlanOperations() => PlanStaging().Operations;
 
     /// <summary>
     /// Reads the folders inside one row of a night's folder tree and hands them back to it as
@@ -584,13 +726,96 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 if (!_disposed)
                 {
                     row.SetChildren(result);
+                    session.CountForeign(row);
                 }
             });
         });
     }
 
-    private IReadOnlyList<ChosenLevel> ChosenLevels() =>
-        [.. Sessions.Select(session => session.Chosen).OfType<ChosenLevel>()];
+    /// <summary>
+    /// Reads one night's foreign LIGHT files under the shallower of its calibration start level and
+    /// its chosen level, which bounds the read to the folders the scan and the copy cover, and hands
+    /// them to the night. A pick inside the folder last read reads nothing again.
+    /// </summary>
+    /// <remarks>On <c>Task.Run</c> and back through <see cref="_post"/>, as the listing is. An
+    /// answer for a folder that is no longer the night's latest read is dropped. Arrival withdraws a
+    /// generated script, because the excludes it was built from have changed. A failed read leaves
+    /// the night as it was, logged, never rethrown.</remarks>
+    private void ReadForeignLights(SessionLevelViewModel session)
+    {
+        if (_readForeignLights is not { } read || !session.HasLevels)
+        {
+            return;
+        }
+
+        var levels = session.Levels;
+        var folder = levels.Levels[Math.Min(CalibrationClimb.StartLevel(levels, session.ChosenIndex), session.ChosenIndex)].Path;
+        var night = session.Night;
+        if (_foreignFolder.TryGetValue(night, out var last) && PathConfinement.IsUnderOrEqual(last, folder))
+        {
+            return;
+        }
+
+        _foreignFolder[night] = folder;
+        var groupKey = _groupKey;
+        var token = _closing.Token;
+        _ = Task.Run(() =>
+        {
+            IReadOnlyList<WbppFramePath> frames;
+            try
+            {
+                frames = read(folder, groupKey, night, token);
+            }
+            catch (Exception ex)
+            {
+                if (ex is not OperationCanceledException)
+                {
+                    _logger.LogWarning(ex, "Reading the foreign lights under {Folder} failed", folder);
+                }
+
+                return;
+            }
+
+            _post(() =>
+            {
+                if (!_disposed && ReferenceEquals(_foreignFolder[night], folder))
+                {
+                    session.SetForeignLights(frames);
+                    WithdrawScript();
+                    RefreshFooter();
+                }
+            });
+        });
+    }
+
+    // Each night's per-file excludes for the copy plan: its own filtered frames under its
+    // sources, its foreign files, then the unselected frames of its ticked calibration rows, keyed
+    // by night so CopySources never hands one night's excludes to another night's operation on
+    // the same folder.
+    private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> PlanExcludes()
+    {
+        var excludedByNight = ExcludedByNight();
+        var plan = new Dictionary<DateOnly, IReadOnlyList<WbppFramePath>>();
+        foreach (var session in Sessions)
+        {
+            if (session.CopySources is { Count: > 0 } sources)
+            {
+                plan[session.Night] =
+                [
+                    .. FolderLevels.ExcludedUnderLevels(sources, excludedByNight),
+                    .. session.ForeignExcluded,
+                    .. session.CalibrationInPlaceExcludes(),
+                ];
+            }
+        }
+
+        return plan;
+    }
+
+    // Every night's foreign files the copy leaves out one by one.
+    private IReadOnlyList<WbppFramePath> ForeignExcluded() => [.. Sessions.SelectMany(session => session.ForeignExcluded)];
+
+    private IReadOnlyList<ChosenLevel> ChosenLevels() => [.. Sessions.SelectMany(session => session.CopySources)];
 
     private IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> ExcludedByNight()
     {
@@ -612,39 +837,6 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         return excluded;
     }
 
-    private void RefreshStagingNames()
-    {
-        var chosen = ChosenLevels();
-        if (chosen.Count == 0)
-        {
-            // Nothing to name, so nothing states a rename: the names are cleared rather than left
-            // standing at whatever the last refresh set (review P3-9). Latent today, because the
-            // levels are fixed at load and a night with levels always has a pick.
-            foreach (var session in Sessions)
-            {
-                session.SetStagingEntryName("");
-            }
-
-            return;
-        }
-
-        // The names are Task 2's, including a date prefix and a _2 suffix. Nothing here re-derives,
-        // re-cases or re-suffixes one: each row is told its own name and decides only whether to
-        // state it.
-        var names = FolderLevels.StagingNames(chosen);
-        var index = 0;
-        foreach (var session in Sessions)
-        {
-            if (session.Chosen is null)
-            {
-                continue;
-            }
-
-            session.SetStagingEntryName(names[index]);
-            index++;
-        }
-    }
-
     // ------------------------------------------------------------------ the footer
 
     /// <summary>The copy's LIGHT frame count, or empty while the levels are still being computed.
@@ -662,6 +854,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _sizeText = "";
 
+    /// <summary>The size split by kind, "lights 7.1 GB (420), flats 2.7 GB (210), flat-darks 0,
+    /// other 12 MB". Empty without a walker.</summary>
+    [ObservableProperty]
+    private string _breakdownText = "";
+
     /// <summary>The staging folder on its own line under the figures.</summary>
     [ObservableProperty]
     private string _stagingFolderText = "";
@@ -672,6 +869,10 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// <summary>The totals themselves, exposed so a case asserts the figures rather than parsing
     /// the strings. Null while the levels are still being computed.</summary>
     public ExportTotals? Totals { get; private set; }
+
+    /// <summary>The full byte total <see cref="SizeText"/> formats: lights plus the scan's selected
+    /// calibration and uncatalogued files. Null while unknown or still loading.</summary>
+    public long? TotalSizeBytes { get; private set; }
 
     /// <summary>Spec 12.13's empty-export warning, or the no-frames sentence beside it, and empty
     /// when neither applies.</summary>
@@ -695,6 +896,12 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     /// measurable. Task 2's arithmetic, never computed here.</summary>
     public int LongestDestinationLength { get; private set; }
 
+    /// <summary>The review step's line on where the copied folder names start: "Folder names kept
+    /// from" the plan's start folder, "Folder names kept from each scan root" when the plan has
+    /// operations under several roots, and empty when it has none.</summary>
+    [ObservableProperty]
+    private string _folderNamesKeptText = "";
+
     private void RefreshFooter()
     {
         if (IsLoading)
@@ -702,71 +909,112 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             FrameCountText = "";
             FolderCountText = "";
             SizeText = "";
+            TotalSizeBytes = null;
+            FolderNamesKeptText = "";
             return;
         }
 
         var chosen = ChosenLevels();
+        var plan = PlanStaging();
+        FolderNamesKeptText = plan.StartFolder is { } start ? "Folder names kept from " + start
+            : plan.Operations.Count > 0 ? "Folder names kept from each scan root"
+            : "";
         var excludedByNight = ExcludedByNight();
         var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, excludedByNight);
-        var totals = FolderLevels.Totals(chosen, excludedUnder);
+        // The folder count is the plan's, after its dedupe, so the review step's Copy label and
+        // the footer name the same number.
+        var totals = FolderLevels.Totals(chosen, excludedUnder, ForeignExcluded()) with { FolderCount = plan.Operations.Count };
         Totals = totals;
 
-        FrameCountText = WbppPathText.Frames(totals.FrameCount);
-        FolderCountText = totals.FolderCount == 1
+        // One tally over every night's counted files, each file once, as the plan copies a folder
+        // two nights share once.
+        var calibration = CalibrationScan.Tally(Sessions.SelectMany(session => session.CalibrationCounted()));
+        var flats = (Count: calibration.FlatCount, Bytes: calibration.FlatBytes);
+        var darkFlats = (Count: calibration.DarkFlatCount, Bytes: calibration.DarkFlatBytes);
+        var darks = (Count: calibration.DarkCount, Bytes: calibration.DarkBytes);
+        var bias = (Count: calibration.BiasCount, Bytes: calibration.BiasBytes);
+        var other = calibration.OtherBytes;
+        // Every file the copier will copy beyond the lights: calibration frames and uncatalogued
+        // files under the ticked folders, so the count agrees with the copier's.
+        var extraFiles = calibration.Count;
+
+        FrameCountText = extraFiles == 0
+            ? WbppPathText.Frames(totals.FrameCount)
+            : string.Create(CultureInfo.InvariantCulture, $"{totals.FrameCount + extraFiles:N0} files");
+        // The operations the copy runs, after the plan's dedupe: a folder ticked by two nights,
+        // or nested in another night's source, is one folder.
+        FolderCountText = plan.Operations.Count == 1
             ? "1 folder"
-            : string.Create(CultureInfo.InvariantCulture, $"{totals.FolderCount:N0} folders");
-        SizeText = WbppPathText.Bytes(totals.SizeBytes);
+            : string.Create(CultureInfo.InvariantCulture, $"{plan.Operations.Count:N0} folders");
+        var size = totals.SizeBytes is long lights ? lights + calibration.Bytes : (long?)null;
+        TotalSizeBytes = size;
+        SizeText = WbppPathText.Bytes(size)
+            + (Sessions.Any(session => session.IsScanning) ? ", sizing" : "");
+
+        static string Group((int Count, long Bytes) group) => group.Count == 0
+            ? "0"
+            : WbppPathText.Bytes(group.Bytes) + string.Create(CultureInfo.InvariantCulture, $" ({group.Count:N0})");
+        BreakdownText = _scanDriver is null
+            ? ""
+            : "lights " + WbppPathText.Bytes(totals.SizeBytes) + string.Create(CultureInfo.InvariantCulture, $" ({totals.FrameCount:N0})")
+                + ", flats " + Group(flats)
+                + ", flat-darks " + Group(darkFlats)
+                + (darks.Count > 0 ? ", darks " + Group(darks) : "")
+                + (bias.Count > 0 ? ", bias " + Group(bias) : "")
+                + (other > 0 ? ", other " + WbppPathText.Bytes(other) : "");
         StagingFolderText = _committedStaging ?? "";
 
         // Each night's own line under its tree, from the same seam over that night alone, so the
         // line and the footer cannot disagree.
         foreach (var session in Sessions)
         {
-            if (session.Chosen is { } night)
+            if (session.CopySources is { Count: > 0 } night)
             {
                 session.SetSummary(
-                    FolderLevels.Totals([night], FolderLevels.ExcludedUnderLevels([night], excludedByNight)),
-                    night.SkippedFolders?.Count ?? 0);
+                    FolderLevels.Totals(
+                        night, FolderLevels.ExcludedUnderLevels(night, excludedByNight), session.ForeignExcluded),
+                    session.SkippedCount,
+                    session.CalibrationTotals());
             }
         }
 
         // Spec 12.13: the filter is blamed only when the filter is what emptied the export. A
         // selection whose levels hold no frames at all says so instead, because telling a user to
         // loosen a filter that excluded nothing sends them to the wrong control.
-        // The skips are blamed on the same rule: only when the levels held frames and the skips
+        // The ticks are blamed on the same rule: only when the nights held frames and the ticks
         // alone took every one of them.
-        var held = chosen.Sum(level => level.Level.FrameCount);
-        var afterSkips = held - chosen.Sum(level => (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount));
+        var held = Sessions.Where(session => session.HasLevels).Sum(session => session.Levels.TotalFrameCount);
+        var afterSkips = chosen.Sum(level => level.Level.FrameCount - (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount));
         EmptyExportText = held <= 0 ? NoFramesAtAllWarning
             : afterSkips <= 0 ? SkipsEmptyWarning
             : totals.FrameCount <= 0 ? EmptyExportWarning
             : "";
 
-        RefreshLongPath(chosen);
+        RefreshLongPath(plan.Operations);
         GenerateCommand.NotifyCanExecuteChanged();
     }
 
-    // Recomputed on a level change and on a staging folder change, because both move the figure,
-    // and on nothing else. A figure computed once at load shows a clean page to a user who then
-    // picks the level that breaks their copy.
-    private void RefreshLongPath(IReadOnlyList<ChosenLevel> chosen)
+    // Recomputed on every footer refresh, from the same plan the footer reads, because a level
+    // change, a staging folder change and a calibration tick all move the figure. A figure
+    // computed once at load shows a clean page to a user who then picks the level that breaks
+    // their copy.
+    private void RefreshLongPath(IReadOnlyList<CopyOperation> operations)
     {
         LongestDestinationLength = 0;
         LongPathText = "";
 
-        if (_catalogue is not { } catalogue || CopyDestination is not { } staging || chosen.Count == 0)
+        if (_catalogue is not { } catalogue || CopyDestination is not { } staging || operations.Count == 0)
         {
             return;
         }
 
-        var names = FolderLevels.StagingNames(chosen);
-        var longest = 0;
-        for (var i = 0; i < chosen.Count; i++)
-        {
-            longest = Math.Max(
-                longest,
-                FolderLevels.LongestDestinationLength(chosen[i], staging, names[i], catalogue));
-        }
+        // Every operation, calibration included: the scan supplies the figure for files the
+        // catalogue does not hold.
+        var longest = operations.Max(operation => FolderLevels.LongestDestinationLength(
+            operation,
+            staging,
+            catalogue,
+            Sessions.Count == 0 ? 0 : Sessions.Max(session => session.LongestScannedRelative(operation.SourcePath))));
 
         LongestDestinationLength = longest;
         if (longest >= LongPathThreshold)
@@ -775,8 +1023,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
                 + longest.ToString(CultureInfo.InvariantCulture)
                 + " characters. Windows refuses a path of 260 characters or more unless long paths "
                 + "are enabled, and the script stops at the first file it cannot create, leaving a "
-                + "partial copy. Choose a shorter staging folder, or a deeper folder for the nights "
-                + "with the longest paths.";
+                + "partial copy. Choose a shorter staging folder.";
         }
     }
 
@@ -1056,7 +1303,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     private void AfterStagingChanged()
     {
         StagingFolderText = _committedStaging ?? "";
-        RefreshLongPath(ChosenLevels());
+        RefreshLongPath(PlanOperations());
         OnPropertyChanged(nameof(CopyDestination));
 
         // GenerateDisabledReason and IsGenerateAvailable are expressions over the committed value,
@@ -1144,7 +1391,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
     // The subfolder moves every destination path, so the long-path figure and any script follow it.
     partial void OnIsSubfolderOnChanged(bool value)
     {
-        RefreshLongPath(ChosenLevels());
+        RefreshLongPath(PlanOperations());
         WithdrawScript();
     }
 
@@ -1190,9 +1437,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
         IProgress<StagingProgress> progress, Func<StagingIo, StagingIo> track, CancellationToken ct)
     {
         var destination = CopyDestination ?? throw new InvalidOperationException(NoStagingReason);
-        var chosen = ChosenLevels();
-        var operations = FolderLevels.CopyOperations(
-            chosen, FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight()));
+        var operations = PlanOperations();
         var request = new StagingCopyRequest(operations, destination, Exclusions);
         var writer = _appWriter;
         var io = StagingIoFor;
@@ -1384,9 +1629,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         GenerateError = "";
 
-        var chosen = ChosenLevels();
-        var excludedUnder = FolderLevels.ExcludedUnderLevels(chosen, ExcludedByNight());
-        var operations = FolderLevels.CopyOperations(chosen, excludedUnder);
+        var operations = PlanOperations();
         var fileName = ScriptGenerator.FileNameFor(type, _targetName);
 
         string text;
@@ -1524,10 +1767,11 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
             "excluded file" => "one of the frames the filter excluded",
             "excluded folder" => "one of the skipped folders",
             "SourcePath" => "one of the folders this export copies from",
-            "EntryName" => "one of the staging folder names",
+            "EntryName" => "one of the folder paths this export writes",
             "StagingRoot" => "the staging folder",
             "TargetName" => "the target name",
             "FileName" => "the script file name",
+            "destination subfolder" => "a calibration folder name",
             _ => valueName,
         };
 
@@ -1569,6 +1813,7 @@ public sealed partial class WbppExportViewModel : ObservableObject, IDisposable
 
         _disposed = true;
         _closing.Cancel();
+        _scanDriver?.CancelAll();
         (QualityPanel as IDisposable)?.Dispose();
     }
 }

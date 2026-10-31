@@ -1396,7 +1396,10 @@ public class AnalysisQueryTests(ITestOutputHelper output)
         var session = BestOfThree("Correlation, session granularity", () =>
             library.Query.Correlation(AnalysisMetric.Humidity, AnalysisMetric.Hfr, BySession));
         var matrix = BestOfThree("Matrix", () => library.Query.Matrix(NoFilter));
-        var series = BestOfThree("TimeSeries", () => library.Query.TimeSeries(AnalysisMetric.Hfr, NoFilter));
+        // Unasserted baseline, so one run is enough.
+        var seriesClock = Stopwatch.StartNew();
+        library.Query.TimeSeries(AnalysisMetric.Hfr, NoFilter);
+        var series = seriesClock.ElapsedMilliseconds;
 
         // One further full scan of the filtered rows, which is what the hundred statement shape
         // (one corr() per pair) would pay a hundred times over. The matrix budget is asserted to
@@ -2101,6 +2104,16 @@ public class AnalysisQueryTests(ITestOutputHelper output)
             using var context = new GalactiLogContext(GalactiLogContextOptions.Create(_db.ConnectionString));
             context.Database.OpenConnection();
             var connection = (SqliteConnection)context.Database.GetDbConnection();
+
+            // A page cache big enough for every index this insert touches, on this connection
+            // only: the default 2 MB makes the 200k row case thrash its index pages. The queries
+            // under test open their own connections and keep the default.
+            using (var pragma = connection.CreateCommand())
+            {
+                pragma.CommandText = "PRAGMA cache_size = -262144;";
+                pragma.ExecuteNonQuery();
+            }
+
             using var transaction = connection.BeginTransaction();
             using var command = connection.CreateCommand();
 

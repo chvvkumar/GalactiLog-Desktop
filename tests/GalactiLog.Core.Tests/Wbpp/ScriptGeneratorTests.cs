@@ -416,10 +416,10 @@ public class ScriptGeneratorTests
     [InlineData("..")]
     [InlineData(".")]
     [InlineData(@"C:\elsewhere")]
-    [InlineData("sub/folder")]
-    [InlineData(@"sub\folder")]
+    [InlineData(@"sub\..\x")]
+    [InlineData("a:b")]
     [InlineData("")]
-    public void Generate_RefusesAnEntryNameThatCouldLeaveTheStagingRoot(string entryName)
+    public void Generate_RefusesAnEntryThatCouldLeaveTheStagingRoot(string entryName)
     {
         // Measured by the reviewer on disk: an entry name of "..\escaped" made Join-Path produce
         // a path outside the staging root and Copy-Item land the file there, and made
@@ -438,6 +438,27 @@ public class ScriptGeneratorTests
                 () => ScriptGenerator.Generate(type, ForShell(input, type)));
             Assert.Equal("EntryName", thrown.ValueName);
         }
+    }
+
+    [Fact]
+    public void Generate_AcceptsARelativeEntryPath_AndTheBashFlavourWritesItWithSlashes()
+    {
+        var entry = @"2026\Date_2026-10-18\LIGHT\ZWO ASI533MM Pro\Target_Pleiades\Angle_45.18";
+        var quoted = @"2026\Barnard's Loop\LIGHT";
+        var ops = new[]
+        {
+            new CopyOperation(new DateOnly(2026, 10, 18), @"W:\Astro\Incoming\\" + entry, entry, []),
+            new CopyOperation(new DateOnly(2026, 10, 19), @"W:\Astro\Incoming\\" + quoted, quoted, []),
+        };
+        var input = new WbppScriptInput(ops, @"E:\Staging\M_45_-_Pleiades", "M 45 - Pleiades", ScriptGenerator.DefaultExclusions, "wbpp_M_45.ps1");
+
+        var powerShell = ScriptGenerator.Generate(WbppScriptType.PowerShell, input);
+        Assert.Contains("Dst = (Join-Path $StagingRoot " + ScriptGenerator.PowerShellQuote(entry) + ")", powerShell, StringComparison.Ordinal);
+        Assert.Contains("Dst = (Join-Path $StagingRoot " + ScriptGenerator.PowerShellQuote(quoted) + ")", powerShell, StringComparison.Ordinal);
+
+        var bash = ScriptGenerator.Generate(WbppScriptType.Bash, input with { FileName = "wbpp_M_45.sh" });
+        Assert.Contains("copy_folder 1 " + ScriptGenerator.BashQuote("2026/Date_2026-10-18/LIGHT/ZWO ASI533MM Pro/Target_Pleiades/Angle_45.18") + " ", bash, StringComparison.Ordinal);
+        Assert.Contains("copy_folder 2 " + ScriptGenerator.BashQuote("2026/Barnard's Loop/LIGHT") + " ", bash, StringComparison.Ordinal);
     }
 
     [Theory]
@@ -1383,6 +1404,33 @@ public class ScriptGeneratorTests
         }
 
         return builder.ToString();
+    }
+
+    [Theory]
+    [InlineData(WbppScriptType.PowerShell)]
+    [InlineData(WbppScriptType.Bash)]
+    public void Generate_WithADestinationSubfolder_MatchesItsGolden(WbppScriptType type)
+    {
+        var ops = new[]
+        {
+            new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\Date_2026-07-01\LIGHT\Target_A", "2026-07-01", []),
+            new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\Date_2026-07-01\FLAT\Cam\Angle_1", "2026-07-01", [@"B_0003.fits"], null, @"FLAT\Cam\Angle_1"),
+        };
+        var text = ScriptGenerator.Generate(type, new WbppScriptInput(ops, @"E:\Staging\Target A", "Target A", ScriptGenerator.DefaultExclusions, "wbpp_Target_A" + Extension(type)));
+        Assert.Equal(ReadGolden("calibration-subfolder" + Extension(type)), text);
+    }
+
+    [Theory]
+    [InlineData(@"C:\abs")]
+    [InlineData(@"FLAT\..\x")]
+    [InlineData("FLAT\nX")]
+    [InlineData("")]
+    public void Generate_RefusesAnUnsafeDestinationSubfolder(string subfolder)
+    {
+        var op = new CopyOperation(new DateOnly(2026, 7, 1), @"D:\Astro\x", "n", [], null, subfolder);
+        var input = new WbppScriptInput([op], @"E:\Staging\Target A", "Target A", ScriptGenerator.DefaultExclusions, "wbpp_Target_A.sh");
+        var ex = Assert.Throws<WbppUnsafeValueException>(() => ScriptGenerator.Generate(WbppScriptType.Bash, input));
+        Assert.Equal("destination subfolder", ex.ValueName);
     }
 
     // ---- reading the goldens ----
