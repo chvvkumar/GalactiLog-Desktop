@@ -732,9 +732,12 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         => [.. view.Named<TrendChartPart>("TrendChartPart").GetVisualDescendants().OfType<ItemsControl>()
             .First(items => items.Name == "Lanes").GetRealizedContainers()];
 
+    // No 1600 x 900 row here or in the two theories below. The right column is the window less the
+    // same sidebar at 1280, 1600 and 1900 (840, 1160 and 1460 px, measured), and its frames region
+    // is wide chrome (FramesColumn.WideWidth) at all three, so 1280 x 720 is the same configuration
+    // with less room on both axes and the null row keeps 900 px of height.
     [AvaloniaTheory]
     [InlineData(1280d, 720d)]
-    [InlineData(1600d, 900d)]
     [InlineData(null, 900d)]
     public void EveryMode_StaysInsideTheLayout_WithAtMostOneVerticalBarPerRegion(double? width, double height)
     {
@@ -763,10 +766,10 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         }
     }
 
+    // No 1600 x 900 row: see the note above EveryMode_StaysInsideTheLayout_WithAtMostOneVerticalBarPerRegion.
     [AvaloniaTheory]
     [InlineData(1280d, 720d, 2)]
     [InlineData(1280d, 720d, 12)]
-    [InlineData(1600d, 900d, 12)]
     [InlineData(null, 900d, 12)]
     public void CompareNights_TheLanesScrollInTheirOwnRegion_AndTheTableBelowTakesAtMostFortyPercent(double? width, double height, int filters)
     {
@@ -867,9 +870,9 @@ public sealed class ModesLayoutViewTests(ITestOutputHelper output)
         Assert.True(after > before + 1d, $"the cap is {after} at the larger text size, {before} before, so the case cannot tell a stale floor");
     }
 
+    // No 1600 x 900 row: see the note above EveryMode_StaysInsideTheLayout_WithAtMostOneVerticalBarPerRegion.
     [AvaloniaTheory]
     [InlineData(1280d, 720d)]
-    [InlineData(1600d, 900d)]
     [InlineData(null, 900d)]
     public void TheStageTwoViewers_HoldNothingWiderThanTheirViewport(double? width, double height)
     {

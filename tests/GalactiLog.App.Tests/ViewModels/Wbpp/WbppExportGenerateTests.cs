@@ -33,13 +33,13 @@ public class WbppExportGenerateTests
 
     // The command wait lives out of a test body, because xUnit1031 is an error here.
     private static void Generate(WbppExportViewModel page, WbppScriptType type)
-        => page.GenerateCommand.ExecuteAsync(type).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.GenerateCommand.ExecuteAsync(type).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static void CopyScript(WbppExportViewModel page)
-        => page.CopyScriptCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.CopyScriptCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     private static void CopyRunCommand(WbppExportViewModel page)
-        => page.CopyRunCommandCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30));
+        => Assert.True(page.CopyRunCommandCommand.ExecuteAsync(null).Wait(TimeSpan.FromSeconds(30)), "The command did not finish within 30 s.");
 
     // ------------------------------------------------------------------ 10.7 cancelled and done
 
@@ -322,7 +322,7 @@ public class WbppExportGenerateTests
         harness.Destination = harness.ScriptPath("wbpp.ps1");
         Generate(harness.Page, WbppScriptType.PowerShell);
 
-        harness.Page.Sessions[0].Rows[0].IsChosen = true;
+        harness.Page.Sessions[0].Rows[0].IsIncluded = true;
 
         Assert.False(harness.Page.HasScript);
         Assert.True(File.Exists(harness.Destination));
@@ -552,7 +552,7 @@ public class WbppExportGenerateTests
         // generator throws its own type on the same input.
         using var harness = ExportHarness.Create(OneNight(), [N1]);
         harness.SetScanRoots(@"C:\p16other");
-        var source = harness.Page.Sessions[0].Chosen!.Level.Path;
+        var source = harness.Page.Sessions[0].CopySources[0].Level.Path;
         var inside = Path.Combine(source, "staged");
 
         harness.Page.StagingPath = inside;

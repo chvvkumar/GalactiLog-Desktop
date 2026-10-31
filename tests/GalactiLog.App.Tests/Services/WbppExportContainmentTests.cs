@@ -132,7 +132,7 @@ public class WbppExportContainmentTests
     {
         // The application copies nothing: the script the user runs performs the copy. Departure
         // from the brief's literal needle list, and the reason is in the assertion itself: bare
-        // "Copy" occurs in FolderLevels.CopyOperations and in the page's own Copy script command,
+        // "Copy" occurs in FolderLevels.CopySources and in the page's own Copy script command,
         // both of which the brief requires, so the needles are call shapes rather than words.
         //
         // The scan runs over both Wbpp folders entire and over the dialog service, not over the
@@ -245,7 +245,7 @@ public class WbppExportContainmentTests
         // And the words that must not fire on the page's own legitimate members.
         Assert.DoesNotMatch(
             new Regex(@"(?<![A-Za-z])Copy\s*\("),
-            "FolderLevels.CopyOperations(chosen, excluded);");
+            "FolderLevels.CopySources(chosen, roots, excluded);");
         Assert.DoesNotMatch(new Regex(@"(?<![A-Za-z])Copy\s*\("), "CopyScriptCommand;");
     }
 }

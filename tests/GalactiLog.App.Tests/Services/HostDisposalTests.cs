@@ -1,5 +1,6 @@
 using System.Net;
 using System.Reflection;
+using GalactiLog.App.Tests.TestSupport;
 using GalactiLog.Core.Targets;
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.DependencyInjection;
@@ -82,6 +83,7 @@ public sealed class HostDisposalTests
         {
             Root = Path.Combine(Path.GetTempPath(), "GalactiLogHostDisposal_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(Root);
+            SeededAppData.CopyInto(Root);
 
             // Serilog's Log.Logger is process-global and Build() overwrites it, so a previous
             // fixture's file sink would otherwise keep its log file open under a root this one

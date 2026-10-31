@@ -124,6 +124,40 @@ public class WbppExportWizardTests
         Assert.True(rig.Wizard.CanGoNext);
     }
 
+    // A failure here is a Next left enabled after the user unticks every folder, or left disabled
+    // after a tick brings one back.
+    [Fact]
+    public void Folders_FollowsTheTicks()
+    {
+        using var rig = new Rig();
+        var session = rig.Harness.Page.Sessions[0];
+        Assert.True(rig.Wizard.CanGoNext);
+        var raised = new List<bool>();
+        rig.Wizard.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(WbppExportWizardViewModel.CanGoNext))
+            {
+                raised.Add(rig.Wizard.CanGoNext);
+            }
+        };
+
+        rig.Harness.OnUi(() =>
+        {
+            foreach (var row in session.Rows)
+            {
+                row.IsIncluded = false;
+            }
+        });
+        Assert.Empty(session.CopySources);
+        Assert.False(rig.Wizard.CanGoNext);
+        Assert.False(Assert.Single(raised.Distinct()));
+        raised.Clear();
+
+        rig.Harness.OnUi(() => session.Rows[^1].IsIncluded = true);
+        Assert.True(rig.Wizard.CanGoNext);
+        Assert.True(Assert.Single(raised.Distinct()));
+    }
+
     // Tier 1. A failure here is a copy that touches the disk before the wizard has locked (R3, R4).
     [Fact]
     public async Task CommitWithCopy_SetsIsCommitted_BeforeTheIoSeamSeesItsFirstCall()

@@ -20,6 +20,10 @@ concurrency:
 
 jobs:
   build-test:
+    # A PR from snd or dev has a head that release.yml already tested when it was pushed, and the
+    # branch policy admits no other source into dev or main. A skipped job reports success, so a
+    # required check is still satisfied. PRs from any other branch still run the suite.
+    if: github.head_ref != 'snd' && github.head_ref != 'dev'
     runs-on: [self-hosted, Windows, X64]
     # cmd, not powershell: the runner account's execution policy is Restricted, so a powershell
     # step cannot load the script GitHub writes for it. cmd needs no Git Bash path step.
@@ -38,4 +42,4 @@ jobs:
       - run: dotnet build --no-restore -c Release
       # No trx logger and no artifact upload: nothing read the trx, and a failed test's name
       # is already in the job log (CI review 2026-09-25).
-      - run: dotnet test --no-build -c Release
+      - run: dotnet test --no-build -c Release --blame-hang-timeout 10m --blame-hang-dump-type mini

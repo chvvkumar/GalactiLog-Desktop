@@ -26,6 +26,7 @@ internal sealed class Library
 
     private readonly List<WbppCataloguePath> _catalogue = [];
     private readonly Dictionary<DateOnly, List<WbppFramePath>> _nights = [];
+    private readonly Dictionary<Guid, FrameKeys> _keys = [];
 
     /// <summary>The page's own group key, passed through unchanged. Never synthesised from a
     /// <see cref="Guid"/>: a resolved key is stored upper cased and would then read as another
@@ -35,6 +36,9 @@ internal sealed class Library
     /// <summary>The target's display name.</summary>
     public string TargetName { get; set; } = "M 31";
 
+    /// <summary>When true the query answers no match keys, so no night has a light set.</summary>
+    public bool WithoutKeys { get; set; }
+
     /// <summary>The configured scan roots.</summary>
     public List<string> ScanRoots { get; } = [Root];
 
@@ -43,10 +47,11 @@ internal sealed class Library
     public Dictionary<string, Guid> Ids { get; } = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>Adds one of this target's own LIGHT frames on one night.</summary>
-    public Library Frame(DateOnly night, string path, long? size = 1_000L)
+    public Library Frame(DateOnly night, string path, long? size = 1_000L, FrameKeys? keys = null)
     {
         var id = Guid.NewGuid();
         Ids[path] = id;
+        _keys[id] = keys ?? CalibrationFixtures.K();
         Night(night).Add(new WbppFramePath(id, path, size));
         _catalogue.Add(new WbppCataloguePath(path, GroupKey, TargetName, night, true, size));
         return this;
@@ -89,7 +94,8 @@ internal sealed class Library
 
         return new WbppPaths(
             byNight,
-            ContaminationIndex.Build([.. ScanRoots], _catalogue));
+            ContaminationIndex.Build([.. ScanRoots], _catalogue),
+            WithoutKeys ? null : _keys);
     }
 
     private List<WbppFramePath> Night(DateOnly night)
@@ -153,6 +159,65 @@ internal sealed class ExportHarness : IDisposable
     /// <summary>What the folder picker returns. Null is a cancelled picker.</summary>
     public string? PickedFolder { get; set; }
 
+    /// <summary>How many times the page posted to the UI thread.</summary>
+    public int PostCount => Volatile.Read(ref _postCount);
+
+    private int _postCount;
+
+    /// <summary>Waits until no background post is pending: the page's pool work has drained and
+    /// the post count holds across a quiet interval. The wait lives here rather than in a test body,
+    /// because xUnit1031 is an error in this solution.</summary>
+    public void WaitForQuiet()
+    {
+        var last = -1;
+        Assert.True(
+            SpinWait.SpinUntil(
+                () =>
+                {
+                    var now = PostCount;
+                    if (now == last && Volatile.Read(ref _inFlight) == 0)
+                    {
+                        return true;
+                    }
+
+                    last = now;
+                    Thread.Sleep(100);
+                    return false;
+                },
+                TimeSpan.FromSeconds(10)),
+            "The page's background posts did not settle within 10 s.");
+    }
+
+    private readonly Lock _postGate = new();
+
+    // The delegates the page runs on pool threads that are still running; Dispose waits for none.
+    private int _inFlight;
+
+    private volatile bool _disposed;
+
+    private T Tracked<T>(Func<T> work)
+    {
+        Interlocked.Increment(ref _inFlight);
+        try
+        {
+            return work();
+        }
+        finally
+        {
+            Interlocked.Decrement(ref _inFlight);
+        }
+    }
+
+    /// <summary>Runs a case's own write as the UI thread would: never interleaved with a post.
+    /// </summary>
+    public void OnUi(Action action)
+    {
+        lock (_postGate)
+        {
+            action();
+        }
+    }
+
     /// <summary>The page itself.</summary>
     public WbppExportViewModel Page { get; private set; } = null!;
 
@@ -165,7 +230,7 @@ internal sealed class ExportHarness : IDisposable
     public void Release()
     {
         _gate?.Set();
-        Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+        Assert.True(Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
     }
 
     /// <summary>A temporary folder that exists on disk, for a staging value that has to.</summary>
@@ -189,7 +254,11 @@ internal sealed class ExportHarness : IDisposable
         Func<IReadOnlyList<WbppFrame>, IReadOnlyDictionary<Guid, FrameGrading>, string,
             Action<IReadOnlyCollection<Guid>>, object>? createPanel = null,
         bool parked = false,
-        Func<string, IReadOnlyList<string>?>? listSubfolders = null)
+        Func<string, IReadOnlyList<string>?>? listSubfolders = null,
+        Func<string, string, DateOnly, CancellationToken, IReadOnlyList<WbppFramePath>>? readForeignLights = null,
+        CalibrationWalk.Walker? walk = null,
+        Func<GeneralSettings, GeneralSettings>? general = null,
+        Action<Action>? post = null)
     {
         var harness = new ExportHarness(library, nights)
         {
@@ -203,17 +272,21 @@ internal sealed class ExportHarness : IDisposable
                 WbppExclusionsDocument = exclusions,
             },
         };
+        if (general is not null)
+        {
+            harness.General = general(harness.General);
+        }
 
         harness.Page = new WbppExportViewModel(
             library.GroupKey,
             library.TargetName,
             nights,
-            (_, requested, _, _) =>
+            (_, requested, _, _) => harness.Tracked(() =>
             {
                 harness.ReadPathsCalls++;
                 harness._gate?.Wait(TimeSpan.FromSeconds(30));
                 return library.Build(requested);
-            },
+            }),
             (_, night) =>
             {
                 harness.DetailCalls.Add(night);
@@ -233,8 +306,38 @@ internal sealed class ExportHarness : IDisposable
                 return Task.CompletedTask;
             },
             createPanel,
-            post: action => action(),
-            listSubfolders: listSubfolders);
+            post: action =>
+            {
+                Interlocked.Increment(ref harness._postCount);
+
+                // One posted action at a time, as the UI dispatcher runs them: a listing and a scan
+                // result landing together must not interleave their writes to one tree. A post that
+                // lands after Dispose is dropped, so nothing reaches a torn-down window.
+                void Run()
+                {
+                    if (harness._disposed)
+                    {
+                        return;
+                    }
+
+                    lock (harness._postGate)
+                    {
+                        action();
+                    }
+                }
+
+                if (post is null)
+                {
+                    Run();
+                }
+                else
+                {
+                    post(Run);
+                }
+            },
+            listSubfolders: listSubfolders is null ? null : folder => harness.Tracked(() => listSubfolders(folder)),
+            readForeignLights: (root, groupKey, night, ct) => harness.Tracked(() => (readForeignLights ?? ((_, _, _, _) => []))(root, groupKey, night, ct)),
+            walk: walk is null ? null : (root, skip, rule, progress, ct) => harness.Tracked(() => walk(root, skip, rule, progress, ct)));
 
         if (installPickers)
         {
@@ -248,7 +351,7 @@ internal sealed class ExportHarness : IDisposable
 
         if (!parked)
         {
-            harness.Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+            Assert.True(harness.Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
         }
 
         return harness;
@@ -259,10 +362,29 @@ internal sealed class ExportHarness : IDisposable
     public void SetScanRoots(params string[] roots)
         => General = General with { ScanRoots = roots };
 
+    /// <summary>Cancels the page's background work and waits for it, then drops any post still
+    /// queued. Safe to call twice: a window case disposes before it closes the window.</summary>
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         _gate?.Set();
         Page.Dispose();
+        try
+        {
+            Page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+        }
+        catch (AggregateException exception) when (exception.InnerException is OperationCanceledException)
+        {
+            // A load cancelled by the dispose above.
+        }
+
+        Assert.True(SpinWait.SpinUntil(() => Volatile.Read(ref _inFlight) == 0, TimeSpan.FromSeconds(30)),
+            "The page's background work did not finish within 30 s of Dispose.");
         if (Directory.Exists(_appDataRoot))
         {
             Directory.Delete(_appDataRoot, recursive: true);
@@ -293,7 +415,7 @@ public class WbppExportViewModelTests
     {
         try
         {
-            page.PendingLoad?.Wait(TimeSpan.FromSeconds(30));
+            Assert.True(page.PendingLoad?.Wait(TimeSpan.FromSeconds(30)) ?? true, "The load did not finish within 30 s.");
         }
         catch (AggregateException exception) when (exception.InnerException is OperationCanceledException)
         {
@@ -466,7 +588,7 @@ public class WbppExportViewModelTests
 
         using var harness = ExportHarness.Create(library, [N1]);
 
-        var chosen = harness.Page.Sessions[0].Chosen!;
+        var chosen = harness.Page.Sessions[0].CopySources.Single();
         Assert.Empty(chosen.Level.OtherTargets);
         Assert.False(chosen.Level.IsContaminated);
         Assert.Equal("Ha", chosen.Level.Path[^2..]);
@@ -520,7 +642,7 @@ public class WbppExportViewModelTests
         Assert.Equal(SessionLevelViewModel.NoFramesText, row.UnavailableText);
         Assert.False(row.HasLevels);
         Assert.Empty(row.Rows);
-        Assert.Null(row.Chosen);
+        Assert.Empty(row.CopySources);
         Assert.Equal(0, harness.Page.Totals!.FolderCount);
     }
 
@@ -699,7 +821,7 @@ public class WbppExportViewModelTests
 
         // Advisory, not a veto: choosing one is how a user deliberately copies a whole night
         // folder that two targets share.
-        m31.IsChosen = true;
+        m31.IsIncluded = true;
         Assert.Equal(m31.Index, harness.Page.Sessions[0].ChosenIndex);
         Assert.Equal("M31", harness.Page.Sessions[0].ChosenOwnName);
     }
@@ -748,7 +870,7 @@ public class WbppExportViewModelTests
     }
 
     [Fact]
-    public void PickingALevelOnOneNight_LeavesAnotherNightsPickAlone()
+    public void TickingALevelOnOneNight_LeavesAnotherNightsTicksAlone()
     {
         var library = new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N2, Ha(N2, "a.fits"));
 
@@ -758,50 +880,31 @@ public class WbppExportViewModelTests
         var second = harness.Page.Sessions[1];
         var before = second.ChosenIndex;
 
-        first.Rows[0].IsChosen = true;
+        first.Rows[0].IsIncluded = true;
 
         Assert.Equal(0, first.ChosenIndex);
         Assert.Equal(before, second.ChosenIndex);
-        Assert.NotEqual(first.GroupName, second.GroupName);
     }
 
     [Fact]
-    public void TheStagingRenameIsStatedOnTheRowsItHappensToAndNoOthers()
+    public void TheReviewStepNamesTheStartFolder_TheDeepestFolderEveryCopiedFolderShares()
     {
-        // Nights 1 and 3 both pick a leaf named Ha, which is the collision case; night 2 picks
-        // OIII and states nothing.
-        var library = new Library()
-            .Frame(N1, Ha(N1, "a.fits"))
-            .Frame(N2, Path.Combine(Library.Root, "M31", "2025-03-21", "OIII", "a.fits"))
-            .Frame(N3, Ha(N3, "a.fits"));
+        using var two = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")).Frame(N2, Ha(N2, "a.fits")), [N1, N2]);
+        Assert.Equal(@"Folder names kept from C:\p16lib\M31", two.Page.FolderNamesKeptText);
 
-        using var harness = ExportHarness.Create(library, [N1, N2, N3]);
-
-        Assert.Equal("2025-03-20_Ha", harness.Page.Sessions[0].StagingName);
-        Assert.Equal("", harness.Page.Sessions[1].StagingName);
-        Assert.False(harness.Page.Sessions[1].HasStagingName);
-        Assert.Equal("2025-03-22_Ha", harness.Page.Sessions[2].StagingName);
+        using var one = ExportHarness.Create(new Library().Frame(N1, Ha(N1, "a.fits")), [N1]);
+        Assert.Equal(@"Folder names kept from C:\p16lib", one.Page.FolderNamesKeptText);
     }
 
     [Fact]
-    public void ARefreshWithNoNightOfferingAPick_ClearsTheNamesRatherThanLeavingThemStanding()
+    public void TheReviewStepSaysEachScanRoot_WhenTheNightsSitUnderTwoRoots()
     {
-        // Latent rather than shipped: the levels are fixed at load and a night with levels always
-        // has a pick, so nothing on the page reaches this state today. The rule is pinned anyway,
-        // because a row keeping its last name would state a rename for a plan the page no longer
-        // holds, and the state is one level list away from being reachable.
-        using var harness = ExportHarness.Create(new Library().EmptyNight(N1), [N1]);
-        var session = harness.Page.Sessions[0];
-        Assert.Null(session.Chosen);
+        var library = new Library().Frame(N1, Ha(N1, "a.fits"));
+        library.ScanRoots.Add(Library.SecondRoot);
+        library.Frame(N2, Path.Combine(Library.SecondRoot, "M31", "2025-03-21", "Ha", "a.fits"));
+        using var harness = ExportHarness.Create(library, [N1, N2]);
 
-        session.SetStagingEntryName("2025-03-20_Ha");
-        Assert.True(session.HasStagingName);
-
-        // A pick moving with nothing to pick is what reaches the refresh's early return.
-        session.ChosenIndex = 0;
-
-        Assert.Equal("", session.StagingName);
-        Assert.False(session.HasStagingName);
+        Assert.Equal("Folder names kept from each scan root", harness.Page.FolderNamesKeptText);
     }
 
     // ------------------------------------------------------ 10.4 the totals, including unknown
@@ -815,7 +918,7 @@ public class WbppExportViewModelTests
 
         using var harness = ExportHarness.Create(library, [N1]);
 
-        var chosen = harness.Page.Sessions.Select(row => row.Chosen!).ToList();
+        var chosen = harness.Page.Sessions.Select(row => row.CopySources.Single()).ToList();
         var expected = FolderLevels.Totals(chosen, []);
 
         Assert.Equal(expected, harness.Page.Totals);
@@ -880,7 +983,7 @@ public class WbppExportViewModelTests
         using var harness = ExportHarness.Create(library, [N1]);
 
         var session = harness.Page.Sessions[0];
-        session.Rows.Single(row => row.FolderName == "Ha").IsChosen = true;
+        session.Rows.Single(row => row.FolderName == "OIII").IsIncluded = false;
 
         Assert.Equal(1, harness.Page.Totals!.FrameCount);
 
@@ -900,8 +1003,8 @@ public class WbppExportViewModelTests
 
         Assert.Equal(
             "Frames counts this target's light frames. The size counts every catalogued file in "
-            + "the chosen folders; sidecars and files GalactiLog never read are copied too and are "
-            + "not counted.",
+            + "the ticked folders; sidecars and other files are copied too and are counted once the "
+            + "calibration scan has read them.",
             harness.Page.FooterNoteText);
     }
 

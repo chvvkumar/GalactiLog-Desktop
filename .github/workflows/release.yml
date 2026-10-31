@@ -51,7 +51,18 @@ jobs:
 
       - name: Test
         shell: bash
-        run: dotnet test -c Release
+        run: dotnet test -c Release --blame-hang-timeout 2m --blame-hang-dump-type mini
+
+      # The next run's checkout wipes TestResults, so a hang dump or Sequence.xml only
+      # survives as an artifact. The 2m hang timeout sits above the 30 s test wait budgets.
+      - name: Upload test results
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-results-${{ github.run_id }}-${{ github.run_attempt }}
+          path: '**/TestResults/**'
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Publish
         shell: bash
