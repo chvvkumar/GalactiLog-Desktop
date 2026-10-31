@@ -490,7 +490,7 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     private CalibrationScanState _scanState;
 
     /// <summary>"Scanning files: reading 916 headers under Date_2025-10-15" while the scan runs,
-    /// else empty. The night's header row and the calibration strip both draw it.</summary>
+    /// else empty. The night's header row draws it beside a moving bar.</summary>
     [ObservableProperty]
     private string _progressText = "";
 
@@ -538,8 +538,15 @@ public sealed partial class SessionLevelViewModel : ObservableObject
 
     /// <summary>Whether a scan is running. Cleared when its result is taken, ahead of
     /// <see cref="ScanState"/>, which turns Done only after the page has matched and published the
-    /// result, so an observer of Done always sees the finished rows.</summary>
-    internal bool IsScanning { get; private set; }
+    /// result, so an observer of Done always sees the finished rows. The header row's bar moves
+    /// on it and Rescan reads "Scanning..." disabled while it holds.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(RescanText))]
+    [NotifyCanExecuteChangedFor(nameof(RescanCommand))]
+    private bool _isScanning;
+
+    /// <summary>"Scanning..." while the scan runs, else "Rescan".</summary>
+    public string RescanText => IsScanning ? "Scanning..." : "Rescan";
 
     /// <summary>The last mutation of a scan's publish: the block reads Done.</summary>
     internal void MarkDone() => ScanState = CalibrationScanState.Done;
@@ -576,8 +583,10 @@ public sealed partial class SessionLevelViewModel : ObservableObject
     private int _lookHigherIndex = -1;
     private int _lookHigherCount;
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRescan))]
     private void Rescan() => RescanRequested?.Invoke(this);
+
+    private bool CanRescan() => !IsScanning;
 
     [RelayCommand]
     private void LookHigher() => LookHigherRequested?.Invoke(this);

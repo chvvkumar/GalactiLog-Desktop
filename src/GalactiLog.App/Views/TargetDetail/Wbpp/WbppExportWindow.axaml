@@ -159,7 +159,10 @@
                                    Foreground="{DynamicResource ColorTextPrimary}" />
     
                         <!-- The running scan stands beside the frame count, at the top of the night,
-                             so it shows without scrolling to the strip under a long tree. -->
+                             so it shows without scrolling under a long tree. A short moving bar leads
+                             the text: motion reads as busy where a ticking number does not. The bar's
+                             IsIndeterminate is bound, not constant, so Fluent's animation stops with the
+                             scan (IndeterminateProgressBarScanTest). -->
                         <StackPanel Grid.Column="1"
                                     Margin="12,0,0,0"
                                     Orientation="Horizontal"
@@ -168,6 +171,15 @@
                           <TextBlock Text="{Binding FrameCountText}"
                                      VerticalAlignment="Center"
                                      Foreground="{DynamicResource ColorTextSecondary}" />
+                          <ProgressBar x:Name="HeaderScanBar"
+                                       Width="72"
+                                       Height="3"
+                                       MinHeight="3"
+                                       VerticalAlignment="Center"
+                                       IsIndeterminate="{Binding IsScanning}"
+                                       IsVisible="{Binding IsScanning}"
+                                       IsHitTestVisible="False"
+                                       Foreground="{DynamicResource ColorAccent}" />
                           <TextBlock x:Name="HeaderScanLine"
                                      Text="{Binding ProgressText}"
                                      IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
@@ -284,10 +296,11 @@
                                    TextWrapping="Wrap"
                                    Foreground="{DynamicResource ColorTextSecondary}" />
 
-                        <!-- The status strip: the scan of the night's hierarchy in one line with the
-                             tally of ticked calibration folders, Look in and Rescan docked right, then
-                             the light-set lines and the warnings. Only on a page with a walker, and
-                             inside the tree so it collapses with it. -->
+                        <!-- The status strip: the finished scan in one line with the tally of ticked
+                             calibration folders, Look in and Rescan docked right, then the light-set
+                             lines and the warnings. The running scan is not repeated here: the header
+                             row carries it once. Only on a page with a walker, and inside the tree so
+                             it collapses with it. -->
                         <StackPanel x:Name="CalibrationBlock"
                                     Spacing="4"
                                     Margin="0,6,0,0"
@@ -298,7 +311,7 @@
                                     DockPanel.Dock="Right"
                                     Classes="quiet sm"
                                     VerticalAlignment="Top"
-                                    Content="Rescan"
+                                    Content="{Binding RescanText}"
                                     Command="{Binding RescanCommand}" />
                             <Button x:Name="LookHigherButton"
                                     DockPanel.Dock="Right"
@@ -310,12 +323,6 @@
                                     Command="{Binding LookHigherCommand}" />
                             <StackPanel Spacing="4" VerticalAlignment="Center">
                               <WrapPanel Orientation="Horizontal">
-                                <TextBlock x:Name="ScanProgressLine"
-                                           Margin="0,0,12,0"
-                                           Text="{Binding ProgressText}"
-                                           IsVisible="{Binding ProgressText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                                           Foreground="{DynamicResource ColorTextSecondary}" />
-
                                 <!-- The unreadable files, one path per line, on the sentence's tooltip. -->
                                 <TextBlock x:Name="ScanSentenceLine"
                                            Margin="0,0,12,0"

@@ -534,14 +534,15 @@ public class WbppExportWindowTests
         Dispatcher.UIThread.RunJobs();
 
         Assert.Single(Visible<StackPanel>(window, "CalibrationBlock"));
-        Assert.Empty(Visible<TextBlock>(window, "ScanProgressLine"));
         var sentence = Visible<TextBlock>(window, "ScanSentenceLine").Single();
         Assert.Equal(session.ScanSentence, sentence.Text);
         Assert.StartsWith("Scanned ", sentence.Text, StringComparison.Ordinal);
         Assert.Equal(session.CalibrationTally, Visible<TextBlock>(window, "CalibrationTally").Single().Text);
         Assert.Single(Visible<ItemsControl>(window, "LightSetLines"));
         Assert.Contains(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Text == session.LightSetLines[0] && t.IsEffectivelyVisible);
-        Assert.Single(Visible<Button>(window, "RescanButton"));
+        var rescan = Visible<Button>(window, "RescanButton").Single();
+        Assert.True(rescan.IsEffectivelyEnabled);
+        Assert.Equal("Rescan", rescan.Content);
         Assert.Empty(Visible<Button>(window, "LookHigherButton"));
         Assert.Empty(Visible<TextBlock>(window, "NoCalibrationLine"));
 
@@ -570,7 +571,7 @@ public class WbppExportWindowTests
 
             Assert.Equal(CalibrationScanState.Scanning, session.ScanState);
             Assert.EndsWith(", sizing", InStep<TextBlock>(window, "FooterSize").Text, StringComparison.Ordinal);
-            Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "ScanProgressLine").Single().Text);
+            Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "HeaderScanLine").Single().Text);
 
             disk.Gate.Set();
             Until(() => session.ScanState == CalibrationScanState.Done
@@ -591,8 +592,8 @@ public class WbppExportWindowTests
         }
     }
 
-    // A failure here is a running scan that shows only in the strip, a screen below the night's
-    // header on a long tree.
+    // A failure here is a running scan with nothing moving beside the night's header, a strip that
+    // repeats the line a screen lower, or a Rescan button that reads as pressable mid-scan.
     [AvaloniaFact]
     public void NightHeader_ShowsTheRunningScan_AndDropsItWhenTheScanCompletes()
     {
@@ -609,14 +610,22 @@ public class WbppExportWindowTests
             var line = Visible<TextBlock>(window, "HeaderScanLine").Single();
             Assert.Equal(session.ProgressText, line.Text);
             Assert.StartsWith("Scanning files: reading ", line.Text, StringComparison.Ordinal);
-            Assert.Equal(session.ProgressText, Visible<TextBlock>(window, "ScanProgressLine").Single().Text);
+            var bar = Visible<ProgressBar>(window, "HeaderScanBar").Single();
+            Assert.True(bar.IsIndeterminate);
+            Assert.DoesNotContain(window.GetVisualDescendants().OfType<TextBlock>(), t => t.Name == "ScanProgressLine");
+            var rescan = Visible<Button>(window, "RescanButton").Single();
+            Assert.False(rescan.IsEffectivelyEnabled);
+            Assert.Equal("Scanning...", rescan.Content);
 
             disk.Gate.Set();
             Until(() => session.ScanState == CalibrationScanState.Done);
             Dispatcher.UIThread.RunJobs();
 
             Assert.Empty(Visible<TextBlock>(window, "HeaderScanLine"));
-            Assert.Empty(Visible<TextBlock>(window, "ScanProgressLine"));
+            Assert.Empty(Visible<ProgressBar>(window, "HeaderScanBar"));
+            Assert.False(bar.IsIndeterminate);
+            Assert.True(rescan.IsEffectivelyEnabled);
+            Assert.Equal("Rescan", rescan.Content);
 
             harness.Dispose();
             window.Close();
@@ -690,7 +699,7 @@ public class WbppExportWindowTests
 
         foreach (var name in new[]
         {
-            "CalibrationBlock", "ScanProgressLine", "HeaderScanLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
+            "CalibrationBlock", "HeaderScanBar", "HeaderScanLine", "ScanSentenceLine", "CalibrationTally", "LightSetLines",
             "CalibrationWarnings", "NoCalibrationLine", "RescanButton", "LookHigherButton",
             "FooterBreakdown", "ReviewBreakdown", "ExpandButton", "TickBox", "CalibrationText", "NoteTag", "RowTag",
         })
@@ -698,7 +707,7 @@ public class WbppExportWindowTests
             Assert.Contains(@"x:Name=""" + name + @"""", markup, StringComparison.Ordinal);
         }
 
-        foreach (var gone in new[] { "CalibrationHeading", @"Text=""Calibration found""", "ChainRadio", "ChosenPill", "CalibrationRows", "CopiesFromHereText", "IsChosenZone", "ShowsRadio", "ShowsTick" })
+        foreach (var gone in new[] { "ScanProgressLine", @"Content=""Rescan""", "CalibrationHeading", @"Text=""Calibration found""", "ChainRadio", "ChosenPill", "CalibrationRows", "CopiesFromHereText", "IsChosenZone", "ShowsRadio", "ShowsTick" })
         {
             Assert.DoesNotContain(gone, markup, StringComparison.Ordinal);
         }
@@ -711,6 +720,7 @@ public class WbppExportWindowTests
         Assert.Matches(new Regex(@"x:Name=""ExpandButton""\s+[^>]*IsVisible=""\{Binding ShowsExpander\}"""), markup);
         Assert.Matches(new Regex(@"x:Name=""NoteTag""[^>]*ColorTextSecondary"), markup);
         Assert.Matches(new Regex(@"x:Name=""HeaderScanLine""[^>]*ColorAccent"), markup);
+        Assert.Matches(new Regex(@"x:Name=""HeaderScanBar""[^>]*IsIndeterminate=""\{Binding IsScanning\}"""), markup);
         Assert.Matches(new Regex(@"x:Name=""RowTag""[^>]*ColorWarning"), markup);
         Assert.Matches(new Regex(@"x:Name=""CalibrationText""[^>]*ColorTextSecondary"), markup);
         Assert.Matches(new Regex(@"x:Name=""RescanButton""\s+[^>]*Classes=""quiet sm"""), markup);
