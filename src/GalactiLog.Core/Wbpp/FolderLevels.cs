@@ -80,7 +80,8 @@ public sealed class ContaminationIndex
                 index.targetNames.TryAdd(row.TargetKey, row.TargetName);
             }
 
-            foreach (var folder in FolderLevels.AncestorChain(row.FilePath, root))
+            var chain = FolderLevels.AncestorChain(row.FilePath, root);
+            foreach (var folder in chain)
             {
                 if (!index.folders.TryGetValue(folder, out var facts))
                 {
@@ -91,6 +92,12 @@ public sealed class ContaminationIndex
                 if (occupies)
                 {
                     facts.Occupants.Add((row.TargetKey, row.Night!.Value));
+                }
+
+                // The chain's last folder is the frame's own parent, the only one that holds it directly.
+                if (occupies && ReferenceEquals(folder, chain[^1]))
+                {
+                    facts.HoldsLightsDirectly = true;
                 }
 
                 if (row.FileSize is long size)
@@ -191,11 +198,17 @@ public sealed class ContaminationIndex
         internal bool BytesUnknown { get; set; }
 
         internal int LongestRelative { get; set; }
+
+        internal bool HoldsLightsDirectly { get; set; }
     }
 
     /// <summary>True when the index holds facts for the folder: some catalogue row under a scan
     /// root lies beneath it.</summary>
     public bool IsCatalogued(string folder) => folders.ContainsKey(folder);
+
+    /// <summary>True when a catalogued LIGHT row with a night has <paramref name="folder"/> as its
+    /// immediate parent directory, so a calibration scan can skip reading headers there.</summary>
+    public bool HoldsLights(string folder) => folders.TryGetValue(folder, out var facts) && facts.HoldsLightsDirectly;
 
     // Null when no catalogue row sits under the folder at all.
     internal FolderFacts? Facts(string folder) => folders.GetValueOrDefault(folder);
@@ -207,8 +220,8 @@ public sealed class ContaminationIndex
 /// <summary>
 /// The folder level computation for a WBPP export: which folder a night should be copied from,
 /// what that folder drags along and how big it is. Port of <c>compute_ancestor_chain</c>,
-/// <c>compute_session_levels</c>, <c>pick_default_level</c>, <c>subtree_bytes</c>,
-/// <c>disambiguate_staging_names</c> and <c>map_excluded_to_ops</c> in the web's
+/// <c>compute_session_levels</c>, <c>pick_default_level</c>, <c>subtree_bytes</c>
+/// and <c>map_excluded_to_ops</c> in the web's
 /// <c>wbpp_export.py</c>. Nothing here opens a file, walks a directory or asks the file system
 /// anything.
 /// </summary>
@@ -416,68 +429,23 @@ public static class FolderLevels
     }
 
     /// <summary>
-    /// The length of the longest path the copy would write for this level (ruling R7): the staging
-    /// root with any trailing separator trimmed, one separator, the entry name, one separator, and
-    /// the longest path relative to the level among the catalogued files under it. Pure arithmetic
-    /// over strings; it touches no disk, and the script generator knows nothing about it.
+    /// The length of the longest path one operation would write (ruling R7): the staging root with
+    /// any trailing separator trimmed, one separator, the entry name, one separator, and the longer
+    /// of the catalogue's longest path relative to the operation's source and
+    /// <paramref name="uncataloguedLongestRelative"/>, the figure a scan supplies for files the
+    /// catalogue does not hold. Pure arithmetic over strings; it touches no disk, and the script
+    /// generator knows nothing about it.
     /// </summary>
     public static int LongestDestinationLength(
-        ChosenLevel chosen,
+        CopyOperation operation,
         string stagingRoot,
-        string entryName,
-        ContaminationIndex index)
+        ContaminationIndex index,
+        int uncataloguedLongestRelative)
         => TrimTrailingSeparator(stagingRoot).Length
             + 1
-            + entryName.Length
+            + operation.EntryName.Length
             + 1
-            + (index.Facts(chosen.Level.Path)?.LongestRelative ?? 0);
-
-    /// <summary>
-    /// The staging folder name for each chosen level, in the order given. Port of
-    /// <c>disambiguate_staging_names</c>: colliding basenames are all prefixed with their own
-    /// night as <c>yyyy-MM-dd_</c>. The returned list is then made distinct under
-    /// <see cref="StringComparer.OrdinalIgnoreCase"/> with a <c>_2</c>, <c>_3</c> suffix
-    /// (ruling R6), because the prefix can itself collide with a folder already named that way and
-    /// the Python's answer there is two copy operations writing into one folder.
-    /// The suffix is the first free number at that position in the list, so which entry takes which
-    /// number depends on the order of <paramref name="chosen"/>; only the distinctness of the whole
-    /// list is guaranteed. Seeding the taken set up front instead would rename the first occurrence
-    /// too, which is worse.
-    /// </summary>
-    public static IReadOnlyList<string> StagingNames(IReadOnlyList<ChosenLevel> chosen)
-    {
-        var bases = chosen.Select(level => BaseName(level.Level.Path)).ToList();
-
-        // Counted case-insensitively, unlike the Python's Counter: the names become folders in one
-        // staging directory on Windows, where HA and Ha are one folder and a case-sensitive count
-        // would hand the user a silent merge.
-        var counts = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        foreach (var name in bases)
-        {
-            counts[name] = counts.GetValueOrDefault(name) + 1;
-        }
-
-        var taken = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var names = new List<string>(chosen.Count);
-        for (var i = 0; i < bases.Count; i++)
-        {
-            var name = counts[bases[i]] > 1
-                ? chosen[i].Night.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "_" + bases[i]
-                : bases[i];
-
-            var candidate = name;
-            var suffix = 1;
-            while (!taken.Add(candidate))
-            {
-                suffix++;
-                candidate = name + "_" + suffix.ToString(CultureInfo.InvariantCulture);
-            }
-
-            names.Add(candidate);
-        }
-
-        return names;
-    }
+            + Math.Max(index.Facts(operation.SourcePath)?.LongestRelative ?? 0, uncataloguedLongestRelative);
 
     /// <summary>
     /// Describes each folder as a skippable subfolder at <paramref name="depth"/>, one entry per
@@ -517,53 +485,66 @@ public static class FolderLevels
             }
 
             under.AddRange(
-                excluded.Where(frame =>
-                    PathConfinement.IsUnderOrEqual(level.Level.Path, frame.FilePath)
-                    && !(level.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, frame.FilePath))));
+                excluded.Where(frame => Covers([level], frame.FilePath)));
         }
 
         return under;
     }
 
     /// <summary>
-    /// One copy operation per chosen level, in the order given, with its staging entry name and its
-    /// per-file excludes. Port of <c>map_excluded_to_ops</c> plus
-    /// <c>disambiguate_staging_names</c>: each excluded frame is assigned to the chosen level whose
-    /// path is its longest containing prefix, and a frame matching no chosen level is dropped.
-    /// Each chosen level's skipped folders become relative directory excludes.
-    /// This is the single input the script generator renders from.
+    /// True when some source's level contains or equals <paramref name="path"/> and none of that
+    /// source's skipped folders does. The one predicate the session, the in-place calibration
+    /// excludes and the calibration totals share for "the lights copy takes this path".
     /// </summary>
-    public static IReadOnlyList<CopyOperation> CopyOperations(
+    public static bool Covers(IReadOnlyList<ChosenLevel> sources, string path)
+        => sources.Any(source => PathConfinement.IsUnderOrEqual(source.Level.Path, path)
+            && !(source.SkippedFolders ?? []).Any(skipped => PathConfinement.IsUnderOrEqual(skipped.Path, path)));
+
+    /// <summary>
+    /// One copy source per chosen level, in the order given; <paramref name="scanRoots"/>[i] is
+    /// <paramref name="chosen"/>[i]'s scan root. Port of <c>map_excluded_to_ops</c>, per night: each
+    /// excluded frame is assigned to the chosen level of its own night whose path is its longest
+    /// containing prefix, and a frame matching no such level is dropped. Several levels per night
+    /// are allowed, and two nights sharing one chosen folder, or nesting, each exclude only their
+    /// own night's frames. Each chosen level's skipped folders become relative directory excludes,
+    /// null when there are none. <see cref="StagingLayout.Plan"/> names the sources.
+    /// </summary>
+    public static IReadOnlyList<CopySource> CopySources(
         IReadOnlyList<ChosenLevel> chosen,
-        IReadOnlyList<WbppFramePath> excludedUnderLevels)
+        IReadOnlyList<string> scanRoots,
+        IReadOnlyDictionary<DateOnly, IReadOnlyList<WbppFramePath>> excludedByNight)
     {
-        var names = StagingNames(chosen);
         var perLevel = chosen.Select(_ => new List<string>()).ToList();
 
-        foreach (var frame in excludedUnderLevels)
+        foreach (var (night, frames) in excludedByNight)
         {
-            var best = -1;
-            var bestLength = -1;
-            for (var i = 0; i < chosen.Count; i++)
+            foreach (var frame in frames)
             {
-                var path = chosen[i].Level.Path;
-                if (PathConfinement.IsUnderOrEqual(path, frame.FilePath) && path.Length > bestLength)
+                var best = -1;
+                var bestLength = -1;
+                for (var i = 0; i < chosen.Count; i++)
                 {
-                    best = i;
-                    bestLength = path.Length;
+                    var path = chosen[i].Level.Path;
+                    if (chosen[i].Night == night
+                        && PathConfinement.IsUnderOrEqual(path, frame.FilePath) && path.Length > bestLength)
+                    {
+                        best = i;
+                        bestLength = path.Length;
+                    }
+                }
+
+                if (best >= 0)
+                {
+                    perLevel[best].Add(Path.GetRelativePath(chosen[best].Level.Path, frame.FilePath));
                 }
             }
-
-            if (best < 0)
-            {
-                continue;
-            }
-
-            perLevel[best].Add(Path.GetRelativePath(chosen[best].Level.Path, frame.FilePath));
         }
 
-        return [.. chosen.Select((level, i) => new CopyOperation(level.Night, level.Level.Path, names[i], perLevel[i],
-            [.. (level.SkippedFolders ?? []).Select(folder => Path.GetRelativePath(level.Level.Path, folder.Path))]))];
+        return [.. chosen.Select((level, i) =>
+        {
+            List<string> directories = [.. (level.SkippedFolders ?? []).Select(folder => Path.GetRelativePath(level.Level.Path, folder.Path))];
+            return new CopySource(level.Night, scanRoots[i], level.Level.Path, perLevel[i], directories.Count == 0 ? null : directories);
+        })];
     }
 
     /// <summary>
@@ -575,6 +556,18 @@ public static class FolderLevels
     public static ExportTotals Totals(
         IReadOnlyList<ChosenLevel> chosen,
         IReadOnlyList<WbppFramePath> excludedUnderLevels)
+        => Totals(chosen, excludedUnderLevels, []);
+
+    /// <summary>
+    /// As the two-argument overload, and <paramref name="foreignExcluded"/> frames (other targets'
+    /// lights the copy leaves out) deduct their bytes but never their counts, since they were never
+    /// in a level's frame count. Only a foreign frame under a chosen level and outside every skipped
+    /// folder deducts; a null size makes the total null.
+    /// </summary>
+    public static ExportTotals Totals(
+        IReadOnlyList<ChosenLevel> chosen,
+        IReadOnlyList<WbppFramePath> excludedUnderLevels,
+        IReadOnlyList<WbppFramePath> foreignExcluded)
     {
         var frameCount = chosen.Sum(level => level.Level.FrameCount
             - (level.SkippedFolders ?? []).Sum(skipped => skipped.FrameCount)) - excludedUnderLevels.Count;
@@ -592,6 +585,14 @@ public static class FolderLevels
         foreach (var frame in excludedUnderLevels)
         {
             size = frame.FileSize is long bytes && size is long running ? running - bytes : null;
+        }
+
+        foreach (var frame in foreignExcluded)
+        {
+            if (Covers(chosen, frame.FilePath))
+            {
+                size = frame.FileSize is long bytes && size is long running ? running - bytes : null;
+            }
         }
 
         return new ExportTotals(frameCount, chosen.Count, size);
@@ -637,9 +638,8 @@ public static class FolderLevels
     private static bool SameFolder(string left, string right)
         => PathConfinement.IsUnderOrEqual(left, right) && PathConfinement.IsUnderOrEqual(right, left);
 
-    /// <summary>A folder's own name: the staging entry name for a chosen folder, and the one home
-    /// for that rule. The application's row and tree text reaches it rather than splitting a path
-    /// again, so a staging entry name and the name shown beside it cannot differ.</summary>
+    /// <summary>A folder's own name, and the one home for that rule in row and tree text. The
+    /// application's row and tree text reaches it rather than splitting a path again.</summary>
     public static string BaseName(string path)
     {
 

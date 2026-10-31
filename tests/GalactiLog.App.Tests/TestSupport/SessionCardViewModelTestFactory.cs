@@ -10,7 +10,7 @@ namespace GalactiLog.App.Tests.TestSupport;
 // Phase 6 Task 4. The one place App.Tests builds a SessionCardViewModel, so Task 5's and Task 8's
 // factory-seam changes are one edit rather than twenty. No window, no dispatcher and no database:
 // the session query and the notes write are lambdas, the debounce is FakeDelay, and the post seam
-// runs its closure inline.
+// runs its closure inline, one closure at a time.
 //
 // Task 5: set Harness.FrameTableResult to your FrameTableViewModel and read FrameTableRequests.
 // Task 8: the same through ChartResult and ChartRequests.
@@ -247,6 +247,7 @@ internal static class SessionCardViewModelTestFactory
         {
             Detail = detail ?? PopulatedDetail(),
         };
+        var uiThread = new object();
 
         harness.TargetPage = targetPage ?? new TargetPageState(
             (display ?? new DisplaySettings()).TargetPage,
@@ -290,7 +291,17 @@ internal static class SessionCardViewModelTestFactory
             display ?? new DisplaySettings(),
             general ?? new GeneralSettings { Timezone = "UTC", Use24HTime = true },
             delay: harness.Delay.Delay,
-            post: action => action(),
+            // Inline, one closure at a time like the UI thread, as TargetDetailViewModelTestFactory
+            // posts. Unserialized, the guide graph's first frames publish and its whole-night reload's
+            // publish ran on two pool threads at once: the stale one passed its generation check before
+            // the reload bumped it, then interleaved its field writes with the fresh one's.
+            post: action =>
+            {
+                lock (uiThread)
+                {
+                    action();
+                }
+            },
             logger: harness.Logger,
             targetPage: harness.TargetPage,
             createFrameThumbnail: createFrameThumbnail is null

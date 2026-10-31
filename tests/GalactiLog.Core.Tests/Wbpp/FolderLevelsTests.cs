@@ -12,12 +12,12 @@ namespace GalactiLog.Core.Tests.Wbpp;
 // computation is pure string and dictionary work over rows the database already holds, and a case
 // that seemed to need the disk would mean the design was wrong.
 //
-// The level table, the contamination counts, the default pick and the staging names are compared
+// The level table, the contamination counts and the default pick are compared
 // against the real wbpp_export.py through the golden file this repository carries
 // (tests/Fixtures/golden/levels/levels.json, written by levels_oracle.py with
 // PYTHONHASHSEED=0). The oracle's parity cases are single-leaf, so the Python's set ordering
-// cannot show in them; the multi-leaf order, the Windows root shapes, the case-only difference,
-// the byte figure and ruling R6's distinctness are the port's own and are asserted directly.
+// cannot show in them; the multi-leaf order, the Windows root shapes, the case-only difference
+// and the byte figure are the port's own and are asserted directly.
 public class FolderLevelsTests
 {
     private const string Root = @"D:\Astro";
@@ -115,41 +115,9 @@ public class FolderLevelsTests
         }
     }
 
-    [Fact]
-    public void StagingNames_MatchTheOracleOnEveryParityCase()
-    {
-        // Two of the golden file's staging entries are evidence of the Python's own answer on the
-        // two inputs the port departs from (R6 and Q4); they are not parity cases and have their
-        // own assertions below. Both counts are asserted, so neither a trimmed golden nor a rename
-        // of the evidence scenarios can quietly empty this loop.
-        var staging = Golden().GetProperty("staging");
-        Assert.Equal(6, staging.GetArrayLength());
-
-        var skipped = 0;
-        var compared = 0;
-        foreach (var scenario in staging.EnumerateArray())
-        {
-            var name = scenario.GetProperty("name").GetString()!;
-            if (name.Contains("python_answer", StringComparison.Ordinal))
-            {
-                skipped++;
-                continue;
-            }
-
-            compared++;
-            var paths = scenario.GetProperty("paths").EnumerateArray().Select(p => WinAny(p.GetString()!)).ToList();
-            var dates = scenario.GetProperty("dates").EnumerateArray()
-                .Select(d => DateOnly.Parse(d.GetString()!, CultureInfo.InvariantCulture)).ToList();
-            var chosen = paths.Select((p, i) => new ChosenLevel(dates[i], Level(p))).ToList();
-
-            Assert.Equal(
-                scenario.GetProperty("names").EnumerateArray().Select(n => n.GetString()),
-                FolderLevels.StagingNames(chosen));
-        }
-
-        Assert.Equal(4, compared);
-        Assert.Equal(2, skipped);
-    }
+    // Ruling 2026-10-26: the staging parity cases in levels.json are retired. The entry is now a path
+    // from the start folder down (StagingLayout), which the Python has no mode for; the scenarios
+    // stay in the golden as evidence of the Python's answer and are compared by nothing.
 
     // ---------------------------------------------------------------------------------------
     // 7.2 Windows shapes
@@ -266,7 +234,7 @@ public class FolderLevelsTests
     }
 
     [Fact]
-    public void ForSession_ForAFolderNameHoldingADot_KeepsTheWholeNameInThePathAndTheStagingEntry()
+    public void ForSession_ForAFolderNameHoldingADot_KeepsTheWholeNameInThePath()
     {
         var frame = Frame(@"Date_2026-07-13\LIGHT\Cam\M31\Angle_71.61\a.fits");
         var index = Index(Cat(frame, "m31", "M 31", Night(1)));
@@ -276,7 +244,6 @@ public class FolderLevelsTests
 
         Assert.Equal(Under(@"Date_2026-07-13\LIGHT\Cam\M31\Angle_71.61"), leaf.Path);
         Assert.Equal(5, leaf.DepthFromRoot);
-        Assert.Equal(["Angle_71.61"], FolderLevels.StagingNames([new ChosenLevel(Night(1), leaf)]));
     }
 
     [Fact]
@@ -429,16 +396,6 @@ public class FolderLevelsTests
             .Levels.Single(level => level.Path == Under("M31"));
 
         Assert.Equal(["Other"], parent.OtherTargets);
-    }
-
-    [Fact]
-    public void StagingNames_ForADriveRootAndAShareRoot_AreTheDriveLetterAndTheShareName()
-    {
-        Assert.Equal(
-            ["D", "share"],
-            FolderLevels.StagingNames([
-                new ChosenLevel(Night(1), Level(@"D:\")),
-                new ChosenLevel(Night(2), Level(@"\\server\share"))]));
     }
 
     // The rename note compares a row's folder name against a staging entry name. The application's
@@ -621,49 +578,6 @@ public class FolderLevelsTests
     }
 
     // ---------------------------------------------------------------------------------------
-    // 7.6 Staging names, the two departures
-    // ---------------------------------------------------------------------------------------
-
-    [Fact]
-    public void StagingNames_ForTwoNightsWhoseLeavesDifferOnlyInCase_ArePrefixed()
-    {
-        // The Python's Counter is case sensitive and returns ["Ha", "HA"], which on Windows is one
-        // staging folder holding both nights (Q4).
-        Assert.Equal(
-            ["2026-07-01_Ha", "2026-07-02_HA"],
-            FolderLevels.StagingNames([
-                new ChosenLevel(Night(1), Level(@"D:\a\Ha")),
-                new ChosenLevel(Night(2), Level(@"D:\b\HA"))]));
-    }
-
-    [Fact]
-    public void StagingNames_WhenTheDatePrefixItselfCollides_StayDistinct()
-    {
-        // The reviewer's own input. The Python answers
-        // ['2026-07-01_Ha', '2026-07-02_Ha', '2026-07-01_Ha'], two operations into one folder.
-        var names = FolderLevels.StagingNames([
-            new ChosenLevel(Night(1), Level(@"D:\a\Ha")),
-            new ChosenLevel(Night(2), Level(@"D:\b\Ha")),
-            new ChosenLevel(Night(3), Level(@"D:\c\2026-07-01_Ha"))]);
-
-        Assert.Equal(["2026-07-01_Ha", "2026-07-02_Ha", "2026-07-01_Ha_2"], names);
-        Assert.Equal(names.Count, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-    }
-
-    [Fact]
-    public void StagingNames_WhenTheSuffixedNameIsItselfTaken_MoveOnToTheNextNumber()
-    {
-        var names = FolderLevels.StagingNames([
-            new ChosenLevel(Night(3), Level(@"D:\c\2026-07-01_Ha")),
-            new ChosenLevel(Night(4), Level(@"D:\d\2026-07-01_Ha_2")),
-            new ChosenLevel(Night(1), Level(@"D:\a\Ha")),
-            new ChosenLevel(Night(2), Level(@"D:\b\Ha"))]);
-
-        Assert.Equal(["2026-07-01_Ha", "2026-07-01_Ha_2", "2026-07-01_Ha_3", "2026-07-02_Ha"], names);
-        Assert.Equal(names.Count, names.Distinct(StringComparer.OrdinalIgnoreCase).Count());
-    }
-
-    // ---------------------------------------------------------------------------------------
     // 7.7 Excluded frames scoped to the chosen level
     // ---------------------------------------------------------------------------------------
 
@@ -711,32 +625,40 @@ public class FolderLevelsTests
     // ---------------------------------------------------------------------------------------
 
     [Fact]
-    public void CopyOperations_AssignAnExcludeToItsLongestContainingLevel()
+    public void CopySources_AssignAnExcludeToItsLongestContainingLevelOfItsNight()
     {
         var bad = Frame(@"M31\2026-07-01\Ha\bad.fits");
-        var chosen = new[]
-        {
-            new ChosenLevel(Night(1), Level(Under(@"M31"))),
-            new ChosenLevel(Night(2), Level(Under(@"M31\2026-07-01"))),
-        };
+        var chosen = new[] { new ChosenLevel(Night(1), Level(Under(@"M31"))), new ChosenLevel(Night(1), Level(Under(@"M31\2026-07-01"))) };
 
-        var ops = FolderLevels.CopyOperations(chosen, [bad]);
+        var sources = FolderLevels.CopySources(chosen, [Root, Root], Excluded((Night(1), [bad])));
 
-        Assert.Empty(ops[0].ExcludedRelativePaths);
-        Assert.Equal([@"Ha\bad.fits"], ops[1].ExcludedRelativePaths);
-        Assert.Equal([Under(@"M31"), Under(@"M31\2026-07-01")], ops.Select(o => o.SourcePath));
-        Assert.Equal(["M31", "2026-07-01"], ops.Select(o => o.EntryName));
-        Assert.Equal([Night(1), Night(2)], ops.Select(o => o.Night));
+        Assert.Empty(sources[0].ExcludedRelativePaths);
+        Assert.Equal([@"Ha\bad.fits"], sources[1].ExcludedRelativePaths);
+        Assert.Equal([Under(@"M31"), Under(@"M31\2026-07-01")], sources.Select(s => s.SourcePath));
+        Assert.All(sources, s => { Assert.Equal(Root, s.ScanRoot); Assert.Equal(Night(1), s.Night); });
     }
 
     [Fact]
-    public void CopyOperations_DropAnExcludeUnderNoChosenLevel()
+    public void CopySources_PerNight_AssignEachExcludeOnlyToItsOwnNightsLevel()
+    {
+        var first = Frame(@"M31\Ha\first.fits");
+        var second = Frame(@"M31\Ha\second.fits");
+        var chosen = new[] { new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))), new ChosenLevel(Night(2), Level(Under(@"M31\Ha"))) };
+
+        var sources = FolderLevels.CopySources(chosen, [Root, Root], Excluded((Night(1), [first]), (Night(2), [second])));
+
+        Assert.Equal(["first.fits"], sources[0].ExcludedRelativePaths);
+        Assert.Equal(["second.fits"], sources[1].ExcludedRelativePaths);
+    }
+
+    [Fact]
+    public void CopySources_DropAnExcludeUnderNoChosenLevel()
     {
         var chosen = new[] { new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))) };
 
-        var ops = FolderLevels.CopyOperations(chosen, [Frame(@"M31\OIII\bad.fits")]);
+        var sources = FolderLevels.CopySources(chosen, [Root], Excluded((Night(1), [Frame(@"M31\OIII\bad.fits")])));
 
-        Assert.Empty(Assert.Single(ops).ExcludedRelativePaths);
+        Assert.Empty(Assert.Single(sources).ExcludedRelativePaths);
     }
 
     // ---------------------------------------------------------------------------------------
@@ -749,13 +671,10 @@ public class FolderLevelsTests
     [InlineData(244, 261)]
     public void LongestDestinationLength_IsTheExactArithmeticAroundTheWindowsCeiling(int stagingLength, int expected)
     {
-        var level = Under(@"M31\Ha");
         var index = Index(Cat(Frame(@"M31\Ha\sub\name.fits"), "m31", "M 31", Night(1)));
+        var operation = new CopyOperation(Night(1), Under(@"M31\Ha"), "Ha", []);
 
-        var actual = FolderLevels.LongestDestinationLength(
-            new ChosenLevel(Night(1), Level(level)), StagingRootOfLength(stagingLength), "Ha", index);
-
-        Assert.Equal(expected, actual);
+        Assert.Equal(expected, FolderLevels.LongestDestinationLength(operation, StagingRootOfLength(stagingLength), index, 0));
     }
 
     [Fact]
@@ -766,10 +685,19 @@ public class FolderLevelsTests
             Cat(Frame(@"M31\Ha\sub\name.fits"), "m31", "M 31", Night(1)),
             Cat(Frame(@"M31\Ha\b.fits"), "m31", "M 31", Night(1)));
 
-        var actual = FolderLevels.LongestDestinationLength(
-            new ChosenLevel(Night(1), Level(Under(@"M31\Ha"))), StagingRootOfLength(242), "Ha", index);
+        Assert.Equal(259, FolderLevels.LongestDestinationLength(new CopyOperation(Night(1), Under(@"M31\Ha"), "Ha", []), StagingRootOfLength(242), index, 0));
+    }
 
-        Assert.Equal(259, actual);
+    [Fact]
+    public void LongestDestinationLength_TakesTheUncataloguedFigureWhenItIsLonger()
+    {
+        // "a.fits" is 6; a scanned flat at "sub\flat_01.fits" is 16. Calibration folders are not in
+        // the catalogue, so their figure arrives from the scan.
+        var index = Index(Cat(Frame(@"M31\Ha\a.fits"), "m31", "M 31", Night(1)));
+        var operation = new CopyOperation(Night(1), Under(@"M31\Ha"), "Ha", []);
+
+        Assert.Equal(242 + 1 + 2 + 1 + 16, FolderLevels.LongestDestinationLength(operation, StagingRootOfLength(242), index, 16));
+        Assert.Equal(242 + 1 + 2 + 1 + 6, FolderLevels.LongestDestinationLength(operation, StagingRootOfLength(242), index, 0));
     }
 
     // ---------------------------------------------------------------------------------------
@@ -819,15 +747,13 @@ public class FolderLevelsTests
     }
 
     [Fact]
-    public void CopyOperations_MapsSkippedFoldersToRelativeDirectories()
+    public void CopySources_MapSkippedFoldersToRelativeDirectories()
     {
         var level = Level(Under(@"M31\2026-07-01"));
         var skipped = Level(Under(@"M31\2026-07-01\OIII"));
-        var ops = FolderLevels.CopyOperations([new ChosenLevel(Night(1), level, [skipped])], []);
-        Assert.Equal(["OIII"], ops[0].ExcludedRelativeDirectories);
 
-        var plain = FolderLevels.CopyOperations([new ChosenLevel(Night(1), level)], []);
-        Assert.Empty(plain[0].ExcludedRelativeDirectories ?? []);
+        Assert.Equal(["OIII"], FolderLevels.CopySources([new ChosenLevel(Night(1), level, [skipped])], [Root], Excluded())[0].ExcludedRelativeDirectories);
+        Assert.Null(FolderLevels.CopySources([new ChosenLevel(Night(1), level)], [Root], Excluded())[0].ExcludedRelativeDirectories);
     }
 
     [Fact]
@@ -856,6 +782,35 @@ public class FolderLevelsTests
 
         Assert.Equal(1, totals.FrameCount);
         Assert.Equal(200L, totals.SizeBytes);
+    }
+
+    [Fact]
+    public void HoldsLights_IsTrueOnlyForTheDirectParentOfALightRow()
+    {
+        var light = Frame(@"M31\2026-07-01\Ha\a.fits", 100);
+        var flat = Frame(@"M31\2026-07-01\Flats\f.fits", 100);
+        var index = Index(Cat(light, "m31", "M 31", Night(1)), Cat(flat, "m31", "M 31", Night(1), isLight: false));
+
+        Assert.True(index.HoldsLights(Under(@"M31\2026-07-01\Ha")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Flats")));
+        Assert.False(index.HoldsLights(Under(@"M31\2026-07-01\Nowhere")));
+    }
+
+    [Fact]
+    public void Totals_ForeignExcludes_DeductBytesButNotCounts()
+    {
+        var level = new FolderLevel(Under(@"M31\2026-07-01"), 2, 3, [], [], 700);
+        var chosen = new[] { new ChosenLevel(Night(1), level) };
+        var foreign = Frame(@"M31\2026-07-01\Ha\z.fits", 150);
+        var unknown = Frame(@"M31\2026-07-01\Ha\y.fits", null);
+
+        var totals = FolderLevels.Totals(chosen, [], [foreign]);
+        Assert.Equal(3, totals.FrameCount);
+        Assert.Equal(550L, totals.SizeBytes);
+
+        Assert.Null(FolderLevels.Totals(chosen, [], [foreign, unknown]).SizeBytes);
+        Assert.Equal(700L, FolderLevels.Totals(chosen, []).SizeBytes);
     }
 
     [Fact]
@@ -948,9 +903,6 @@ public class FolderLevelsTests
     private static string Win(string posix)
         => posix == "/root" ? Root : Root + posix["/root".Length..].Replace('/', '\\');
 
-    private static string WinAny(string posix)
-        => posix.StartsWith("/root", StringComparison.Ordinal) ? Win(posix) : @"D:" + posix.Replace('/', '\\');
-
     private static string StripComments(string source)
     {
         source = Regex.Replace(source, @"/\*.*?\*/", "", RegexOptions.Singleline);
@@ -966,5 +918,19 @@ public class FolderLevelsTests
             dir = dir.Parent;
         }
         return dir?.FullName ?? throw new DirectoryNotFoundException("GalactiLog.sln not found above test output directory.");
+    }
+
+    [Fact]
+    public void Covers_IsTrueUnderASource_OutsideItsExcludedDirectories()
+    {
+        const string date = @"W:\Astro\Incoming\2026\Date_2026-10-18";
+        const string flat = date + @"\FLAT";
+        var source = new ChosenLevel(new DateOnly(2026, 10, 18), new FolderLevel(date, 2, 3, [], [], 3_000), [new FolderLevel(flat, 3, 0, [], [], 0)]);
+
+        Assert.True(FolderLevels.Covers([source], date + @"\LIGHT\ZWO ASI533MM Pro\Target_Pleiades\Angle_45.18\L1.fits"));
+        Assert.True(FolderLevels.Covers([source], date));
+        Assert.False(FolderLevels.Covers([source], flat + @"\ZWO ASI533MM Pro\Angle_45.18\f1.fits"));
+        Assert.False(FolderLevels.Covers([source], @"W:\Astro\Incoming\2026\Date_2026-10-15\FLAT\f.fits"));
+        Assert.False(FolderLevels.Covers([], date));
     }
 }

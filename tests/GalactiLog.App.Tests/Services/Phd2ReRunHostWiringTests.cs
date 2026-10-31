@@ -751,6 +751,8 @@ public sealed class Phd2ReRunHostWiringTests
             _root = root
                 ?? Path.Combine(Path.GetTempPath(), "GalactiLogPhd2Wiring_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
+            // A restart over a root an earlier host already populated keeps that database.
+            SeededAppData.CopyInto(_root);
 
             // Serilog's Log.Logger is process-global and Build() overwrites it, so a previous
             // host's file sink would keep its log file open under a root this one is about to

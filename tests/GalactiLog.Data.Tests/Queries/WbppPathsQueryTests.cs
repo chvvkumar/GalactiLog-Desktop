@@ -475,6 +475,69 @@ public class WbppPathsQueryTests(ITestOutputHelper output)
     /// only the shape.</summary>
     private const double RatioBudget = 6.0d;
 
+    // ---- light keys and foreign lights ---------------------------------------------------
+
+    [Fact]
+    public void Read_SuppliesMatchingKeysPerNightFrame_FromColumnsAndRawHeaders()
+    {
+        using var library = Library.Empty();
+        var target = library.AddTarget("M 31");
+        var id = library.AddKeyedFrame(target, Night1, @$"{Root}\a.fits",
+            """{"OFFSET":50,"XBINNING":1,"ROTATANG":128.85,"OBJCTROT":307.0}""");
+
+        var paths = library.Query.Read(library.GroupKey(target), [Night1], [Root]);
+
+        Assert.Equal(new FrameKeys("ZWO ASI2600MM Pro", "Ha", 1, 110, 50, "SQA55", 128.85, null), paths.Keys![id]);
+        Assert.Single(paths.Keys);
+    }
+
+    [Fact]
+    public void Read_Keys_FallBackToRotatorWhenRotatangIsAbsent_AndIgnoreObjctrot()
+    {
+        using var library = Library.Empty();
+        var target = library.AddTarget("M 31");
+        var withRotator = library.AddKeyedFrame(target, Night1, @$"{Root}\a.fits",
+            """{"OFFSET":"50","XBINNING":2,"ROTATOR":12.5,"OBJCTROT":307.0,"READOUTM":"High"}""");
+        var objctrotOnly = library.AddKeyedFrame(target, Night1, @$"{Root}\b.fits", """{"OBJCTROT":307.0}""");
+
+        var paths = library.Query.Read(library.GroupKey(target), [Night1], [Root]);
+
+        Assert.Equal(12.5, paths.Keys![withRotator].RotatorAngle);
+        Assert.Equal(50.0, paths.Keys[withRotator].Offset);
+        Assert.Equal("High", paths.Keys[withRotator].ReadoutMode);
+        Assert.Null(paths.Keys[objctrotOnly].RotatorAngle);
+        Assert.Null(paths.Keys[objctrotOnly].Offset);
+    }
+
+    [Fact]
+    public void ForeignLightsUnder_ReturnsOtherTargetsAndOtherNightsLightsUnderTheFolder_Only()
+    {
+        using var library = Library.Empty();
+        var m31 = library.AddTarget("M 31");
+        var m33 = library.AddTarget("M 33");
+        var folder = @$"{Root}\Date_2025-10-15";
+
+        library.AddFrame(m31, Night1, @$"{folder}\own.fits", 1L);
+        library.AddFrame(m31, Night2, @$"{folder}\otherNight.fits", 2L);
+        library.AddFrame(m33, Night1, @$"{folder}\sub\otherTarget.fits", 3L);
+        library.AddFrame(m33, Night1, @$"{folder}\flat.fits", 4L, "FLAT");
+        library.AddFrame(m33, Night1, @$"{Root}\Date_2025-10-150\sibling.fits", 5L);
+        library.AddFrame(m33, Night1, @$"{Root}\DateX2025-10-15\wild.fits", 6L);
+        library.AddFrame(null, Night1, @$"{folder}\unresolved.fits", 7L);
+        library.AddFrame(m31, null, @$"{folder}\undated.fits", 8L);
+
+        var found = library.Query.ForeignLightsUnder(folder, library.GroupKey(m31), Night1);
+
+        Assert.Equal(
+            [
+                @$"{folder}\otherNight.fits",
+                @$"{folder}\sub\otherTarget.fits",
+                @$"{folder}\undated.fits",
+                @$"{folder}\unresolved.fits",
+            ],
+            found.Select(f => f.FilePath).OrderBy(p => p, StringComparer.Ordinal));
+    }
+
     // ---- the fixtures ---------------------------------------------------------------------
 
     private sealed class Library : IDisposable
@@ -531,6 +594,18 @@ public class WbppPathsQueryTests(ITestOutputHelper output)
                 image.FileSize = fileSize;
                 image.ImageType = imageType;
             });
+
+        public Guid AddKeyedFrame(Guid target, DateOnly night, string filePath, string rawHeaders)
+            => LibrarySeeder.AddFrame(_db.ConnectionString, target, night, image =>
+            {
+                image.FilePath = filePath;
+                image.FileName = Path.GetFileName(filePath);
+                image.Camera = "ZWO ASI2600MM Pro";
+                image.FilterUsed = "Ha";
+                image.CameraGain = 110;
+                image.Telescope = "SQA55";
+                image.RawHeaders = rawHeaders;
+            }).Id;
 
         /// <summary>Writes a raw <c>session_date</c> no writer in the application can produce.
         /// The column is TEXT with no format constraint, so this is what a hand-edited row or an

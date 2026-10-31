@@ -269,7 +269,9 @@ public class Phd2RepositoryTests
     public void InsertFrames_HoldsAtMostOneChunkInTheChangeTracker()
     {
         using var database = TestDatabaseFactory.CreateMigratedDatabase();
-        const int count = 50_000;
+        // Two full chunks and part of a third: a tracker that is never emptied reaches twice the
+        // chunk size, and one emptied only at the end exceeds it, so either fails the range below.
+        const int count = Phd2Repository.FrameBatchSize * 2 + 500;
         var logId = Guid.NewGuid();
         var sessionId = Guid.NewGuid();
         using var context = Phd2SchemaTests.Open(database);
@@ -279,7 +281,7 @@ public class Phd2RepositoryTests
         context.ChangeTracker.Clear();
 
         // Sampled rather than measured on every entity: Entries() is a walk of the tracker, so
-        // reading it 50,000 times would be quadratic. A sample every 500 rows cannot miss a
+        // reading it on every row would be quadratic. A sample every 500 rows cannot miss a
         // tracker that is never emptied, which is the failure being refused, and the peak is read
         // at the tracker's own high-water mark inside a chunk.
         var peak = 0;

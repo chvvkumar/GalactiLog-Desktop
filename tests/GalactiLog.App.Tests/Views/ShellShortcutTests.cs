@@ -127,11 +127,10 @@ public class ShellShortcutTests : IDisposable
 
         Press(window, PhysicalKey.F5);
 
-        for (var spin = 0; spin < 200 && Volatile.Read(ref reads) == before; spin++)
-        {
-            await Task.Delay(10);
-            Dispatcher.UIThread.RunJobs();
-        }
+        // The refresh starts its read synchronously, so the page's pending load is the signal.
+        Dispatcher.UIThread.RunJobs();
+        await activity.PendingLoad!;
+        Dispatcher.UIThread.RunJobs();
 
         Assert.True(Volatile.Read(ref reads) > before, "F5 did not re-read the Activity page");
         window.Close();

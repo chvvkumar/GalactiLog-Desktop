@@ -80,13 +80,31 @@ public sealed record SubfolderLevel(FolderLevel Level, bool IsCatalogued);
 /// <summary>One night's worth of a WBPP export script's copy step (core-shapes.md section 4).
 /// <paramref name="ExcludedRelativePaths"/> carries native <c>\</c> separators, relative to
 /// <paramref name="SourcePath"/>. <paramref name="ExcludedRelativeDirectories"/> lists skipped
-/// subfolders in the same form, with no trailing separator; null reads as none.</summary>
+/// subfolders in the same form, with no trailing separator; null reads as none.
+/// <paramref name="DestinationSubfolder"/> places the operation under <c>EntryName\&lt;subfolder&gt;</c>:
+/// relative, native separators, no leading or trailing separator; null reads as none.</summary>
 public sealed record CopyOperation(
     DateOnly Night,
     string SourcePath,
     string EntryName,
     IReadOnlyList<string> ExcludedRelativePaths,
+    IReadOnlyList<string>? ExcludedRelativeDirectories = null,
+    string? DestinationSubfolder = null);
+
+/// <summary>One folder the export copies, before it is named: the night it belongs to, the scan
+/// root it sits under, its absolute path and what the copy leaves out of it. Excludes are relative
+/// to <paramref name="SourcePath"/> with native separators; a null directory list reads as none.</summary>
+public sealed record CopySource(
+    DateOnly Night,
+    string ScanRoot,
+    string SourcePath,
+    IReadOnlyList<string> ExcludedRelativePaths,
     IReadOnlyList<string>? ExcludedRelativeDirectories = null);
+
+/// <summary>The named operations of one export and the folder their entry paths are relative to;
+/// <paramref name="StartFolder"/> is null when the sources sit under several scan roots (each
+/// entry is then relative to its own root) and when there are no operations.</summary>
+public sealed record StagingPlan(string? StartFolder, IReadOnlyList<CopyOperation> Operations);
 
 /// <summary>The export's summary counts, over the chosen levels and their excluded frames
 /// (core-shapes.md section 4). <paramref name="SizeBytes"/> is null when any counted file's size
@@ -191,3 +209,74 @@ public sealed record WbppScriptInput(
     string TargetName,
     IReadOnlyList<string> Exclusions,
     string FileName);
+
+/// <summary>What a scanned file is, from its header's frame type (calibration pre-selection).</summary>
+public enum CalibrationType { Light, Flat, DarkFlat, Dark, Bias, Other }
+
+/// <summary>The header values a frame is matched on. Null means the header did not carry the key.</summary>
+public sealed record FrameKeys(
+    string? Camera,
+    string? Filter,
+    double? Binning,
+    double? Gain,
+    double? Offset,
+    string? Telescope,
+    double? RotatorAngle,
+    string? ReadoutMode);
+
+/// <summary>One file found while scanning a night's folder hierarchy.</summary>
+public sealed record ScannedFrame(
+    string FilePath,
+    long Size,
+    CalibrationType Type,
+    FrameKeys Keys,
+    double? ExposureSeconds,
+    DateOnly? Night);
+
+/// <summary>One distinct combination of keys over the night's light frames.</summary>
+public sealed record LightSet(FrameKeys Keys, int FrameCount);
+
+/// <summary>One calibration frame with whether it was selected and why or why not.</summary>
+public sealed record FrameMatch(ScannedFrame Frame, bool Selected, string Note);
+
+/// <summary>One folder of calibration frames. <see cref="DefaultTicked"/> is true when any frame in
+/// it was selected.</summary>
+public sealed record CalibrationRow(string Folder, IReadOnlyList<FrameMatch> Frames, bool DefaultTicked, string Note)
+{
+    public int SelectedCount => Frames.Count(f => f.Selected);
+    public int TotalCount => Frames.Count;
+    public long SelectedBytes => Frames.Where(f => f.Selected).Sum(f => f.Frame.Size);
+    public long TotalBytes => Frames.Sum(f => f.Frame.Size);
+    public IReadOnlyList<CalibrationType> Types => Frames.Select(f => f.Frame.Type).Distinct().ToList();
+}
+
+/// <summary>The outcome of matching a night's calibration frames to its light sets.</summary>
+public sealed record CalibrationMatch(
+    IReadOnlyList<LightSet> LightSets,
+    IReadOnlyList<CalibrationRow> Rows,
+    IReadOnlyList<string> MissingFlatWarnings,
+    bool EveryFilterHasAFlat);
+
+/// <summary>A path the calibration walk could not fully read, and why.</summary>
+public sealed record ScanIssue(string Path, string Reason);
+
+/// <summary>What <c>CalibrationWalk</c> found: every file below the root, the paths it could not
+/// read, and how many headers it read.</summary>
+public sealed record WalkResult(IReadOnlyList<ScannedFrame> Frames, IReadOnlyList<ScanIssue> Issues, int HeadersRead);
+
+/// <summary>The settings that turn a capture instant into a night.</summary>
+public sealed record NightRule(bool UseImagingNight, double? ObserverLongitude, string? ObserverTimezone);
+
+/// <summary>Frame counts and bytes the calibration copy will add, per type. <c>Other</c> is the
+/// non-calibration, non-light files under the chosen level, carried only when they lie under the
+/// chosen lights folder, since calibration operations exclude them.</summary>
+public sealed record CalibrationTotals(
+    int FlatCount, long FlatBytes,
+    int DarkFlatCount, long DarkFlatBytes,
+    int DarkCount, long DarkBytes,
+    int BiasCount, long BiasBytes,
+    int OtherCount, long OtherBytes)
+{
+    public int Count => FlatCount + DarkFlatCount + DarkCount + BiasCount + OtherCount;
+    public long Bytes => FlatBytes + DarkFlatBytes + DarkBytes + BiasBytes + OtherBytes;
+}
