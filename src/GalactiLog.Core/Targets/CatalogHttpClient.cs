@@ -1,3 +1,5 @@
+using System.Diagnostics;
+using System.Runtime.ExceptionServices;
 using System.Text;
 
 namespace GalactiLog.Core.Targets;
@@ -44,11 +46,45 @@ internal sealed class CatalogHttpClient : IDisposable
         _http.Dispose();
     }
 
-    // Sends `request` synchronously. Throws NonTransientCatalogException for a non-429 4xx
-    // (spec 9.6); throws the underlying HttpRequestException/TaskCanceledException for
-    // anything else (timeout, 5xx, 429, connection failure) so Task 6's cache wrapper can
-    // retry it. Returns the bounded response body text on success. A cancelled `ct` aborts the
-    // send and the body read with OperationCanceledException.
+    // Mirror fallback (port of the container's upstream.request_with_fallback): sends the same
+    // request to each of `urls` in order and returns the first good response. `build` makes a
+    // fresh request per mirror, since an HttpRequestMessage cannot be sent twice. When every
+    // mirror fails, the last transient failure is thrown if there was one: one mirror answering
+    // "bad request" proves nothing while another is down, so the combined failure is
+    // non-transient only when every attempt was. A cancelled `ct` stops at once, without trying
+    // the next mirror.
+    public string Send(IReadOnlyList<string> urls, Func<string, HttpRequestMessage> build, CancellationToken ct = default)
+    {
+        Exception? transient = null;
+        Exception? last = null;
+        foreach (var url in urls)
+        {
+            try
+            {
+                using var request = build(url);
+                return Send(request, ct);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested
+                && ex is HttpRequestException or TaskCanceledException or NonTransientCatalogException)
+            {
+                last = ex;
+                if (ex is not NonTransientCatalogException)
+                {
+                    transient = ex;
+                }
+            }
+        }
+
+        ExceptionDispatchInfo.Throw(transient ?? last ?? new ArgumentException("No url given.", nameof(urls)));
+        throw new UnreachableException();
+    }
+
+    // Sends `request` synchronously. Throws NonTransientCatalogException for a status that
+    // rejects this one request (spec 9.6); throws the underlying
+    // HttpRequestException/TaskCanceledException for anything else (timeout, 5xx, 429, 404,
+    // connection failure) so Task 6's cache wrapper can retry it. Returns the bounded response
+    // body text on success. A cancelled `ct` aborts the send and the body read with
+    // OperationCanceledException.
     public string Send(HttpRequestMessage request, CancellationToken ct = default)
     {
         // ResponseHeadersRead so the framework does not buffer an arbitrarily large body
@@ -65,8 +101,14 @@ internal sealed class CatalogHttpClient : IDisposable
         {
             return;
         }
+        // Only the statuses that say "this particular request was rejected". Every other 4xx
+        // (401, 403, 404, 410, ...) comes from a fixed query endpoint with the object in the
+        // parameters, so it means the endpoint itself is missing or blocked: the CDS outage page
+        // answers 404 on every path. Those fall through to EnsureSuccessStatusCode and take the
+        // transient path, so an outage trips the scan's circuit breaker instead of failing the
+        // scan, and is never negative-cached.
         var code = (int)response.StatusCode;
-        if (code is >= 400 and < 500 and not 429)
+        if (code is 400 or 413 or 414 or 422)
         {
             throw new NonTransientCatalogException($"{_source} returned {code} {response.ReasonPhrase}");
         }

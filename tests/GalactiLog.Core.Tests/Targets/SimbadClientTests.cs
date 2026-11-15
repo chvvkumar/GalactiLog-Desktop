@@ -164,12 +164,65 @@ public class SimbadClientTests
     }
 
     [Fact]
-    public void QueryObject_NotFoundStatus_ThrowsNonTransientCatalogException()
+    public void QueryObject_NotFoundOnEveryMirror_IsAnOutageNotABadRequest()
     {
+        // A fixed endpoint answering 404 is the service being down (the CDS outage page), so it
+        // must take the transient path: retried, never negative-cached, never fatal to a scan.
         var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.NotFound, "");
         var client = new SimbadClient(handler);
 
-        Assert.Throws<NonTransientCatalogException>(() => client.QueryObject("M 31"));
+        Assert.Throws<HttpRequestException>(() => client.QueryObject("M 31"));
+    }
+
+    [Fact]
+    public void QueryObject_FirstMirrorDown_AnsweredByTheNext()
+    {
+        var hosts = new List<string>();
+        var handler = new FakeHttpMessageHandler(request =>
+        {
+            hosts.Add(request.RequestUri!.Host);
+            return request.RequestUri.Host == "simbad.cds.unistra.fr"
+                ? new HttpResponseMessage(HttpStatusCode.NotFound)
+                : new HttpResponseMessage(HttpStatusCode.OK)
+                {
+                    Content = new StringContent("::data::\nM  31|G|10.684|41.269\n"),
+                };
+        });
+        var client = new SimbadClient(handler);
+
+        var result = client.QueryObject("M 31");
+
+        Assert.Equal("M  31", result!.MainId);
+        Assert.Equal(["simbad.cds.unistra.fr", "simbad.harvard.edu"], hosts);
+    }
+
+    [Fact]
+    public void QueryAliases_FirstMirrorUnreachable_AnsweredByTheNext()
+    {
+        var handler = new FakeHttpMessageHandler(request =>
+            request.RequestUri!.Host == "simbad.cds.unistra.fr"
+                ? throw new HttpRequestException("connection refused")
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("id\n\"M 31\"\n") });
+        var client = new SimbadClient(handler);
+
+        Assert.Equal(["M 31"], client.QueryAliases("M  31"));
+    }
+
+    [Fact]
+    public void QueryObject_Cancelled_DoesNotTryTheNextMirror()
+    {
+        using var cts = new CancellationTokenSource();
+        var calls = 0;
+        var handler = new FakeHttpMessageHandler(_ =>
+        {
+            calls++;
+            cts.Cancel();
+            throw new TaskCanceledException();
+        });
+        var client = new SimbadClient(handler);
+
+        Assert.ThrowsAny<OperationCanceledException>(() => client.QueryObject("M 31", cts.Token));
+        Assert.Equal(1, calls);
     }
 
     [Fact]

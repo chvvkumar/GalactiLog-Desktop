@@ -159,12 +159,12 @@ public class SesameClientTests
     }
 
     [Fact]
-    public void Query_NonTransientStatus_ThrowsNonTransientCatalogException()
+    public void Query_NotFoundStatus_IsAnOutageNotABadRequest()
     {
         var handler = FakeHttpMessageHandler.Returning(HttpStatusCode.NotFound, "");
         var client = new SesameClient(handler);
 
-        Assert.Throws<NonTransientCatalogException>(() => client.Query("M 31"));
+        Assert.Throws<HttpRequestException>(() => client.Query("M 31"));
     }
 
     [Fact]

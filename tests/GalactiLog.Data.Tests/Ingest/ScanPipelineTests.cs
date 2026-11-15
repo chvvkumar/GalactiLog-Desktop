@@ -95,7 +95,7 @@ public class ScanPipelineTests : IDisposable
             // only thing this fixture is for.
             cancellationToken.WaitHandle.WaitOne(delay);
             cancellationToken.ThrowIfCancellationRequested();
-            var body = request.RequestUri!.Host == "simbad.cds.unistra.fr"
+            var body = request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
                 ? "::error::\nNo object found\n"
                 : "<?xml version=\"1.0\"?><Sesame></Sesame>";
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };

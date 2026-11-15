@@ -119,11 +119,11 @@ public class TargetResolverTests : IDisposable
         {
             var host = request.RequestUri!.Host;
             var path = request.RequestUri.AbsolutePath;
-            if (host == "simbad.cds.unistra.fr" && path.Contains("sim-script", StringComparison.Ordinal))
+            if (host.StartsWith("simbad.", StringComparison.Ordinal) && path.Contains("sim-script", StringComparison.Ordinal))
             {
                 return TextResponse(HttpStatusCode.OK, "::data::\nM 31|G,LIN|10.6847|41.269\n");
             }
-            if (host == "simbad.cds.unistra.fr" && path.Contains("sim-tap", StringComparison.Ordinal))
+            if (host.StartsWith("simbad.", StringComparison.Ordinal) && path.Contains("sim-tap", StringComparison.Ordinal))
             {
                 return TextResponse(HttpStatusCode.OK, "id\n");
             }
@@ -215,7 +215,7 @@ public class TargetResolverTests : IDisposable
         var handler = new StubHttpMessageHandler(request =>
         {
             var host = request.RequestUri!.Host;
-            if (host == "simbad.cds.unistra.fr")
+            if (host.StartsWith("simbad.", StringComparison.Ordinal))
             {
                 return TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n");
             }
@@ -245,7 +245,7 @@ public class TargetResolverTests : IDisposable
         var handler = new StubHttpMessageHandler(request =>
         {
             var host = request.RequestUri!.Host;
-            if (host == "simbad.cds.unistra.fr")
+            if (host.StartsWith("simbad.", StringComparison.Ordinal))
             {
                 throw new HttpRequestException("simulated network failure");
             }
@@ -418,11 +418,11 @@ public class TargetResolverTests : IDisposable
         {
             var host = request.RequestUri!.Host;
             var path = request.RequestUri.AbsolutePath;
-            if (host == "simbad.cds.unistra.fr" && path.Contains("sim-script", StringComparison.Ordinal))
+            if (host.StartsWith("simbad.", StringComparison.Ordinal) && path.Contains("sim-script", StringComparison.Ordinal))
             {
                 return TextResponse(HttpStatusCode.OK, "::data::\nM 31|G,LIN|10.6847|41.269\n");
             }
-            if (host == "simbad.cds.unistra.fr" && path.Contains("sim-tap", StringComparison.Ordinal))
+            if (host.StartsWith("simbad.", StringComparison.Ordinal) && path.Contains("sim-tap", StringComparison.Ordinal))
             {
                 return TextResponse(HttpStatusCode.OK, "id\n");
             }
@@ -623,7 +623,7 @@ public class TargetResolverTests : IDisposable
     [Fact]
     public void Resolve_CleanNoMatch_ReportsTransientNetworkFailureFalse()
     {
-        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host == "simbad.cds.unistra.fr"
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
             ? TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n")
             : TextResponse(HttpStatusCode.OK, "<?xml version=\"1.0\"?><Sesame></Sesame>"));
         var resolver = MakeResolver(handler);
@@ -702,7 +702,7 @@ public class TargetResolverTests : IDisposable
     [Fact]
     public void Resolve_NegativeCached_ReportedOnlyOnTheCallThatWroteTheRow()
     {
-        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host == "simbad.cds.unistra.fr"
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
             ? TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n")
             : TextResponse(HttpStatusCode.OK, "<?xml version=\"1.0\"?><Sesame></Sesame>"));
         var resolver = MakeResolver(handler);
@@ -752,7 +752,7 @@ public class TargetResolverTests : IDisposable
     // A clean "queried, found nothing" from both online sources, which is the only condition
     // under which the pipeline may conclude anything durable about a name (spec 9.6).
     private static StubHttpMessageHandler NoMatchHandler() => new(request =>
-        request.RequestUri!.Host == "simbad.cds.unistra.fr"
+        request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
             ? TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n")
             : TextResponse(HttpStatusCode.OK, "<?xml version=\"1.0\"?><Sesame></Sesame>"));
 
