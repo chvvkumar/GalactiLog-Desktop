@@ -300,7 +300,7 @@ public class Phd2ScanCorrelationTests : IDisposable
     {
         protected override HttpResponseMessage Send(HttpRequestMessage request, CancellationToken ct)
         {
-            var body = request.RequestUri!.Host == "simbad.cds.unistra.fr"
+            var body = request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
                 ? "::error::\nNo object found\n"
                 : "<?xml version=\"1.0\"?><Sesame></Sesame>";
             return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) };

@@ -14,8 +14,10 @@ namespace GalactiLog.Core.Targets;
 // factory, so the container constructs it and disposes it with the host.
 public sealed class SimbadClient : IDisposable
 {
-    private const string ObjectQueryUrl = "https://simbad.cds.unistra.fr/simbad/sim-script";
-    private const string AliasQueryUrl = "https://simbad.cds.unistra.fr/simbad/sim-tap/sync";
+    // Tried in order: CDS first, the Harvard mirror second. Same paths, same response format.
+    private static readonly string[] Mirrors = ["https://simbad.cds.unistra.fr", "https://simbad.harvard.edu"];
+    private static readonly string[] ObjectQueryUrls = [.. Mirrors.Select(m => m + "/simbad/sim-script")];
+    private static readonly string[] AliasQueryUrls = [.. Mirrors.Select(m => m + "/simbad/sim-tap/sync")];
 
     private readonly CatalogHttpClient _http;
     private readonly HttpMessageHandler _handler;
@@ -54,8 +56,9 @@ public sealed class SimbadClient : IDisposable
 
     // Call 1 (spec 9.4.3): POST sim-script. Returns null when SIMBAD reports no match, when
     // sanitization empties the name, or when the response has fewer than 4 pipe-delimited
-    // fields. Throws NonTransientCatalogException for a non-429 4xx; throws the underlying
-    // HttpRequestException/TaskCanceledException for anything else (timeout, 5xx, 429,
+    // fields. Throws NonTransientCatalogException when every mirror rejects the request itself
+    // (400, 413, 414, 422); throws the underlying
+    // HttpRequestException/TaskCanceledException for anything else (timeout, 5xx, 429, 404,
     // connection failure) so Task 6's wrapper can retry it.
     public ObjectResult? QueryObject(string objectName, CancellationToken ct = default)
     {
@@ -66,11 +69,13 @@ public sealed class SimbadClient : IDisposable
         }
 
         var script = $"format object \"%MAIN_ID|%OTYPELIST|%COO(d;A)|%COO(d;D)\"\nquery id {sanitized}";
-        using var request = new HttpRequestMessage(HttpMethod.Post, ObjectQueryUrl)
-        {
-            Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["script"] = script }),
-        };
-        var text = _http.Send(request, ct);
+        var text = _http.Send(
+            ObjectQueryUrls,
+            url => new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new FormUrlEncodedContent(new Dictionary<string, string> { ["script"] = script }),
+            },
+            ct);
         return ParseObjectResponse(text);
     }
 
@@ -115,9 +120,8 @@ public sealed class SimbadClient : IDisposable
     public IReadOnlyList<string> QueryAliases(string mainId, CancellationToken ct = default)
     {
         var query = $"SELECT id FROM ident JOIN basic ON ident.oidref = basic.oid WHERE basic.main_id = '{EscapeAdql(mainId)}'";
-        var url = $"{AliasQueryUrl}?request=doQuery&lang=adql&format=tsv&query={Uri.EscapeDataString(query)}";
-        using var request = new HttpRequestMessage(HttpMethod.Get, url);
-        var tsv = _http.Send(request, ct);
+        var parameters = $"?request=doQuery&lang=adql&format=tsv&query={Uri.EscapeDataString(query)}";
+        var tsv = _http.Send(AliasQueryUrls, url => new HttpRequestMessage(HttpMethod.Get, url + parameters), ct);
         return ParseAliasResponse(tsv);
     }
 

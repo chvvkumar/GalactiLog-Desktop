@@ -394,7 +394,7 @@ public class ScanWriterTests : IDisposable
     public async Task RunAsync_SolarSystemTargetCreated_WritesTheSharedStageName()
     {
         var noMatch = new StubHttpMessageHandler(request => TextResponse(HttpStatusCode.OK,
-            request.RequestUri!.Host == "simbad.cds.unistra.fr"
+            request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
                 ? "::error::\nnot found\n"
                 : "<?xml version=\"1.0\"?><Sesame></Sesame>"));
 
@@ -415,7 +415,7 @@ public class ScanWriterTests : IDisposable
     [Fact]
     public async Task RunAsync_UnresolvedObjectName_EmitsResolutionFailedActivity()
     {
-        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host == "simbad.cds.unistra.fr"
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
             ? TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n")
             : TextResponse(HttpStatusCode.OK, "<?xml version=\"1.0\"?><Sesame></Sesame>"));
 
@@ -540,9 +540,10 @@ public class ScanWriterTests : IDisposable
     private static StubHttpMessageHandler AlwaysTransientlyFailingHandler()
         => new(_ => throw new HttpRequestException("simulated network failure"));
 
-    // Spec 9.6: three attempts per source, SIMBAD then SESAME, for the one name that is
-    // actually checked online before the breaker opens.
-    private const int CallsForOneFullyRetriedName = 6;
+    // Spec 9.6: three attempts per source, SIMBAD (two mirrors per attempt) then SESAME (one
+    // host), for the one name that is
+    // actually checked online before the breaker opens: 3 * 2 + 3 * 1.
+    private const int CallsForOneFullyRetriedName = 9;
 
     [Fact]
     public async Task RunAsync_TransientNetworkFailure_TripsCircuitBreaker_SkipsOnlineForRestOfRun()
@@ -645,7 +646,7 @@ public class ScanWriterTests : IDisposable
     {
         // A clean "queried, found nothing" from both sources: the first frame negative-caches
         // the name, the second frame hits that cache at step 1.
-        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host == "simbad.cds.unistra.fr"
+        var handler = new StubHttpMessageHandler(request => request.RequestUri!.Host.StartsWith("simbad.", StringComparison.Ordinal)
             ? TextResponse(HttpStatusCode.OK, "::error::\nNo object found\n")
             : TextResponse(HttpStatusCode.OK, "<?xml version=\"1.0\"?><Sesame></Sesame>"));
 
